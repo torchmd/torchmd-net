@@ -1,0 +1,110 @@
+import sys
+import os
+import torch
+import argparse
+
+import pytorch_lightning as pl
+from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
+from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
+
+from utils import LoadFromFile, save_argparse
+from module import LNNP
+
+
+def get_args():
+    # fmt: off
+    parser = argparse.ArgumentParser(description='Training')
+    parser.add_argument('--conf', '-c', type=open, action=LoadFromFile)# keep first
+    parser.add_argument('--num-epochs', default=300, type=int, help='number of epochs')
+    parser.add_argument('--batch-size', default=32, type=int, help='batch size')
+    parser.add_argument('--inference-batch-size', default=None, type=int, help='Batchsize for validation and tests.')
+    parser.add_argument('--lr', default=1e-4, type=float, help='learning rate')
+    parser.add_argument('--lr-patience', type=int, default=10, help='Patience for lr-schedule. Patience per eval-interval of validation')
+    parser.add_argument('--lr-min', type=float, default=1e-6, help='Minimum learning rate before early stop')
+    parser.add_argument('--lr-factor', type=float, default=0.8, help='Minimum learning rate before early stop')
+    parser.add_argument('--lr-warmup-steps', type=int, default=0, help='How many steps to warm-up over. Defaults to 0 for no warm-up')
+    parser.add_argument('--early-stopping-patience', type=int, default=30, help='Stop training after this many epochs without improvement')
+    parser.add_argument('--weight-decay', type=float, default=0.0, help='Weight decay strength')
+    parser.add_argument('--ngpus', type=int, default=-1, help='Number of GPUs, -1 use all available. Use CUDA_VISIBLE_DEVICES=1, to decide gpus')
+    parser.add_argument('--num-nodes', type=int, default=1, help='Number of nodes')
+    parser.add_argument('--log-dir', '-l', default='/tmp/logs', help='log file')
+    parser.add_argument('--load-model', default=None, help='Restart training using a model checkpoint')
+    parser.add_argument('--splits', default=None, help='Npz with splits idx_train, idx_val, idx_test')
+    parser.add_argument('--val-ratio', type=float, default=0.05, help='Percentage of validation set')
+    parser.add_argument('--test-ratio', type=float, default=0.10922, help='Percentage of test set')
+    parser.add_argument('--test-interval', type=int, default=10, help='Test interval, one test per n epochs (default: 10)')
+    parser.add_argument('--save-interval', type=int, default=10, help='Save interval, one save per n epochs (default: 10)')
+    parser.add_argument('--seed', type=int, default=1, help='random seed (default: 1)')
+    parser.add_argument('--distributed-backend', default='ddp', help='Distributed backend: dp, ddp, ddp2')
+    parser.add_argument('--num-workers', type=int, default=4, help='Number of workers for data prefetch')
+    parser.add_argument('--redirect', type=bool, default=False, help='Redirect stdout and stderr to log_dir/log')
+
+    parser.add_argument('--label', default='energy_U0', type=str, help='Target property, e.g. energy_U0')
+    # parser.add_argument('--lower-cutoff', type=float, default=0.0, help='Lower cutoff in model')
+    parser.add_argument('--upper-cutoff', type=float, default=5.0, help='Upper cutoff in model')
+
+    parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
+    parser.add_argument('--num-filters', type=int, default=256, help='Number of filters in the model')
+    parser.add_argument('--num-interactions', type=int, default=6, help='Number of interaction layers in the model')
+    parser.add_argument('--num-rbf', type=int, default=64, help='Number of radial basis functions in model')
+    # parser.add_argument('--activation', default='ssp', choices=['silu', 'ssp', 'tanh'], help='Activation function')
+    # parser.add_argument('--rbf-type', type=str, default='gauss', choices=['gauss', 'lognorm', 'expnorm'], help='Type of distance expansion')
+    # parser.add_argument('--trainable-rbf', type=bool, default=False, help='If distance expansion functions should be trainable')
+    # parser.add_argument('--max-z', type=int, default=100, help='Max atomic number in model')
+    # fmt: on
+ 
+    args = parser.parse_args()
+
+    if args.redirect:
+        sys.stdout = open(os.path.join(args.log_dir, 'log'), 'w')
+        sys.stderr = sys.stdout
+ 
+    if args.inference_batch_size is None:
+        args.inference_batch_size = args.batch_size
+
+    save_argparse(args, os.path.join(args.log_dir, 'input.yaml'), exclude=['conf'])
+
+    return args
+
+
+def main():
+    args = get_args()
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+
+    model = LNNP(args)
+    checkpoint_callback = ModelCheckpoint(
+        dirpath=args.log_dir,
+        monitor='val_loss',
+        save_top_k=10, # -1 to save all
+        period=args.save_interval,
+        filename='{epoch}-{val_loss:.4f}-{test_loss:.4f}'
+    )
+    early_stopping = EarlyStopping('val_loss', patience=args.early_stopping_patience)
+    
+    tb_logger = pl.loggers.TensorBoardLogger(args.log_dir, name='tensorbord', version='')
+    csv_logger = pl.loggers.CSVLogger(args.log_dir, name='', version='')
+
+    trainer = pl.Trainer(
+        max_epochs=args.num_epochs,
+        gpus=args.ngpus,
+        num_nodes=args.num_nodes,
+        distributed_backend=args.distributed_backend,
+        default_root_dir=args.log_dir,
+        auto_lr_find=False,
+        resume_from_checkpoint=args.load_model,
+        checkpoint_callback=checkpoint_callback,
+        callbacks=[early_stopping],
+        logger=[tb_logger, csv_logger],
+        reload_dataloaders_every_epoch=False,
+        enable_pl_optimizer=True
+    )
+
+    trainer.fit(model)
+
+    # run test set after completing the fit
+    trainer.test()
+
+
+if __name__ == "__main__":
+    main()
