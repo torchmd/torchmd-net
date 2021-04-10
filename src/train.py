@@ -40,17 +40,17 @@ def get_args():
     parser.add_argument('--redirect', type=bool, default=False, help='Redirect stdout and stderr to log_dir/log')
 
     parser.add_argument('--label', default='energy_U0', type=str, help='Target property, e.g. energy_U0')
-    # parser.add_argument('--lower-cutoff', type=float, default=0.0, help='Lower cutoff in model')
-    parser.add_argument('--upper-cutoff', type=float, default=5.0, help='Upper cutoff in model')
+    parser.add_argument('--cutoff-lower', type=float, default=0.0, help='Lower cutoff in model')
+    parser.add_argument('--cutoff-upper', type=float, default=5.0, help='Upper cutoff in model')
 
     parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
     parser.add_argument('--num-filters', type=int, default=256, help='Number of filters in the model')
     parser.add_argument('--num-interactions', type=int, default=6, help='Number of interaction layers in the model')
     parser.add_argument('--num-rbf', type=int, default=64, help='Number of radial basis functions in model')
-    # parser.add_argument('--activation', default='ssp', choices=['silu', 'ssp', 'tanh'], help='Activation function')
-    # parser.add_argument('--rbf-type', type=str, default='gauss', choices=['gauss', 'lognorm', 'expnorm'], help='Type of distance expansion')
-    # parser.add_argument('--trainable-rbf', type=bool, default=False, help='If distance expansion functions should be trainable')
-    # parser.add_argument('--max-z', type=int, default=100, help='Max atomic number in model')
+    parser.add_argument('--activation', default='silu', choices=['silu', 'ssp', 'tanh', 'sigmoid'], help='Activation function')
+    parser.add_argument('--rbf-type', type=str, default='expnorm', choices=['gauss', 'expnorm'], help='Type of distance expansion')
+    parser.add_argument('--trainable-rbf', type=bool, default=False, help='If distance expansion functions should be trainable')
+    parser.add_argument('--neighbor-embedding', type=bool, default=False, help='If a neighbor embedding should be applied before interactions')
     # fmt: on
  
     args = parser.parse_args()

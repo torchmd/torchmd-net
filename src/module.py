@@ -1,7 +1,7 @@
 import os
 import pytorch_lightning as pl
 
-from torch_geometric.nn.models.schnet import SchNet, qm9_target_dict
+from torch_geometric.nn.models.schnet import qm9_target_dict
 from torch_geometric.data import DataLoader
 from torch_geometric.datasets import QM9
 
@@ -11,6 +11,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.functional import mse_loss, l1_loss
 
 from utils import make_splits
+from torchmd_gn import TorchMD_GN
 
 
 class LNNP(pl.LightningModule):
@@ -26,12 +27,17 @@ class LNNP(pl.LightningModule):
         if self.hparams.load_model:
             raise NotImplementedError()
         else:
-            self.model = SchNet(
+            self.model = TorchMD_GN(
                 hidden_channels=self.hparams.embedding_dimension,
                 num_filters=self.hparams.num_filters,
                 num_interactions=self.hparams.num_interactions,
-                num_gaussians=self.hparams.num_rbf,
-                cutoff=self.hparams.upper_cutoff,
+                num_rbf=self.hparams.num_rbf,
+                rbf_type=self.hparams.rbf_type,
+                trainable_rbf=self.hparams.trainable_rbf,
+                activation=self.hparams.activation,
+                neighbor_embedding=self.hparams.neighbor_embedding,
+                cutoff_lower=self.hparams.cutoff_lower,
+                cutoff_upper=self.hparams.cutoff_upper,
                 atomref=self.dataset.atomref(target=self.label_idx)
             )
 
@@ -48,9 +54,9 @@ class LNNP(pl.LightningModule):
         )
         print(f'train {len(idx_train)}, val {len(idx_val)}, test {len(idx_test)}')
 
-        self.train_dataset = self.dataset[:20]#idx_train]
-        self.val_dataset = self.dataset[:20]#idx_val]
-        self.test_dataset = self.dataset[:20]#idx_test]
+        self.train_dataset = self.dataset[idx_train]
+        self.val_dataset = self.dataset[idx_val]
+        self.test_dataset = self.dataset[idx_test]
 
         self._reset_losses_dict()
 
