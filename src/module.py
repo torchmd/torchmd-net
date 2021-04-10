@@ -79,18 +79,21 @@ class LNNP(pl.LightningModule):
         return self.model(z, pos, batch=batch)
 
     def training_step(self, batch, batch_idx):
+        batch = batch.to(self.device)
         pred = self(batch.z, batch.pos, batch.batch)
         loss = mse_loss(pred[:,0], batch.y[:,self.label_idx])
         self.losses['train'].append(loss.detach())
         return loss
 
     def validation_step(self, batch, batch_idx):
+        batch = batch.to(self.device)
         pred = self(batch.z, batch.pos, batch.batch)
         loss = mse_loss(pred[:,0], batch.y[:,self.label_idx])
         self.losses['val'].append(loss.detach())
         return loss
 
     def test_step(self, batch, batch_idx):
+        batch = batch.to(self.device)
         pred = self(batch.z, batch.pos, batch.batch)
         loss = l1_loss(pred[:,0], batch.y[:,self.label_idx])
         self.losses['test'].append(loss.detach())
