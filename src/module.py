@@ -19,7 +19,7 @@ class LNNP(pl.LightningModule):
         super(LNNP, self).__init__()
         self.hparams = hparams
 
-        self.dataset = QM9('data/')
+        self.dataset = QM9(self.hparams.data)
 
         label2idx = dict(zip(qm9_target_dict.values(), qm9_target_dict.keys()))
         self.label_idx = label2idx[self.hparams.label]

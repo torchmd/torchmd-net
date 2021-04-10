@@ -39,6 +39,7 @@ def get_args():
     parser.add_argument('--num-workers', type=int, default=4, help='Number of workers for data prefetch')
     parser.add_argument('--redirect', type=bool, default=False, help='Redirect stdout and stderr to log_dir/log')
 
+    parser.add_argument('--data', default='data/', type=str, help='Path to the database')
     parser.add_argument('--label', default='energy_U0', type=str, help='Target property, e.g. energy_U0')
     parser.add_argument('--cutoff-lower', type=float, default=0.0, help='Lower cutoff in model')
     parser.add_argument('--cutoff-upper', type=float, default=5.0, help='Upper cutoff in model')
