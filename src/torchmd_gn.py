@@ -1,8 +1,3 @@
-import os
-import warnings
-import os.path as osp
-from math import pi as PI
-
 import ase
 import torch
 import torch.nn.functional as F
@@ -10,14 +5,7 @@ from torch.nn import Embedding, Sequential, Linear, ModuleList
 import numpy as np
 
 from torch_scatter import scatter
-from torch_geometric.data.makedirs import makedirs
-from torch_geometric.data import download_url, extract_zip
 from torch_geometric.nn import radius_graph, MessagePassing
-
-try:
-    import schnetpack as spk
-except ImportError:
-    spk = None
 
 
 class TorchMD_GN(torch.nn.Module):
