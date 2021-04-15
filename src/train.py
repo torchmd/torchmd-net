@@ -58,7 +58,7 @@ def get_args():
     parser.add_argument('--neighbor-embedding', type=bool, default=False, help='If a neighbor embedding should be applied before interactions')
 
     # other args
-    parser.add_argument('--label', default=None, type=str, required=True, help='Target property, e.g. energy_U0, forces')
+    parser.add_argument('--label', default=None, type=str, help='Target property, e.g. energy_U0, forces')
     parser.add_argument('--derivative', default=False, type=bool, help='If true, take the derivative of the prediction w.r.t coordinates')
     parser.add_argument('--cutoff-lower', type=float, default=0.0, help='Lower cutoff in model')
     parser.add_argument('--cutoff-upper', type=float, default=5.0, help='Upper cutoff in model')
