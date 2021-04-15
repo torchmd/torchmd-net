@@ -12,7 +12,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.functional import mse_loss, l1_loss
 
 from utils import make_splits
-from data import Subset, CGDataset
+from data import Subset, AtomrefDataset, CGDataset
 from torchmd_gn import TorchMD_GN
 
 
@@ -20,12 +20,6 @@ class LNNP(pl.LightningModule):
     def __init__(self, hparams):
         super(LNNP, self).__init__()
         self.hparams = hparams
-
-        atomref = None
-        if self.hparams.data:
-            dataset = QM9(self.hparams.data)
-            label2idx = dict(zip(qm9_target_dict.values(), qm9_target_dict.keys()))
-            atomref = dataset.atomref(target=label2idx[self.hparams.label])
 
         if self.hparams.load_model:
             raise NotImplementedError()
@@ -41,15 +35,17 @@ class LNNP(pl.LightningModule):
                 neighbor_embedding=self.hparams.neighbor_embedding,
                 cutoff_lower=self.hparams.cutoff_lower,
                 cutoff_upper=self.hparams.cutoff_upper,
-                derivative=self.hparams.derivative,
-                atomref=atomref # TODO: move atomref to dataset wrapper
+                derivative=self.hparams.derivative
             )
 
         self.losses = None
 
     def setup(self, stage):
         if self.hparams.data:
-            self.dataset = QM9(self.hparams.data, transform=partial(LNNP._filter_label, label=self.hparams.label))
+            label2idx = dict(zip(qm9_target_dict.values(), qm9_target_dict.keys()))
+            label_idx = label2idx[self.hparams.label]
+            self.dataset = QM9(self.hparams.data, transform=partial(LNNP._filter_label, label_idx=label_idx))
+            self.dataset = AtomrefDataset(self.dataset, self.dataset.atomref(label_idx))
         elif self.hparams.coords and self.hparams.forces and self.hparams.embed:
             self.dataset = CGDataset(self.hparams.coords, self.hparams.forces, self.hparams.embed)
         else:
@@ -170,7 +166,6 @@ class LNNP(pl.LightningModule):
     def _reset_losses_dict(self):
         self.losses = {'train': [], 'val': [], 'test': []}
 
-    def _filter_label(batch, label):
-        label2idx = dict(zip(qm9_target_dict.values(), qm9_target_dict.keys()))
-        batch.y = batch.y[:,label2idx[label]].unsqueeze(1)
+    def _filter_label(batch, label_idx):
+        batch.y = batch.y[:,label_idx].unsqueeze(1)
         return batch

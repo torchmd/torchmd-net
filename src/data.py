@@ -1,8 +1,11 @@
 import glob
 import numpy as np
+
 import torch
 from torch.utils.data import Dataset
+
 from torch_geometric.data import Data
+from torch_geometric.nn.models.schnet import qm9_target_dict
 
 
 class CGDataset(Dataset):
@@ -39,9 +42,6 @@ class CGDataset(Dataset):
             assert cdata.shape[1] == edata.shape[0]
         print('Combined dataset size {}'.format(len(self.index)))
 
-    def __len__(self):
-        return len(self.index)
-
     def __getitem__(self, idx):
         fileid, index = self.index[idx]
 
@@ -49,7 +49,14 @@ class CGDataset(Dataset):
         fdata = np.load(self.forcefiles[fileid], mmap_mode='r')
         edata = np.load(self.embedfiles[fileid]).astype(np.int)
 
-        return Data(pos=torch.from_numpy(np.array(cdata[index])), y=torch.from_numpy(np.array(fdata[index])), z=torch.from_numpy(edata))
+        return Data(
+            pos=torch.from_numpy(np.array(cdata[index])),
+            y=torch.from_numpy(np.array(fdata[index])),
+            z=torch.from_numpy(edata)
+        )
+
+    def __len__(self):
+        return len(self.index)
 
 
 class Subset(Dataset):
@@ -69,3 +76,24 @@ class Subset(Dataset):
 
     def __len__(self):
         return len(self.indices)
+
+
+class AtomrefDataset(Dataset):
+    r"""Dataset wrapper which removes the atomrefs from labels.
+
+    Arguments:
+        dataset (Dataset): A dataset with property `z` to index the atomrefs.
+        atomref (array-like): Array containing atomrefs to be indexed by `dataset[idx].z`.
+    """
+
+    def __init__(self, dataset, atomref):
+        self.dataset = dataset
+        self.atomref = atomref
+
+    def __getitem__(self, idx):
+        item = self.dataset[idx]
+        item.y -= self.atomref[item.z].sum()
+        return item
+
+    def __len__(self):
+        return len(self.dataset)
