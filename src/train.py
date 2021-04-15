@@ -27,6 +27,7 @@ def get_args():
     parser.add_argument('--weight-decay', type=float, default=0.0, help='Weight decay strength')
     parser.add_argument('--ngpus', type=int, default=-1, help='Number of GPUs, -1 use all available. Use CUDA_VISIBLE_DEVICES=1, to decide gpus')
     parser.add_argument('--num-nodes', type=int, default=1, help='Number of nodes')
+    parser.add_argument('--precision', type=int, default=32, choices=[16, 32], help='Floating point precision')
     parser.add_argument('--log-dir', '-l', default='/tmp/logs', help='log file')
     parser.add_argument('--load-model', default=None, help='Restart training using a model checkpoint')
     parser.add_argument('--splits', default=None, help='Npz with splits idx_train, idx_val, idx_test')
@@ -96,6 +97,10 @@ def main():
     tb_logger = pl.loggers.TensorBoardLogger(args.log_dir, name='tensorbord', version='')
     csv_logger = pl.loggers.CSVLogger(args.log_dir, name='', version='')
 
+    ddp_plugin = None
+    if 'ddp' in args.distributed_backend:
+        ddp_plugin = pl.plugins.DDPPlugin(find_unused_parameters=False)
+
     trainer = pl.Trainer(
         max_epochs=args.num_epochs,
         gpus=args.ngpus,
@@ -108,7 +113,9 @@ def main():
         callbacks=[early_stopping],
         logger=[tb_logger, csv_logger],
         reload_dataloaders_every_epoch=False,
-        enable_pl_optimizer=True
+        enable_pl_optimizer=True,
+        precision=args.precision,
+        plugins=ddp_plugin
     )
 
     trainer.fit(model)
