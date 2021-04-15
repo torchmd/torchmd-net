@@ -103,12 +103,15 @@ class LNNP(pl.LightningModule):
 
         with torch.set_grad_enabled(stage == 'train' or self.hparams.derivative):
             pred = self(batch.z, batch.pos, batch.batch)
-
         if self.hparams.derivative:
             _, pred = pred
 
         loss = loss_fn(pred, batch.y)
         self.losses[stage].append(loss.detach())
+
+        if stage == 'val':
+            # PyTorch Lightning requires this in order for ReduceLROnPlateau to work
+            self.log('val_loss', loss)
         return loss
 
     def optimizer_step(self, *args, **kwargs):
@@ -118,8 +121,9 @@ class LNNP(pl.LightningModule):
 
             for pg in optimizer.param_groups:
                 pg['lr'] = lr_scale * self.hparams.lr
-
         super().optimizer_step(*args, **kwargs)
+
+        # zero_grad call might be unnecessary here if we have Trainer(..., enable_pl_optimizer=True)
         optimizer.zero_grad()
 
     def train_dataloader(self):
@@ -146,7 +150,6 @@ class LNNP(pl.LightningModule):
 
             self.log_dict(result_dict)
         self._reset_losses_dict()
-        return {'val_loss': torch.stack(validation_step_outputs).mean()}
 
     def _get_dataloader(self, dataset, stage):
         if stage == 'train':
