@@ -93,17 +93,17 @@ class LNNP(pl.LightningModule):
         return self.step(batch, mse_loss, 'train')
 
     def validation_step(self, batch, batch_idx):
-        return self.step(batch, mse_loss, 'val')
+        with torch.set_grad_enabled(self.hparams.derivative):
+            return self.step(batch, mse_loss, 'val')
 
     def test_step(self, batch, batch_idx):
-        return self.step(batch, l1_loss, 'test')
+        with torch.set_grad_enabled(self.hparams.derivative):
+            return self.step(batch, l1_loss, 'test')
 
     def step(self, batch, loss_fn, stage):
         batch = batch.to(self.device)
 
-        with torch.set_grad_enabled(stage == 'train' or self.hparams.derivative):
-            pred = self(batch.z, batch.pos, batch.batch)
-
+        pred = self(batch.z, batch.pos, batch.batch)
         if self.hparams.derivative:
             _, pred = pred
 
