@@ -107,7 +107,7 @@ class LNNP(pl.LightningModule):
 
         if stage == 'val':
             # PyTorch Lightning requires this in order for ReduceLROnPlateau to work
-            self.log('val_loss', loss)
+            self.log('val_loss', loss.detach().cpu())
         return loss
 
     def optimizer_step(self, *args, **kwargs):
