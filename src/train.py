@@ -39,11 +39,15 @@ def get_args():
     parser.add_argument('--num-workers', type=int, default=4, help='Number of workers for data prefetch')
     parser.add_argument('--redirect', type=bool, default=False, help='Redirect stdout and stderr to log_dir/log')
 
-    parser.add_argument('--data', default='data/', type=str, help='Path to the database')
-    parser.add_argument('--label', default='energy_U0', type=str, help='Target property, e.g. energy_U0')
-    parser.add_argument('--cutoff-lower', type=float, default=0.0, help='Lower cutoff in model')
-    parser.add_argument('--cutoff-upper', type=float, default=5.0, help='Upper cutoff in model')
+    # QM9 database
+    parser.add_argument('--data', default=None, type=str, help='Path to QM9 database')
 
+    # CG dataset
+    parser.add_argument('--coords', default=None, type=str, help='Coordinate files glob')
+    parser.add_argument('--forces', default=None, type=str, help='Force files glob')
+    parser.add_argument('--embed', default=None, type=str, help='Embedding files glob')
+
+    # architectural args
     parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
     parser.add_argument('--num-filters', type=int, default=256, help='Number of filters in the model')
     parser.add_argument('--num-interactions', type=int, default=6, help='Number of interaction layers in the model')
@@ -52,6 +56,12 @@ def get_args():
     parser.add_argument('--rbf-type', type=str, default='expnorm', choices=['gauss', 'expnorm'], help='Type of distance expansion')
     parser.add_argument('--trainable-rbf', type=bool, default=False, help='If distance expansion functions should be trainable')
     parser.add_argument('--neighbor-embedding', type=bool, default=False, help='If a neighbor embedding should be applied before interactions')
+
+    # other args
+    parser.add_argument('--label', default=None, type=str, required=True, help='Target property, e.g. energy_U0, forces')
+    parser.add_argument('--derivative', default=False, type=bool, help='If true, take the derivative of the prediction w.r.t coordinates')
+    parser.add_argument('--cutoff-lower', type=float, default=0.0, help='Lower cutoff in model')
+    parser.add_argument('--cutoff-upper', type=float, default=5.0, help='Upper cutoff in model')
     # fmt: on
  
     args = parser.parse_args()

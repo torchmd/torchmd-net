@@ -1,4 +1,5 @@
 import os
+from functools import partial
 import pytorch_lightning as pl
 
 from torch_geometric.nn.models.schnet import qm9_target_dict
@@ -11,6 +12,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.functional import mse_loss, l1_loss
 
 from utils import make_splits
+from data import Subset, CGDataset
 from torchmd_gn import TorchMD_GN
 
 
@@ -19,10 +21,11 @@ class LNNP(pl.LightningModule):
         super(LNNP, self).__init__()
         self.hparams = hparams
 
-        self.dataset = QM9(self.hparams.data)
-
-        label2idx = dict(zip(qm9_target_dict.values(), qm9_target_dict.keys()))
-        self.label_idx = label2idx[self.hparams.label]
+        atomref = None
+        if self.hparams.data:
+            dataset = QM9(self.hparams.data)
+            label2idx = dict(zip(qm9_target_dict.values(), qm9_target_dict.keys()))
+            atomref = dataset.atomref(target=label2idx[self.hparams.label])
 
         if self.hparams.load_model:
             raise NotImplementedError()
@@ -38,12 +41,20 @@ class LNNP(pl.LightningModule):
                 neighbor_embedding=self.hparams.neighbor_embedding,
                 cutoff_lower=self.hparams.cutoff_lower,
                 cutoff_upper=self.hparams.cutoff_upper,
-                atomref=self.dataset.atomref(target=self.label_idx)
+                derivative=self.hparams.derivative,
+                atomref=atomref # TODO: move atomref to dataset wrapper
             )
 
         self.losses = None
 
     def setup(self, stage):
+        if self.hparams.data:
+            self.dataset = QM9(self.hparams.data, transform=partial(LNNP._filter_label, label=self.hparams.label))
+        elif self.hparams.coords and self.hparams.forces and self.hparams.embed:
+            self.dataset = CGDataset(self.hparams.coords, self.hparams.forces, self.hparams.embed)
+        else:
+            raise ValueError('Please provide either a QM9 database path or paths to coordinates, forces and emebddings.')
+
         idx_train, idx_val, idx_test = make_splits(
             len(self.dataset),
             self.hparams.val_ratio,
@@ -54,9 +65,9 @@ class LNNP(pl.LightningModule):
         )
         print(f'train {len(idx_train)}, val {len(idx_val)}, test {len(idx_test)}')
 
-        self.train_dataset = self.dataset[idx_train]
-        self.val_dataset = self.dataset[idx_val]
-        self.test_dataset = self.dataset[idx_test]
+        self.train_dataset = Subset(self.dataset, idx_train)
+        self.val_dataset = Subset(self.dataset, idx_val)
+        self.test_dataset = Subset(self.dataset, idx_test)
 
         self._reset_losses_dict()
 
@@ -79,24 +90,25 @@ class LNNP(pl.LightningModule):
         return self.model(z, pos, batch=batch)
 
     def training_step(self, batch, batch_idx):
-        batch = batch.to(self.device)
-        pred = self(batch.z, batch.pos, batch.batch)
-        loss = mse_loss(pred[:,0], batch.y[:,self.label_idx])
-        self.losses['train'].append(loss.detach())
-        return loss
+        return self.step(batch, mse_loss, 'train')
 
     def validation_step(self, batch, batch_idx):
-        batch = batch.to(self.device)
-        pred = self(batch.z, batch.pos, batch.batch)
-        loss = mse_loss(pred[:,0], batch.y[:,self.label_idx])
-        self.losses['val'].append(loss.detach())
-        return loss
+        return self.step(batch, mse_loss, 'val')
 
     def test_step(self, batch, batch_idx):
+        return self.step(batch, l1_loss, 'test')
+
+    def step(self, batch, loss_fn, stage):
         batch = batch.to(self.device)
-        pred = self(batch.z, batch.pos, batch.batch)
-        loss = l1_loss(pred[:,0], batch.y[:,self.label_idx])
-        self.losses['test'].append(loss.detach())
+
+        with torch.set_grad_enabled(stage == 'train' or self.hparams.derivative):
+            pred = self(batch.z, batch.pos, batch.batch)
+
+        if self.hparams.derivative:
+            _, pred = pred
+
+        loss = loss_fn(pred, batch.y)
+        self.losses[stage].append(loss.detach())
         return loss
 
     def optimizer_step(self, *args, **kwargs):
@@ -114,7 +126,7 @@ class LNNP(pl.LightningModule):
         return self._get_dataloader(self.train_dataset, 'train')
 
     def val_dataloader(self):
-        return self._get_dataloader(self.val_dataset, 'validation')
+        return self._get_dataloader(self.val_dataset, 'val')
 
     def test_dataloader(self):
         return self._get_dataloader(self.test_dataset, 'test')
@@ -140,7 +152,7 @@ class LNNP(pl.LightningModule):
         if stage == 'train':
             batch_size = self.hparams.batch_size
             shuffle = True
-        elif stage in ['validation', 'test']:
+        elif stage in ['val', 'test']:
             batch_size = self.hparams.inference_batch_size
             shuffle = False
 
@@ -154,3 +166,8 @@ class LNNP(pl.LightningModule):
 
     def _reset_losses_dict(self):
         self.losses = {'train': [], 'val': [], 'test': []}
+
+    def _filter_label(batch, label):
+        label2idx = dict(zip(qm9_target_dict.values(), qm9_target_dict.keys()))
+        batch.y = batch.y[:,label2idx[label]].unsqueeze(1)
+        return batch

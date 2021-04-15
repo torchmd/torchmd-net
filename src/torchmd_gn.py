@@ -10,6 +10,7 @@ from torch_geometric.nn import radius_graph, MessagePassing
 
 class TorchMD_GN(torch.nn.Module):
     r"""The TorchMD Graph Network architecture.
+    Code adapted from https://github.com/rusty1s/pytorch_geometric/blob/d7d8e5e2edada182d820bbb1eec5f016f50db1e0/torch_geometric/nn/models/schnet.py#L38
 
     .. math::
         \mathbf{x}^{\prime}_i = \sum_{j \in \mathcal{N}(i)} \mathbf{x}_j \odot
@@ -52,13 +53,15 @@ class TorchMD_GN(torch.nn.Module):
         atomref (torch.Tensor, optional): The reference of single-atom
             properties.
             Expects a vector of shape :obj:`(max_atomic_number, )`.
+        derivative (bool, optional): If True, computes the derivative of the prediction
+            w.r.t the input coordinates. (default: :obj:`False`)
     """
 
     def __init__(self, hidden_channels=128, num_filters=128,
                  num_interactions=6, num_rbf=50, rbf_type='expnorm',
                  trainable_rbf=True, activation='silu', neighbor_embedding=True,
                  cutoff_lower=0.0, cutoff_upper=5.0, readout='add', dipole=False,
-                 mean=None, std=None, atomref=None):
+                 mean=None, std=None, atomref=None, derivative=False):
         super(TorchMD_GN, self).__init__()
 
         assert readout in ['add', 'sum', 'mean']
@@ -79,6 +82,7 @@ class TorchMD_GN(torch.nn.Module):
         self.mean = mean
         self.std = std
         self.scale = None
+        self.derivative = derivative
 
         atomic_mass = torch.from_numpy(ase.data.atomic_masses)
         self.register_buffer('atomic_mass', atomic_mass)
@@ -122,6 +126,9 @@ class TorchMD_GN(torch.nn.Module):
         assert z.dim() == 1 and z.dtype == torch.long
         batch = torch.zeros_like(z) if batch is None else batch
 
+        if self.derivative:
+            pos.requires_grad_()
+
         h = self.embedding(z)
 
         edge_index = radius_graph(pos, r=self.cutoff_upper, batch=batch)
@@ -159,6 +166,10 @@ class TorchMD_GN(torch.nn.Module):
         if self.scale is not None:
             out = self.scale * out
 
+        if self.derivative:
+            dy = -torch.autograd.grad(out, pos, grad_outputs=torch.ones_like(out), create_graph=True, retain_graph=True)[0]
+            return out, dy
+
         return out
 
     def __repr__(self):
@@ -170,7 +181,8 @@ class TorchMD_GN(torch.nn.Module):
                 f'rbf_type={self.rbf_type}, '
                 f'activation={self.activation}, '
                 f'cutoff_lower={self.cutoff_lower}, '
-                f'cutoff_upper={self.cutoff_upper})')
+                f'cutoff_upper={self.cutoff_upper}, '
+                f'derivative={self.derivative})')
 
 
 class InteractionBlock(torch.nn.Module):
