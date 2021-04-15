@@ -7,6 +7,12 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 
+try:
+    from pytorch_lightning.plugins import DDPPlugin
+except ImportError:
+    # compatibility for older PyTorch lightning versions
+    from pytorch_lightning.plugins.ddp_plugin import DDPPlugin
+
 from utils import LoadFromFile, save_argparse
 from module import LNNP
 
@@ -99,7 +105,7 @@ def main():
 
     ddp_plugin = None
     if 'ddp' in args.distributed_backend:
-        ddp_plugin = pl.plugins.DDPPlugin(find_unused_parameters=False)
+        ddp_plugin = DDPPlugin(find_unused_parameters=False)
 
     trainer = pl.Trainer(
         max_epochs=args.num_epochs,
@@ -115,7 +121,7 @@ def main():
         reload_dataloaders_every_epoch=False,
         enable_pl_optimizer=True,
         precision=args.precision,
-        plugins=ddp_plugin
+        plugins=[ddp_plugin]
     )
 
     trainer.fit(model)
