@@ -11,7 +11,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.functional import mse_loss, l1_loss
 
-from utils import make_splits
+from utils import make_splits, TestingContext
 from data import Subset, AtomrefDataset, CGDataset
 from torchmd_gn import TorchMD_GN
 
@@ -138,10 +138,8 @@ class LNNP(pl.LightningModule):
             result_dict['val_loss'] = torch.tensor(self.losses['val']).mean()
 
             if self.current_epoch % self.hparams.test_interval == 0:
-                # if the testing flag is not set in the trainer run_test uses validation_step instead of test_step
-                self.trainer.testing = True
-                result = self.trainer.run_test()
-                self.trainer.testing = False
+                with TestingContext(self):
+                    self.trainer.run_test()
                 result_dict['test_loss'] = torch.tensor(self.losses['test']).mean()
 
             self.log_dict(result_dict)

@@ -10,7 +10,7 @@ from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 try:
     from pytorch_lightning.plugins import DDPPlugin
 except ImportError:
-    # compatibility for older PyTorch lightning versions
+    # compatibility for PyTorch Lightning versions < 1.2.0
     from pytorch_lightning.plugins.ddp_plugin import DDPPlugin
 
 from utils import LoadFromFile, save_argparse
