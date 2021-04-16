@@ -1,6 +1,8 @@
 import os
 from functools import partial
+
 import pytorch_lightning as pl
+from pytorch_lightning.trainer.states import RunningStage
 
 from torch_geometric.nn.models.schnet import qm9_target_dict
 from torch_geometric.data import DataLoader
@@ -138,10 +140,10 @@ class LNNP(pl.LightningModule):
             result_dict['val_loss'] = torch.tensor(self.losses['val']).mean()
 
             if self.current_epoch % self.hparams.test_interval == 0:
-                # if the testing flag is not set in the trainer run_test uses validation_step instead of test_step
-                self.trainer.testing = True
-                result = self.trainer.run_test()
-                self.trainer.testing = False
+                current_stage = self.running_stage
+                self.trainer._set_running_stage(RunningStage.TESTING, self)
+                self.trainer.fit(self)
+                self.trainer._set_running_stage(current_stage, self)
                 result_dict['test_loss'] = torch.tensor(self.losses['test']).mean()
 
             self.log_dict(result_dict)
