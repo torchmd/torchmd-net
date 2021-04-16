@@ -4,6 +4,13 @@ import numpy as np
 import torch
 from sklearn.model_selection import train_test_split
 
+try:
+    from pytorch_lightning.trainer.states import RunningStage
+except ImportError:
+    # compatibility for PyTorch lightning versions < 1.2.0
+    RunningStage = None
+
+
 def train_val_test_split(dset_len,val_ratio,test_ratio, seed, order=None):
     shuffle = True if order is None else False
     valtest_ratio = val_ratio + test_ratio
@@ -27,6 +34,7 @@ def train_val_test_split(dset_len,val_ratio,test_ratio, seed, order=None):
 
     return np.array(idx_train), np.array(idx_val), np.array(idx_test)
 
+
 def make_splits(dataset_len, val_ratio, test_ratio, seed, filename=None, splits=None, order=None):
     if splits is not None:
         splits = np.load(splits)
@@ -43,6 +51,7 @@ def make_splits(dataset_len, val_ratio, test_ratio, seed, filename=None, splits=
 
     return torch.from_numpy(idx_train), torch.from_numpy(idx_val), torch.from_numpy(idx_test)
 
+
 class LoadFromFile(argparse.Action):
     #parser.add_argument('--file', type=open, action=LoadFromFile)
     def __call__ (self, parser, namespace, values, option_string=None):
@@ -51,6 +60,7 @@ class LoadFromFile(argparse.Action):
                 namespace.__dict__.update(yaml.load(f, Loader=yaml.FullLoader))
         else:
             raise ValueError('configuration file must end with yaml or yml')
+
 
 def save_argparse(args, filename, exclude=None):
     if filename.endswith('yaml') or filename.endswith('yml'):
@@ -62,3 +72,25 @@ def save_argparse(args, filename, exclude=None):
         yaml.dump(args, open(filename, 'w'))
     else:
         raise ValueError('Configuration file should end with yaml or yml')
+
+
+class TestingContext:
+    def __init__(self, lightning_module):
+        self.lightning_module = lightning_module
+
+    def __enter__(self):
+        if RunningStage is None:
+            # PyTorch Lightning < 1.2.0
+            self.lightning_module.trainer.testing = True
+        else:
+            # PyTorch Lightning >= 1.2.0
+            self._stage = self.lightning_module.running_stage
+            self.lightning_module.trainer._set_running_stage(RunningStage.TESTING, self)
+
+    def __exit__(self, type, value, traceback):
+        if RunningStage is None:
+            # PyTorch Lightning < 1.2.0
+            self.lightning_module.trainer.testing = False
+        else:
+            # PyTorch Lightning >= 1.2.0
+            self.lightning_module.trainer._set_running_stage(self._stage, self)
