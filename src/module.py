@@ -100,7 +100,11 @@ class LNNP(pl.LightningModule):
         with torch.set_grad_enabled(stage == 'train' or self.hparams.derivative):
             pred = self(batch.z, batch.pos, batch.batch)
         if self.hparams.derivative:
-            _, pred = pred
+            # "use" both outputs of the model's forward function but discard the first to only use the derivative and
+            # avoid 'RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one.',
+            # which otherwise get's thrown because of setting 'find_unused_parameters=False' in the DDPPlugin
+            out, deriv = pred
+            pred = deriv + out.sum() * 0
 
         loss = loss_fn(pred, batch.y)
         self.losses[stage].append(loss.detach())
