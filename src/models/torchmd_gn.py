@@ -1,14 +1,15 @@
 import ase
 import torch
-import torch.nn.functional as F
-from torch.nn import Embedding, Sequential, Linear, ModuleList
-import numpy as np
+from torch import nn
+from torch.nn import functional as F
 
 from torch_scatter import scatter
 from torch_geometric.nn import radius_graph, MessagePassing
 
+from models.utils import NeighborEmbedding, CosineCutoff, rbf_class_mapping, act_class_mapping
 
-class TorchMD_GN(torch.nn.Module):
+
+class TorchMD_GN(nn.Module):
     r"""The TorchMD Graph Network architecture.
     Code adapted from https://github.com/rusty1s/pytorch_geometric/blob/d7d8e5e2edada182d820bbb1eec5f016f50db1e0/torch_geometric/nn/models/schnet.py#L38
 
@@ -65,23 +66,25 @@ class TorchMD_GN(torch.nn.Module):
         super(TorchMD_GN, self).__init__()
 
         assert readout in ['add', 'sum', 'mean']
-        assert rbf_type in rbf_class_mapping, f'Unknown RBF type "{rbf_type}". Choose from {", ".join(rbf_class_mapping.keys())}.'
-        assert activation in act_class_mapping, f'Unknown activation function "{activation}". Choose from {", ".join(act_class_mapping.keys())}.'
+        assert rbf_type in rbf_class_mapping, (f'Unknown RBF type "{rbf_type}". '
+                                               f'Choose from {", ".join(rbf_class_mapping.keys())}.')
+        assert activation in act_class_mapping, (f'Unknown activation function "{activation}". '
+                                                 f'Choose from {", ".join(act_class_mapping.keys())}.')
 
         self.hidden_channels = hidden_channels
         self.num_filters = num_filters
         self.num_interactions = num_interactions
         self.num_rbf = num_rbf
         self.rbf_type = rbf_type
+        self.trainable_rbf = trainable_rbf
         self.activation = activation
+        self.neighbor_embedding = neighbor_embedding
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
-        self.readout = readout
+        self.readout = 'add' if dipole else readout
         self.dipole = dipole
-        self.readout = 'add' if self.dipole else self.readout
         self.mean = mean
         self.std = std
-        self.scale = None
         self.derivative = derivative
 
         atomic_mass = torch.from_numpy(ase.data.atomic_masses)
@@ -89,24 +92,28 @@ class TorchMD_GN(torch.nn.Module):
 
         act_class = act_class_mapping[activation]
 
-        self.embedding = Embedding(100, hidden_channels)
-        self.distance_expansion = rbf_class_mapping[rbf_type](cutoff_lower, cutoff_upper, num_rbf, trainable_rbf)
-        self.neighbor_embedding = NeighborEmbedding(hidden_channels, num_rbf, cutoff_lower, cutoff_upper) if neighbor_embedding else None
+        self.embedding = nn.Embedding(100, hidden_channels)
+        self.distance_expansion = rbf_class_mapping[rbf_type](
+            cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
+        )
+        self.neighbor_embedding = NeighborEmbedding(
+            hidden_channels, num_rbf, cutoff_lower, cutoff_upper
+        ) if neighbor_embedding else None
 
-        self.interactions = ModuleList()
+        self.interactions = nn.ModuleList()
         for _ in range(num_interactions):
             block = InteractionBlock(hidden_channels, num_rbf, num_filters,
                                      act_class, cutoff_lower, cutoff_upper)
             self.interactions.append(block)
 
-        self.lin1 = Linear(hidden_channels, hidden_channels // 2)
+        self.lin1 = nn.Linear(hidden_channels, hidden_channels // 2)
         self.act = act_class()
-        self.lin2 = Linear(hidden_channels // 2, 1)
+        self.lin2 = nn.Linear(hidden_channels // 2, 1)
 
         self.register_buffer('initial_atomref', atomref)
         self.atomref = None
         if atomref is not None:
-            self.atomref = Embedding(100, 1)
+            self.atomref = nn.Embedding(100, 1)
             self.atomref.weight.data.copy_(atomref)
 
         self.reset_parameters()
@@ -115,9 +122,9 @@ class TorchMD_GN(torch.nn.Module):
         self.embedding.reset_parameters()
         for interaction in self.interactions:
             interaction.reset_parameters()
-        torch.nn.init.xavier_uniform_(self.lin1.weight)
+        nn.init.xavier_uniform_(self.lin1.weight)
         self.lin1.bias.data.fill_(0)
-        torch.nn.init.xavier_uniform_(self.lin2.weight)
+        nn.init.xavier_uniform_(self.lin2.weight)
         self.lin2.bias.data.fill_(0)
         if self.atomref is not None:
             self.atomref.weight.data.copy_(self.initial_atomref)
@@ -127,7 +134,7 @@ class TorchMD_GN(torch.nn.Module):
         batch = torch.zeros_like(z) if batch is None else batch
 
         if self.derivative:
-            pos.requires_grad_()
+            pos.requires_grad_(True)
 
         h = self.embedding(z)
 
@@ -163,11 +170,9 @@ class TorchMD_GN(torch.nn.Module):
         if self.dipole:
             out = torch.norm(out, dim=-1, keepdim=True)
 
-        if self.scale is not None:
-            out = self.scale * out
-
         if self.derivative:
-            dy = -torch.autograd.grad(out, pos, grad_outputs=torch.ones_like(out), create_graph=True, retain_graph=True)[0]
+            dy = -torch.autograd.grad(out, pos, grad_outputs=torch.ones_like(out),
+                                      create_graph=True, retain_graph=True)[0]
             return out, dy
 
         return out
@@ -179,34 +184,37 @@ class TorchMD_GN(torch.nn.Module):
                 f'num_interactions={self.num_interactions}, '
                 f'num_rbf={self.num_rbf}, '
                 f'rbf_type={self.rbf_type}, '
+                f'trainable_rbf={self.trainable_rbf}, '
                 f'activation={self.activation}, '
+                f'neighbor_embedding={self.neighbor_embedding}, '
                 f'cutoff_lower={self.cutoff_lower}, '
                 f'cutoff_upper={self.cutoff_upper}, '
                 f'derivative={self.derivative})')
 
 
-class InteractionBlock(torch.nn.Module):
-    def __init__(self, hidden_channels, num_rbf, num_filters, activation, cutoff_lower, cutoff_upper):
+class InteractionBlock(nn.Module):
+    def __init__(self, hidden_channels, num_rbf, num_filters, activation,
+                 cutoff_lower, cutoff_upper):
         super(InteractionBlock, self).__init__()
-        self.mlp = Sequential(
-            Linear(num_rbf, num_filters),
+        self.mlp = nn.Sequential(
+            nn.Linear(num_rbf, num_filters),
             activation(),
-            Linear(num_filters, num_filters),
+            nn.Linear(num_filters, num_filters),
         )
         self.conv = CFConv(hidden_channels, hidden_channels, num_filters,
                            self.mlp, cutoff_lower, cutoff_upper)
         self.act = activation()
-        self.lin = Linear(hidden_channels, hidden_channels)
+        self.lin = nn.Linear(hidden_channels, hidden_channels)
 
         self.reset_parameters()
 
     def reset_parameters(self):
-        torch.nn.init.xavier_uniform_(self.mlp[0].weight)
+        nn.init.xavier_uniform_(self.mlp[0].weight)
         self.mlp[0].bias.data.fill_(0)
-        torch.nn.init.xavier_uniform_(self.mlp[2].weight)
+        nn.init.xavier_uniform_(self.mlp[2].weight)
         self.mlp[0].bias.data.fill_(0)
         self.conv.reset_parameters()
-        torch.nn.init.xavier_uniform_(self.lin.weight)
+        nn.init.xavier_uniform_(self.lin.weight)
         self.lin.bias.data.fill_(0)
 
     def forward(self, x, edge_index, edge_weight, edge_attr):
@@ -217,23 +225,24 @@ class InteractionBlock(torch.nn.Module):
 
 
 class CFConv(MessagePassing):
-    def __init__(self, in_channels, out_channels, num_filters, nn, cutoff_lower, cutoff_upper):
+    def __init__(self, in_channels, out_channels, num_filters, net,
+                 cutoff_lower, cutoff_upper):
         super(CFConv, self).__init__(aggr='add')
-        self.lin1 = Linear(in_channels, num_filters, bias=False)
-        self.lin2 = Linear(num_filters, out_channels)
-        self.nn = nn
+        self.lin1 = nn.Linear(in_channels, num_filters, bias=False)
+        self.lin2 = nn.Linear(num_filters, out_channels)
+        self.net = net
         self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)
 
         self.reset_parameters()
 
     def reset_parameters(self):
-        torch.nn.init.xavier_uniform_(self.lin1.weight)
-        torch.nn.init.xavier_uniform_(self.lin2.weight)
+        nn.init.xavier_uniform_(self.lin1.weight)
+        nn.init.xavier_uniform_(self.lin2.weight)
         self.lin2.bias.data.fill_(0)
 
     def forward(self, x, edge_index, edge_weight, edge_attr):
         C = self.cutoff(edge_weight)
-        W = self.nn(edge_attr) * C.view(-1, 1)
+        W = self.net(edge_attr) * C.view(-1, 1)
 
         x = self.lin1(x)
         x = self.propagate(edge_index, x=x, W=W)
@@ -242,116 +251,3 @@ class CFConv(MessagePassing):
 
     def message(self, x_j, W):
         return x_j * W
-
-
-class NeighborEmbedding(MessagePassing):
-    def __init__(self, hidden_channels, num_rbf, cutoff_lower, cutoff_upper):
-        super(NeighborEmbedding, self).__init__(aggr='add')
-        self.embedding = Embedding(100, hidden_channels)
-        self.distance_proj = Linear(num_rbf, hidden_channels)
-        self.combine = Linear(hidden_channels * 2, hidden_channels)
-        self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)
-
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        self.embedding.reset_parameters()
-        torch.nn.init.xavier_uniform_(self.distance_proj.weight)
-        torch.nn.init.xavier_uniform_(self.combine.weight)
-        self.distance_proj.bias.data.fill_(0)
-        self.combine.bias.data.fill_(0)
-
-    def forward(self, z, x, edge_index, edge_weight, edge_attr):
-        C = self.cutoff(edge_weight)
-        W = self.distance_proj(edge_attr) * C.view(-1, 1)
-
-        x_neighbors = self.embedding(z)
-        x_neighbors = self.propagate(edge_index, x=x_neighbors, W=W)
-        x_neighbors = self.combine(torch.cat([x, x_neighbors], dim=1))
-        return x_neighbors
-
-    def message(self, x_j, W):
-        return x_j * W
-
-
-class GaussianSmearing(torch.nn.Module):
-    def __init__(self, start=0.0, stop=5.0, num_gaussians=50, trainable=True):
-        super(GaussianSmearing, self).__init__()
-        offset = torch.linspace(start, stop, num_gaussians)
-        coeff = -0.5 / (offset[1] - offset[0]).item()**2
-
-        if trainable:
-            self.register_parameter('coeff', torch.nn.Parameter(torch.scalar_tensor(coeff)))
-            self.register_parameter('offset', torch.nn.Parameter(offset))
-        else:
-            self.register_buffer('coeff', torch.scalar_tensor(coeff))
-            self.register_buffer('offset', offset)
-
-    def forward(self, dist):
-        dist = dist.view(-1, 1) - self.offset.view(1, -1)
-        return torch.exp(self.coeff * torch.pow(dist, 2))
-
-
-class ExpNormalSmearing(torch.nn.Module):
-    def __init__(self, cutoff_lower=0.0, cutoff_upper=5.0, num_rbf=50, trainable=True):
-        super().__init__()
-        self.register_buffer('cutoff_lower', torch.scalar_tensor(cutoff_lower))
-
-        self.cutoff_fn = CosineCutoff(0, cutoff_upper)
-
-        # initialize means and betas according to the default values in PhysNet (https://pubs.acs.org/doi/10.1021/acs.jctc.9b00181)
-        means = torch.linspace(torch.exp(torch.scalar_tensor(-cutoff_upper + cutoff_lower)), 1, num_rbf)
-        betas = torch.tensor([(2 / num_rbf * (1 - torch.exp(torch.scalar_tensor(-cutoff_upper + cutoff_lower)))) ** -2] * num_rbf)
-
-        if trainable:
-            self.register_parameter('means', torch.nn.Parameter(means))
-            self.register_parameter('betas', torch.nn.Parameter(betas))
-        else:
-            self.register_buffer('means', means)
-            self.register_buffer('betas', betas)
-
-    def forward(self, distances):
-        distances = distances.unsqueeze(-1)
-        return self.cutoff_fn(distances) * torch.exp(-self.betas * (torch.exp(-distances + self.cutoff_lower) - self.means) ** 2)
-
-
-class ShiftedSoftplus(torch.nn.Module):
-    def __init__(self):
-        super(ShiftedSoftplus, self).__init__()
-        self.shift = torch.log(torch.tensor(2.0)).item()
-
-    def forward(self, x):
-        return F.softplus(x) - self.shift
-
-
-class CosineCutoff(torch.nn.Module):
-    def __init__(self, cutoff_lower=0.0, cutoff_upper=5.0):
-        super(CosineCutoff, self).__init__()
-        self.register_buffer("cutoff_lower", torch.scalar_tensor(cutoff_lower))
-        self.register_buffer("cutoff_upper", torch.scalar_tensor(cutoff_upper))
-
-    def forward(self, distances):
-        if self.cutoff_lower > 0:
-            cutoffs = 0.5 * (torch.cos(np.pi * ( 2 * (distances - self.cutoff_lower) / (self.cutoff_upper - self.cutoff_lower) + 1.0)) + 1.0)
-            # remove contributions below the cutoff radius
-            cutoffs = cutoffs * (distances < self.cutoff_upper).float()
-            cutoffs = cutoffs * (distances > self.cutoff_lower).float()
-            return cutoffs
-        else:
-            cutoffs = 0.5 * (torch.cos(distances * np.pi / self.cutoff_upper) + 1.0)
-            # remove contributions beyond the cutoff radius
-            cutoffs = cutoffs * (distances < self.cutoff_upper).float()
-            return cutoffs
-
-
-rbf_class_mapping = {
-    'gauss': GaussianSmearing,
-    'expnorm': ExpNormalSmearing
-}
-
-act_class_mapping = {
-    'ssp': ShiftedSoftplus,
-    'silu': torch.nn.SiLU,
-    'tanh': torch.nn.Tanh,
-    'signmoid': torch.nn.Sigmoid
-}
