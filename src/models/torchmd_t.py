@@ -93,7 +93,7 @@ class TorchMD_T(nn.Module):
         attn_act_class = act_class_mapping[attn_activation]
 
         self.embedding = nn.Embedding(100, hidden_channels)
-        
+
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
         )
@@ -222,6 +222,8 @@ class MultiHeadAttention(MessagePassing):
         self.dv_proj = None
         if distance_influence in ['values', 'both']:
             self.dv_proj = nn.Linear(num_rbf, hidden_channels)
+
+        self.reset_parameters()
 
     def reset_parameters(self):
         self.layernorm.reset_parameters()
