@@ -13,8 +13,8 @@ except ImportError:
     # compatibility for PyTorch Lightning versions < 1.2.0
     from pytorch_lightning.plugins.ddp_plugin import DDPPlugin
 
-from utils import LoadFromFile, save_argparse
-from module import LNNP
+from torchmdnet2.utils import LoadFromFile, save_argparse
+from torchmdnet2.models import LNNP
 
 
 def get_args():
@@ -70,13 +70,13 @@ def get_args():
     parser.add_argument('--cutoff-lower', type=float, default=0.0, help='Lower cutoff in model')
     parser.add_argument('--cutoff-upper', type=float, default=5.0, help='Upper cutoff in model')
     # fmt: on
- 
+
     args = parser.parse_args()
 
     if args.redirect:
         sys.stdout = open(os.path.join(args.log_dir, 'log'), 'w')
         sys.stderr = sys.stdout
- 
+
     if args.inference_batch_size is None:
         args.inference_batch_size = args.batch_size
 
@@ -99,7 +99,7 @@ def main():
         filename='{epoch}-{val_loss:.4f}-{test_loss:.4f}'
     )
     early_stopping = EarlyStopping('val_loss', patience=args.early_stopping_patience)
-    
+
     tb_logger = pl.loggers.TensorBoardLogger(args.log_dir, name='tensorbord', version='')
     csv_logger = pl.loggers.CSVLogger(args.log_dir, name='', version='')
 

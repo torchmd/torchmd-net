@@ -11,9 +11,9 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.functional import mse_loss, l1_loss
 
-from utils import make_splits, TestingContext
-from data import Subset, AtomrefDataset, CGDataset
-from torchmd_gn import TorchMD_GN
+from ..utils import make_splits, TestingContext
+from ..data import Subset, AtomrefDataset, CGDataset
+from ..nn.torchmd_gn import TorchMD_GN
 
 
 class LNNP(pl.LightningModule):
@@ -79,7 +79,7 @@ class LNNP(pl.LightningModule):
         lr_scheduler = {'scheduler': scheduler,
                         'monitor': 'val_loss',
                         'interval': 'epoch',
-                        'frequency': 1} 
+                        'frequency': 1}
         return [optimizer], [lr_scheduler]
 
     def forward(self, z, pos, batch=None):
