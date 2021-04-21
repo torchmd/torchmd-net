@@ -4,7 +4,7 @@
 
 ```
 git clone https://github.com/compsciencelab/torchmd-net.git
-pip install torchmd-net/
+pip install -e torchmd-net/
 ```
 
 ## Usage
