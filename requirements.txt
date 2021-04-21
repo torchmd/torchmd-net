@@ -1,8 +1,4 @@
 torch
 pytorch-lightning
-torch-geometric
-torch-sparse
-torch-scatter
-torch-cluster
 matplotlib
 scipy
