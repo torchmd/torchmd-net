@@ -13,7 +13,7 @@ from torch.nn.functional import mse_loss, l1_loss
 
 from utils import make_splits, TestingContext
 from data import Subset, AtomrefDataset, CGDataset
-from torchmd_gn import TorchMD_GN
+from models import create_model
 
 
 class LNNP(pl.LightningModule):
@@ -23,21 +23,8 @@ class LNNP(pl.LightningModule):
 
         if self.hparams.load_model:
             raise NotImplementedError()
-        else:
-            self.model = TorchMD_GN(
-                hidden_channels=self.hparams.embedding_dimension,
-                num_filters=self.hparams.num_filters,
-                num_interactions=self.hparams.num_interactions,
-                num_rbf=self.hparams.num_rbf,
-                rbf_type=self.hparams.rbf_type,
-                trainable_rbf=self.hparams.trainable_rbf,
-                activation=self.hparams.activation,
-                neighbor_embedding=self.hparams.neighbor_embedding,
-                cutoff_lower=self.hparams.cutoff_lower,
-                cutoff_upper=self.hparams.cutoff_upper,
-                derivative=self.hparams.derivative
-            )
 
+        self.model = create_model(self.hparams)
         self.losses = None
 
     def setup(self, stage):
