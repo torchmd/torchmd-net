@@ -6,7 +6,7 @@ from torch.nn import functional as F
 from torch_scatter import scatter
 from torch_geometric.nn import radius_graph, MessagePassing
 
-from models.utils import NeighborEmbedding, CosineCutoff, rbf_class_mapping, act_class_mapping
+from torchmdnet.models.utils import NeighborEmbedding, CosineCutoff, rbf_class_mapping, act_class_mapping
 
 
 class TorchMD_GN(nn.Module):

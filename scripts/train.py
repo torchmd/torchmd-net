@@ -13,8 +13,8 @@ except ImportError:
     # compatibility for PyTorch Lightning versions < 1.2.0
     from pytorch_lightning.plugins.ddp_plugin import DDPPlugin
 
-from utils import LoadFromFile, save_argparse
-from module import LNNP
+from torchmdnet.utils import LoadFromFile, save_argparse
+from torchmdnet import LNNP
 
 
 def get_args():

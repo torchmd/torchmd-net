@@ -1,4 +1,4 @@
-from models import TorchMD_GN, TorchMD_T
+from torchmdnet.models import TorchMD_GN, TorchMD_T
 
 def create_model(args):
     model_args = dict(

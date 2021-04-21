@@ -11,9 +11,9 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.functional import mse_loss, l1_loss
 
-from utils import make_splits, TestingContext
-from data import Subset, AtomrefDataset, CGDataset
-from models import create_model
+from torchmdnet.utils import make_splits, TestingContext
+from torchmdnet.data import Subset, AtomrefDataset, CGDataset
+from torchmdnet.models import create_model
 
 
 class LNNP(pl.LightningModule):
