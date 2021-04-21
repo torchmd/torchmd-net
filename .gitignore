@@ -132,5 +132,4 @@ dmypy.json
 .vscode/
 
 # temp directories
-data/
 logs/
