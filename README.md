@@ -3,6 +3,8 @@
 ## Installation
 
 ```
+conda create --name torchmd python=3.8
+conda activate torchmd
 git clone https://github.com/compsciencelab/torchmd-net.git
 pip install -e torchmd-net/
 ```
