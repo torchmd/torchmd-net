@@ -2,7 +2,8 @@ activation: silu
 batch_size: 128
 cutoff_lower: 0.0
 cutoff_upper: 5.0
-data: ~/data/
+dataset: QM9
+dataset_root: ~/data/
 distributed_backend: ddp
 early_stopping_patience: 100
 embedding_dimension: 256
