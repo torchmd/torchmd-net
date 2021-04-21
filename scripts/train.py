@@ -80,6 +80,8 @@ def get_args():
  
     args = parser.parse_args()
 
+    assert args.label is not None, 'Please specify a label.'
+
     if args.redirect:
         sys.stdout = open(os.path.join(args.log_dir, 'log'), 'w')
         sys.stderr = sys.stdout
