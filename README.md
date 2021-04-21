@@ -1,14 +1,31 @@
 # torchmd-net
 
 ## Installation
-
+Create a new conda environment using Python 3.8 via
 ```
 conda create --name torchmd python=3.8
 conda activate torchmd
+```
+
+Then, install PyTorch according to your hardware specifications (more information [here](https://pytorch.org/get-started/locally/#start-locally)), e.g. for CUDA 11.1 and the most recent version of PyTorch use
+```
+conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c conda-forge
+```
+
+Download and install the `torchmd-net` repository via
+```
 git clone https://github.com/compsciencelab/torchmd-net.git
 pip install -e torchmd-net/
 ```
-Additionally, `torch-geometric` must be installed with its dependencies as it is specified [here](https://github.com/rusty1s/pytorch_geometric#installation).
+
+Finally, install `torch-geometric` with its dependencies as it is specified [here](https://github.com/rusty1s/pytorch_geometric#installation). Example for PyTorch 1.8 and CUDA 11.1:
+```
+pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cu111.html
+pip install torch-sparse -f https://pytorch-geometric.com/whl/torch-1.8.0+cu111.html
+pip install torch-cluster -f https://pytorch-geometric.com/whl/torch-1.8.0+cu111.html
+pip install torch-spline-conv -f https://pytorch-geometric.com/whl/torch-1.8.0+cu111.html
+pip install torch-geometric
+```
 
 ## Usage
 Specifying training arguments can either be done via a configuration `.yaml` file or through command line arguments directly. An example configuration file for training a TorchMD Graph Network on QM9 can be found at [examples/graph-network.yaml](https://github.com/compsciencelab/torchmd-net/blob/main/examples/graph-network.yaml). GPUs can be selected by listing the desired device IDs (coming from `nvidia-smi`) in the `CUDA_VISIBLE_DEVICES` environment variable.
