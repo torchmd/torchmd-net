@@ -39,13 +39,15 @@ __Currently does not work with the most recent PyTorch Lightning version. Tested
 
 In order to train models on multiple nodes some environment variables have to be set, which provide all necessary information to PyTorch Lightning. In the following we provide an example bash script to start training on two machines with two GPUs each. The script has to be started once on each node. Once [`train.py`](https://github.com/compsciencelab/torchmd-net/blob/main/scripts/train.py) is started on all nodes, a network connection between the nodes will be established using NCCL.
 
+In addition to the environment variables the argument `--num-nodes` has to be specified with the number of nodes involved during training.
+
 ```
 export NODE_RANK=0
 export MASTER_ADDR=hostname1
 export MASTER_PORT=12910
 
 mkdir -p output
-CUDA_VISIBLE_DEVICES=0,1 python torchmd-net/scripts/train.py --conf torchmd-net/examples/graph-network.yaml --log-dir output/ --num-nodes 2
+CUDA_VISIBLE_DEVICES=0,1 python torchmd-net/scripts/train.py --conf torchmd-net/examples/graph-network.yaml --num-nodes 2 --log-dir output/
 ```
 
 - `NODE_RANK` : Integer indicating the node index. Must be `0` for the main node and incremented by one for each additional node.
