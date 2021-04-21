@@ -8,6 +8,7 @@ conda activate torchmd
 git clone https://github.com/compsciencelab/torchmd-net.git
 pip install -e torchmd-net/
 ```
+Additionally, `torch-geometric` must be installed with its dependencies as it is specified [here](https://github.com/rusty1s/pytorch_geometric#installation).
 
 ## Usage
 Specifying training arguments can either be done via a configuration `.yaml` file or through command line arguments directly. An example configuration file for training a TorchMD Graph Network on QM9 can be found at [examples/graph-network.yaml](https://github.com/compsciencelab/torchmd-net/blob/main/examples/graph-network.yaml). GPUs can be selected by listing the desired device IDs (coming from `nvidia-smi`) in the `CUDA_VISIBLE_DEVICES` environment variable.
