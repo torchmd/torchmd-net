@@ -4,6 +4,7 @@ from glob import glob
 from os.path import isfile, join
 from collections import OrderedDict
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch_scatter import scatter
@@ -14,33 +15,7 @@ import mdtraj
 
 from ..nn import BaselineModel, RepulsionLayer, HarmonicLayer
 from ..geometry import GeometryFeature, GeometryStatistics
-
-
-
-AA2INT = {'ALA':1,
-         'GLY':2,
-         'PHE':3,
-         'TYR':4,
-         'ASP':5,
-         'GLU':6,
-         'TRP':7,
-         'PRO':8,
-         'ASN':9,
-         'GLN':10,
-         'HIS':11,
-         'HSD':11,
-         'HSE':11,
-         'SER':12,
-         'THR':13,
-         'VAL':14,
-         'MET':15,
-         'CYS':16,
-         'NLE':17,
-         'ARG':18,
-         'LYS':19,
-         'LEU':20,
-         'ILE':21
-         }
+from ..utils import tqdm
 
 
 class ChignolinDataset(InMemoryDataset):
@@ -48,25 +23,29 @@ class ChignolinDataset(InMemoryDataset):
 
     def __init__(self, root,  transform=None, pre_transform=None,
                  pre_filter=None):
-
+        self.temperature = 350 # K
         super(ChignolinDataset, self).__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
+        self.traj = mdtraj.load(self.processed_paths[1])
 
     def download(self):
         # Download to `self.raw_dir`.
         url_trajectory = 'http://pub.htmd.org/chignolin_trajectories.tar.gz'
         url_forces = 'http://pub.htmd.org/chignolin_forces_nowater.tar.gz'
-
-        path_trajectory = download_url(url_trajectory, self.raw_dir)
+        url_coords = 'http://pub.htmd.org/chignolin_coords_nowater.tar.gz'
+        url_inputs = 'http://pub.htmd.org/chignolin_generators.tar.gz'
+        # path_trajectory = download_url(url_trajectory, self.raw_dir)
+        path_inputs = download_url(url_inputs, self.raw_dir)
+        path_coord = download_url(url_coords, self.raw_dir)
         path_forces = download_url(url_forces, self.raw_dir)
 
     @property
     def raw_file_names(self):
-        return ['chignolin_trajectories.tar.gz', 'chignolin_forces_nowater.tar.gz']
+        return ['chignolin_generators.tar.gz', 'chignolin_forces_nowater.tar.gz', 'chignolin_coords_nowater.tar.gz']
 
     @property
     def processed_file_names(self):
-        return 'chignolin.pt'
+        return ['chignolin.pt', 'chignolin.pdb']
 
     @staticmethod
     def get_cg_mapping(topology):
@@ -91,18 +70,18 @@ class ChignolinDataset(InMemoryDataset):
         return embeddings,cg_matrix,cg_mapping
 
     @staticmethod
-    def get_data_filenames(traj_dir, force_dir):
-        tags = [os.path.basename(fn) for fn in  os.listdir(traj_dir) if not isfile(join(traj_dir, fn))]
-        traj_fns = {}
+    def get_data_filenames(coord_dir, force_dir):
+        tags = [os.path.basename(fn).replace('chig_coor_','').replace('.npy','') for fn in  os.listdir(coord_dir)]
+
+        coord_fns = {}
         for tag in tags:
-            aa = glob(join(traj_dir,f'{tag}/*.xtc'))
-            assert len(aa) == 1, aa
-            traj_fns[tag] = aa[0]
+            fn = f'chig_coor_{tag}.npy'
+            coord_fns[tag] = join(coord_dir, fn)
         forces_fns = {}
         for tag in tags:
             fn = f'chig_force_{tag}.npy'
             forces_fns[tag] = join(force_dir, fn)
-        return traj_fns,forces_fns
+        return coord_fns,forces_fns
 
     def get_baseline_model(self, data=None, n_beads=None):
         if data is None:
@@ -111,7 +90,7 @@ class ChignolinDataset(InMemoryDataset):
             n_beads = data.n_beads[0]
         priors = []
         coordinates = data.pos.cpu().detach().numpy().reshape((-1, n_beads, 3))
-        stats = GeometryStatistics(coordinates, backbone_inds='all', get_all_distances=True,
+        stats = GeometryStatistics(coordinates, temperature=self.temperature, backbone_inds='all', get_all_distances=True,
                           get_backbone_angles=True, get_backbone_dihedrals=True)
 
         # estimate the harmonic bond parameters
@@ -155,45 +134,43 @@ class ChignolinDataset(InMemoryDataset):
         # extract files
         for fn in self.raw_paths:
             extract_tar(fn, self.raw_dir, mode='r:gz')
-        traj_dir = join(self.raw_dir, 'filtered')
+        coord_dir = join(self.raw_dir, 'coords_nowater')
         force_dir = join(self.raw_dir, 'forces_nowater')
 
-        topology_fn = join(traj_dir,'filtered.pdb')
-        topology = mdtraj.load(topology_fn).topology
+        topology_fn = join(self.raw_dir,'chignolin_50ns_0/structure.pdb')
+        traj = mdtraj.load(topology_fn).remove_solvent()
+        traj.save(self.processed_paths[1])
 
+        topology = traj.topology
         embeddings, cg_matrix, cg_mapping = self.get_cg_mapping(topology)
         n_beads = cg_matrix.shape[0]
         embeddings = np.array(embeddings, dtype=np.int64)
 
-        traj_fns, forces_fns = self.get_data_filenames(traj_dir, force_dir)
+        coord_fns, forces_fns = self.get_data_filenames(coord_dir, force_dir)
 
         f_proj = np.dot(np.linalg.inv(np.dot(cg_matrix,cg_matrix.T)),cg_matrix)
 
         data_list = []
         ii_frame = 0
-        for tag in tqdm(traj_fns, desc='Load Dataset'):
+        for i_traj, tag in enumerate(tqdm(coord_fns, desc='Load Dataset')):
             forces = np.load(forces_fns[tag])
-            # the chignolin trajectory as 2 ions at the end while the forces don't record these atoms
-            cg_forces = np.array(np.einsum('mn, ind-> imd', f_proj[:,:-2], forces), dtype=np.float32)
-            cg_coords = []
+            cg_forces = np.array(np.einsum('mn, ind-> imd', f_proj, forces), dtype=np.float32)
 
-            for chunk in mdtraj.iterload(traj_fns[tag], chunk=100, top=topology_fn):
-                cg_coord = np.array(np.einsum('mn, ind-> imd',
-                                                 cg_matrix, chunk.xyz), dtype=np.float32)
-                cg_coords.append(cg_coord)
-            cg_coords = np.vstack(cg_coords)
-            assert cg_coords.shape == cg_forces.shape
+            coords = np.load(coord_fns[tag])
+            cg_coords = np.array(np.einsum('mn, ind-> imd',cg_matrix, coords), dtype=np.float32)
 
-            for i_frame in range(chunk.n_frames):
+            n_frames = cg_coords.shape[0]
+
+            for i_frame in range(n_frames):
                 pos = torch.from_numpy(cg_coords[i_frame].reshape(n_beads, 3))
                 z = torch.from_numpy(embeddings)
                 force = torch.from_numpy(cg_forces[i_frame].reshape(n_beads, 3))
 
                 data = Data(z=z, pos=pos, forces=force, idx=ii_frame,
-                            name='chignolin', n_beads=n_beads)
-                if self.pre_filter is not None and not self.pre_filter(data):
+                            name='chignolin', n_beads=n_beads, traj_idx=i_traj)
+                if self.pre_filter != None and not self.pre_filter(data):
                     continue
-                if self.pre_transform is not None:
+                if self.pre_transform != None:
                     data = self.pre_transform(data)
                 data_list.append(data)
                 ii_frame += 1

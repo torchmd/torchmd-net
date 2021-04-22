@@ -10,6 +10,24 @@ except ImportError:
     # compatibility for PyTorch lightning versions < 1.2.0
     RunningStage = None
 
+def is_notebook():
+    from IPython import get_ipython
+    try:
+        shell = get_ipython().__class__.__name__
+        if shell == 'ZMQInteractiveShell':
+            return True   # Jupyter notebook or qtconsole
+        elif shell == 'TerminalInteractiveShell':
+            return False  # Terminal running IPython
+        else:
+            return False  # Other type (?)
+    except NameError:
+        return False      # Probably standard Python interpreter
+
+if is_notebook():
+    from tqdm.notebook import tqdm
+else:
+    from tqdm import tqdm
+
 
 def train_val_test_split(dset_len,val_ratio,test_ratio, seed, order=None):
     shuffle = True if order is None else False
