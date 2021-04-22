@@ -75,6 +75,7 @@ def get_args():
     parser.add_argument('--derivative', default=False, type=bool, help='If true, take the derivative of the prediction w.r.t coordinates')
     parser.add_argument('--cutoff-lower', type=float, default=0.0, help='Lower cutoff in model')
     parser.add_argument('--cutoff-upper', type=float, default=5.0, help='Upper cutoff in model')
+    parser.add_argument('--atom-filter', type=int, default=0, help='Only sum over atoms with Z > atom_filter')
     # fmt: on
  
     args = parser.parse_args()
