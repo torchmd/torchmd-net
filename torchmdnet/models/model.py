@@ -10,7 +10,8 @@ def create_model(args):
         neighbor_embedding=args.neighbor_embedding,
         cutoff_lower=args.cutoff_lower,
         cutoff_upper=args.cutoff_upper,
-        derivative=args.derivative
+        derivative=args.derivative,
+        atom_filter=args.atom_filter
     )
 
     if args.model == 'graph-network':
