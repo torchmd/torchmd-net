@@ -72,6 +72,8 @@ class TorchMD_GN(nn.Module):
                                                f'Choose from {", ".join(rbf_class_mapping.keys())}.')
         assert activation in act_class_mapping, (f'Unknown activation function "{activation}". '
                                                  f'Choose from {", ".join(act_class_mapping.keys())}.')
+        if derivative:
+            assert atom_filter == 0, 'Atom filter currently does not work if derivative is set to true'
 
         self.hidden_channels = hidden_channels
         self.num_filters = num_filters
@@ -152,12 +154,13 @@ class TorchMD_GN(nn.Module):
         for interaction in self.interactions:
             h = h + interaction(h, edge_index, edge_weight, edge_attr)
 
-        # drop atoms according to the filter
-        atom_mask = z > self.atom_filter
-        h = h[atom_mask]
-        z = z[atom_mask]
-        pos = pos[atom_mask]
-        batch = batch[atom_mask]
+        if not self.derivative:
+            # drop atoms according to the filter
+            atom_mask = z > self.atom_filter
+            h = h[atom_mask]
+            z = z[atom_mask]
+            pos = pos[atom_mask]
+            batch = batch[atom_mask]
 
         # output network
         h = self.lin1(h)

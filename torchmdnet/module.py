@@ -8,9 +8,9 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.functional import mse_loss, l1_loss
 
-import torchmdnet
+from torchmdnet import datasets
 from torchmdnet.utils import make_splits, TestingContext
-from torchmdnet.data import Subset, AtomrefDataset, CGDataset
+from torchmdnet.data import Subset, AtomrefDataset
 from torchmdnet.models import create_model
 
 
@@ -26,15 +26,15 @@ class LNNP(pl.LightningModule):
         self.losses = None
 
     def setup(self, stage):
-        if self.hparams.dataset == 'CG':
-            self.dataset = CGDataset(
+        if self.hparams.dataset == 'custom':
+            self.dataset = datasets.Custom(
                 self.hparams.coord_files,
                 self.hparams.embed_files,
                 self.hparams.energy_files,
                 self.hparams.force_files
             )
         else:
-            self.dataset = getattr(torchmdnet.datasets, self.hparams.dataset)(
+            self.dataset = getattr(datasets, self.hparams.dataset)(
                 self.hparams.dataset_root,
                 label=self.hparams.label
             )
@@ -51,6 +51,11 @@ class LNNP(pl.LightningModule):
             self.hparams.splits,
         )
         print(f'train {len(idx_train)}, val {len(idx_val)}, test {len(idx_test)}')
+
+        self.has_y = 'y' in self.dataset[0]
+        self.has_dy = 'dy' in self.dataset[0]
+
+        assert self.hparams.derivative == self.has_dy, 'Dataset has to contain "dy" if "derivative" is true.'
 
         self.train_dataset = Subset(self.dataset, idx_train)
         self.val_dataset = Subset(self.dataset, idx_val)
@@ -91,14 +96,21 @@ class LNNP(pl.LightningModule):
         with torch.set_grad_enabled(stage == 'train' or self.hparams.derivative):
             pred = self(batch.z, batch.pos, batch.batch)
 
+        loss = 0
         if self.hparams.derivative:
+            pred, deriv = pred
+            
             # "use" both outputs of the model's forward function but discard the first to only use the derivative and
             # avoid 'RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one.',
             # which otherwise get's thrown because of setting 'find_unused_parameters=False' in the DDPPlugin
-            out, deriv = pred
-            pred = deriv + out.sum() * 0
+            if not self.has_y:
+                deriv = deriv + pred.sum() * 0
+            loss = loss + loss_fn(deriv, batch.dy) * self.hparams.force_weight
 
-        loss = loss_fn(pred, batch.y)
+        if self.has_y:
+            loss = loss + loss_fn(pred, batch.y) * self.hparams.energy_weight
+
+        # loss = loss_fn(pred, batch.y)
         self.losses[stage].append(loss.detach())
 
         if stage == 'val':
