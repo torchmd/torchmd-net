@@ -2,6 +2,7 @@ import os
 import os.path as osp
 from glob import glob
 from os.path import isfile, join
+from collections import OrderedDict
 
 import torch
 import torch.nn.functional as F
@@ -13,6 +14,33 @@ import mdtraj
 
 from ..nn import BaselineModel, RepulsionLayer, HarmonicLayer
 from ..geometry import GeometryFeature, GeometryStatistics
+
+
+
+AA2INT = {'ALA':1,
+         'GLY':2,
+         'PHE':3,
+         'TYR':4,
+         'ASP':5,
+         'GLU':6,
+         'TRP':7,
+         'PRO':8,
+         'ASN':9,
+         'GLN':10,
+         'HIS':11,
+         'HSD':11,
+         'HSE':11,
+         'SER':12,
+         'THR':13,
+         'VAL':14,
+         'MET':15,
+         'CYS':16,
+         'NLE':17,
+         'ARG':18,
+         'LYS':19,
+         'LEU':20,
+         'ILE':21
+         }
 
 
 class ChignolinDataset(InMemoryDataset):
