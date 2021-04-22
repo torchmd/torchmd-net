@@ -27,9 +27,17 @@ class LNNP(pl.LightningModule):
 
     def setup(self, stage):
         if self.hparams.dataset == 'CG':
-            self.dataset = CGDataset(self.hparams.coords, self.hparams.forces, self.hparams.embed)
+            self.dataset = CGDataset(
+                self.hparams.coord_files,
+                self.hparams.embed_files,
+                self.hparams.energy_files,
+                self.hparams.force_files
+            )
         else:
-            self.dataset = getattr(torchmdnet.datasets, self.hparams.dataset)(self.hparams.dataset_root, label=self.hparams.label)
+            self.dataset = getattr(torchmdnet.datasets, self.hparams.dataset)(
+                self.hparams.dataset_root,
+                label=self.hparams.label
+            )
 
         if hasattr(self.dataset, 'get_atomref'):
             self.dataset = AtomrefDataset(self.dataset)
