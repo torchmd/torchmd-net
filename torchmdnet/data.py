@@ -83,12 +83,11 @@ class AtomrefDataset(Dataset):
 
     Arguments:
         dataset (Dataset): A dataset with property `z` to index the atomrefs.
-        atomref (array-like): Array containing atomrefs to be indexed by `dataset[idx].z`.
     """
 
-    def __init__(self, dataset, atomref):
+    def __init__(self, dataset):
         self.dataset = dataset
-        self.atomref = atomref
+        self.atomref = self.dataset.get_atomref()
 
     def __getitem__(self, idx):
         item = self.dataset[idx]

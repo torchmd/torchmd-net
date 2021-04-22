@@ -1,16 +1,14 @@
 import os
 from functools import partial
 import pytorch_lightning as pl
-
-from torch_geometric.nn.models.schnet import qm9_target_dict
 from torch_geometric.data import DataLoader
-from torch_geometric.datasets import QM9
 
 import torch
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.functional import mse_loss, l1_loss
 
+import torchmdnet
 from torchmdnet.utils import make_splits, TestingContext
 from torchmdnet.data import Subset, AtomrefDataset, CGDataset
 from torchmdnet.models import create_model
@@ -28,15 +26,13 @@ class LNNP(pl.LightningModule):
         self.losses = None
 
     def setup(self, stage):
-        if self.hparams.data:
-            label2idx = dict(zip(qm9_target_dict.values(), qm9_target_dict.keys()))
-            label_idx = label2idx[self.hparams.label]
-            self.dataset = QM9(self.hparams.data, transform=partial(LNNP._filter_label, label_idx=label_idx))
-            self.dataset = AtomrefDataset(self.dataset, self.dataset.atomref(label_idx))
-        elif self.hparams.coords and self.hparams.forces and self.hparams.embed:
+        if self.hparams.dataset == 'CG':
             self.dataset = CGDataset(self.hparams.coords, self.hparams.forces, self.hparams.embed)
         else:
-            raise ValueError('Please provide either a QM9 database path or paths to coordinates, forces and emebddings.')
+            self.dataset = getattr(torchmdnet.datasets, self.hparams.dataset)(self.hparams.dataset_root, label=self.hparams.label)
+
+        if hasattr(self.dataset, 'get_atomref'):
+            self.dataset = AtomrefDataset(self.dataset)
 
         idx_train, idx_val, idx_test = make_splits(
             len(self.dataset),
@@ -86,6 +82,7 @@ class LNNP(pl.LightningModule):
 
         with torch.set_grad_enabled(stage == 'train' or self.hparams.derivative):
             pred = self(batch.z, batch.pos, batch.batch)
+
         if self.hparams.derivative:
             # "use" both outputs of the model's forward function but discard the first to only use the derivative and
             # avoid 'RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one.',
@@ -154,7 +151,3 @@ class LNNP(pl.LightningModule):
 
     def _reset_losses_dict(self):
         self.losses = {'train': [], 'val': [], 'test': []}
-
-    def _filter_label(batch, label_idx):
-        batch.y = batch.y[:,label_idx].unsqueeze(1)
-        return batch

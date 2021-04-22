@@ -46,15 +46,14 @@ def get_args():
     parser.add_argument('--num-workers', type=int, default=4, help='Number of workers for data prefetch')
     parser.add_argument('--redirect', type=bool, default=False, help='Redirect stdout and stderr to log_dir/log')
 
-    # QM9 database
-    parser.add_argument('--data', default=None, type=str, help='Path to QM9 database')
+    # dataset specific
+    parser.add_argument('--dataset', default=None, type=str, choices=['QM9', 'ANI1', 'CG'], help='Name of the torch_geometric dataset')
+    parser.add_argument('--dataset-root', default='~/data', type=str, help='Data storage directory (not used if dataset is "CG")')
+    parser.add_argument('--coords', default=None, type=str, help='CG coordinate files glob')
+    parser.add_argument('--forces', default=None, type=str, help='CG force files glob')
+    parser.add_argument('--embed', default=None, type=str, help='CG embedding files glob')
 
-    # CG dataset
-    parser.add_argument('--coords', default=None, type=str, help='Coordinate files glob')
-    parser.add_argument('--forces', default=None, type=str, help='Force files glob')
-    parser.add_argument('--embed', default=None, type=str, help='Embedding files glob')
-
-    # Model
+    # model architecture
     parser.add_argument('--model', type=str, default='graph-network', choices=['graph-network', 'transformer'], help='Which model to train')
 
     # architectural args
