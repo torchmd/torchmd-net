@@ -53,12 +53,15 @@ class TorchMD_T(nn.Module):
             Expects a vector of shape :obj:`(max_atomic_number, )`.
         derivative (bool, optional): If True, computes the derivative of the prediction
             w.r.t the input coordinates. (default: :obj:`False`)
+        atom_filter (int, optional): Only sum over atoms with Z > atom_filter.
+            (default: :obj:`0`)
     """
 
     def __init__(self, hidden_channels=128, num_layers=6, num_rbf=50, rbf_type='expnorm',
                  trainable_rbf=True, activation='silu', attn_activation='silu', neighbor_embedding=True,
                  num_heads=8, distance_influence='both', cutoff_lower=0.0, cutoff_upper=5.0,
-                 readout='add', dipole=False, mean=None, std=None, atomref=None, derivative=False):
+                 readout='add', dipole=False, mean=None, std=None, atomref=None, derivative=False,
+                 atom_filter=0):
         super(TorchMD_T, self).__init__()
 
         assert readout in ['add', 'sum', 'mean']
@@ -85,6 +88,7 @@ class TorchMD_T(nn.Module):
         self.mean = mean
         self.std = std
         self.derivative = derivative
+        self.atom_filter = atom_filter
 
         atomic_mass = torch.from_numpy(ase.data.atomic_masses)
         self.register_buffer('atomic_mass', atomic_mass)
@@ -152,6 +156,13 @@ class TorchMD_T(nn.Module):
         for attn in self.attention_layers:
             h = h + attn(h, edge_index, edge_weight, edge_attr)
 
+        # drop atoms according to the filter
+        atom_mask = z > self.atom_filter
+        h = h[atom_mask]
+        z = z[atom_mask]
+        pos = pos[atom_mask]
+        batch = batch[atom_mask]
+
         h = self.out_norm(h)
 
         h = self.lin1(h)
@@ -196,7 +207,8 @@ class TorchMD_T(nn.Module):
                 f'distance_influence={self.distance_influence}, '
                 f'cutoff_lower={self.cutoff_lower}, '
                 f'cutoff_upper={self.cutoff_upper}, '
-                f'derivative={self.derivative})')
+                f'derivative={self.derivative}, '
+                f'atom_filter={self.atom_filter})')
 
 
 class MultiHeadAttention(MessagePassing):
