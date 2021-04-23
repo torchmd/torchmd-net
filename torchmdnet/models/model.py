@@ -11,7 +11,8 @@ def create_model(args):
         cutoff_lower=args.cutoff_lower,
         cutoff_upper=args.cutoff_upper,
         derivative=args.derivative,
-        atom_filter=args.atom_filter
+        atom_filter=args.atom_filter,
+        max_z=args.max_z
     )
 
     if args.model == 'graph-network':
