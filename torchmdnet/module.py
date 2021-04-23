@@ -99,18 +99,18 @@ class LNNP(pl.LightningModule):
         loss = 0
         if self.hparams.derivative:
             pred, deriv = pred
-            
-            # "use" both outputs of the model's forward function but discard the first to only use the derivative and
-            # avoid 'RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one.',
-            # which otherwise get's thrown because of setting 'find_unused_parameters=False' in the DDPPlugin
+
             if not self.has_y:
+                # "use" both outputs of the model's forward function but discard the first to only use the derivative and
+                # avoid 'RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one.',
+                # which otherwise get's thrown because of setting 'find_unused_parameters=False' in the DDPPlugin
                 deriv = deriv + pred.sum() * 0
+
             loss = loss + loss_fn(deriv, batch.dy) * self.hparams.force_weight
 
         if self.has_y:
             loss = loss + loss_fn(pred, batch.y) * self.hparams.energy_weight
 
-        # loss = loss_fn(pred, batch.y)
         self.losses[stage].append(loss.detach())
 
         if stage == 'val':
