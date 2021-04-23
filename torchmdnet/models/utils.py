@@ -1,14 +1,93 @@
+import ase
 import math
 import torch
 from torch import nn
-
+from torch_scatter import scatter
 from torch_geometric.nn import MessagePassing
 
 
+class OutputNetwork(nn.Module):
+    def __init__(self, hidden_channels, activation, readout='add', dipole=False,
+                 mean=None, std=None, atomref=None, derivative=False, atom_filter=0,
+                 max_z=100):
+        super(OutputNetwork, self).__init__()
+
+        if derivative:
+            assert atom_filter == 0, 'Atom filter currently does not work if derivative is set to true'
+
+        self.hidden_channels = hidden_channels
+        self.activation = activation
+        self.readout = readout
+        self.dipole = dipole
+        self.mean = mean
+        self.std = std
+        self.derivative = derivative
+        self.atom_filter = atom_filter
+        self.max_z = max_z
+
+        atomic_mass = torch.from_numpy(ase.data.atomic_masses)
+        self.register_buffer('atomic_mass', atomic_mass)
+
+        self.lin1 = nn.Linear(hidden_channels, hidden_channels // 2)
+        self.act = activation()
+        self.lin2 = nn.Linear(hidden_channels // 2, 1)
+
+        self.register_buffer('initial_atomref', atomref)
+        self.atomref = None
+        if atomref is not None:
+            self.atomref = nn.Embedding(self.max_z, 1)
+            self.atomref.weight.data.copy_(atomref)
+
+    def reset_parameters(self):
+        nn.init.xavier_uniform_(self.lin1.weight)
+        self.lin1.bias.data.fill_(0)
+        nn.init.xavier_uniform_(self.lin2.weight)
+        self.lin2.bias.data.fill_(0)
+        if self.atomref is not None:
+            self.atomref.weight.data.copy_(self.initial_atomref)
+
+    def forward(self, z, h, pos, batch):
+        if not self.derivative:
+            # drop atoms according to the filter
+            atom_mask = z > self.atom_filter
+            h = h[atom_mask]
+            z = z[atom_mask]
+            pos = pos[atom_mask]
+            batch = batch[atom_mask]
+
+        # output network
+        h = self.lin1(h)
+        h = self.act(h)
+        h = self.lin2(h)
+
+        if self.dipole:
+            # Get center of mass.
+            mass = self.atomic_mass[z].view(-1, 1)
+            c = scatter(mass * pos, batch, dim=0) / scatter(mass, batch, dim=0)
+            h = h * (pos - c[batch])
+
+        if not self.dipole and self.mean is not None and self.std is not None:
+            h = h * self.std + self.mean
+
+        if not self.dipole and self.atomref is not None:
+            h = h + self.atomref(z)
+
+        out = scatter(h, batch, dim=0, reduce=self.readout)
+
+        if self.dipole:
+            out = torch.norm(out, dim=-1, keepdim=True)
+
+        if self.derivative:
+            dy = -torch.autograd.grad(out, pos, grad_outputs=torch.ones_like(out),
+                                      create_graph=True, retain_graph=True)[0]
+            return out, dy
+        return out
+
+
 class NeighborEmbedding(MessagePassing):
-    def __init__(self, hidden_channels, num_rbf, cutoff_lower, cutoff_upper):
+    def __init__(self, hidden_channels, num_rbf, cutoff_lower, cutoff_upper, max_z=100):
         super(NeighborEmbedding, self).__init__(aggr='add')
-        self.embedding = nn.Embedding(100, hidden_channels)
+        self.embedding = nn.Embedding(max_z, hidden_channels)
         self.distance_proj = nn.Linear(num_rbf, hidden_channels)
         self.combine = nn.Linear(hidden_channels * 2, hidden_channels)
         self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)

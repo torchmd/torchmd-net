@@ -1,12 +1,9 @@
-import ase
 import torch
 from torch import nn
-from torch.nn import functional as F
-
-from torch_scatter import scatter
 from torch_geometric.nn import radius_graph, MessagePassing
 
-from torchmdnet.models.utils import NeighborEmbedding, CosineCutoff, rbf_class_mapping, act_class_mapping
+from torchmdnet.models.utils import (OutputNetwork, NeighborEmbedding, CosineCutoff,
+                                     rbf_class_mapping, act_class_mapping)
 
 
 class TorchMD_GN(nn.Module):
@@ -58,13 +55,16 @@ class TorchMD_GN(nn.Module):
             w.r.t the input coordinates. (default: :obj:`False`)
         atom_filter (int, optional): Only sum over atoms with Z > atom_filter.
             (default: :obj:`0`)
+        max_z (int, optional): Maximum atomic number. Used for initializing embeddings.
+            (default: :obj:`100`)
     """
 
     def __init__(self, hidden_channels=128, num_filters=128,
                  num_interactions=6, num_rbf=50, rbf_type='expnorm',
                  trainable_rbf=True, activation='silu', neighbor_embedding=True,
                  cutoff_lower=0.0, cutoff_upper=5.0, readout='add', dipole=False,
-                 mean=None, std=None, atomref=None, derivative=False, atom_filter=0):
+                 mean=None, std=None, atomref=None, derivative=False, atom_filter=0,
+                 max_z=100):
         super(TorchMD_GN, self).__init__()
 
         assert readout in ['add', 'sum', 'mean']
@@ -89,18 +89,17 @@ class TorchMD_GN(nn.Module):
         self.std = std
         self.derivative = derivative
         self.atom_filter = atom_filter
-
-        atomic_mass = torch.from_numpy(ase.data.atomic_masses)
-        self.register_buffer('atomic_mass', atomic_mass)
+        self.max_z = max_z
 
         act_class = act_class_mapping[activation]
 
-        self.embedding = nn.Embedding(100, hidden_channels)
+        self.embedding = nn.Embedding(self.max_z, hidden_channels)
+
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
         )
         self.neighbor_embedding = NeighborEmbedding(
-            hidden_channels, num_rbf, cutoff_lower, cutoff_upper
+            hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z
         ) if neighbor_embedding else None
 
         self.interactions = nn.ModuleList()
@@ -109,15 +108,10 @@ class TorchMD_GN(nn.Module):
                                      act_class, cutoff_lower, cutoff_upper)
             self.interactions.append(block)
 
-        self.lin1 = nn.Linear(hidden_channels, hidden_channels // 2)
-        self.act = act_class()
-        self.lin2 = nn.Linear(hidden_channels // 2, 1)
-
-        self.register_buffer('initial_atomref', atomref)
-        self.atomref = None
-        if atomref is not None:
-            self.atomref = nn.Embedding(100, 1)
-            self.atomref.weight.data.copy_(atomref)
+        self.output_network = OutputNetwork(
+            hidden_channels, act_class, self.readout, self.dipole, self.mean, self.std,
+            atomref, self.derivative, self.atom_filter, self.max_z
+        )
 
         self.reset_parameters()
 
@@ -125,12 +119,7 @@ class TorchMD_GN(nn.Module):
         self.embedding.reset_parameters()
         for interaction in self.interactions:
             interaction.reset_parameters()
-        nn.init.xavier_uniform_(self.lin1.weight)
-        self.lin1.bias.data.fill_(0)
-        nn.init.xavier_uniform_(self.lin2.weight)
-        self.lin2.bias.data.fill_(0)
-        if self.atomref is not None:
-            self.atomref.weight.data.copy_(self.initial_atomref)
+        self.output_network.reset_parameters()
 
     def forward(self, z, pos, batch=None):
         assert z.dim() == 1 and z.dtype == torch.long
@@ -152,41 +141,7 @@ class TorchMD_GN(nn.Module):
         for interaction in self.interactions:
             h = h + interaction(h, edge_index, edge_weight, edge_attr)
 
-        # drop atoms according to the filter
-        atom_mask = z > self.atom_filter
-        h = h[atom_mask]
-        z = z[atom_mask]
-        pos = pos[atom_mask]
-        batch = batch[atom_mask]
-
-        # output network
-        h = self.lin1(h)
-        h = self.act(h)
-        h = self.lin2(h)
-
-        if self.dipole:
-            # Get center of mass.
-            mass = self.atomic_mass[z].view(-1, 1)
-            c = scatter(mass * pos, batch, dim=0) / scatter(mass, batch, dim=0)
-            h = h * (pos - c[batch])
-
-        if not self.dipole and self.mean is not None and self.std is not None:
-            h = h * self.std + self.mean
-
-        if not self.dipole and self.atomref is not None:
-            h = h + self.atomref(z)
-
-        out = scatter(h, batch, dim=0, reduce=self.readout)
-
-        if self.dipole:
-            out = torch.norm(out, dim=-1, keepdim=True)
-
-        if self.derivative:
-            dy = -torch.autograd.grad(out, pos, grad_outputs=torch.ones_like(out),
-                                      create_graph=True, retain_graph=True)[0]
-            return out, dy
-
-        return out
+        return self.output_network(z, h, pos, batch)
 
     def __repr__(self):
         return (f'{self.__class__.__name__}('
