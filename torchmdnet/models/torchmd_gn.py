@@ -89,7 +89,7 @@ class TorchMD_GN(nn.Module):
         self.std = std
         self.derivative = derivative
         self.atom_filter = atom_filter
-        self.max_z
+        self.max_z = max_z
 
         act_class = act_class_mapping[activation]
 

@@ -106,9 +106,11 @@ class LNNP(pl.LightningModule):
                 # which otherwise get's thrown because of setting 'find_unused_parameters=False' in the DDPPlugin
                 deriv = deriv + pred.sum() * 0
 
+            # force/derivative loss
             loss = loss + loss_fn(deriv, batch.dy) * self.hparams.force_weight
 
         if self.has_y:
+            # energy/prediction loss
             loss = loss + loss_fn(pred, batch.y) * self.hparams.energy_weight
 
         self.losses[stage].append(loss.detach())
