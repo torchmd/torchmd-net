@@ -17,7 +17,7 @@ from torchmdnet.models import create_model
 class LNNP(pl.LightningModule):
     def __init__(self, hparams):
         super(LNNP, self).__init__()
-        self.hparams = hparams
+        self.save_hyperparameters(hparams)
 
         if self.hparams.load_model:
             raise NotImplementedError()
@@ -128,8 +128,6 @@ class LNNP(pl.LightningModule):
             for pg in optimizer.param_groups:
                 pg['lr'] = lr_scale * self.hparams.lr
         super().optimizer_step(*args, **kwargs)
-
-        # zero_grad call might be unnecessary here if we have Trainer(..., enable_pl_optimizer=True)
         optimizer.zero_grad()
 
     def train_dataloader(self):

@@ -132,7 +132,6 @@ def main():
         callbacks=[early_stopping],
         logger=[tb_logger, csv_logger],
         reload_dataloaders_every_epoch=False,
-        enable_pl_optimizer=True,
         precision=args.precision,
         plugins=[ddp_plugin]
     )
