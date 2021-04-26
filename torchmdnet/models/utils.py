@@ -47,6 +47,8 @@ class OutputNetwork(nn.Module):
             self.atomref.weight.data.copy_(self.initial_atomref)
 
     def forward(self, z, h, pos, batch):
+        n_samples = batch.max() + 1
+
         if not self.derivative:
             # drop atoms according to the filter
             atom_mask = z > self.atom_filter
@@ -73,6 +75,8 @@ class OutputNetwork(nn.Module):
             h = h + self.atomref(z)
 
         out = scatter(h, batch, dim=0, reduce=self.readout)
+        assert out.size(0) == n_samples, ('Some samples were completely filtered out by the atom filter. '
+                                          f'Make sure that at least one atom per sample exists with Z <= {self.atom_filter}.')
 
         if self.dipole:
             out = torch.norm(out, dim=-1, keepdim=True)
