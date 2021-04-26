@@ -60,7 +60,7 @@ class TorchMD_GN(torch.nn.Module):
     def __init__(self, hidden_channels=128, num_filters=128,
                  num_interactions=6, num_rbf=50, rbf_type='expnorm',
                  trainable_rbf=True, activation='silu', neighbor_embedding=True,
-                 cutoff_lower=0.0, cutoff_upper=5.0, readout='add', dipole=False,
+                 cutoff_lower=0.0, cutoff_upper=5.0, readout='add', dipole=False, mlp_out=None,
                  mean=None, std=None, atomref=None, derivative=False):
         super(TorchMD_GN, self).__init__()
 
@@ -98,10 +98,14 @@ class TorchMD_GN(torch.nn.Module):
             block = InteractionBlock(hidden_channels, num_rbf, num_filters,
                                      act_class, cutoff_lower, cutoff_upper)
             self.interactions.append(block)
-
-        self.lin1 = Linear(hidden_channels, hidden_channels // 2)
-        self.act = act_class()
-        self.lin2 = Linear(hidden_channels // 2, 1)
+        if mlp_out is None:
+            self.mlp = Sequential(
+                Linear(hidden_channels, hidden_channels // 2),
+                act_class(),
+                Linear(hidden_channels // 2, 1)
+            )
+        else:
+            self.mlp = mlp_out
 
         self.register_buffer('initial_atomref', atomref)
         self.atomref = None
@@ -111,14 +115,19 @@ class TorchMD_GN(torch.nn.Module):
 
         self.reset_parameters()
 
+    @staticmethod
+    def init_weights(m):
+        if type(m) == torch.nn.Linear:
+            torch.nn.init.xavier_uniform_(m.weight)
+            m.bias.data.fill_(0.0)
+
     def reset_parameters(self):
         self.embedding.reset_parameters()
         for interaction in self.interactions:
             interaction.reset_parameters()
-        torch.nn.init.xavier_uniform_(self.lin1.weight)
-        self.lin1.bias.data.fill_(0)
-        torch.nn.init.xavier_uniform_(self.lin2.weight)
-        self.lin2.bias.data.fill_(0)
+
+        self.mlp.apply(self.init_weights)
+
         if self.atomref is not None:
             self.atomref.weight.data.copy_(self.initial_atomref)
 
@@ -142,9 +151,7 @@ class TorchMD_GN(torch.nn.Module):
         for interaction in self.interactions:
             h = h + interaction(h, edge_index, edge_weight, edge_attr)
 
-        h = self.lin1(h)
-        h = self.act(h)
-        h = self.lin2(h)
+        h = self.mlp(h)
 
         if self.dipole:
             # Get center of mass.

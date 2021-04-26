@@ -115,7 +115,7 @@ class ChignolinDataset(InMemoryDataset):
         return baseline_model
 
     @staticmethod
-    def _remove_baseline_forces(data, baseline_model):
+    def _remove_baseline_forces(data, slices, baseline_model):
         data.pos.requires_grad_()
         n_frames = data.idx.shape[0]
         baseline_energy = baseline_model(data.pos, n_frames)
@@ -127,7 +127,7 @@ class ChignolinDataset(InMemoryDataset):
         data.pos.requires_grad = False
         data.forces -= baseline_force
         data.baseline_forces = baseline_force
-
+        slices['baseline_forces'] = slices['forces']
         return data
 
     def process(self):
@@ -178,6 +178,6 @@ class ChignolinDataset(InMemoryDataset):
         datas, slices = self.collate(data_list)
 
         baseline_model = self.get_baseline_model(datas, n_beads)
-        datas = self._remove_baseline_forces(datas, baseline_model)
+        self._remove_baseline_forces(datas, slices, baseline_model)
 
         torch.save((datas, slices), self.processed_paths[0])

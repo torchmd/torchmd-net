@@ -44,10 +44,12 @@ class CGnet(nn.Module):
         data.pos.requires_grad_()
 
         energy = self.model(data.z, data.pos, data.batch)
+
         if not self.train_baseline and self.training:
           pass
         else:
           energy += self.baseline(data)
+          
         force = -torch.autograd.grad(energy,
                                     data.pos,
                                      grad_outputs=torch.ones_like(energy),

@@ -54,6 +54,9 @@ def get_args():
     parser.add_argument('--forces', default=None, type=str, help='Force files glob')
     parser.add_argument('--embed', default=None, type=str, help='Embedding files glob')
 
+    parser.add_argument('--dataset', default=None, type=str, help='name of the dataset used for training')
+    parser.add_argument('--dataset_root', default=None, type=str, help='path where the dataset will be setup.')
+
     # architectural args
     parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
     parser.add_argument('--num-filters', type=int, default=256, help='Number of filters in the model')

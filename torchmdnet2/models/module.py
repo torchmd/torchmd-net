@@ -14,7 +14,11 @@ from torch.nn.functional import mse_loss, l1_loss
 from ..utils import make_splits, TestingContext
 from ..data import Subset, AtomrefDataset, CGDataset
 from ..nn.torchmd_gn import TorchMD_GN
+from ..dataset import ChignolinDataset
 
+dataset_map = {
+    'chignolin' : ChignolinDataset,
+}
 
 class LNNP(pl.LightningModule):
     def __init__(self, hparams):
@@ -40,6 +44,7 @@ class LNNP(pl.LightningModule):
 
         self.losses = None
 
+
     def setup(self, stage):
         if self.hparams.data:
             label2idx = dict(zip(qm9_target_dict.values(), qm9_target_dict.keys()))
@@ -48,6 +53,11 @@ class LNNP(pl.LightningModule):
             self.dataset = AtomrefDataset(self.dataset, self.dataset.atomref(label_idx))
         elif self.hparams.coords and self.hparams.forces and self.hparams.embed:
             self.dataset = CGDataset(self.hparams.coords, self.hparams.forces, self.hparams.embed)
+        elif self.hparams.dataset:
+            if self.hparams.dataset in dataset_map:
+                self.dataset = dataset_map[self.hparams.dataset](self.hparams.dataset_root)[::self.hparams.dataset_stride]
+            else:
+                raise ValueError(f'dataset parameter must be either of: {list(dataset_map.keys())}')
         else:
             raise ValueError('Please provide either a QM9 database path or paths to coordinates, forces and emebddings.')
 
@@ -61,9 +71,14 @@ class LNNP(pl.LightningModule):
         )
         print(f'train {len(idx_train)}, val {len(idx_val)}, test {len(idx_test)}')
 
-        self.train_dataset = Subset(self.dataset, idx_train)
-        self.val_dataset = Subset(self.dataset, idx_val)
-        self.test_dataset = Subset(self.dataset, idx_test)
+        if self.hparams.dataset:
+            self.train_dataset = self.dataset[idx_train]
+            self.val_dataset = self.dataset[idx_val]
+            self.test_dataset = self.dataset[idx_test]
+        else:
+            self.train_dataset = Subset(self.dataset, idx_train)
+            self.val_dataset = Subset(self.dataset, idx_val)
+            self.test_dataset = Subset(self.dataset, idx_test)
 
         self._reset_losses_dict()
 
@@ -94,6 +109,11 @@ class LNNP(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         return self.step(batch, l1_loss, 'test')
 
+    def test_epoch_end(self, outputs):
+        avg_loss = torch.stack(outputs).mean()
+        self.log('avg_loss', avg_loss.detach().cpu())
+
+
     def step(self, batch, loss_fn, stage):
         batch = batch.to(self.device)
 
@@ -106,7 +126,7 @@ class LNNP(pl.LightningModule):
             out, deriv = pred
             pred = deriv + out.sum() * 0
 
-        loss = loss_fn(pred, batch.y)
+        loss = loss_fn(pred, batch.forces)
         self.losses[stage].append(loss.detach())
 
         if stage == 'val':
