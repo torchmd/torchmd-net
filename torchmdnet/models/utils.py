@@ -8,12 +8,12 @@ from torch_geometric.nn import MessagePassing
 
 class OutputNetwork(nn.Module):
     def __init__(self, hidden_channels, activation, readout='add', dipole=False,
-                 mean=None, std=None, atomref=None, derivative=False, atom_filter=0,
+                 mean=None, std=None, atomref=None, derivative=False, atom_filter=-1,
                  max_z=100):
         super(OutputNetwork, self).__init__()
 
         if derivative:
-            assert atom_filter == 0, 'Atom filter currently does not work if derivative is set to true'
+            assert atom_filter == -1, 'Atom filter currently does not work if derivative is set to true'
 
         self.hidden_channels = hidden_channels
         self.activation = activation
