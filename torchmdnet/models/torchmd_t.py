@@ -51,7 +51,7 @@ class TorchMD_T(nn.Module):
         derivative (bool, optional): If True, computes the derivative of the prediction
             w.r.t the input coordinates. (default: :obj:`False`)
         atom_filter (int, optional): Only sum over atoms with Z > atom_filter.
-            (default: :obj:`0`)
+            (default: :obj:`-1`)
         max_z (int, optional): Maximum atomic number. Used for initializing embeddings.
             (default: :obj:`100`)
     """
@@ -60,7 +60,7 @@ class TorchMD_T(nn.Module):
                  trainable_rbf=True, activation='silu', attn_activation='silu', neighbor_embedding=True,
                  num_heads=8, distance_influence='both', cutoff_lower=0.0, cutoff_upper=5.0,
                  readout='add', dipole=False, mean=None, std=None, atomref=None, derivative=False,
-                 atom_filter=0, max_z=100):
+                 atom_filter=-1, max_z=100):
         super(TorchMD_T, self).__init__()
 
         assert readout in ['add', 'sum', 'mean']
