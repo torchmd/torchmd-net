@@ -76,7 +76,7 @@ class OutputNetwork(nn.Module):
 
         out = scatter(h, batch, dim=0, reduce=self.readout)
         assert out.size(0) == n_samples, ('Some samples were completely filtered out by the atom filter. '
-                                          f'Make sure that at least one atom per sample exists with Z <= {self.atom_filter}.')
+                                          f'Make sure that at least one atom per sample exists with Z > {self.atom_filter}.')
 
         if self.dipole:
             out = torch.norm(out, dim=-1, keepdim=True)
