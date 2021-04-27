@@ -20,6 +20,8 @@ class TorchMD_GN(torch.nn.Module):
     :math:`\mathbf{e}_{j,i}` denotes the interatomic distances between atoms.
 
     Args:
+        embedding_size (int, optional): Size of the embedding dictionary.
+            (default :obj:`100`)
         hidden_channels (int, optional): Hidden embedding size.
             (default: :obj:`128`)
         num_filters (int, optional): The number of filters to use.
@@ -55,9 +57,11 @@ class TorchMD_GN(torch.nn.Module):
             Expects a vector of shape :obj:`(max_atomic_number, )`.
         derivative (bool, optional): If True, computes the derivative of the prediction
             w.r.t the input coordinates. (default: :obj:`False`)
+        cfconv_agg (str, optional): The aggregation method for CFConv filter
+            outputs. (default: :obj:`mean`)
     """
 
-    def __init__(self, hidden_channels=128, num_filters=128,
+    def __init__(self, embedding_size=100, hidden_channels=128, num_filters=128,
                  num_interactions=6, num_rbf=50, rbf_type='expnorm',
                  trainable_rbf=True, activation='silu', neighbor_embedding=True,
                  cutoff_lower=0.0, cutoff_upper=5.0, readout='add', dipole=False, mlp_out=None,
@@ -67,7 +71,7 @@ class TorchMD_GN(torch.nn.Module):
         assert readout in ['add', 'sum', 'mean']
         assert rbf_type in rbf_class_mapping, f'Unknown RBF type "{rbf_type}". Choose from {", ".join(rbf_class_mapping.keys())}.'
         assert activation in act_class_mapping, f'Unknown activation function "{activation}". Choose from {", ".join(act_class_mapping.keys())}.'
-
+        self.embedding_size = embedding_size
         self.hidden_channels = hidden_channels
         self.num_filters = num_filters
         self.num_interactions = num_interactions
@@ -83,20 +87,22 @@ class TorchMD_GN(torch.nn.Module):
         self.std = std
         self.scale = None
         self.derivative = derivative
+        self.cfconv_agg = cfconv_agg
 
         atomic_mass = torch.from_numpy(ase.data.atomic_masses)
         self.register_buffer('atomic_mass', atomic_mass)
 
         act_class = act_class_mapping[activation]
 
-        self.embedding = Embedding(100, hidden_channels)
+        self.embedding = Embedding(self.embedding_size, hidden_channels)
         self.distance_expansion = rbf_class_mapping[rbf_type](cutoff_lower, cutoff_upper, num_rbf, trainable_rbf)
         self.neighbor_embedding = NeighborEmbedding(hidden_channels, num_rbf, cutoff_lower, cutoff_upper) if neighbor_embedding else None
 
         self.interactions = ModuleList()
         for _ in range(num_interactions):
             block = InteractionBlock(hidden_channels, num_rbf, num_filters,
-                                     act_class, cutoff_lower, cutoff_upper)
+                                     act_class, cutoff_lower, cutoff_upper,
+                                     cfconv_agg=self.cfconv_agg)
             self.interactions.append(block)
         if mlp_out is None:
             self.mlp = Sequential(
@@ -110,7 +116,7 @@ class TorchMD_GN(torch.nn.Module):
         self.register_buffer('initial_atomref', atomref)
         self.atomref = None
         if atomref is not None:
-            self.atomref = Embedding(100, 1)
+            self.atomref = Embedding(self.embedding_size, 1)
             self.atomref.weight.data.copy_(atomref)
 
         self.reset_parameters()
@@ -193,7 +199,8 @@ class TorchMD_GN(torch.nn.Module):
 
 
 class InteractionBlock(torch.nn.Module):
-    def __init__(self, hidden_channels, num_rbf, num_filters, activation, cutoff_lower, cutoff_upper):
+    def __init__(self, hidden_channels, num_rbf, num_filters, activation,
+                  	cutoff_lower, cutoff_upper, cfconv_agg='mean'):
         super(InteractionBlock, self).__init__()
         self.mlp = Sequential(
             Linear(num_rbf, num_filters),
@@ -201,7 +208,8 @@ class InteractionBlock(torch.nn.Module):
             Linear(num_filters, num_filters),
         )
         self.conv = CFConv(hidden_channels, hidden_channels, num_filters,
-                           self.mlp, cutoff_lower, cutoff_upper)
+                           self.mlp, cutoff_lower, cutoff_upper,
+                           aggr=cfconv_agg)
         self.act = activation()
         self.lin = Linear(hidden_channels, hidden_channels)
 
@@ -224,8 +232,9 @@ class InteractionBlock(torch.nn.Module):
 
 
 class CFConv(MessagePassing):
-    def __init__(self, in_channels, out_channels, num_filters, nn, cutoff_lower, cutoff_upper):
-        super(CFConv, self).__init__(aggr='add')
+    def __init__(self, in_channels, out_channels, num_filters, nn, cutoff_lower,
+                 cutoff_upper, agg='mean'):
+        super(CFConv, self).__init__(aggr=aggr)
         self.lin1 = Linear(in_channels, num_filters, bias=False)
         self.lin2 = Linear(num_filters, out_channels)
         self.nn = nn
