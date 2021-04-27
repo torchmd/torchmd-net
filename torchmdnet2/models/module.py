@@ -126,7 +126,7 @@ class LNNP(pl.LightningModule):
             out, deriv = pred
             pred = deriv + out.sum() * 0
 
-        loss = loss_fn(pred, batch.forces)
+        loss = loss_fn(pred, batch[self.hparams.target_name])
         self.losses[stage].append(loss.detach())
 
         if stage == 'val':

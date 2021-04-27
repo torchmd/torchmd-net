@@ -46,6 +46,9 @@ def get_args():
     parser.add_argument('--num-workers', type=int, default=4, help='Number of workers for data prefetch')
     parser.add_argument('--redirect', type=bool, default=False, help='Redirect stdout and stderr to log_dir/log')
 
+
+    parser.add_argument('--target_name', default='y', type=str, help='name of the target property to use in the dataset for the optimisation. For ChignolinDataset the target property is "forces" while for QM9 it is "y"')
+
     # QM9 database
     parser.add_argument('--data', default=None, type=str, help='Path to QM9 database')
 
