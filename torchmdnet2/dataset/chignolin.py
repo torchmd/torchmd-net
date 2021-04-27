@@ -110,7 +110,8 @@ class ChignolinDataset(InMemoryDataset):
 
         geometry_feature = GeometryFeature(feature_tuples='all_backbone', n_beads=n_beads)
 
-        baseline_model = BaselineModel(geometry_feature, priors, n_beads)
+        baseline_model = BaselineModel(geometry_feature, priors, n_beads,
+                                        beta=stats.beta)
 
         return baseline_model
 

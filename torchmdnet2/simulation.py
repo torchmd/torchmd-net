@@ -601,8 +601,8 @@ class Simulation(object):
             batch[ii:ii+n_beads] = iframe
             idx[iframe] = iframe
             ii += n_beads
-
-        potential, forces = self.model(Data(z=z, pos=pos, batch=batch, idx=idx))
+        data = Data(z=z, pos=pos, batch=batch, idx=idx)
+        potential, forces = self.model(data)
 
         return potential, forces.reshape((-1, n_beads, 3))
 

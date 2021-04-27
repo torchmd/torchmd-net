@@ -18,10 +18,10 @@ class BaselineModel(nn.Module):
 
     """
 
-    def __init__(self, geom_feature, priors, n_beads):
+    def __init__(self, geom_feature, priors, n_beads, beta=1/300):
         super(BaselineModel, self).__init__()
         self.geom_feature = geom_feature
-
+        self.beta = beta
         self.priors = nn.Sequential(*priors)
         harm_idx = 1
         repul_idx = 1

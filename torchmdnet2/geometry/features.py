@@ -25,9 +25,7 @@ class GeometryFeature(nn.Module):
         Number of beads; only needs to be provided if 'all_backbone' is used.
         If a list of feature_tuples are provided and n_beads is provided
         incorrectly, an error will be raised.
-    device : torch.device (default=torch.device('cpu'))
-        Device upon which tensors are mounted. Default device is the local
-        CPU.
+    
 
     Attributes
     ----------
@@ -48,15 +46,13 @@ class GeometryFeature(nn.Module):
         used is that same as the feature class device.
     """
 
-    def __init__(self, feature_tuples=None, n_beads=None,
-                 device=torch.device('cpu')):
+    def __init__(self, feature_tuples=None, n_beads=None):
         super(GeometryFeature, self).__init__()
 
         self._n_beads = n_beads
-        self.device = device
-        self.geometry = Geometry(method='torch', device=self.device)
-        if feature_tuples is not 'all_backbone':
-            if feature_tuples is not None:
+        self.geometry = Geometry(method='torch')
+        if feature_tuples != 'all_backbone':
+            if feature_tuples != None:
                 _temp_dict = dict(
                     zip(feature_tuples, np.arange(len(feature_tuples))))
                 if len(_temp_dict) < len(feature_tuples):
@@ -101,6 +97,11 @@ class GeometryFeature(nn.Module):
             self.feature_tuples = self._distance_pairs + \
                 self._angle_trips + self._dihedral_quads
 
+        self.register_buffer('distances', torch.tensor([]))
+        self.register_buffer('angles', torch.tensor([]))
+        self.register_buffer('dihedral_cosines', torch.tensor([]))
+        self.register_buffer('dihedral_sines', torch.tensor([]))
+
     def compute_distances(self, data):
         """Computes all pairwise distances."""
         self.distances = self.geometry.get_distances(self._distance_pairs,
@@ -137,7 +138,7 @@ class GeometryFeature(nn.Module):
 
         self._coordinates = data
         self.n_beads = data.shape[1]
-        if self._n_beads is not None and self.n_beads != self._n_beads:
+        if self._n_beads != None and self.n_beads != self._n_beads:
             raise ValueError(
                 "n_beads passed to __init__ does not match n_beads in data."
             )
@@ -148,7 +149,7 @@ class GeometryFeature(nn.Module):
 
         self.descriptions = {}
         self.description_order = []
-        out = torch.Tensor([]).to(self.device)
+        out = torch.Tensor([]).to(device=self.distances.device)
 
         if len(self._distance_pairs) > 0:
             self.compute_distances(data)

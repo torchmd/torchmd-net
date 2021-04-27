@@ -17,11 +17,10 @@ class CGnet(nn.Module):
 
     """
 
-    def __init__(self, model, baseline, train_baseline=False):
+    def __init__(self, model, baseline):
         super(CGnet, self).__init__()
         self.model = model
         self.baseline = baseline
-        self.train_baseline = train_baseline
 
     def forward(self, data):
         """Forward pass through the network ending with autograd layer.
@@ -45,15 +44,21 @@ class CGnet(nn.Module):
 
         energy = self.model(data.z, data.pos, data.batch)
 
-        if not self.train_baseline and self.training:
-          pass
-        else:
-          energy += self.baseline(data)
-          
-        force = -torch.autograd.grad(energy,
+        if isinstance(energy, tuple):
+            energy, forces = energy
+            baseline_energy = self.baseline(data.pos, data.idx.shape[0])
+            forces += -torch.autograd.grad(baseline_energy,
                                     data.pos,
-                                     grad_outputs=torch.ones_like(energy),
+                                     grad_outputs=torch.ones_like(baseline_energy),
+                                    create_graph=True,
+                                    retain_graph=True)[0]
+        else:
+            energy += self.baseline(data.pos, data.idx.shape[0])
+            forces = -torch.autograd.grad(energy,
+                                    data.pos,
+                                    grad_outputs=torch.ones_like(energy),
                                     create_graph=True,
                                     retain_graph=True)[0]
 
-        return energy, force
+
+        return energy, forces

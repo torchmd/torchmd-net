@@ -21,8 +21,7 @@ class Geometry(object):
         from the feature device attribute
     """
 
-    def __init__(self, method='torch', device=torch.device('cpu')):
-        self.device = device
+    def __init__(self, method='torch'):
         if method not in ['torch', 'numpy']:
             raise RuntimeError("Allowed methods are 'torch' and 'numpy'")
         self.method = method
@@ -234,7 +233,7 @@ class Geometry(object):
         """
 
         self.check_array_vs_tensor(distances, 'distances')
-
+        device = distances.device
         n_frames, n_beads, n_neighbors = distances.shape
 
         # Create a simple neighbor list of shape [n_frames, n_beads, n_neighbors]
@@ -243,7 +242,7 @@ class Geometry(object):
         neighbors = self.tile(self.arange(n_beads), (n_frames, n_beads, 1))
         # To remove the self interaction of beads, an inverted identity matrix
         # is used to exclude the respective indices in the neighbor list.
-        neighbors = neighbors[:, ~self.eye(n_beads, dtype=self.bool)].reshape(
+        neighbors = neighbors[:, ~self.eye(n_beads, dtype=self.bool, device=device)].reshape(
             n_frames,
             n_beads,
             n_neighbors)
@@ -254,7 +253,7 @@ class Geometry(object):
             neighbor_mask = self.to_type(neighbor_mask, self.float32)
         else:
             neighbor_mask = self.ones((n_frames, n_beads, n_neighbors),
-                                      dtype=self.float32)
+                                      dtype=self.float32, device=device)
 
         return neighbors, neighbor_mask
 
@@ -312,20 +311,20 @@ class Geometry(object):
         elif self.method == 'numpy':
             return np.tile(x, shape)
 
-    def eye(self, n, dtype):
+    def eye(self, n, dtype, device):
         # As of pytorch 1.2.0, BoolTensors are implemented. However,
         # torch.eye does not take dtype=torch.bool on CPU devices yet.
         # Watch pytorch PR #24148 for the implementation, which would
         # allow us to return torch.eye(n, dtype=dtype)
         # For now, we do this:
         if self.method == 'torch':
-            return self._torch_eye(n, dtype).to(self.device)
+            return self._torch_eye(n, dtype).to(device)
         elif self.method == 'numpy':
             return np.eye(n, dtype=dtype)
 
-    def ones(self, shape, dtype):
+    def ones(self, shape, dtype, device):
         if self.method == 'torch':
-            return torch.ones(*shape, dtype=dtype).to(self.device)
+            return torch.ones(*shape, dtype=dtype).to(device)
         elif self.method == 'numpy':
             return np.ones(shape, dtype=dtype)
 

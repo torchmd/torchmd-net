@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 notebooks/test/*
+notebooks/chign_run/*
 # C extensions
 *.so
 
