@@ -1,5 +1,6 @@
 from torch import nn
-
+from torch.autograd import grad
+import torch
 
 class CGnet(nn.Module):
     """CGnet neural network class
@@ -47,15 +48,13 @@ class CGnet(nn.Module):
         if isinstance(energy, tuple):
             energy, forces = energy
             baseline_energy = self.baseline(data.pos, data.idx.shape[0])
-            forces += -torch.autograd.grad(baseline_energy,
-                                    data.pos,
+            forces += -grad(baseline_energy, data.pos,
                                      grad_outputs=torch.ones_like(baseline_energy),
                                     create_graph=True,
                                     retain_graph=True)[0]
         else:
             energy += self.baseline(data.pos, data.idx.shape[0])
-            forces = -torch.autograd.grad(energy,
-                                    data.pos,
+            forces = -grad(energy,data.pos,
                                     grad_outputs=torch.ones_like(energy),
                                     create_graph=True,
                                     retain_graph=True)[0]
