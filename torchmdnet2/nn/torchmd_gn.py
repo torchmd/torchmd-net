@@ -70,7 +70,7 @@ class TorchMD_GN(torch.nn.Module):
         super(TorchMD_GN, self).__init__()
 
         assert readout in ['add', 'sum', 'mean']
-        assert cfconv_aggr in ['add', 'sum', 'mean']
+        assert cfconv_aggr in ['add', 'max', 'mean', None]
         assert rbf_type in rbf_class_mapping, f'Unknown RBF type "{rbf_type}". Choose from {", ".join(rbf_class_mapping.keys())}.'
         assert activation in act_class_mapping, f'Unknown activation function "{activation}". Choose from {", ".join(act_class_mapping.keys())}.'
         self.embedding_size = embedding_size
