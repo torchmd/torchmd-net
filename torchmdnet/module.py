@@ -115,9 +115,8 @@ class LNNP(pl.LightningModule):
 
         self.losses[stage].append(loss.detach())
 
-        if stage == 'val':
-            # PyTorch Lightning requires this in order for ReduceLROnPlateau to work
-            self.log('val_loss', loss.detach().cpu())
+        # PyTorch Lightning requires this in order for ReduceLROnPlateau to work
+        self.log(f'{stage}_loss', loss.detach().cpu())
         return loss
 
     def optimizer_step(self, *args, **kwargs):
@@ -147,7 +146,7 @@ class LNNP(pl.LightningModule):
 
             if self.current_epoch % self.hparams.test_interval == 0:
                 with TestingContext(self):
-                    self.trainer.run_test()
+                    self.trainer.run_evaluation()
                 result_dict['test_loss'] = torch.tensor(self.losses['test']).mean()
 
             self.log_dict(result_dict)

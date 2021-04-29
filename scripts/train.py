@@ -13,7 +13,7 @@ except ImportError:
     # compatibility for PyTorch Lightning versions < 1.2.0
     from pytorch_lightning.plugins.ddp_plugin import DDPPlugin
 
-from torchmdnet.utils import LoadFromFile, save_argparse
+from torchmdnet.utils import LoadFromFile, save_argparse, TrainCSVLogger
 from torchmdnet import LNNP
 
 
@@ -114,7 +114,7 @@ def main():
     early_stopping = EarlyStopping('val_loss', patience=args.early_stopping_patience)
     
     tb_logger = pl.loggers.TensorBoardLogger(args.log_dir, name='tensorbord', version='')
-    csv_logger = pl.loggers.CSVLogger(args.log_dir, name='', version='')
+    csv_logger = TrainCSVLogger(args.log_dir, name='', version='', requires_metric='train_loss')
 
     ddp_plugin = None
     if 'ddp' in args.distributed_backend:
