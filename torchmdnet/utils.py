@@ -128,16 +128,18 @@ class TrainCSVLogger(CSVLogger):
         name: Experiment name. Defaults to ``'default'``.
         version: Experiment version. If version is not specified the logger inspects the save
             directory for existing versions, then automatically assigns the next available version.
-        requires_metric: A string which is required in the metrics dict in order to save it to the CSV.
+        requires_metric: A string or list of strings which are required in the metrics dict
+            in order to save it to the CSV.
         prefix: A string to put at the beginning of metric keys.
     """
 
     def __init__(self, *args, requires_metric=None, **kwargs):
+        if isinstance(requires_metric, str):
+            requires_metric = [requires_metric]
         self.requires_metric = requires_metric
         super(TrainCSVLogger, self).__init__(*args, **kwargs)
 
     @rank_zero_only
     def log_metrics(self, metrics, step):
-        if self.requires_metric and self.requires_metric in metrics:
+        if self.requires_metric and len([key for key in self.requires_metric if key not in metrics]) == 0:
             super(TrainCSVLogger, self).log_metrics(metrics, step)
-

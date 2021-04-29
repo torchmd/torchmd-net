@@ -114,7 +114,8 @@ def main():
     early_stopping = EarlyStopping('val_loss', patience=args.early_stopping_patience)
     
     tb_logger = pl.loggers.TensorBoardLogger(args.log_dir, name='tensorbord', version='')
-    csv_logger = TrainCSVLogger(args.log_dir, name='', version='', requires_metric='train_loss')
+    csv_logger = TrainCSVLogger(args.log_dir, name='', version='',
+                                requires_metric=['train_loss', 'val_loss'])
 
     ddp_plugin = None
     if 'ddp' in args.distributed_backend:
