@@ -21,26 +21,29 @@ dataset_map = {
 }
 
 class LNNP(pl.LightningModule):
-    def __init__(self, hparams):
+    def __init__(self,  hparams, model=None):
         super(LNNP, self).__init__()
         self.hparams = hparams
-
-        if self.hparams.load_model:
-            raise NotImplementedError()
+        if model is None:
+            if self.hparams.load_model:
+                raise NotImplementedError()
+            else:
+                self.model = TorchMD_GN(
+                    hidden_channels=self.hparams.embedding_dimension,
+                    num_filters=self.hparams.num_filters,
+                    num_interactions=self.hparams.num_interactions,
+                    num_rbf=self.hparams.num_rbf,
+                    rbf_type=self.hparams.rbf_type,
+                    trainable_rbf=self.hparams.trainable_rbf,
+                    activation=self.hparams.activation,
+                    neighbor_embedding=self.hparams.neighbor_embedding,
+                    cutoff_lower=self.hparams.cutoff_lower,
+                    cutoff_upper=self.hparams.cutoff_upper,
+                    derivative=self.hparams.derivative,
+                    cfconv_aggr=self.hparams.cfconv_aggr,
+                )
         else:
-            self.model = TorchMD_GN(
-                hidden_channels=self.hparams.embedding_dimension,
-                num_filters=self.hparams.num_filters,
-                num_interactions=self.hparams.num_interactions,
-                num_rbf=self.hparams.num_rbf,
-                rbf_type=self.hparams.rbf_type,
-                trainable_rbf=self.hparams.trainable_rbf,
-                activation=self.hparams.activation,
-                neighbor_embedding=self.hparams.neighbor_embedding,
-                cutoff_lower=self.hparams.cutoff_lower,
-                cutoff_upper=self.hparams.cutoff_upper,
-                derivative=self.hparams.derivative
-            )
+            self.model = model
 
         self.losses = None
 

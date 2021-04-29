@@ -29,7 +29,7 @@ else:
     from tqdm import tqdm
 
 
-def train_val_test_split(dset_len,val_ratio,test_ratio, seed, order=None):
+def train_val_test_split(dset_len,val_ratio,test_ratio, seed=None, order=None):
     shuffle = True if order is None else False
     valtest_ratio = val_ratio + test_ratio
     idx_train = list(range(dset_len))
@@ -53,7 +53,7 @@ def train_val_test_split(dset_len,val_ratio,test_ratio, seed, order=None):
     return np.array(idx_train), np.array(idx_val), np.array(idx_test)
 
 
-def make_splits(dataset_len, val_ratio, test_ratio, seed, filename=None, splits=None, order=None):
+def make_splits(dataset_len, val_ratio, test_ratio, seed=None, filename=None, splits=None, order=None):
     if splits is not None:
         splits = np.load(splits)
         idx_train = splits['idx_train']
@@ -68,6 +68,69 @@ def make_splits(dataset_len, val_ratio, test_ratio, seed, filename=None, splits=
         np.savez(filename, idx_train=idx_train, idx_val=idx_val, idx_test=idx_test)
 
     return torch.from_numpy(idx_train), torch.from_numpy(idx_val), torch.from_numpy(idx_test)
+
+
+from torch_geometric.data.data import size_repr
+
+from argparse import Namespace
+
+class Args(Namespace):
+    def __init__(self,**kwargs):
+        for key, item in kwargs.items():
+            if isinstance(item, dict):
+                self[key] = Args(**item)
+            else:
+                self[key] = item
+
+    def __getitem__(self, key):
+        r"""Gets the data of the attribute :obj:`key`."""
+        return getattr(self, key, None)
+
+    def __setitem__(self, key, value):
+        """Sets the attribute :obj:`key` to :obj:`value`."""
+        setattr(self, key, value)
+
+    @property
+    def keys(self):
+        r"""Returns all names of graph attributes."""
+        keys = [key for key in self.__dict__.keys() if self[key] is not None]
+        keys = [key for key in keys if key[:2] != '__' and key[-2:] != '__']
+        return keys
+
+    def __len__(self):
+        r"""Returns the number of all present attributes."""
+        return len(self.keys)
+
+    def __contains__(self, key):
+        r"""Returns :obj:`True`, if the attribute :obj:`key` is present in the
+        data."""
+        return key in self.keys
+
+    def __iter__(self):
+        r"""Iterates over all present attributes in the data, yielding their
+        attribute names and content."""
+        for key in sorted(self.keys):
+            yield key, self[key]
+
+    def __call__(self, *keys):
+        r"""Iterates over all attributes :obj:`*keys` in the data, yielding
+        their attribute names and content.
+        If :obj:`*keys` is not given this method will iterative over all
+        present attributes."""
+        for key in sorted(self.keys) if not keys else keys:
+            if key in self:
+                yield key, self[key]
+
+    def __repr__(self):
+        cls = str(self.__class__.__name__)
+        has_dict = any([isinstance(item, dict) for _, item in self])
+
+        if not has_dict:
+            info = [size_repr(key, item) for key, item in self]
+            return '{}({})'.format(cls, ', '.join(info))
+        else:
+            info = [size_repr(key, item, indent=2) for key, item in self]
+            return '{}(\n{}\n)'.format(cls, ',\n'.join(info))
 
 
 class LoadFromFile(argparse.Action):

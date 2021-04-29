@@ -5,7 +5,7 @@ VERSION = '0.1'
 
 install_requires = [
     'mdtraj',
-    'pytorch-lightning',
+    'jsonargparse[signatures]',
     'tqdm',
     'ase',
     'e3nn',
