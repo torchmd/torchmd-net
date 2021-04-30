@@ -62,15 +62,20 @@ class SchNet(Model):
             outputs. (default: :obj:`mean`)
     """
 
-    def __init__(self, embedding_size: int =100, hidden_channels: int =128, num_filters: int =128,
-                 num_interactions: int =6, num_rbf: int =50, rbf_type: str ='expnorm',
-                 trainable_rbf: bool =True, activation: str ='silu', neighbor_embedding: bool =True,
-                 cutoff_lower: float =0.0, cutoff_upper: float =5.0, readout: str ='add',
-                 dipole: bool =False, n_layers: int =2, reduction_factor: int =1,
+    def __init__(self, embedding_size: int =100, hidden_channels: int =128,
+                num_filters: int =128,
+                num_interactions: int =6, num_rbf: int =50,
+                rbf_type: str ='expnorm',
+                trainable_rbf: bool =True, activation: str ='silu',
+                neighbor_embedding: bool =True,
+                cutoff_lower: float =0.0, cutoff_upper: float =5.0,
+                readout: str ='add',
+                 dipole: bool =False, n_layers: int =2,
+                 reduction_factor: int =1,
                  mean: float=None, std: float=None, atomref: torch.Tensor =None, derivative: bool =False,
-                 cfconv_aggr='mean'):
+                 cfconv_aggr: str ='mean'):
 
-        super(SchNet, self).__init__()
+        super(SchNet, self).__init__(self, )
 
         assert readout in ['add', 'sum', 'mean']
         assert cfconv_aggr in ['add', 'sum', 'mean']

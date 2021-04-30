@@ -13,14 +13,15 @@ dataset_map = {
 }
 
 class DataModule(pl.LightningDataModule):
-    def __init__(self, dataset_name: str, log_dir: str,
+    def __init__(self, dataset_name: str, dataset_root: str,
+                 log_dir: str,
                 val_ratio: float = 0.1,
                 test_ratio: float = 0.1,
                 splits: str = None, batch_size: int = 512,
                 inference_batch_size: int = 64, num_workers: int = 1) -> None:
 
         assert dataset_name in dataset_map, f'Name of the dataset should be one of {list(dataset_map.keys())}'
-        self.dataset = dataset_map[dataset_name]
+        self.dataset = dataset_map[dataset_name](dataset_root)
         self.batch_size = batch_size
         self.inference_batch_size = inference_batch_size
         self.num_workers = num_workers
