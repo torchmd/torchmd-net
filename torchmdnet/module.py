@@ -154,7 +154,7 @@ class LNNP(pl.LightningModule):
             if len(self.losses['test']) > 0:
                 result_dict['test_loss'] = torch.stack(self.losses['test']).mean()
 
-            self.log_dict(result_dict)
+            self.log_dict(result_dict, sync_dist=True)
         self._reset_losses_dict()
 
     def _get_dataloader(self, dataset, stage):
