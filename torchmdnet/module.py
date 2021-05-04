@@ -104,10 +104,9 @@ class LNNP(pl.LightningModule):
 
             if not self.has_y:
                 # "use" both outputs of the model's forward function but discard the first
-                # to only use the derivative and avoid 'RuntimeError: Expected to have
-                # finished reduction in the prior iteration before starting a new one.',
-                # which otherwise get's thrown because of setting
-                # 'find_unused_parameters=False' in the DDPPlugin
+                # to only use the derivative and avoid 'Expected to have finished reduction
+                # in the prior iteration before starting a new one.', which otherwise get's
+                # thrown because of setting 'find_unused_parameters=False' in the DDPPlugin
                 deriv = deriv + pred.sum() * 0
 
             # force/derivative loss
