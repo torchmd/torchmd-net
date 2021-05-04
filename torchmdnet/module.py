@@ -146,13 +146,13 @@ class LNNP(pl.LightningModule):
             result_dict = {
                 'epoch': self.current_epoch,
                 'lr': self.trainer.optimizers[0].param_groups[0]['lr'],
-                'train_loss': torch.tensor(self.losses['train']).mean(),
-                'val_loss': torch.tensor(self.losses['val']).mean(),
+                'train_loss': torch.stack(self.losses['train']).mean(),
+                'val_loss': torch.stack(self.losses['val']).mean(),
             }
 
             # add test loss if available
             if len(self.losses['test']) > 0:
-                result_dict['test_loss'] = torch.tensor(self.losses['test']).mean()
+                result_dict['test_loss'] = torch.stack(self.losses['test']).mean()
 
             self.log_dict(result_dict)
         self._reset_losses_dict()
