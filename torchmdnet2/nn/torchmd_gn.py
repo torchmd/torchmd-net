@@ -70,7 +70,7 @@ class TorchMD_GN(torch.nn.Module):
         super(TorchMD_GN, self).__init__()
 
         assert readout in ['add', 'sum', 'mean']
-        assert cfconv_aggr in ['add', 'sum', 'mean']
+        assert cfconv_aggr in ['add', 'max', 'mean', None]
         assert rbf_type in rbf_class_mapping, f'Unknown RBF type "{rbf_type}". Choose from {", ".join(rbf_class_mapping.keys())}.'
         assert activation in act_class_mapping, f'Unknown activation function "{activation}". Choose from {", ".join(act_class_mapping.keys())}.'
         self.embedding_size = embedding_size
@@ -202,7 +202,7 @@ class TorchMD_GN(torch.nn.Module):
 
 class InteractionBlock(torch.nn.Module):
     def __init__(self, hidden_channels, num_rbf, num_filters, activation,
-                  	cutoff_lower, cutoff_upper, cfconv_aggr='mean'):
+                      cutoff_lower, cutoff_upper, cfconv_aggr='mean'):
         super(InteractionBlock, self).__init__()
         self.mlp = Sequential(
             Linear(num_rbf, num_filters),
@@ -360,6 +360,33 @@ class CosineCutoff(torch.nn.Module):
             # remove contributions beyond the cutoff radius
             cutoffs = cutoffs * (distances < self.cutoff_upper).float()
             return cutoffs
+
+
+class GraphNormMSE(torch.nn.Module):
+    def __init__(self):
+        super(GraphNormMSE, self).__init__()
+
+    def forward(self, pred_prop, prop, batch):
+        """Calculation of the MSE loss per graph.
+
+        Args:
+            pred_prop (torch.tensor): property predicted by the
+                model, with shape (n_examples, **dims)
+            prop (torch.tensor): labeled property that the model
+                is attempting to match, with shape (n_examples, **dims)
+            batch (torch.tensor): batch indices, as supplied by
+                pytorch geometric dataloader, with shape (n_examples)
+        Returns:
+            loss (torch.tensor): MSE loss per graph, where each example
+                has been normalized by the size of the graph from which
+                it originated. Shape (1); scalar.
+        """
+        node_idx, node_sizes = torch.unique(batch, return_counts=True)
+        example_sizes = node_sizes[batch]
+        prop_diff = prop - pred_prop
+        prop_diff = prop_diff * example_sizes[:, None]
+        loss = (prop_diff**2).mean()
+        return loss
 
 
 rbf_class_mapping = {
