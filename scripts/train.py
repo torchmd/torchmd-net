@@ -6,6 +6,7 @@ import argparse
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
+from pytorch_lightning.loggers import CSVLogger
 
 try:
     from pytorch_lightning.plugins import DDPPlugin
@@ -13,7 +14,7 @@ except ImportError:
     # compatibility for PyTorch Lightning versions < 1.2.0
     from pytorch_lightning.plugins.ddp_plugin import DDPPlugin
 
-from torchmdnet.utils import LoadFromFile, save_argparse, TrainCSVLogger
+from torchmdnet.utils import LoadFromFile, save_argparse
 from torchmdnet import LNNP
 
 
@@ -114,8 +115,7 @@ def main():
     early_stopping = EarlyStopping('val_loss', patience=args.early_stopping_patience)
     
     tb_logger = pl.loggers.TensorBoardLogger(args.log_dir, name='tensorbord', version='')
-    csv_logger = TrainCSVLogger(args.log_dir, name='', version='',
-                                requires_metric=['train_loss', 'val_loss'])
+    csv_logger = CSVLogger(args.log_dir, name='', version='')
 
     ddp_plugin = None
     if 'ddp' in args.distributed_backend:
