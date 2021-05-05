@@ -59,7 +59,7 @@ def test_graph_norm_loss():
                          torch.tensor(graph_labels))
 
     numpy_loss = random_force_data - random_force_labels
-    numpy_loss = numpy_loss * np.array(size_labels)[:, None]
+    numpy_loss = numpy_loss / np.array(size_labels)[:, None]
     numpy_loss = (numpy_loss ** 2).mean()
 
     np.testing.assert_allclose(numpy_loss, torch_loss.numpy(),
