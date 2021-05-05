@@ -60,6 +60,7 @@ class SchNet(Model):
             w.r.t the input coordinates. (default: :obj:`False`)
         cfconv_aggr (str, optional): The aggregation method for CFConv filter
             outputs. (default: :obj:`mean`)
+        kwargs (optional): hypers for models.utils.Model
     """
 
     def __init__(self, embedding_size: int =100, hidden_channels: int =128,
@@ -73,12 +74,12 @@ class SchNet(Model):
                  dipole: bool =False, n_layers: int =2,
                  reduction_factor: int =1,
                  mean: float=None, std: float=None, atomref: torch.Tensor =None, derivative: bool =False,
-                 cfconv_aggr: str ='mean'):
+                 cfconv_aggr: str ='mean', **kwargs):
 
-        super(SchNet, self).__init__(self, )
+        super(SchNet, self).__init__(**kwargs)
 
         assert readout in ['add', 'sum', 'mean']
-        assert cfconv_aggr in ['add', 'sum', 'mean']
+        assert cfconv_aggr in ['add', 'sum', 'mean', None]
         assert rbf_type in rbf_class_mapping, f'Unknown RBF type "{rbf_type}". Choose from {", ".join(rbf_class_mapping.keys())}.'
         assert activation in act_class_mapping, f'Unknown activation function "{activation}". Choose from {", ".join(act_class_mapping.keys())}.'
         self.embedding_size = embedding_size

@@ -12,15 +12,16 @@ from ..utils import make_splits, TestingContext
 
 
 class Model(pl.LightningModule):
-    def __init__(self, model: Model, lr=1e-4, weight_decay=0, lr_factor=0.8,
+    def __init__(self, #model: pl.LightningModule,
+    lr=1e-4, weight_decay=0, lr_factor=0.8,
     lr_patience=10, lr_min=1e-7, target_name='forces',
     lr_warmup_steps=0,
     test_interval=1,
 ):
         super(Model, self).__init__()
-        self.model = model
+        #self.model = model
         self.losses = None
-        self.derivative = model.derivative
+        # self.derivative = model.derivative
         self.lr = lr
         self.weight_decay = weight_decay
         self.lr_factor = lr_factor
@@ -31,7 +32,9 @@ class Model(pl.LightningModule):
         self.test_interval = test_interval
 
     def configure_optimizers(self):
-        optimizer = AdamW(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+        optimizer = AdamW(#self.model.parameters(),
+        self.parameters(),
+        lr=self.lr, weight_decay=self.weight_decay)
         scheduler = ReduceLROnPlateau(
             optimizer,
             'min',
@@ -45,8 +48,9 @@ class Model(pl.LightningModule):
                         'frequency': 1}
         return [optimizer], [lr_scheduler]
 
-    def forward(self, z, pos, batch=None):
-        return self.model(z, pos, batch=batch)
+    # def forward(self, z, pos, batch=None):
+    #     # return self.model(z, pos, batch=batch)
+    #     return self(z, pos, batch=batch)
 
     def training_step(self, batch, batch_idx):
         return self.step(batch, mse_loss, 'train')
@@ -57,18 +61,13 @@ class Model(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         return self.step(batch, l1_loss, 'test')
 
-    def test_epoch_end(self, outputs):
-        avg_loss = torch.stack(outputs).mean()
-        self.log('avg_loss', avg_loss.detach().cpu())
-
     def setup(self, stage):
-
-        self._reset_losses_dict()
+        pass
 
     def step(self, batch, loss_fn, stage):
         batch = batch.to(self.device)
 
-        with torch.set_grad_enabled(stage == 'train' or derivative):
+        with torch.set_grad_enabled(stage == 'train' or self.derivative):
             pred = self(batch.z, batch.pos, batch.batch)
         if self.derivative:
             # "use" both outputs of the model's forward function but discard the first to only use the derivative and
@@ -78,8 +77,7 @@ class Model(pl.LightningModule):
             pred = deriv + out.sum() * 0
 
         loss = loss_fn(pred, batch[self.target_name])
-        self.losses[stage].append(loss.detach())
-
+        
         if stage == 'val':
             # PyTorch Lightning requires this in order for ReduceLROnPlateau to work
             self.log('val_loss', loss.detach().cpu())
@@ -97,21 +95,16 @@ class Model(pl.LightningModule):
         # zero_grad call might be unnecessary here if we have Trainer(..., enable_pl_optimizer=True)
         optimizer.zero_grad()
 
-    def validation_epoch_end(self, validation_step_outputs):
-        if self.global_step > 0:
-            result_dict = {'epoch': self.current_epoch, 'lr': self.trainer.optimizers[0].param_groups[0]['lr']}
-            result_dict['train_loss'] = torch.tensor(self.losses['train']).mean()
-            result_dict['val_loss'] = torch.tensor(self.losses['val']).mean()
+    def train_epoch_end(self, outputs):
+        avg_loss = torch.stack(outputs).mean()
+        self.log('train_loss', avg_loss.detach().cpu())
 
-            if self.current_epoch % self.test_interval == 0:
-                with TestingContext(self):
-                    self.trainer.run_test()
-                result_dict['test_loss'] = torch.tensor(self.losses['test']).mean()
+    def test_epoch_end(self, outputs):
+        avg_loss = torch.stack(outputs).mean()
+        self.log('test_loss', avg_loss.detach().cpu())
 
-            self.log_dict(result_dict)
-        self._reset_losses_dict()
-
-    def _reset_losses_dict(self):
-        self.losses = {'train': [], 'val': [], 'test': []}
+    def validation_epoch_end(self, outputs):
+        avg_loss = torch.stack(outputs).mean()
+        self.log('val_loss', avg_loss.detach().cpu())
 
 

@@ -18,10 +18,13 @@ class DataModule(pl.LightningDataModule):
                 val_ratio: float = 0.1,
                 test_ratio: float = 0.1,
                 splits: str = None, batch_size: int = 512,
-                inference_batch_size: int = 64, num_workers: int = 1) -> None:
-
+                inference_batch_size: int = 64, num_workers: int = 1,
+                train_stride: int = 1) -> None:
+        super(DataModule, self).__init__()
         assert dataset_name in dataset_map, f'Name of the dataset should be one of {list(dataset_map.keys())}'
-        self.dataset = dataset_map[dataset_name](dataset_root)
+        self.dataset_root = dataset_root
+        self.dataset_name = dataset_name
+
         self.batch_size = batch_size
         self.inference_batch_size = inference_batch_size
         self.num_workers = num_workers
@@ -29,18 +32,19 @@ class DataModule(pl.LightningDataModule):
         self.test_ratio = test_ratio
         self.log_dir = log_dir
         self.splits = splits
+        self.train_stride = train_stride
 
+    def setup(self, stage):
+        self.dataset = dataset_map[self.dataset_name](self.dataset_root)
         idx_train, idx_val, idx_test = make_splits(
             len(self.dataset),
-            val_ratio,
-            test_ratio,
-            filename=os.path.join(log_dir, 'splits.npz'),
-            splits=splits,
+            self.val_ratio,
+            self.test_ratio,
+            filename=os.path.join(self.log_dir, 'splits.npz'),
+            splits=self.splits,
         )
 
-        # print(f'train {len(idx_train)}, val {len(idx_val)}, test {len(idx_test)}')
-
-        self.train_dataset = self.dataset[idx_train]
+        self.train_dataset = self.dataset[idx_train[::self.train_stride]]
         self.val_dataset = self.dataset[idx_val]
         self.test_dataset = self.dataset[idx_test]
 
