@@ -384,7 +384,7 @@ class GraphNormMSE(torch.nn.Module):
         node_idx, node_sizes = torch.unique(batch, return_counts=True)
         example_sizes = node_sizes[batch]
         prop_diff = prop - pred_prop
-        prop_diff = prop_diff * example_sizes[:, None]
+        prop_diff = prop_diff / example_sizes[:, None]
         loss = (prop_diff**2).mean()
         return loss
 
