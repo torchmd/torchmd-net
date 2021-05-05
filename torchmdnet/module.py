@@ -142,7 +142,7 @@ class LNNP(pl.LightningModule):
         return self._get_dataloader(self.test_dataset, 'test')
 
     def validation_epoch_end(self, validation_step_outputs):
-        if self.global_step > 0 and self.trainer.is_global_zero:
+        if self.global_step > 0:
             # construct dict of logged metrics
             result_dict = {
                 'epoch': self.current_epoch,
