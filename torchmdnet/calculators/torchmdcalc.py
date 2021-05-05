@@ -1,10 +1,9 @@
 import torch
-# from torchmdnet.models import load_model
+from torchmdnet.models import load_model
+
 
 class External:
     def __init__(self, netfile, embeddings, device='cpu'):
-        raise NotImplementedError('TODO: load_model is not yet implemented.')
-
         self.model = load_model(netfile, device=device)
         self.device = device
         self.n_atoms = embeddings.size(1)
