@@ -35,5 +35,13 @@ def create_model(args):
     raise ValueError(f'Unknown architecture: {args.model}')
 
 
-def load_model(filepath, device='cpu'):
-    return torchmdnet.LNNP.load_from_checkpoint(filepath, map_location=device).model
+def load_model(filepath, hparams=None, device='cpu'):
+    if hparams is None:
+        # use hparams from the checkpoint
+        return torchmdnet.LNNP.load_from_checkpoint(filepath, map_location=device).model
+    else:
+        # create model with new hparams and only load model state_dict
+        model = create_model(hparams)
+        state_dict = torchmdnet.LNNP.load_from_checkpoint(filepath, map_location=device).model.state_dict()
+        model.load_state_dict(state_dict)
+        return model

@@ -11,7 +11,7 @@ from torch.nn.functional import mse_loss, l1_loss
 from torchmdnet import datasets
 from torchmdnet.utils import make_splits, TestingContext
 from torchmdnet.data import Subset, AtomrefDataset
-from torchmdnet.models import create_model
+from torchmdnet.models import create_model, load_model
 
 
 class LNNP(pl.LightningModule):
@@ -20,9 +20,10 @@ class LNNP(pl.LightningModule):
         self.save_hyperparameters(hparams)
 
         if self.hparams.load_model:
-            raise NotImplementedError()
+            self.model = load_model(self.hparams.load_model, hparams=self.hparams)
+        else:
+            self.model = create_model(self.hparams)
 
-        self.model = create_model(self.hparams)
         self.losses = None
 
     def setup(self, stage):
