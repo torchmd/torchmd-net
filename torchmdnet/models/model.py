@@ -38,10 +38,10 @@ def create_model(args):
 def load_model(filepath, hparams=None, device='cpu'):
     if hparams is None:
         # use hparams from the checkpoint
-        return torchmdnet.LNNP.load_from_checkpoint(filepath, map_location=device).model
+        return torchmdnet.LNNP.load_from_checkpoint(filepath, map_location=device).model.to(device)
     else:
         # create model with new hparams and only load model state_dict
-        model = create_model(hparams)
+        model = create_model(hparams).to(device)
         state_dict = torchmdnet.LNNP.load_from_checkpoint(filepath, map_location=device).model.state_dict()
         model.load_state_dict(state_dict)
         return model
