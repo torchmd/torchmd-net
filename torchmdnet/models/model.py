@@ -1,4 +1,6 @@
+import torchmdnet
 from torchmdnet.models import TorchMD_GN, TorchMD_T
+
 
 def create_model(args):
     model_args = dict(
@@ -31,3 +33,7 @@ def create_model(args):
         )
 
     raise ValueError(f'Unknown architecture: {args.model}')
+
+
+def load_model(filepath, device='cpu'):
+    return torchmdnet.LNNP.load_from_checkpoint(filepath, map_location=device).model
