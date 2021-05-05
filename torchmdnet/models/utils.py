@@ -197,5 +197,5 @@ act_class_mapping = {
     'ssp': ShiftedSoftplus,
     'silu': nn.SiLU,
     'tanh': nn.Tanh,
-    'signmoid': nn.Sigmoid
+    'sigmoid': nn.Sigmoid
 }
