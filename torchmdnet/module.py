@@ -77,7 +77,8 @@ class LNNP(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         return self.step(batch, mse_loss, 'train')
 
-    def validation_step(self, batch, batch_idx, dataloader_idx):
+    def validation_step(self, batch, batch_idx, *args):
+        dataloader_idx = args[0] if len(args) > 0 else 0
         if dataloader_idx == 0:
             return self.step(batch, mse_loss, 'val')
         elif dataloader_idx == 1:
@@ -129,8 +130,10 @@ class LNNP(pl.LightningModule):
         return self._get_dataloader(self.train_dataset, 'train')
 
     def val_dataloader(self):
-        return [self._get_dataloader(self.val_dataset, 'val'),
-                self._get_dataloader(self.test_dataset, 'test')]
+        loaders = [self._get_dataloader(self.val_dataset, 'val')]
+        if len(self.test_dataset) > 0:
+            loaders.append(self._get_dataloader(self.test_dataset, 'test'))
+        return loaders
 
     def test_dataloader(self):
         return self._get_dataloader(self.test_dataset, 'test')
