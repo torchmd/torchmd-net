@@ -53,11 +53,6 @@ class LNNP(pl.LightningModule):
         )
         print(f'train {len(idx_train)}, val {len(idx_val)}, test {len(idx_test)}')
 
-        self.has_y = 'y' in self.dataset[0]
-        self.has_dy = 'dy' in self.dataset[0]
-
-        assert self.hparams.derivative == self.has_dy, 'Dataset has to contain "dy" if "derivative" is true.'
-
         self.train_dataset = Subset(self.dataset, idx_train)
         self.val_dataset = Subset(self.dataset, idx_val)
         self.test_dataset = Subset(self.dataset, idx_test)
@@ -101,7 +96,7 @@ class LNNP(pl.LightningModule):
         if self.hparams.derivative:
             pred, deriv = pred
 
-            if not self.has_y:
+            if 'y' not in batch:
                 # "use" both outputs of the model's forward function but discard the first to only use the derivative and
                 # avoid 'RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one.',
                 # which otherwise get's thrown because of setting 'find_unused_parameters=False' in the DDPPlugin
@@ -110,7 +105,7 @@ class LNNP(pl.LightningModule):
             # force/derivative loss
             loss = loss + loss_fn(deriv, batch.dy) * self.hparams.force_weight
 
-        if self.has_y:
+        if 'y' in batch:
             # energy/prediction loss
             loss = loss + loss_fn(pred, batch.y) * self.hparams.energy_weight
 
