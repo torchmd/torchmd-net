@@ -9,7 +9,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.functional import mse_loss, l1_loss
 
 from torchmdnet import datasets
-from torchmdnet.utils import make_splits, TestingContext
+from torchmdnet.utils import make_splits
 from torchmdnet.data import Subset, AtomrefDataset
 from torchmdnet.models import create_model, load_model
 
@@ -60,14 +60,11 @@ class LNNP(pl.LightningModule):
         self._reset_losses_dict()
 
     def configure_optimizers(self):
-        optimizer = AdamW(self.model.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
-        scheduler = ReduceLROnPlateau(
-            optimizer,
-            'min',
-            factor=self.hparams.lr_factor,
-            patience=self.hparams.lr_patience,
-            min_lr=self.hparams.lr_min
-        )
+        optimizer = AdamW(self.model.parameters(), lr=self.hparams.lr,
+                          weight_decay=self.hparams.weight_decay)
+        scheduler = ReduceLROnPlateau(optimizer, 'min', factor=self.hparams.lr_factor,
+                                      patience=self.hparams.lr_patience,
+                                      min_lr=self.hparams.lr_min)
         lr_scheduler = {'scheduler': scheduler,
                         'monitor': 'val_loss',
                         'interval': 'epoch',
@@ -80,15 +77,20 @@ class LNNP(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         return self.step(batch, mse_loss, 'train')
 
-    def validation_step(self, batch, batch_idx):
-        return self.step(batch, mse_loss, 'val')
+    def validation_step(self, batch, batch_idx, *args):
+        dataloader_idx = args[0] if len(args) > 0 else 0
+        if dataloader_idx == 0:
+            return self.step(batch, mse_loss, 'val')
+        elif dataloader_idx == 1:
+            if self.current_epoch % self.hparams.test_interval == 0:
+                # test only on certain epochs
+                return self.step(batch, l1_loss, 'test')
+        return None
 
     def test_step(self, batch, batch_idx):
         return self.step(batch, l1_loss, 'test')
 
     def step(self, batch, loss_fn, stage):
-        batch = batch.to(self.device)
-
         with torch.set_grad_enabled(stage == 'train' or self.hparams.derivative):
             pred = self(batch.z, batch.pos, batch.batch)
 
@@ -97,9 +99,10 @@ class LNNP(pl.LightningModule):
             pred, deriv = pred
 
             if 'y' not in batch:
-                # "use" both outputs of the model's forward function but discard the first to only use the derivative and
-                # avoid 'RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one.',
-                # which otherwise get's thrown because of setting 'find_unused_parameters=False' in the DDPPlugin
+                # "use" both outputs of the model's forward function but discard the first
+                # to only use the derivative and avoid 'Expected to have finished reduction
+                # in the prior iteration before starting a new one.', which otherwise get's
+                # thrown because of setting 'find_unused_parameters=False' in the DDPPlugin
                 deriv = deriv + pred.sum() * 0
 
             # force/derivative loss
@@ -109,10 +112,8 @@ class LNNP(pl.LightningModule):
             # energy/prediction loss
             loss = loss + loss_fn(pred, batch.y) * self.hparams.energy_weight
 
+        # save loss for logging
         self.losses[stage].append(loss.detach())
-
-        # PyTorch Lightning requires this in order for ReduceLROnPlateau to work
-        self.log(f'{stage}_loss', loss.detach().cpu())
         return loss
 
     def optimizer_step(self, *args, **kwargs):
@@ -129,23 +130,29 @@ class LNNP(pl.LightningModule):
         return self._get_dataloader(self.train_dataset, 'train')
 
     def val_dataloader(self):
-        return self._get_dataloader(self.val_dataset, 'val')
+        loaders = [self._get_dataloader(self.val_dataset, 'val')]
+        if len(self.test_dataset) > 0:
+            loaders.append(self._get_dataloader(self.test_dataset, 'test'))
+        return loaders
 
     def test_dataloader(self):
         return self._get_dataloader(self.test_dataset, 'test')
 
     def validation_epoch_end(self, validation_step_outputs):
         if self.global_step > 0:
-            result_dict = {'epoch': self.current_epoch, 'lr': self.trainer.optimizers[0].param_groups[0]['lr']}
-            result_dict['train_loss'] = torch.tensor(self.losses['train']).mean()
-            result_dict['val_loss'] = torch.tensor(self.losses['val']).mean()
+            # construct dict of logged metrics
+            result_dict = {
+                'epoch': self.current_epoch,
+                'lr': self.trainer.optimizers[0].param_groups[0]['lr'],
+                'train_loss': torch.stack(self.losses['train']).mean(),
+                'val_loss': torch.stack(self.losses['val']).mean(),
+            }
 
-            if self.current_epoch % self.hparams.test_interval == 0:
-                with TestingContext(self):
-                    self.trainer.run_evaluation()
-                result_dict['test_loss'] = torch.tensor(self.losses['test']).mean()
+            # add test loss if available
+            if len(self.losses['test']) > 0:
+                result_dict['test_loss'] = torch.stack(self.losses['test']).mean()
 
-            self.log_dict(result_dict)
+            self.log_dict(result_dict, sync_dist=True)
         self._reset_losses_dict()
 
     def _get_dataloader(self, dataset, stage):
