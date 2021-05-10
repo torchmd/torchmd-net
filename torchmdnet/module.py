@@ -1,5 +1,4 @@
-import os
-from functools import partial
+from os.path import join
 import pytorch_lightning as pl
 from torch_geometric.data import DataLoader
 
@@ -48,7 +47,7 @@ class LNNP(pl.LightningModule):
             self.hparams.val_ratio,
             self.hparams.test_ratio,
             self.hparams.seed,
-            os.path.join(self.hparams.log_dir, 'splits.npz'),
+            join(self.hparams.log_dir, 'splits.npz'),
             self.hparams.splits,
         )
         print(f'train {len(idx_train)}, val {len(idx_val)}, test {len(idx_test)}')
@@ -56,6 +55,15 @@ class LNNP(pl.LightningModule):
         self.train_dataset = Subset(self.dataset, idx_train)
         self.val_dataset = Subset(self.dataset, idx_val)
         self.test_dataset = Subset(self.dataset, idx_test)
+
+        if self.hparams.standardize:
+            from tqdm import tqdm
+            data = tqdm(self._get_dataloader(self.train_dataset, 'inference'),
+                        desc='computing mean and std')
+            ys = torch.cat([batch.y for batch in data])
+
+            self.model.output_network.mean = ys.mean()
+            self.model.output_network.std = ys.std()
 
         self._reset_losses_dict()
 
@@ -127,16 +135,16 @@ class LNNP(pl.LightningModule):
         optimizer.zero_grad()
 
     def train_dataloader(self):
-        return self._get_dataloader(self.train_dataset, 'train')
+        return self._get_dataloader(self.train_dataset, 'training')
 
     def val_dataloader(self):
-        loaders = [self._get_dataloader(self.val_dataset, 'val')]
+        loaders = [self._get_dataloader(self.val_dataset, 'inference')]
         if len(self.test_dataset) > 0:
-            loaders.append(self._get_dataloader(self.test_dataset, 'test'))
+            loaders.append(self._get_dataloader(self.test_dataset, 'inference'))
         return loaders
 
     def test_dataloader(self):
-        return self._get_dataloader(self.test_dataset, 'test')
+        return self._get_dataloader(self.test_dataset, 'inference')
 
     def validation_epoch_end(self, validation_step_outputs):
         if self.global_step > 0:
@@ -156,12 +164,14 @@ class LNNP(pl.LightningModule):
         self._reset_losses_dict()
 
     def _get_dataloader(self, dataset, stage):
-        if stage == 'train':
+        if stage == 'training':
             batch_size = self.hparams.batch_size
             shuffle = True
-        elif stage in ['val', 'test']:
+        elif stage == 'inference':
             batch_size = self.hparams.inference_batch_size
             shuffle = False
+        else:
+            raise ValueError(f'Unknown stage "{stage}". Please choose "training" or "inference".')
 
         return DataLoader(
             dataset=dataset,

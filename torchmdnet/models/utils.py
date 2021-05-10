@@ -68,15 +68,15 @@ class OutputNetwork(nn.Module):
             c = scatter(mass * pos, batch, dim=0) / scatter(mass, batch, dim=0)
             h = h * (pos - c[batch])
 
-        if not self.dipole and self.mean is not None and self.std is not None:
-            h = h * self.std + self.mean
-
         if not self.dipole and self.atomref is not None:
             h = h + self.atomref(z)
 
         out = scatter(h, batch, dim=0, reduce=self.readout)
         assert out.size(0) == n_samples, ('Some samples were completely filtered out by the atom filter. '
                                           f'Make sure that at least one atom per sample exists with Z > {self.atom_filter}.')
+
+        if not self.dipole and self.mean is not None and self.std is not None:
+            out = out * self.std + self.mean
 
         if self.dipole:
             out = torch.norm(out, dim=-1, keepdim=True)

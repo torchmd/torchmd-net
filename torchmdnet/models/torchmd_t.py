@@ -84,8 +84,6 @@ class TorchMD_T(nn.Module):
         self.cutoff_upper = cutoff_upper
         self.readout = 'add' if dipole else readout
         self.dipole = dipole
-        self.mean = mean
-        self.std = std
         self.derivative = derivative
         self.atom_filter = atom_filter
         self.max_z = max_z
@@ -111,7 +109,7 @@ class TorchMD_T(nn.Module):
         self.out_norm = nn.LayerNorm(hidden_channels)
 
         self.output_network = OutputNetwork(
-            hidden_channels, act_class, self.readout, self.dipole, self.mean, self.std,
+            hidden_channels, act_class, self.readout, self.dipole, mean, std,
             atomref, self.derivative, self.atom_filter, self.max_z
         )
 
