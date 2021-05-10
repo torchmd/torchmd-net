@@ -178,17 +178,13 @@ class LNNP(pl.LightningModule):
         )
 
     def _standardize(self):
-        with torch.no_grad():
-            data = tqdm(self._get_dataloader(self.train_dataset, 'inference'),
-                        desc='computing mean and std')
-            ys = []
-            for batch in data:
-                curr = batch.y
-                if self.model.output_network.atomref is not None:
-                    atomref = self.model.output_network.atomref(batch.z)
-                    curr -= scatter(atomref, batch.batch, dim=0)
-                ys.append(curr.clone())
-            ys = torch.cat(ys)
+        if self.model.output_network.atomref is not None:
+            pl.utilities.rank_zero_warn('Standardizing when using a dataset with '
+                                        'atomrefs likely leads to unwanted behaviour.')
+
+        data = tqdm(self._get_dataloader(self.train_dataset, 'inference'),
+                    desc='computing mean and std')
+        ys = torch.cat([batch.y.clone() for batch in data])
 
         self.model.output_network.mean = ys.mean()
         self.model.output_network.std = ys.std()
