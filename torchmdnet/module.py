@@ -98,7 +98,7 @@ class LNNP(pl.LightningModule):
         with torch.set_grad_enabled(stage == 'train' or self.hparams.derivative):
             pred = self(batch.z, batch.pos, batch.batch)
 
-        loss = 0
+        loss_y, loss_dy = 0, 0
         if self.hparams.derivative:
             pred, deriv = pred
 
@@ -110,13 +110,21 @@ class LNNP(pl.LightningModule):
                 deriv = deriv + pred.sum() * 0
 
             # force/derivative loss
-            loss = loss + loss_fn(deriv, batch.dy) * self.hparams.force_weight
+            loss_dy = loss_fn(deriv, batch.dy)
+
+            if self.hparams.force_weight > 0:
+                self.losses[stage + '_dy'].append(loss_dy.detach())
 
         if 'y' in batch:
             # energy/prediction loss
-            loss = loss + loss_fn(pred, batch.y) * self.hparams.energy_weight
+            loss_y = loss_fn(pred, batch.y)
+            
+            if self.hparams.energy_weight > 0:
+                self.losses[stage + '_y'].append(loss_y.detach())
 
-        # save loss for logging
+        # total loss
+        loss = loss_y * self.hparams.energy_weight + loss_dy * self.hparams.force_weight
+
         self.losses[stage].append(loss.detach())
         return loss
 
@@ -156,6 +164,17 @@ class LNNP(pl.LightningModule):
             if len(self.losses['test']) > 0:
                 result_dict['test_loss'] = torch.stack(self.losses['test']).mean()
 
+            # if prediction and derivative are present, also log them separately
+            if len(self.losses['train_y']) > 0 and len(self.losses['train_dy']) > 0:
+                result_dict['train_loss_y'] = torch.stack(self.losses['train_y']).mean()
+                result_dict['train_loss_dy'] = torch.stack(self.losses['train_dy']).mean()
+                result_dict['val_loss_y'] = torch.stack(self.losses['val_y']).mean()
+                result_dict['val_loss_dy'] = torch.stack(self.losses['val_dy']).mean()
+
+                if len(self.losses['test']) > 0:
+                    result_dict['test_loss_y'] = torch.stack(self.losses['test_y']).mean()
+                    result_dict['test_loss_dy'] = torch.stack(self.losses['test_dy']).mean()
+
             self.log_dict(result_dict, sync_dist=True)
         self._reset_losses_dict()
 
@@ -190,4 +209,6 @@ class LNNP(pl.LightningModule):
         self.model.output_network.std = ys.std()
 
     def _reset_losses_dict(self):
-        self.losses = {'train': [], 'val': [], 'test': []}
+        self.losses = {'train': [], 'val': [], 'test': [],
+                       'train_y': [], 'val_y': [], 'test_y': [],
+                       'train_dy': [], 'val_dy': [], 'test_dy': []}
