@@ -27,7 +27,7 @@ class LNNP(pl.LightningModule):
         self.losses = None
 
     def setup(self, stage):
-        if self.hparams.dataset == 'custom':
+        if self.hparams.dataset == 'Custom':
             self.dataset = datasets.Custom(
                 self.hparams.coord_files,
                 self.hparams.embed_files,
@@ -37,7 +37,7 @@ class LNNP(pl.LightningModule):
         else:
             self.dataset = getattr(datasets, self.hparams.dataset)(
                 self.hparams.dataset_root,
-                label=self.hparams.label
+                dataset_arg=self.hparams.dataset_arg
             )
 
         if hasattr(self.dataset, 'get_atomref'):

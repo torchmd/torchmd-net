@@ -14,8 +14,8 @@ except ImportError:
     # compatibility for PyTorch Lightning versions < 1.2.0
     from pytorch_lightning.plugins.ddp_plugin import DDPPlugin
 
+from torchmdnet import LNNP, datasets
 from torchmdnet.utils import LoadFromFile, save_argparse
-from torchmdnet import LNNP
 
 
 def get_args():
@@ -39,7 +39,7 @@ def get_args():
     parser.add_argument('--load-model', default=None, help='Restart training using a model checkpoint')
     parser.add_argument('--splits', default=None, help='Npz with splits idx_train, idx_val, idx_test')
     parser.add_argument('--val-ratio', type=float, default=0.05, help='Percentage of validation set')
-    parser.add_argument('--test-ratio', type=float, default=0.10922, help='Percentage of test set')
+    parser.add_argument('--test-ratio', type=float, default=0.1, help='Percentage of test set')
     parser.add_argument('--test-interval', type=int, default=10, help='Test interval, one test per n epochs (default: 10)')
     parser.add_argument('--save-interval', type=int, default=10, help='Save interval, one save per n epochs (default: 10)')
     parser.add_argument('--seed', type=int, default=1, help='random seed (default: 1)')
@@ -48,8 +48,9 @@ def get_args():
     parser.add_argument('--redirect', type=bool, default=False, help='Redirect stdout and stderr to log_dir/log')
 
     # dataset specific
-    parser.add_argument('--dataset', default=None, type=str, choices=['QM9', 'ANI1', 'custom'], help='Name of the torch_geometric dataset')
+    parser.add_argument('--dataset', default=None, type=str, choices=datasets.__all__, help='Name of the torch_geometric dataset')
     parser.add_argument('--dataset-root', default='~/data', type=str, help='Data storage directory (not used if dataset is "CG")')
+    parser.add_argument('--dataset-arg', default=None, type=str, help='Additional dataset argument, e.g. target property for QM9 or molecule for MD17')
     parser.add_argument('--coord-files', default=None, type=str, help='Custom coordinate files glob')
     parser.add_argument('--embed-files', default=None, type=str, help='Custom embedding files glob')
     parser.add_argument('--energy-files', default=None, type=str, help='Custom energy files glob')
@@ -75,7 +76,6 @@ def get_args():
     parser.add_argument('--num-heads', type=int, default=8, help='Number of attention heads')
 
     # other args
-    parser.add_argument('--label', default=None, type=str, help='Target property, e.g. energy_U0, forces')
     parser.add_argument('--derivative', default=False, type=bool, help='If true, take the derivative of the prediction w.r.t coordinates')
     parser.add_argument('--cutoff-lower', type=float, default=0.0, help='Lower cutoff in model')
     parser.add_argument('--cutoff-upper', type=float, default=5.0, help='Upper cutoff in model')
@@ -84,8 +84,6 @@ def get_args():
     # fmt: on
  
     args = parser.parse_args()
-
-    assert args.label is not None, 'Please specify a label.'
 
     if args.redirect:
         sys.stdout = open(os.path.join(args.log_dir, 'log'), 'w')

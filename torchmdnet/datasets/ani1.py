@@ -27,8 +27,7 @@ class ANI1(InMemoryDataset):
         'O': -75.0362229210 * HAR2EV
     }
 
-    def __init__(self, root, label, transform=None, pre_transform=None):
-        self.label = label
+    def __init__(self, root, transform=None, pre_transform=None, **kwargs):
         super(ANI1, self).__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
