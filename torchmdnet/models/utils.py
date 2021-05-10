@@ -87,6 +87,14 @@ class OutputNetwork(nn.Module):
             return out, dy
         return out
 
+    def set_atomref(self, atomref):
+        if self.initial_atomref is None:
+            self.initial_atomref = atomref
+            self.atomref = nn.Embedding(self.max_z, 1)
+        else:
+            self.initial_atomref.data.copy_(atomref)
+        self.atomref.weight.data.copy_(self.initial_atomref)
+
 
 class NeighborEmbedding(MessagePassing):
     def __init__(self, hidden_channels, num_rbf, cutoff_lower, cutoff_upper, max_z=100):
