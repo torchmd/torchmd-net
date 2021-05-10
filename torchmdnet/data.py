@@ -18,23 +18,3 @@ class Subset(Dataset):
 
     def __len__(self):
         return len(self.indices)
-
-
-class AtomrefDataset(Dataset):
-    r"""Dataset wrapper which removes the atomrefs from labels.
-
-    Arguments:
-        dataset (Dataset): A dataset with property `z` to index the atomrefs.
-    """
-
-    def __init__(self, dataset):
-        self.dataset = dataset
-        self.atomref = self.dataset.get_atomref()
-
-    def __getitem__(self, idx):
-        item = self.dataset[idx]
-        item.y -= self.atomref[item.z].sum()
-        return item
-
-    def __len__(self):
-        return len(self.dataset)

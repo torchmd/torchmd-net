@@ -2,6 +2,7 @@ from os.path import join
 from tqdm import tqdm
 import pytorch_lightning as pl
 from torch_geometric.data import DataLoader
+from torch_scatter import scatter
 
 import torch
 from torch.optim import AdamW
@@ -10,7 +11,7 @@ from torch.nn.functional import mse_loss, l1_loss
 
 from torchmdnet import datasets
 from torchmdnet.utils import make_splits
-from torchmdnet.data import Subset, AtomrefDataset
+from torchmdnet.data import Subset
 from torchmdnet.models import create_model, load_model
 
 
@@ -40,9 +41,6 @@ class LNNP(pl.LightningModule):
                 dataset_arg=self.hparams.dataset_arg
             )
 
-        if hasattr(self.dataset, 'get_atomref'):
-            self.dataset = AtomrefDataset(self.dataset)
-
         idx_train, idx_val, idx_test = make_splits(
             len(self.dataset),
             self.hparams.val_ratio,
@@ -57,13 +55,11 @@ class LNNP(pl.LightningModule):
         self.val_dataset = Subset(self.dataset, idx_val)
         self.test_dataset = Subset(self.dataset, idx_test)
 
-        if self.hparams.standardize:
-            data = tqdm(self._get_dataloader(self.train_dataset, 'inference'),
-                        desc='computing mean and std')
-            ys = torch.cat([batch.y for batch in data])
+        if hasattr(self.dataset, 'get_atomref'):
+            self.model.output_network.set_atomref(self.dataset.get_atomref())
 
-            self.model.output_network.mean = ys.mean()
-            self.model.output_network.std = ys.std()
+        if self.hparams.standardize:
+            self._standardize()
 
         self._reset_losses_dict()
 
@@ -180,6 +176,22 @@ class LNNP(pl.LightningModule):
             num_workers=self.hparams.num_workers,
             pin_memory=True
         )
+
+    def _standardize(self):
+        with torch.no_grad():
+            data = tqdm(self._get_dataloader(self.train_dataset, 'inference'),
+                        desc='computing mean and std')
+            ys = []
+            for batch in data:
+                curr = batch.y
+                if self.model.output_network.atomref is not None:
+                    atomref = self.model.output_network.atomref(batch.z)
+                    curr -= scatter(atomref, batch.batch, dim=0)
+                ys.append(curr.clone())
+            ys = torch.cat(ys)
+
+        self.model.output_network.mean = ys.mean()
+        self.model.output_network.std = ys.std()
 
     def _reset_losses_dict(self):
         self.losses = {'train': [], 'val': [], 'test': []}
