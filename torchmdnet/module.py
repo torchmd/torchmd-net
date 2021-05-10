@@ -1,4 +1,5 @@
 from os.path import join
+from tqdm import tqdm
 import pytorch_lightning as pl
 from torch_geometric.data import DataLoader
 
@@ -57,7 +58,6 @@ class LNNP(pl.LightningModule):
         self.test_dataset = Subset(self.dataset, idx_test)
 
         if self.hparams.standardize:
-            from tqdm import tqdm
             data = tqdm(self._get_dataloader(self.train_dataset, 'inference'),
                         desc='computing mean and std')
             ys = torch.cat([batch.y for batch in data])
