@@ -81,6 +81,7 @@ def get_args():
     parser.add_argument('--cutoff-upper', type=float, default=5.0, help='Upper cutoff in model')
     parser.add_argument('--atom-filter', type=int, default=-1, help='Only sum over atoms with Z > atom_filter')
     parser.add_argument('--max-z', type=int, default=100, help='Maximum atomic number that fits in the embedding matrix')
+    parser.add_argument('--standardize', type=bool, default=False, help='If true, multiply prediction by dataset std and add mean')
     # fmt: on
  
     args = parser.parse_args()
