@@ -5,7 +5,7 @@ import torch
 from sklearn.model_selection import train_test_split
 
 
-def train_val_test_split(dset_len,val_ratio,test_ratio, seed, order=None):
+def train_val_test_split(dset_len, val_ratio, test_ratio, seed, order=None):
     shuffle = True if order is None else False
     valtest_ratio = val_ratio + test_ratio
     idx_train = list(range(dset_len))

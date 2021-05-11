@@ -118,13 +118,13 @@ def main():
 
     ddp_plugin = None
     if 'ddp' in args.distributed_backend:
-        ddp_plugin = DDPPlugin(find_unused_parameters=False)
+        ddp_plugin = DDPPlugin(find_unused_parameters=False, num_nodes=args.num_nodes)
 
     trainer = pl.Trainer(
         max_epochs=args.num_epochs,
         gpus=args.ngpus,
         num_nodes=args.num_nodes,
-        distributed_backend=args.distributed_backend,
+        accelerator=args.distributed_backend,
         default_root_dir=args.log_dir,
         auto_lr_find=False,
         resume_from_checkpoint=args.load_model,
