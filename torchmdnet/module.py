@@ -105,7 +105,8 @@ class LNNP(LightningModule):
             should_reset = (self.current_epoch % self.hparams.test_interval == 0 or
                             (self.current_epoch - 1) % self.hparams.test_interval == 0)
             if should_reset:
-                # reset validation dataloaders before and after testing epoch
+                # reset validation dataloaders before and after testing epoch, which is faster
+                # than skipping test validation steps by returning None
                 self.trainer.reset_val_dataloader(self)
 
     def validation_epoch_end(self, validation_step_outputs):

@@ -80,6 +80,8 @@ class DataModule(LightningDataModule):
     def _get_dataloader(self, dataset, stage, store_dataloader=True):
         store_dataloader = store_dataloader and not self.trainer.reload_dataloaders_every_epoch
         if stage in self._saved_dataloaders and store_dataloader:
+            # storing the dataloaders like this breaks calls to trainer.reload_train_val_dataloaders
+            # but makes it possible that the dataloaders are not recreated on every testing epoch
             return self._saved_dataloaders[stage]
 
         if stage == 'train':
