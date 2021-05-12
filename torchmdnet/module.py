@@ -1,22 +1,14 @@
-from os.path import join
-from tqdm import tqdm
-import pytorch_lightning as pl
-from torch_geometric.data import DataLoader
-from torch_scatter import scatter
-
 import torch
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.functional import mse_loss, l1_loss
 
-from torchmdnet import datasets
-from torchmdnet.utils import make_splits
-from torchmdnet.data import Subset
+from pytorch_lightning import LightningModule
 from torchmdnet.models import create_model, load_model
 
 
-class LNNP(pl.LightningModule):
-    def __init__(self, hparams):
+class LNNP(LightningModule):
+    def __init__(self, hparams, mean=None, std=None, atomref=None):
         super(LNNP, self).__init__()
         self.save_hyperparameters(hparams)
 
@@ -25,42 +17,14 @@ class LNNP(pl.LightningModule):
         else:
             self.model = create_model(self.hparams)
 
+        if atomref is not None:
+            self.model.output_network.set_atomref(atomref)
+        if mean is not None:
+            self.model.output_network.mean = mean
+        if std is not None:
+            self.model.output_network.std = std
+
         self.losses = None
-
-    def setup(self, stage):
-        if self.hparams.dataset == 'Custom':
-            self.dataset = datasets.Custom(
-                self.hparams.coord_files,
-                self.hparams.embed_files,
-                self.hparams.energy_files,
-                self.hparams.force_files
-            )
-        else:
-            self.dataset = getattr(datasets, self.hparams.dataset)(
-                self.hparams.dataset_root,
-                dataset_arg=self.hparams.dataset_arg
-            )
-
-        idx_train, idx_val, idx_test = make_splits(
-            len(self.dataset),
-            self.hparams.val_ratio,
-            self.hparams.test_ratio,
-            self.hparams.seed,
-            join(self.hparams.log_dir, 'splits.npz'),
-            self.hparams.splits,
-        )
-        print(f'train {len(idx_train)}, val {len(idx_val)}, test {len(idx_test)}')
-
-        self.train_dataset = Subset(self.dataset, idx_train)
-        self.val_dataset = Subset(self.dataset, idx_val)
-        self.test_dataset = Subset(self.dataset, idx_test)
-
-        if hasattr(self.dataset, 'get_atomref'):
-            self.model.output_network.set_atomref(self.dataset.get_atomref())
-
-        if self.hparams.standardize:
-            self._standardize()
-
         self._reset_losses_dict()
 
     def configure_optimizers(self):
@@ -82,14 +46,11 @@ class LNNP(pl.LightningModule):
         return self.step(batch, mse_loss, 'train')
 
     def validation_step(self, batch, batch_idx, *args):
-        dataloader_idx = args[0] if len(args) > 0 else 0
-        if dataloader_idx == 0:
+        if len(args) == 0 or (len(args) > 0 and args[0] == 0):
+            # validation step
             return self.step(batch, mse_loss, 'val')
-        elif dataloader_idx == 1:
-            if self.current_epoch % self.hparams.test_interval == 0:
-                # test only on certain epochs
-                return self.step(batch, l1_loss, 'test')
-        return None
+        # test step
+        return self.step(batch, l1_loss, 'test')
 
     def test_step(self, batch, batch_idx):
         return self.step(batch, l1_loss, 'test')
@@ -138,17 +99,14 @@ class LNNP(pl.LightningModule):
         super().optimizer_step(*args, **kwargs)
         optimizer.zero_grad()
 
-    def train_dataloader(self):
-        return self._get_dataloader(self.train_dataset, 'training')
-
-    def val_dataloader(self):
-        loaders = [self._get_dataloader(self.val_dataset, 'inference')]
-        if len(self.test_dataset) > 0:
-            loaders.append(self._get_dataloader(self.test_dataset, 'inference'))
-        return loaders
-
-    def test_dataloader(self):
-        return self._get_dataloader(self.test_dataset, 'inference')
+    def training_epoch_end(self, training_step_outputs):
+        dm = self.trainer.datamodule
+        if hasattr(dm, 'test_dataset') and len(dm.test_dataset) > 0:
+            should_reset = (self.current_epoch % self.hparams.test_interval == 0 or
+                            (self.current_epoch - 1) % self.hparams.test_interval == 0)
+            if should_reset:
+                # reset validation dataloaders before and after testing epoch
+                self.trainer.reset_val_dataloader(self)
 
     def validation_epoch_end(self, validation_step_outputs):
         if self.global_step > 0:
@@ -177,36 +135,6 @@ class LNNP(pl.LightningModule):
 
             self.log_dict(result_dict, sync_dist=True)
         self._reset_losses_dict()
-
-    def _get_dataloader(self, dataset, stage):
-        if stage == 'training':
-            batch_size = self.hparams.batch_size
-            shuffle = True
-        elif stage == 'inference':
-            batch_size = self.hparams.inference_batch_size
-            shuffle = False
-        else:
-            raise ValueError(f'Unknown stage "{stage}". Please choose "training" or "inference".')
-
-        return DataLoader(
-            dataset=dataset,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=self.hparams.num_workers,
-            pin_memory=True
-        )
-
-    def _standardize(self):
-        if self.model.output_network.atomref is not None:
-            pl.utilities.rank_zero_warn('Standardizing when using a dataset with '
-                                        'atomrefs likely leads to unwanted behaviour.')
-
-        data = tqdm(self._get_dataloader(self.train_dataset, 'inference'),
-                    desc='computing mean and std')
-        ys = torch.cat([batch.y.clone() for batch in data])
-
-        self.model.output_network.mean = ys.mean()
-        self.model.output_network.std = ys.std()
 
     def _reset_losses_dict(self):
         self.losses = {'train': [], 'val': [], 'test': [],
