@@ -15,7 +15,8 @@ except ImportError:
     # compatibility for PyTorch Lightning versions < 1.2.0
     from pytorch_lightning.plugins.ddp_plugin import DDPPlugin
 
-from torchmdnet import LNNP, datasets
+from torchmdnet.module import LNNP
+from torchmdnet import datasets
 from torchmdnet.data import DataModule
 from torchmdnet.models import create_model, load_model
 from torchmdnet.utils import LoadFromFile, save_argparse

@@ -4,7 +4,6 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.functional import mse_loss, l1_loss
 
 from pytorch_lightning import LightningModule
-from torchmdnet.models import create_model, load_model
 
 
 class LNNP(LightningModule):

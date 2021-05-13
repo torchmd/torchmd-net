@@ -1,5 +1,7 @@
 import torchmdnet
-from torchmdnet.models import TorchMD_GN, TorchMD_T, OutputNetwork
+from torchmdnet.models.torchmd_gn import TorchMD_GN
+from torchmdnet.models.torchmd_t import TorchMD_T
+from torchmdnet.models.utils import OutputNetwork
 from torchmdnet.models.wrappers import AtomFilter, Atomref, Standardize, Derivative
 
 
