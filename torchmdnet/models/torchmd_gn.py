@@ -80,6 +80,8 @@ class TorchMD_GN(nn.Module):
                                      act_class, cutoff_lower, cutoff_upper)
             self.interactions.append(block)
 
+        self.reset_parameters()
+
     def reset_parameters(self):
         self.embedding.reset_parameters()
         for interaction in self.interactions:

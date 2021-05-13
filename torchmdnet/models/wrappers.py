@@ -110,6 +110,8 @@ class OutputNetwork(BaseWrapper):
             nn.Linear(hidden_channels // 2, 1)
         )
 
+        self.reset_parameters()
+
     def reset_parameters(self):
         super(OutputNetwork, self).reset_parameters()
         nn.init.xavier_uniform_(self.output_network[0].weight)

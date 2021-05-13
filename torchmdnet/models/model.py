@@ -78,8 +78,6 @@ def create_model(args, atomref=None, mean=None, std=None):
     # Derivative
     if args.derivative:
         model = Derivative(model)
-
-    model.reset_parameters()
     return model
 
 

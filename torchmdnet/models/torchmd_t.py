@@ -82,6 +82,8 @@ class TorchMD_T(nn.Module):
 
         self.out_norm = nn.LayerNorm(hidden_channels)
 
+        self.reset_parameters()
+
     def reset_parameters(self):
         self.embedding.reset_parameters()
         for attn in self.attention_layers:
