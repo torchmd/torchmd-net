@@ -86,7 +86,7 @@ def get_args():
     parser.add_argument('--atom-filter', type=int, default=-1, help='Only sum over atoms with Z > atom_filter')
     parser.add_argument('--max-z', type=int, default=100, help='Maximum atomic number that fits in the embedding matrix')
     parser.add_argument('--standardize', type=bool, default=False, help='If true, multiply prediction by dataset std and add mean')
-    parser.add_argument('--readout', type=str, default='add', choices=['add', 'mean'], help='Reduce function over atoms in the output network')
+    parser.add_argument('--reduce-op', type=str, default='add', choices=['add', 'mean'], help='Reduce operation to apply to atomic predictions')
     parser.add_argument('--dipole', type=bool, default=False, help='Use the magnitude of the dipole moment to make the prediction')
     # fmt: on
  

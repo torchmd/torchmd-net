@@ -1,4 +1,7 @@
+import ase
 from abc import abstractmethod, ABCMeta
+from torch_scatter import scatter
+from torchmdnet.models.utils import act_class_mapping
 
 import torch
 from torch import nn
@@ -10,9 +13,9 @@ class BaseWrapper(nn.Module, metaclass=ABCMeta):
 
     Children of this class should implement the `forward` method,
     which calls `self.model(z, pos, batch=batch)` at some point.
-    Wrappers that are applied before the output network should return
+    Wrappers that are applied before the REDUCE operation should return
     the model's output, `z`, `pos` and `batch`. Wrappers that are applied
-    after the output network should only return the model's output.
+    after REDUCE should only return the model's output.
     """
     def __init__(self, model):
         super(BaseWrapper, self).__init__()
@@ -50,6 +53,32 @@ class Standardize(BaseWrapper):
         return out
 
 
+class Reduce(BaseWrapper):
+    def __init__(self, model, reduce_op='add', dipole=False):
+        super(Reduce, self).__init__(model)
+        self.reduce_op = reduce_op
+        self.dipole = dipole
+
+        atomic_mass = torch.from_numpy(ase.data.atomic_masses).float()
+        self.register_buffer('atomic_mass', atomic_mass)
+
+    def forward(self, z, pos, batch=None):
+        x, z, pos, batch = self.model(z, pos, batch=batch)
+
+        if self.dipole:
+            # Get center of mass.
+            mass = self.atomic_mass[z].view(-1, 1)
+            c = scatter(mass * pos, batch, dim=0) / scatter(mass, batch, dim=0)
+            x = x * (pos - c[batch])
+
+        # aggregate atoms
+        out = scatter(x, batch, dim=0, reduce=self.reduce_op)
+
+        if self.dipole:
+            out = torch.norm(out, dim=-1, keepdim=True)
+        return out
+
+
 class Atomref(BaseWrapper):
     def __init__(self, model, atomref, max_z):
         super(Atomref, self).__init__(model)
@@ -67,10 +96,40 @@ class Atomref(BaseWrapper):
         return x, z, pos, batch
 
 
+class OutputNetwork(BaseWrapper):
+    def __init__(self, model, hidden_channels, activation='silu'):
+        super(OutputNetwork, self).__init__(model)
+        self.hidden_channels = hidden_channels
+        self.activation = activation
+
+        act_class = act_class_mapping[activation]
+
+        self.output_network = nn.Sequential(
+            nn.Linear(hidden_channels, hidden_channels // 2),
+            act_class(),
+            nn.Linear(hidden_channels // 2, 1)
+        )
+
+    def reset_parameters(self):
+        super(OutputNetwork, self).reset_parameters()
+        nn.init.xavier_uniform_(self.output_network[0].weight)
+        self.output_network[0].bias.data.fill_(0)
+        nn.init.xavier_uniform_(self.output_network[2].weight)
+        self.output_network[2].bias.data.fill_(0)
+
+    def forward(self, z, pos, batch=None):
+        assert z.dim() == 1 and z.dtype == torch.long
+        batch = torch.zeros_like(z) if batch is None else batch
+
+        x, z, pos, batch = self.model(z, pos, batch=batch)
+        x = self.output_network(x)
+        return x, z, pos, batch
+
+
 class AtomFilter(BaseWrapper):
-    def __init__(self, model, min_z):
+    def __init__(self, model, remove_threshold):
         super(AtomFilter, self).__init__(model)
-        self.min_z = min_z
+        self.remove_threshold = remove_threshold
 
     def forward(self, z, pos, batch=None):
         x, z, pos, batch = self.model(z, pos, batch=batch)
@@ -78,7 +137,7 @@ class AtomFilter(BaseWrapper):
         n_samples = len(batch.unique())
 
         # drop atoms according to the filter
-        atom_mask = z > self.min_z
+        atom_mask = z > self.remove_threshold
         x = x[atom_mask]
         z = z[atom_mask]
         pos = pos[atom_mask]
@@ -86,5 +145,5 @@ class AtomFilter(BaseWrapper):
         
         assert len(batch.unique()) == n_samples,\
             ('Some samples were completely filtered out by the atom filter. '
-             f'Make sure that at least one atom per sample exists with Z > {self.min_z}.')
+             f'Make sure that at least one atom per sample exists with Z > {self.remove_threshold}.')
         return x, z, pos, batch

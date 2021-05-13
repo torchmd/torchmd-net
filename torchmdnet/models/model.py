@@ -1,11 +1,28 @@
-import torchmdnet
+from torchmdnet.module import LNNP
 from torchmdnet.models.torchmd_gn import TorchMD_GN
 from torchmdnet.models.torchmd_t import TorchMD_T
-from torchmdnet.models.utils import OutputNetwork
-from torchmdnet.models.wrappers import AtomFilter, Atomref, Standardize, Derivative
+from torchmdnet.models.wrappers import (Derivative, Standardize, Reduce,
+                                        Atomref, OutputNetwork, AtomFilter)
 
 
 def create_model(args, atomref=None, mean=None, std=None):
+    r"""Nested model structure. Modules REDUCE, OUTPUT_NET and REPRESENTATION are required,
+    the remaining modules may be included to achieve certain functionality.
+
+        model = Derivative(Standardize(REDUCE(Atomref(OUTPUT_NET(AtomFilter(REPRESENTATION()))))))
+                                |________________|
+                                        |
+                                mutually exclusive
+
+        Derivative     - computes the derivative of the model's output (compute's force predictions)
+        Standardize    - returns `pred * std + mean` where mean and std come from the dataset
+        REDUCE         - aggregates atoms of one molecule (optionally computes dipole moment magnitude)
+        Atomref        - adds atomic reference data to each atomic prediction, based on atom type `z`
+        OUTPUT_NET     - transforms atomic embeddings into atomwise scalar predictions
+        AtomFilter     - removes atomic embeddings where `atom_type <= remove_threshold`
+        REPRESENTATION - computes featurization given the atomic neighborhood (e.g. Graph Network, Transformer)
+    """
+
     assert atomref is None or (mean is None and std is None),\
         'Use either atomref or standardization, both is not supported.'
 
@@ -22,7 +39,7 @@ def create_model(args, atomref=None, mean=None, std=None):
         max_z=args.max_z
     )
 
-    # representation model
+    # REPRESENTATION
     if args.model == 'graph-network':
         model = TorchMD_GN(
             num_filters=args.embedding_dimension,
@@ -38,25 +55,27 @@ def create_model(args, atomref=None, mean=None, std=None):
     else:
         raise ValueError(f'Unknown architecture: {args.model}')
 
-    # atom filter
+    # AtomFilter
     if not args.derivative and args.atom_filter > -1:
         model = AtomFilter(model, args.atom_filter)
     elif args.atom_filter > -1:
         raise ValueError('Derivative and atom filter can\'t be used together')
 
-    # atomref
+    # OUTPUT_NET
+    model = OutputNetwork(model, args.embedding_dimension, args.activation)
+
+    # Atomref
     if atomref is not None and not args.dipole:
         model = Atomref(model, atomref, args.max_z)
 
-    # output network
-    model = OutputNetwork(model, args.embedding_dimension, args.activation,
-                          readout=args.readout, dipole=args.dipole)
+    # REDUCE
+    model = Reduce(model, args.reduce_op, args.dipole)
 
-    # standardize
+    # Standardize
     if (mean is not None or std is not None) and not args.dipole:
         model = Standardize(model, mean, std)
 
-    # derivative
+    # Derivative
     if args.derivative:
         model = Derivative(model)
 
@@ -67,10 +86,16 @@ def create_model(args, atomref=None, mean=None, std=None):
 def load_model(filepath, args=None, device='cpu'):
     if args is None:
         # use args from the checkpoint
-        return torchmdnet.LNNP.load_from_checkpoint(filepath, map_location=device).model.to(device)
+        return LNNP.load_from_checkpoint(
+            filepath, map_location=device
+        ).model.to(device)
     else:
         # create model with new args and only load model state_dict
         model = create_model(args).to(device)
-        state_dict = torchmdnet.LNNP.load_from_checkpoint(filepath, map_location=device).model.state_dict()
+        
+        state_dict = LNNP.load_from_checkpoint(
+            filepath, map_location=device
+        ).model.state_dict()
+
         model.load_state_dict(state_dict)
         return model

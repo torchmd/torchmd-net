@@ -1,8 +1,6 @@
-import torch
 from torch import nn
 from torch_geometric.nn import radius_graph, MessagePassing
-
-from torchmdnet.models.utils import (OutputNetwork, NeighborEmbedding, CosineCutoff,
+from torchmdnet.models.utils import (NeighborEmbedding, CosineCutoff,
                                      rbf_class_mapping, act_class_mapping)
 
 

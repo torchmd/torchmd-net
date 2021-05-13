@@ -1,61 +1,7 @@
-import ase
 import math
 import torch
 from torch import nn
-from torch_scatter import scatter
 from torch_geometric.nn import MessagePassing
-
-
-class OutputNetwork(nn.Module):
-    def __init__(self, representation_model, hidden_channels,
-                 activation='silu', readout='add', dipole=False):
-        super(OutputNetwork, self).__init__()
-
-        self.representation_model = representation_model
-
-        self.hidden_channels = hidden_channels
-        self.activation = activation
-        self.readout = readout
-        self.dipole = dipole
-
-        act_class = act_class_mapping[activation]
-
-        atomic_mass = torch.from_numpy(ase.data.atomic_masses)
-        self.register_buffer('atomic_mass', atomic_mass)
-
-        self.lin1 = nn.Linear(hidden_channels, hidden_channels // 2)
-        self.act = act_class()
-        self.lin2 = nn.Linear(hidden_channels // 2, 1)
-
-    def reset_parameters(self):
-        self.representation_model.reset_parameters()
-        nn.init.xavier_uniform_(self.lin1.weight)
-        self.lin1.bias.data.fill_(0)
-        nn.init.xavier_uniform_(self.lin2.weight)
-        self.lin2.bias.data.fill_(0)
-
-    def forward(self, z, pos, batch=None):
-        assert z.dim() == 1 and z.dtype == torch.long
-        batch = torch.zeros_like(z) if batch is None else batch
-
-        x, z, pos, batch = self.representation_model(z, pos, batch=batch)
-
-        # output network
-        x = self.lin1(x)
-        x = self.act(x)
-        x = self.lin2(x)
-
-        if self.dipole:
-            # Get center of mass.
-            mass = self.atomic_mass[z].view(-1, 1)
-            c = scatter(mass * pos, batch, dim=0) / scatter(mass, batch, dim=0)
-            x = x * (pos - c[batch])
-
-        out = scatter(x, batch, dim=0, reduce=self.readout)
-
-        if self.dipole:
-            out = torch.norm(out, dim=-1, keepdim=True)
-        return out
 
 
 class NeighborEmbedding(MessagePassing):
