@@ -19,11 +19,12 @@ class OutputNetwork(nn.Module):
         self.activation = activation
         self.readout = readout
         self.dipole = dipole
-        self.mean = mean
-        self.std = std
         self.derivative = derivative
         self.atom_filter = atom_filter
         self.max_z = max_z
+
+        self.register_buffer('mean', mean)
+        self.register_buffer('std', std)
 
         atomic_mass = torch.from_numpy(ase.data.atomic_masses)
         self.register_buffer('atomic_mass', atomic_mass)
@@ -75,8 +76,11 @@ class OutputNetwork(nn.Module):
         assert out.size(0) == n_samples, ('Some samples were completely filtered out by the atom filter. '
                                           f'Make sure that at least one atom per sample exists with Z > {self.atom_filter}.')
 
-        if not self.dipole and self.mean is not None and self.std is not None:
-            out = out * self.std + self.mean
+        if not self.dipole and self.std is not None:
+            out = out * self.std
+
+        if not self.dipole and self.mean is not None:
+            out = out + self.mean
 
         if self.dipole:
             out = torch.norm(out, dim=-1, keepdim=True)

@@ -15,6 +15,7 @@ except ImportError:
     from pytorch_lightning.plugins.ddp_plugin import DDPPlugin
 
 from torchmdnet import LNNP, datasets
+from torchmdnet.data import DataModule
 from torchmdnet.utils import LoadFromFile, save_argparse
 
 
@@ -103,7 +104,14 @@ def main():
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 
-    model = LNNP(args)
+    # initialize data module
+    data = DataModule(args)
+    data.prepare_data()
+    data.setup('fit')
+
+    # initialize model
+    model = LNNP(args, mean=data.mean, std=data.std, atomref=data.atomref)
+
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.log_dir,
         monitor='val_loss',
@@ -135,7 +143,7 @@ def main():
         plugins=[ddp_plugin]
     )
 
-    trainer.fit(model)
+    trainer.fit(model, data)
 
     # run test set after completing the fit
     trainer.test()
