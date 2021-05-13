@@ -2,6 +2,7 @@ import sys
 import os
 import torch
 import argparse
+from functools import partial
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
@@ -16,6 +17,7 @@ except ImportError:
 
 from torchmdnet import LNNP, datasets
 from torchmdnet.data import DataModule
+from torchmdnet.models import create_model, load_model
 from torchmdnet.utils import LoadFromFile, save_argparse
 
 
@@ -83,6 +85,8 @@ def get_args():
     parser.add_argument('--atom-filter', type=int, default=-1, help='Only sum over atoms with Z > atom_filter')
     parser.add_argument('--max-z', type=int, default=100, help='Maximum atomic number that fits in the embedding matrix')
     parser.add_argument('--standardize', type=bool, default=False, help='If true, multiply prediction by dataset std and add mean')
+    parser.add_argument('--readout', type=str, default='add', choices=['add', 'mean'], help='Reduce function over atoms in the output network')
+    parser.add_argument('--dipole', type=bool, default=False, help='Use the magnitude of the dipole moment to make the prediction')
     # fmt: on
  
     args = parser.parse_args()
@@ -109,8 +113,13 @@ def main():
     data.prepare_data()
     data.setup('fit')
 
+    if args.load_model:
+        model_creator = load_model
+    else:
+        model_creator = partial(create_model, atomref=data.atomref, mean=data.mean, std=data.std)
+
     # initialize model
-    model = LNNP(args, mean=data.mean, std=data.std, atomref=data.atomref)
+    model = LNNP(args, model_creator)
 
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.log_dir,

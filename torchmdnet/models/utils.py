@@ -7,101 +7,60 @@ from torch_geometric.nn import MessagePassing
 
 
 class OutputNetwork(nn.Module):
-    def __init__(self, hidden_channels, activation, readout='add', dipole=False,
-                 mean=None, std=None, atomref=None, derivative=False, atom_filter=-1,
-                 max_z=100):
+    def __init__(self, representation_model, hidden_channels,
+                 activation='silu', readout='add', dipole=False):
         super(OutputNetwork, self).__init__()
 
-        if derivative:
-            assert atom_filter == -1, 'Atom filter currently does not work if derivative is set to true'
+        self.representation_model = representation_model
 
         self.hidden_channels = hidden_channels
         self.activation = activation
         self.readout = readout
         self.dipole = dipole
-        self.derivative = derivative
-        self.atom_filter = atom_filter
-        self.max_z = max_z
 
-        self.register_buffer('mean', mean)
-        self.register_buffer('std', std)
+        act_class = act_class_mapping[activation]
 
         atomic_mass = torch.from_numpy(ase.data.atomic_masses)
         self.register_buffer('atomic_mass', atomic_mass)
 
         self.lin1 = nn.Linear(hidden_channels, hidden_channels // 2)
-        self.act = activation()
+        self.act = act_class()
         self.lin2 = nn.Linear(hidden_channels // 2, 1)
 
-        self.register_buffer('initial_atomref', atomref)
-        self.atomref = None
-        if atomref is not None:
-            self.atomref = nn.Embedding(self.max_z, 1)
-            self.atomref.weight.data.copy_(atomref)
-
     def reset_parameters(self):
+        self.representation_model.reset_parameters()
         nn.init.xavier_uniform_(self.lin1.weight)
         self.lin1.bias.data.fill_(0)
         nn.init.xavier_uniform_(self.lin2.weight)
         self.lin2.bias.data.fill_(0)
-        if self.atomref is not None:
-            self.atomref.weight.data.copy_(self.initial_atomref)
 
-    def forward(self, z, h, pos, batch):
-        n_samples = batch.max() + 1
+    def forward(self, z, pos, batch=None):
+        assert z.dim() == 1 and z.dtype == torch.long
+        batch = torch.zeros_like(z) if batch is None else batch
 
-        if not self.derivative:
-            # drop atoms according to the filter
-            atom_mask = z > self.atom_filter
-            h = h[atom_mask]
-            z = z[atom_mask]
-            pos = pos[atom_mask]
-            batch = batch[atom_mask]
+        x, z, pos, batch = self.representation_model(z, pos, batch=batch)
 
         # output network
-        h = self.lin1(h)
-        h = self.act(h)
-        h = self.lin2(h)
+        x = self.lin1(x)
+        x = self.act(x)
+        x = self.lin2(x)
 
         if self.dipole:
             # Get center of mass.
             mass = self.atomic_mass[z].view(-1, 1)
             c = scatter(mass * pos, batch, dim=0) / scatter(mass, batch, dim=0)
-            h = h * (pos - c[batch])
+            x = x * (pos - c[batch])
 
-        if not self.dipole and self.atomref is not None:
-            h = h + self.atomref(z)
-
-        out = scatter(h, batch, dim=0, reduce=self.readout)
-        assert out.size(0) == n_samples, ('Some samples were completely filtered out by the atom filter. '
-                                          f'Make sure that at least one atom per sample exists with Z > {self.atom_filter}.')
-
-        if not self.dipole and self.std is not None:
-            out = out * self.std
-
-        if not self.dipole and self.mean is not None:
-            out = out + self.mean
+        out = scatter(x, batch, dim=0, reduce=self.readout)
 
         if self.dipole:
             out = torch.norm(out, dim=-1, keepdim=True)
-
-        if self.derivative:
-            dy = -torch.autograd.grad(out, pos, grad_outputs=torch.ones_like(out),
-                                      create_graph=True, retain_graph=True)[0]
-            return out, dy
         return out
-
-    def set_atomref(self, atomref):
-        if self.initial_atomref is None:
-            self.initial_atomref = atomref
-            self.atomref = nn.Embedding(self.max_z, 1)
-        else:
-            self.initial_atomref.data.copy_(atomref)
-        self.atomref.weight.data.copy_(self.initial_atomref)
 
 
 class NeighborEmbedding(MessagePassing):
-    def __init__(self, hidden_channels, num_rbf, cutoff_lower, cutoff_upper, max_z=100):
+    def __init__(self, hidden_channels, num_rbf, cutoff_lower,
+                 cutoff_upper, max_z=100):
         super(NeighborEmbedding, self).__init__(aggr='add')
         self.embedding = nn.Embedding(max_z, hidden_channels)
         self.distance_proj = nn.Linear(num_rbf, hidden_channels)

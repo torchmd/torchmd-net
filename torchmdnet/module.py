@@ -8,21 +8,11 @@ from torchmdnet.models import create_model, load_model
 
 
 class LNNP(LightningModule):
-    def __init__(self, hparams, mean=None, std=None, atomref=None):
+    def __init__(self, hparams, model_creator):
         super(LNNP, self).__init__()
         self.save_hyperparameters(hparams)
 
-        if self.hparams.load_model:
-            self.model = load_model(self.hparams.load_model, hparams=self.hparams)
-        else:
-            self.model = create_model(self.hparams)
-
-        if atomref is not None:
-            self.model.output_network.set_atomref(atomref)
-        if mean is not None:
-            self.model.output_network.mean = mean
-        if std is not None:
-            self.model.output_network.std = std
+        self.model = model_creator(args=self.hparams)
 
         self.losses = None
         self._reset_losses_dict()

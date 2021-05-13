@@ -35,35 +35,15 @@ class TorchMD_T(nn.Module):
             (default: :obj:`0.0`)
         cutoff_upper (float, optional): Upper cutoff distance for interatomic interactions.
             (default: :obj:`5.0`)
-        readout (string, optional): Whether to apply :obj:`"add"` or
-            :obj:`"mean"` global aggregation. (default: :obj:`"add"`)
-        dipole (bool, optional): If set to :obj:`True`, will use the magnitude
-            of the dipole moment to make the final prediction, *e.g.*, for
-            target 0 of :class:`torch_geometric.datasets.QM9`.
-            (default: :obj:`False`)
-        mean (float, optional): The mean of the property to predict.
-            (default: :obj:`None`)
-        std (float, optional): The standard deviation of the property to
-            predict. (default: :obj:`None`)
-        atomref (torch.Tensor, optional): The reference of single-atom
-            properties.
-            Expects a vector of shape :obj:`(max_atomic_number, )`.
-        derivative (bool, optional): If True, computes the derivative of the prediction
-            w.r.t the input coordinates. (default: :obj:`False`)
-        atom_filter (int, optional): Only sum over atoms with Z > atom_filter.
-            (default: :obj:`-1`)
         max_z (int, optional): Maximum atomic number. Used for initializing embeddings.
             (default: :obj:`100`)
     """
 
     def __init__(self, hidden_channels=128, num_layers=6, num_rbf=50, rbf_type='expnorm',
                  trainable_rbf=True, activation='silu', attn_activation='silu', neighbor_embedding=True,
-                 num_heads=8, distance_influence='both', cutoff_lower=0.0, cutoff_upper=5.0,
-                 readout='add', dipole=False, mean=None, std=None, atomref=None, derivative=False,
-                 atom_filter=-1, max_z=100):
+                 num_heads=8, distance_influence='both', cutoff_lower=0.0, cutoff_upper=5.0, max_z=100):
         super(TorchMD_T, self).__init__()
 
-        assert readout in ['add', 'sum', 'mean']
         assert distance_influence in ['keys', 'values', 'both']
         assert rbf_type in rbf_class_mapping, (f'Unknown RBF type "{rbf_type}". '
                                                f'Choose from {", ".join(rbf_class_mapping.keys())}.')
@@ -82,10 +62,6 @@ class TorchMD_T(nn.Module):
         self.distance_influence = distance_influence
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
-        self.readout = 'add' if dipole else readout
-        self.dipole = dipole
-        self.derivative = derivative
-        self.atom_filter = atom_filter
         self.max_z = max_z
 
         act_class = act_class_mapping[activation]
@@ -108,27 +84,13 @@ class TorchMD_T(nn.Module):
 
         self.out_norm = nn.LayerNorm(hidden_channels)
 
-        self.output_network = OutputNetwork(
-            hidden_channels, act_class, self.readout, self.dipole, mean, std,
-            atomref, self.derivative, self.atom_filter, self.max_z
-        )
-
-        self.reset_parameters()
-
     def reset_parameters(self):
         self.embedding.reset_parameters()
         for attn in self.attention_layers:
             attn.reset_parameters()
-        self.output_network.reset_parameters()
 
     def forward(self, z, pos, batch=None):
-        assert z.dim() == 1 and z.dtype == torch.long
-        batch = torch.zeros_like(z) if batch is None else batch
-
-        if self.derivative:
-            pos.requires_grad_(True)
-
-        h = self.embedding(z)
+        x = self.embedding(z)
 
         edge_index = radius_graph(pos, r=self.cutoff_upper, batch=batch)
         row, col = edge_index
@@ -136,14 +98,13 @@ class TorchMD_T(nn.Module):
         edge_attr = self.distance_expansion(edge_weight)
 
         if self.neighbor_embedding:
-            h = self.neighbor_embedding(z, h, edge_index, edge_weight, edge_attr)
+            x = self.neighbor_embedding(z, x, edge_index, edge_weight, edge_attr)
 
         for attn in self.attention_layers:
-            h = h + attn(h, edge_index, edge_weight, edge_attr)
-
-        h = self.out_norm(h)
+            x = x + attn(x, edge_index, edge_weight, edge_attr)
+        x = self.out_norm(x)
         
-        return self.output_network(z, h, pos, batch)
+        return x, z, pos, batch
 
     def __repr__(self):
         return (f'{self.__class__.__name__}('
@@ -158,9 +119,7 @@ class TorchMD_T(nn.Module):
                 f'num_heads={self.num_heads}, '
                 f'distance_influence={self.distance_influence}, '
                 f'cutoff_lower={self.cutoff_lower}, '
-                f'cutoff_upper={self.cutoff_upper}, '
-                f'derivative={self.derivative}, '
-                f'atom_filter={self.atom_filter})')
+                f'cutoff_upper={self.cutoff_upper})')
 
 
 class MultiHeadAttention(MessagePassing):
