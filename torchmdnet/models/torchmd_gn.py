@@ -103,7 +103,7 @@ class TorchMD_GN(nn.Module):
 
         for interaction in self.interactions:
             x = x + interaction(x, edge_index, edge_weight, edge_attr)
-        
+
         return x, z, pos, batch
 
     def __repr__(self):

@@ -25,7 +25,7 @@ class LNNP(LightningModule):
         lr_scheduler = {'scheduler': scheduler,
                         'monitor': 'val_loss',
                         'interval': 'epoch',
-                        'frequency': 1} 
+                        'frequency': 1}
         return [optimizer], [lr_scheduler]
 
     def forward(self, z, pos, batch=None):
@@ -68,7 +68,7 @@ class LNNP(LightningModule):
         if 'y' in batch:
             # energy/prediction loss
             loss_y = loss_fn(pred, batch.y)
-            
+
             if self.hparams.energy_weight > 0:
                 self.losses[stage + '_y'].append(loss_y.detach())
 

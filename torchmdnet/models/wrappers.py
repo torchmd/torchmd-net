@@ -27,7 +27,7 @@ class BaseWrapper(nn.Module, metaclass=ABCMeta):
     @abstractmethod
     def forward(self, z, pos, batch=None):
         return
-    
+
 
 class Derivative(BaseWrapper):
     def forward(self, z, pos, batch=None):
@@ -144,7 +144,7 @@ class AtomFilter(BaseWrapper):
         z = z[atom_mask]
         pos = pos[atom_mask]
         batch = batch[atom_mask]
-        
+
         assert len(batch.unique()) == n_samples,\
             ('Some samples were completely filtered out by the atom filter. '
              f'Make sure that at least one atom per sample exists with Z > {self.remove_threshold}.')

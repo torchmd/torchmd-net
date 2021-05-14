@@ -107,7 +107,7 @@ class TorchMD_T(nn.Module):
         for attn in self.attention_layers:
             x = x + attn(x, edge_index, edge_weight, edge_attr)
         x = self.out_norm(x)
-        
+
         return x, z, pos, batch
 
     def __repr__(self):
@@ -151,7 +151,7 @@ class MultiHeadAttention(MessagePassing):
         self.dk_proj = None
         if distance_influence in ['keys', 'both']:
             self.dk_proj = nn.Linear(num_rbf, hidden_channels)
-        
+
         self.dv_proj = None
         if distance_influence in ['values', 'both']:
             self.dv_proj = nn.Linear(num_rbf, hidden_channels)
@@ -182,10 +182,10 @@ class MultiHeadAttention(MessagePassing):
         q = self.q_proj(x_norm).reshape(head_shape)
         k = self.k_proj(x_norm).reshape(head_shape)
         v = self.v_proj(x_norm).reshape(head_shape)
-        
+
         dk = self.act(self.dk_proj(f_ij)).reshape(head_shape)if self.dk_proj else 1.0
         dv = self.act(self.dv_proj(f_ij)).reshape(head_shape) if self.dv_proj else 1.0
-        
+
         out = self.propagate(edge_index, q=q, k=k, v=v, dk=dk, dv=dv, r_ij=r_ij)
         out = self.o_proj(out.reshape(-1, self.num_heads * self.head_dim))
         return x + out

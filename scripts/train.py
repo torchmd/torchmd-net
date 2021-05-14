@@ -5,7 +5,7 @@ import argparse
 from functools import partial
 
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
+from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
 
@@ -25,7 +25,7 @@ from torchmdnet.utils import LoadFromFile, save_argparse
 def get_args():
     # fmt: off
     parser = argparse.ArgumentParser(description='Training')
-    parser.add_argument('--conf', '-c', type=open, action=LoadFromFile)# keep first
+    parser.add_argument('--conf', '-c', type=open, action=LoadFromFile) # keep first
     parser.add_argument('--num-epochs', default=300, type=int, help='number of epochs')
     parser.add_argument('--batch-size', default=32, type=int, help='batch size')
     parser.add_argument('--inference-batch-size', default=None, type=int, help='Batchsize for validation and tests.')
@@ -89,13 +89,13 @@ def get_args():
     parser.add_argument('--reduce-op', type=str, default='add', choices=['add', 'mean'], help='Reduce operation to apply to atomic predictions')
     parser.add_argument('--dipole', type=bool, default=False, help='Use the magnitude of the dipole moment to make the prediction')
     # fmt: on
- 
+
     args = parser.parse_args()
 
     if args.redirect:
         sys.stdout = open(os.path.join(args.log_dir, 'log'), 'w')
         sys.stderr = sys.stdout
- 
+
     if args.inference_batch_size is None:
         args.inference_batch_size = args.batch_size
 
@@ -130,7 +130,7 @@ def main():
         filename='{epoch}-{val_loss:.4f}-{test_loss:.4f}'
     )
     early_stopping = EarlyStopping('val_loss', patience=args.early_stopping_patience)
-    
+
     tb_logger = pl.loggers.TensorBoardLogger(args.log_dir, name='tensorbord', version='')
     csv_logger = CSVLogger(args.log_dir, name='', version='')
 

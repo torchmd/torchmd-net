@@ -90,7 +90,7 @@ def load_model(filepath, args=None, device='cpu'):
     else:
         # create model with new args and only load model state_dict
         model = create_model(args).to(device)
-        
+
         state_dict = LNNP.load_from_checkpoint(
             filepath, map_location=device
         ).model.state_dict()

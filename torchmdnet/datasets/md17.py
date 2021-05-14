@@ -48,7 +48,7 @@ class MD17(InMemoryDataset):
         positions = torch.from_numpy(data_npz['R']).float()
         energies = torch.from_numpy(data_npz['E']).float()
         forces = torch.from_numpy(data_npz['F']).float()
-        
+
         samples = []
         for pos, y, dy in zip(positions, energies, forces):
             samples.append(Data(z=z, pos=pos, y=y.unsqueeze(1), dy=dy))

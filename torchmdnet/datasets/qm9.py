@@ -22,9 +22,9 @@ class QM9(QM9_geometric):
 
     def get_atomref(self):
         return self.atomref(self.label_idx)
-    
+
     def _filter_label(self, batch):
-        batch.y = batch.y[:,self.label_idx].unsqueeze(1)
+        batch.y = batch.y[:, self.label_idx].unsqueeze(1)
         return batch
 
     def download(self):
