@@ -86,8 +86,12 @@ class TorchMD_T(nn.Module):
 
     def reset_parameters(self):
         self.embedding.reset_parameters()
+        self.distance_expansion.reset_parameters()
+        if self.neighbor_embedding is not None:
+            self.neighbor_embedding.reset_parameters()
         for attn in self.attention_layers:
             attn.reset_parameters()
+        self.out_norm.reset_parameters()
 
     def forward(self, z, pos, batch=None):
         x = self.embedding(z)
