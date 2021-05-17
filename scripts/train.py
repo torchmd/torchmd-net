@@ -119,6 +119,8 @@ def main():
     if hasattr(data.dataset, 'prior_model'):
         # get the prior model if the dataset defines one
         prior = data.dataset.prior_model(args)
+        args.prior_class = prior.__class__.__name__
+        args.prior_args = prior.get_init_args()
 
     model = LNNP(args, prior_model=prior, mean=data.mean, std=data.std)
 

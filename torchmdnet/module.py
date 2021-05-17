@@ -139,13 +139,6 @@ class LNNP(LightningModule):
             self.log_dict(result_dict, sync_dist=True)
         self._reset_losses_dict()
 
-    def on_save_checkpoint(self, checkpoint):
-        checkpoint['priors'] = {
-            'prior_model': self.model.prior_model,
-            'mean': self.model.mean,
-            'std': self.model.std
-        }
-
     def _reset_losses_dict(self):
         self.losses = {'train': [], 'val': [], 'test': [],
                        'train_y': [], 'val_y': [], 'test_y': [],

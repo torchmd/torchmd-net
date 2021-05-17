@@ -21,6 +21,9 @@ class OutputNetwork(nn.Module):
         self.prior_model = prior_model
         self.derivative = derivative
 
+        mean = torch.scalar_tensor(0) if mean is None else mean
+        std = torch.scalar_tensor(1) if std is None else std
+
         self.register_buffer('mean', mean)
         self.register_buffer('std', std)
 
@@ -39,6 +42,8 @@ class OutputNetwork(nn.Module):
 
     def reset_parameters(self):
         self.representation_model.reset_parameters()
+        if self.prior_model is not None:
+            self.prior_model.reset_parameters()
         nn.init.xavier_uniform_(self.output_network[0].weight)
         self.output_network[0].bias.data.fill_(0)
         nn.init.xavier_uniform_(self.output_network[2].weight)

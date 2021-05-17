@@ -1,4 +1,5 @@
 from abc import abstractmethod, ABCMeta
+import torch
 from torch import nn
 
 
@@ -11,6 +12,15 @@ class BasePrior(nn.Module, metaclass=ABCMeta):
 
     def __init__(self):
         super(BasePrior, self).__init__()
+
+    @abstractmethod
+    def get_init_args(self):
+        r"""A function that returns all required arguments to construct a prior object.
+        The values should be returned inside a dict with the keys being the arguments' names.
+        All values should also be saveable in a .yaml file as this is used to reconstruct the
+        prior model from a checkpoint file.
+        """
+        return
 
     @abstractmethod
     def forward(self, x, z, pos, batch):
@@ -29,14 +39,22 @@ class BasePrior(nn.Module, metaclass=ABCMeta):
 
 
 class Atomref(BasePrior):
-    def __init__(self, atomref):
+    def __init__(self, max_z, atomref=None):
         super(Atomref, self).__init__()
+        if atomref is None:
+            atomref = torch.zeros(max_z, 1)
+
+        if atomref.ndim == 1:
+            atomref = atomref.view(-1, 1)
         self.register_buffer('initial_atomref', atomref)
         self.atomref = nn.Embedding(len(atomref), 1)
         self.atomref.weight.data.copy_(atomref)
 
     def reset_parameters(self):
         self.atomref.weight.data.copy_(self.initial_atomref)
+
+    def get_init_args(self):
+        return dict(max_z=self.initial_atomref.size(0))
 
     def forward(self, x, z, pos, batch):
         return x + self.atomref(z)

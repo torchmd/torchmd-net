@@ -23,7 +23,7 @@ class QM9(QM9_geometric):
         super(QM9, self).__init__(root, transform=transform)
 
     def prior_model(self, args):
-        return Atomref(self.get_atomref(args.max_z))
+        return Atomref(args.max_z, atomref=self.get_atomref(args.max_z))
 
     def get_atomref(self, max_z=100):
         atomref = self.atomref(self.label_idx)

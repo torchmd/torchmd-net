@@ -72,7 +72,7 @@ class ANI1(InMemoryDataset):
         torch.save((data, slices), self.processed_paths[0])
 
     def prior_model(self, args):
-        return Atomref(self.get_atomref(args.max_Z))
+        return Atomref(args.max_z, atomref=self.get_atomref(args.max_Z))
 
     def get_atomref(self, max_z=100):
         out = torch.zeros(max_z)

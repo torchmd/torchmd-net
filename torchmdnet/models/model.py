@@ -5,7 +5,8 @@ from pytorch_lightning.utilities import rank_zero_warn
 from torchmdnet.models.torchmd_gn import TorchMD_GN
 from torchmdnet.models.torchmd_t import TorchMD_T
 from torchmdnet.models.output_modules import OutputNetwork
-from torchmdnet.models.wrappers import  AtomFilter
+from torchmdnet.models.wrappers import AtomFilter
+from torchmdnet import priors
 
 
 def create_model(args, prior_model=None, mean=None, std=None):
@@ -47,6 +48,9 @@ def create_model(args, prior_model=None, mean=None, std=None):
     elif args['atom_filter'] > -1:
         raise ValueError('Derivative and atom filter can\'t be used together')
 
+    if 'prior_class' in args and prior_model is None:
+        prior_model = getattr(priors, args['prior_class'])(**args['prior_args'])
+
     # OUTPUT NET
     model = OutputNetwork(model, args['embedding_dimension'], args['activation'],
                           reduce_op=args['reduce_op'], dipole=args['dipole'],
@@ -60,8 +64,7 @@ def load_model(filepath, args=None, device='cpu'):
     if args is None:
         args = ckpt['hyper_parameters']
 
-    priors = ckpt['priors']
-    model = create_model(args, priors['prior_model'], priors['mean'], priors['std'])
+    model = create_model(args)
 
     state_dict = {re.sub(r'^model\.', '', k): v for k, v in ckpt['state_dict'].items()}
     model.load_state_dict(state_dict)

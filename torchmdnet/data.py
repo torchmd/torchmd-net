@@ -44,9 +44,9 @@ class DataModule(LightningDataModule):
         )
         print(f'train {len(idx_train)}, val {len(idx_val)}, test {len(idx_test)}')
 
-        self.train_dataset = Subset(self.dataset, idx_train)
-        self.val_dataset = Subset(self.dataset, idx_val)
-        self.test_dataset = Subset(self.dataset, idx_test)
+        self.train_dataset = Subset(self.dataset, idx_train[:30])
+        self.val_dataset = Subset(self.dataset, idx_val[:30])
+        self.test_dataset = Subset(self.dataset, idx_test[:30])
 
         if self.hparams.standardize:
             self._standardize()
