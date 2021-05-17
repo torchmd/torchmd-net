@@ -4,6 +4,7 @@ from tqdm import tqdm
 from urllib import request
 import torch
 from torch_geometric.data import InMemoryDataset, extract_tar, Data
+from torchmdnet.priors import Atomref
 import h5py
 
 
@@ -70,7 +71,10 @@ class ANI1(InMemoryDataset):
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
 
-    def get_atomref(self):
-        out = torch.zeros(100)
+    def prior_model(self, args):
+        return Atomref(self.get_atomref(args.max_Z))
+
+    def get_atomref(self, max_z=100):
+        out = torch.zeros(max_z)
         out[list(self.element_numbers.values())] = torch.tensor(list(self.self_energies.values()))
         return out.view(-1, 1)

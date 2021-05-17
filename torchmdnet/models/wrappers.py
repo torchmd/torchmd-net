@@ -53,54 +53,18 @@ class Standardize(BaseWrapper):
         return out
 
 
-class Reduce(BaseWrapper):
-    def __init__(self, model, reduce_op='add', dipole=False):
-        super(Reduce, self).__init__(model)
-        self.reduce_op = reduce_op
-        self.dipole = dipole
-
-        atomic_mass = torch.from_numpy(ase.data.atomic_masses).float()
-        self.register_buffer('atomic_mass', atomic_mass)
-
-    def forward(self, z, pos, batch=None):
-        x, z, pos, batch = self.model(z, pos, batch=batch)
-
-        if self.dipole:
-            # Get center of mass.
-            mass = self.atomic_mass[z].view(-1, 1)
-            c = scatter(mass * pos, batch, dim=0) / scatter(mass, batch, dim=0)
-            x = x * (pos - c[batch])
-
-        # aggregate atoms
-        out = scatter(x, batch, dim=0, reduce=self.reduce_op)
-
-        if self.dipole:
-            out = torch.norm(out, dim=-1, keepdim=True)
-        return out
-
-
-class Atomref(BaseWrapper):
-    def __init__(self, model, atomref, max_z):
-        super(Atomref, self).__init__(model)
-        self.register_buffer('initial_atomref', atomref)
-        self.atomref = nn.Embedding(max_z, 1)
-        self.atomref.weight.data.copy_(atomref)
-
-    def reset_parameters(self):
-        super(Atomref, self).reset_parameters()
-        self.atomref.weight.data.copy_(self.initial_atomref)
-
-    def forward(self, z, pos, batch=None):
-        x, z, pos, batch = self.model(z, pos, batch=batch)
-        x = x + self.atomref(z)
-        return x, z, pos, batch
-
-
 class OutputNetwork(BaseWrapper):
-    def __init__(self, model, hidden_channels, activation='silu'):
+    def __init__(self, model, hidden_channels, activation='silu',
+                 reduce_op='add', dipole=False, prior_model=None):
         super(OutputNetwork, self).__init__(model)
         self.hidden_channels = hidden_channels
         self.activation = activation
+        self.reduce_op = reduce_op
+        self.dipole = dipole
+        self.prior_model = prior_model
+
+        atomic_mass = torch.from_numpy(ase.data.atomic_masses).float()
+        self.register_buffer('atomic_mass', atomic_mass)
 
         act_class = act_class_mapping[activation]
 
@@ -123,9 +87,25 @@ class OutputNetwork(BaseWrapper):
         assert z.dim() == 1 and z.dtype == torch.long
         batch = torch.zeros_like(z) if batch is None else batch
 
+        # run the potentially wrapped representation model
         x, z, pos, batch = self.model(z, pos, batch=batch)
         x = self.output_network(x)
-        return x, z, pos, batch
+
+        if self.dipole:
+            # Get center of mass.
+            mass = self.atomic_mass[z].view(-1, 1)
+            c = scatter(mass * pos, batch, dim=0) / scatter(mass, batch, dim=0)
+            x = x * (pos - c[batch])
+        elif self.prior_model is not None:
+            # apply prior model
+            x = self.prior_model(x, z, pos, batch)
+
+        # aggregate atoms
+        out = scatter(x, batch, dim=0, reduce=self.reduce_op)
+
+        if self.dipole:
+            out = torch.norm(out, dim=-1, keepdim=True)
+        return out
 
 
 class AtomFilter(BaseWrapper):

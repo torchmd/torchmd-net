@@ -1,30 +1,25 @@
+from pytorch_lightning.utilities import rank_zero_warn
+
 from torchmdnet.module import LNNP
 from torchmdnet.models.torchmd_gn import TorchMD_GN
 from torchmdnet.models.torchmd_t import TorchMD_T
-from torchmdnet.models.wrappers import (Derivative, Standardize, Reduce,
-                                        Atomref, OutputNetwork, AtomFilter)
+from torchmdnet.models.wrappers import Derivative, Standardize, OutputNetwork, AtomFilter
 
 
-def create_model(args, atomref=None, mean=None, std=None):
-    r"""Nested model structure. Modules REDUCE, OUTPUT_NET and REPRESENTATION are required,
+def create_model(args, prior_model=None, mean=None, std=None):
+    r"""Nested model structure. Modules OUTPUT_NET and REPRESENTATION are required,
     the remaining modules may be included to achieve certain functionality.
 
-        model = Derivative(Standardize(REDUCE(Atomref(OUTPUT_NET(AtomFilter(REPRESENTATION()))))))
-                                |________________|
-                                        |
-                                mutually exclusive
+        model = Derivative(Standardize(OUTPUT_NET(AtomFilter(REPRESENTATION()))))
 
         Derivative     - computes the derivative of the model's output (compute's force predictions)
         Standardize    - returns `pred * std + mean` where mean and std come from the dataset
-        REDUCE         - aggregates atoms of one molecule (optionally computes dipole moment magnitude)
-        Atomref        - adds atomic reference data to each atomic prediction, based on atom type `z`
-        OUTPUT_NET     - transforms atomic embeddings into atomwise scalar predictions
+        OUTPUT_NET     - transforms atomic embeddings into scalar predictions, applies prior model and aggregates
         AtomFilter     - removes atomic embeddings where `atom_type <= remove_threshold`
         REPRESENTATION - computes featurization given the atomic neighborhood (e.g. Graph Network, Transformer)
     """
-
-    assert atomref is None or (mean is None and std is None),\
-        'Use either atomref or standardization, both is not supported.'
+    if prior_model is not None and (mean is not None or std is not None):
+        rank_zero_warn('Prior model and standardize are given, only using the prior model.')
 
     shared_args = dict(
         hidden_channels=args.embedding_dimension,
@@ -62,17 +57,11 @@ def create_model(args, atomref=None, mean=None, std=None):
         raise ValueError('Derivative and atom filter can\'t be used together')
 
     # OUTPUT_NET
-    model = OutputNetwork(model, args.embedding_dimension, args.activation)
-
-    # Atomref
-    if atomref is not None and not args.dipole:
-        model = Atomref(model, atomref, args.max_z)
-
-    # REDUCE
-    model = Reduce(model, args.reduce_op, args.dipole)
+    model = OutputNetwork(model, args.embedding_dimension, args.activation,
+                          args.reduce_op, args.dipole, prior_model=prior_model)
 
     # Standardize
-    if (mean is not None or std is not None) and not args.dipole:
+    if (mean is not None or std is not None) and not args.dipole and prior_model is None:
         model = Standardize(model, mean, std)
 
     # Derivative

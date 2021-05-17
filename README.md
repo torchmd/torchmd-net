@@ -34,6 +34,19 @@ mkdir output
 CUDA_VISIBLE_DEVICES=0 python torchmd-net/scripts/torchmd_train.py --conf torchmd-net/examples/graph-network.yaml --dataset QM9 --log-dir output/
 ```
 
+## Creating a new dataset
+If you want to train on custom data, first have a look at `torchmdnet.datasets.Custom`, which provides functionalities for 
+loading a NumPy dataset consisting of atom types and coordinates, as well as energies, forces or both as the labels.
+Alternatively, you can implement a custom class according to the torch-geometric way of implementing a dataset. That is, 
+derive the `Dataset` or `InMemoryDataset` class and implement the necessary functions (more info [here](https://pytorch-geometric.readthedocs.io/en/latest/notes/create_dataset.html#creating-your-own-datasets)). The dataset must return torch-geometric `Data` 
+objects, containing at least the keys `z` (atom types) and `pos` (atomic coordinates), as well as `y` (label), `dy` (derivative of the label w.r.t atom coordinates) or both.
+
+### Custom prior models
+In addition to implementing a custom dataset class, it is also possible to add a custom prior model to the model by returning it 
+from the dataset class. By implementing the `prior_model` function inside the dataset class, the returned module will 
+automatically be included in the model. For an example, have a look at the QM9 dataset's `prior_model` function and the 
+corresponding `torchmdnet.priors.Atomref` prior class.
+
 ## Multi-Node Training
 __Currently does not work with the most recent PyTorch Lightning version. Tested up to pytorch-lightning==1.2.10__
 

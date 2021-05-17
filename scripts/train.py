@@ -118,7 +118,10 @@ def main():
     if args.load_model:
         model_creator = load_model
     else:
-        model_creator = partial(create_model, atomref=data.atomref, mean=data.mean, std=data.std)
+        prior = None
+        if hasattr(data.dataset, 'prior_model'):
+            prior = data.dataset.prior_model(args)
+        model_creator = partial(create_model, prior_model=prior, mean=data.mean, std=data.std)
 
     # initialize model
     model = LNNP(args, model_creator)
