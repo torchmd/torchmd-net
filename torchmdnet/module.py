@@ -13,6 +13,11 @@ class LNNP(LightningModule):
 
         self.model = model_creator(args=self.hparams)
 
+        # initialize exponential smoothing
+        self.ema = None
+        self._reset_ema_dict()
+
+        # initialize loss collection
         self.losses = None
         self._reset_losses_dict()
 
@@ -68,6 +73,10 @@ class LNNP(LightningModule):
         if 'y' in batch:
             # energy/prediction loss
             loss_y = loss_fn(pred, batch.y)
+
+            if stage in ['train', 'val'] and self.hparams.ema_alpha < 1:
+                loss_y = self.hparams.ema_alpha * loss_y + (1 - self.hparams.ema_alpha) * self.ema[stage]
+                self.ema[stage] = loss_y.detach()
 
             if self.hparams.energy_weight > 0:
                 self.losses[stage + '_y'].append(loss_y.detach())
@@ -130,3 +139,6 @@ class LNNP(LightningModule):
         self.losses = {'train': [], 'val': [], 'test': [],
                        'train_y': [], 'val_y': [], 'test_y': [],
                        'train_dy': [], 'val_dy': [], 'test_dy': []}
+
+    def _reset_ema_dict(self):
+        self.ema = {'train': 0, 'val': 0}
