@@ -19,13 +19,14 @@ from torchmdnet.module import LNNP
 from torchmdnet import datasets
 from torchmdnet.data import DataModule
 from torchmdnet.models import create_model, load_model
-from torchmdnet.utils import LoadFromFile, save_argparse
+from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse
 
 
 def get_args():
     # fmt: off
     parser = argparse.ArgumentParser(description='Training')
-    parser.add_argument('--conf', '-c', type=open, action=LoadFromFile) # keep first
+    parser.add_argument('--load-model', action=LoadFromCheckpoint, help='Restart training using a model checkpoint') # keep first
+    parser.add_argument('--conf', '-c', type=open, action=LoadFromFile, help='Configuration yaml file') # keep second
     parser.add_argument('--num-epochs', default=300, type=int, help='number of epochs')
     parser.add_argument('--batch-size', default=32, type=int, help='batch size')
     parser.add_argument('--inference-batch-size', default=None, type=int, help='Batchsize for validation and tests.')
@@ -41,7 +42,6 @@ def get_args():
     parser.add_argument('--num-nodes', type=int, default=1, help='Number of nodes')
     parser.add_argument('--precision', type=int, default=32, choices=[16, 32], help='Floating point precision')
     parser.add_argument('--log-dir', '-l', default='/tmp/logs', help='log file')
-    parser.add_argument('--load-model', default=None, help='Restart training using a model checkpoint')
     parser.add_argument('--splits', default=None, help='Npz with splits idx_train, idx_val, idx_test')
     parser.add_argument('--val-ratio', type=float, default=0.05, help='Percentage of validation set')
     parser.add_argument('--test-ratio', type=float, default=0.1, help='Percentage of test set')
@@ -115,16 +115,12 @@ def main():
     data.prepare_data()
     data.setup('fit')
 
-    if args.load_model:
-        model_creator = load_model
-    else:
-        prior = None
-        if hasattr(data.dataset, 'prior_model'):
-            prior = data.dataset.prior_model(args)
-        model_creator = partial(create_model, prior_model=prior, mean=data.mean, std=data.std)
+    prior = None
+    if hasattr(data.dataset, 'prior_model'):
+        # get the prior model if the dataset defines one
+        prior = data.dataset.prior_model(args)
 
-    # initialize model
-    model = LNNP(args, model_creator)
+    model = LNNP(args, prior_model=prior, mean=data.mean, std=data.std)
 
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.log_dir,

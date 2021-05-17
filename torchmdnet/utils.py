@@ -3,6 +3,7 @@ import argparse
 import numpy as np
 import torch
 from sklearn.model_selection import train_test_split
+from os.path import dirname, join, exists
 
 
 def train_val_test_split(dset_len, val_ratio, test_ratio, seed, order=None):
@@ -54,6 +55,18 @@ class LoadFromFile(argparse.Action):
                 namespace.__dict__.update(yaml.load(f, Loader=yaml.FullLoader))
         else:
             raise ValueError('configuration file must end with yaml or yml')
+
+
+class LoadFromCheckpoint(argparse.Action):
+    # parser.add_argument('--file', type=open, action=LoadFromFile)
+    def __call__(self, parser, namespace, values, option_string=None):
+        hparams_path = join(dirname(values), 'hparams.yaml')
+        if not exists(hparams_path):
+            print('Failed to locate the checkpoint\'s hparams.yaml file. Relying on command line args.')
+            return
+        with open(hparams_path, 'r') as f:
+            namespace.__dict__.update(yaml.load(f, Loader=yaml.FullLoader))
+        namespace.__dict__.update(load_model=values)
 
 
 def save_argparse(args, filename, exclude=None):

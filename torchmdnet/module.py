@@ -4,14 +4,18 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.functional import mse_loss, l1_loss
 
 from pytorch_lightning import LightningModule
+from torchmdnet.models import create_model, load_model
 
 
 class LNNP(LightningModule):
-    def __init__(self, hparams, model_creator):
+    def __init__(self, hparams, prior_model=None, mean=None, std=None):
         super(LNNP, self).__init__()
         self.save_hyperparameters(hparams)
 
-        self.model = model_creator(args=self.hparams)
+        if self.hparams.load_model:
+            self.model = load_model(self.hparams.load_model, args=self.hparams)
+        else:
+            self.model = create_model(self.hparams, prior_model, mean, std)
 
         # initialize exponential smoothing
         self.ema = None
@@ -108,7 +112,7 @@ class LNNP(LightningModule):
                 self.trainer.reset_val_dataloader(self)
 
     def validation_epoch_end(self, validation_step_outputs):
-        if self.global_step > 0:
+        if not self.trainer.running_sanity_check:
             # construct dict of logged metrics
             result_dict = {
                 'epoch': self.current_epoch,
@@ -134,6 +138,13 @@ class LNNP(LightningModule):
 
             self.log_dict(result_dict, sync_dist=True)
         self._reset_losses_dict()
+
+    def on_save_checkpoint(self, checkpoint):
+        checkpoint['priors'] = {
+            'prior_model': self.model.prior_model,
+            'mean': self.model.mean,
+            'std': self.model.std
+        }
 
     def _reset_losses_dict(self):
         self.losses = {'train': [], 'val': [], 'test': [],
