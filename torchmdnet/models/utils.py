@@ -63,7 +63,7 @@ class GaussianSmearing(nn.Module):
         self.coeff.data.copy_(coeff)
 
     def forward(self, dist):
-        dist = dist.view(-1, 1) - self.offset.view(1, -1)
+        dist = dist.unsqueeze(-1) - self.offset
         return torch.exp(self.coeff * torch.pow(dist, 2))
 
 
