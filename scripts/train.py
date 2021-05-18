@@ -2,9 +2,10 @@ import sys
 import os
 import torch
 import argparse
+from functools import partial
 
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
+from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
 
@@ -14,15 +15,18 @@ except ImportError:
     # compatibility for PyTorch Lightning versions < 1.2.0
     from pytorch_lightning.plugins.ddp_plugin import DDPPlugin
 
-from torchmdnet import LNNP, datasets
+from torchmdnet.module import LNNP
+from torchmdnet import datasets, priors
 from torchmdnet.data import DataModule
-from torchmdnet.utils import LoadFromFile, save_argparse
+from torchmdnet.models import create_model, load_model
+from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse
 
 
 def get_args():
     # fmt: off
     parser = argparse.ArgumentParser(description='Training')
-    parser.add_argument('--conf', '-c', type=open, action=LoadFromFile)# keep first
+    parser.add_argument('--load-model', action=LoadFromCheckpoint, help='Restart training using a model checkpoint') # keep first
+    parser.add_argument('--conf', '-c', type=open, action=LoadFromFile, help='Configuration yaml file') # keep second
     parser.add_argument('--num-epochs', default=300, type=int, help='number of epochs')
     parser.add_argument('--batch-size', default=32, type=int, help='batch size')
     parser.add_argument('--inference-batch-size', default=None, type=int, help='Batchsize for validation and tests.')
@@ -33,11 +37,12 @@ def get_args():
     parser.add_argument('--lr-warmup-steps', type=int, default=0, help='How many steps to warm-up over. Defaults to 0 for no warm-up')
     parser.add_argument('--early-stopping-patience', type=int, default=30, help='Stop training after this many epochs without improvement')
     parser.add_argument('--weight-decay', type=float, default=0.0, help='Weight decay strength')
+    parser.add_argument('--ema-alpha-y', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of y')
+    parser.add_argument('--ema-alpha-dy', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of dy')
     parser.add_argument('--ngpus', type=int, default=-1, help='Number of GPUs, -1 use all available. Use CUDA_VISIBLE_DEVICES=1, to decide gpus')
     parser.add_argument('--num-nodes', type=int, default=1, help='Number of nodes')
     parser.add_argument('--precision', type=int, default=32, choices=[16, 32], help='Floating point precision')
     parser.add_argument('--log-dir', '-l', default='/tmp/logs', help='log file')
-    parser.add_argument('--load-model', default=None, help='Restart training using a model checkpoint')
     parser.add_argument('--splits', default=None, help='Npz with splits idx_train, idx_val, idx_test')
     parser.add_argument('--val-ratio', type=float, default=0.05, help='Percentage of validation set')
     parser.add_argument('--test-ratio', type=float, default=0.1, help='Percentage of test set')
@@ -61,6 +66,7 @@ def get_args():
 
     # model architecture
     parser.add_argument('--model', type=str, default='graph-network', choices=['graph-network', 'transformer'], help='Which model to train')
+    parser.add_argument('--prior-model', type=str, default=None, choices=priors.__all__, help='Which prior model to use')
 
     # architectural args
     parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
@@ -83,14 +89,16 @@ def get_args():
     parser.add_argument('--atom-filter', type=int, default=-1, help='Only sum over atoms with Z > atom_filter')
     parser.add_argument('--max-z', type=int, default=100, help='Maximum atomic number that fits in the embedding matrix')
     parser.add_argument('--standardize', type=bool, default=False, help='If true, multiply prediction by dataset std and add mean')
+    parser.add_argument('--reduce-op', type=str, default='add', choices=['add', 'mean'], help='Reduce operation to apply to atomic predictions')
+    parser.add_argument('--dipole', type=bool, default=False, help='Use the magnitude of the dipole moment to make the prediction')
     # fmt: on
- 
+
     args = parser.parse_args()
 
     if args.redirect:
         sys.stdout = open(os.path.join(args.log_dir, 'log'), 'w')
         sys.stderr = sys.stdout
- 
+
     if args.inference_batch_size is None:
         args.inference_batch_size = args.batch_size
 
@@ -109,8 +117,16 @@ def main():
     data.prepare_data()
     data.setup('fit')
 
-    # initialize model
-    model = LNNP(args, mean=data.mean, std=data.std, atomref=data.atomref)
+    prior = None
+    if args.prior_model:
+        assert hasattr(priors, args.prior_model), (f'Unknown prior model {args["prior_model"]}. '
+                                                   f'Available models are {", ".join(priors.__all__)}')
+        # initialize the prior model
+        prior = getattr(priors, args.prior_model)(args, data.dataset)
+        args.prior_args = prior.get_init_args()
+
+    # initialize lightning module
+    model = LNNP(args, prior_model=prior, mean=data.mean, std=data.std)
 
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.log_dir,
@@ -120,7 +136,7 @@ def main():
         filename='{epoch}-{val_loss:.4f}-{test_loss:.4f}'
     )
     early_stopping = EarlyStopping('val_loss', patience=args.early_stopping_patience)
-    
+
     tb_logger = pl.loggers.TensorBoardLogger(args.log_dir, name='tensorbord', version='')
     csv_logger = CSVLogger(args.log_dir, name='', version='')
 

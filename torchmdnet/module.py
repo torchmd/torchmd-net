@@ -8,22 +8,20 @@ from torchmdnet.models import create_model, load_model
 
 
 class LNNP(LightningModule):
-    def __init__(self, hparams, mean=None, std=None, atomref=None):
+    def __init__(self, hparams, prior_model=None, mean=None, std=None):
         super(LNNP, self).__init__()
         self.save_hyperparameters(hparams)
 
         if self.hparams.load_model:
-            self.model = load_model(self.hparams.load_model, hparams=self.hparams)
+            self.model = load_model(self.hparams.load_model, args=self.hparams)
         else:
-            self.model = create_model(self.hparams)
+            self.model = create_model(self.hparams, prior_model, mean, std)
 
-        if atomref is not None:
-            self.model.output_network.set_atomref(atomref)
-        if mean is not None:
-            self.model.output_network.mean = mean
-        if std is not None:
-            self.model.output_network.std = std
+        # initialize exponential smoothing
+        self.ema = None
+        self._reset_ema_dict()
 
+        # initialize loss collection
         self.losses = None
         self._reset_losses_dict()
 
@@ -36,7 +34,7 @@ class LNNP(LightningModule):
         lr_scheduler = {'scheduler': scheduler,
                         'monitor': 'val_loss',
                         'interval': 'epoch',
-                        'frequency': 1} 
+                        'frequency': 1}
         return [optimizer], [lr_scheduler]
 
     def forward(self, z, pos, batch=None):
@@ -73,13 +71,23 @@ class LNNP(LightningModule):
             # force/derivative loss
             loss_dy = loss_fn(deriv, batch.dy)
 
+            if stage in ['train', 'val'] and self.hparams.ema_alpha_dy < 1:
+                # apply exponential smoothing over batches to dy
+                loss_dy = self.hparams.ema_alpha_dy * loss_dy + (1 - self.hparams.ema_alpha_dy) * self.ema[stage + '_dy']
+                self.ema[stage + '_dy'] = loss_dy.detach()
+
             if self.hparams.force_weight > 0:
                 self.losses[stage + '_dy'].append(loss_dy.detach())
 
         if 'y' in batch:
             # energy/prediction loss
             loss_y = loss_fn(pred, batch.y)
-            
+
+            if stage in ['train', 'val'] and self.hparams.ema_alpha_y < 1:
+                # apply exponential smoothing over batches to y
+                loss_y = self.hparams.ema_alpha_y * loss_y + (1 - self.hparams.ema_alpha_y) * self.ema[stage + '_y']
+                self.ema[stage + '_y'] = loss_y.detach()
+
             if self.hparams.energy_weight > 0:
                 self.losses[stage + '_y'].append(loss_y.detach())
 
@@ -110,7 +118,7 @@ class LNNP(LightningModule):
                 self.trainer.reset_val_dataloader(self)
 
     def validation_epoch_end(self, validation_step_outputs):
-        if self.global_step > 0:
+        if not self.trainer.running_sanity_check:
             # construct dict of logged metrics
             result_dict = {
                 'epoch': self.current_epoch,
@@ -141,3 +149,7 @@ class LNNP(LightningModule):
         self.losses = {'train': [], 'val': [], 'test': [],
                        'train_y': [], 'val_y': [], 'test_y': [],
                        'train_dy': [], 'val_dy': [], 'test_dy': []}
+
+    def _reset_ema_dict(self):
+        self.ema = {'train_y': 0, 'val_y': 0,
+                    'train_dy': 0, 'val_dy': 0}

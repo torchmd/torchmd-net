@@ -30,7 +30,7 @@ class Custom(Dataset):
         self.embedfiles = sorted(glob.glob(embedglob))
         self.energyfiles = sorted(glob.glob(energyglob)) if self.has_energies else None
         self.forcefiles = sorted(glob.glob(forceglob)) if self.has_forces else None
-        
+
         assert len(self.coordfiles) == len(self.embedfiles), (f'Number of coordinate files {len(self.coordfiles)} '
                                                               f'does not match number of embed files {len(self.embedfiles)}.')
         if self.has_energies:
@@ -78,7 +78,7 @@ class Custom(Dataset):
         if self.has_energies:
             energy_data = np.array(np.load(self.energyfiles[fileid], mmap_mode='r')[index])
             features['y'] = torch.from_numpy(energy_data)
-        
+
         if self.has_forces:
             force_data = np.array(np.load(self.forcefiles[fileid], mmap_mode='r')[index])
             features['dy'] = torch.from_numpy(force_data)
