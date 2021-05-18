@@ -42,10 +42,9 @@ derive the `Dataset` or `InMemoryDataset` class and implement the necessary func
 objects, containing at least the keys `z` (atom types) and `pos` (atomic coordinates), as well as `y` (label), `dy` (derivative of the label w.r.t atom coordinates) or both.
 
 ### Custom prior models
-In addition to implementing a custom dataset class, it is also possible to add a custom prior model to the model by returning it 
-from the dataset class. By implementing the `prior_model` function inside the dataset class, the returned module will 
-automatically be included in the model. For an example, have a look at the QM9 dataset's `prior_model` function and the 
-corresponding `torchmdnet.priors.Atomref` prior class.
+In addition to implementing a custom dataset class, it is also possible to add a custom prior model to the model. This can be
+done by implementing a new prior model class in `torchmdnet.priors` and adding the argument `--prior-model <PriorModelName>`.
+As an example, have a look at `torchmdnet.priors.Atomref`.
 
 ## Multi-Node Training
 __Currently does not work with the most recent PyTorch Lightning version. Tested up to pytorch-lightning==1.2.10__

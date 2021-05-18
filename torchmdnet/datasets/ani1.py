@@ -71,9 +71,6 @@ class ANI1(InMemoryDataset):
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
 
-    def prior_model(self, args):
-        return Atomref(args.max_z, atomref=self.get_atomref(args.max_Z))
-
     def get_atomref(self, max_z=100):
         out = torch.zeros(max_z)
         out[list(self.element_numbers.values())] = torch.tensor(list(self.self_energies.values()))

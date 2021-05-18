@@ -48,8 +48,13 @@ def create_model(args, prior_model=None, mean=None, std=None):
     elif args['atom_filter'] > -1:
         raise ValueError('Derivative and atom filter can\'t be used together')
 
-    if 'prior_class' in args and prior_model is None:
-        prior_model = getattr(priors, args['prior_class'])(**args['prior_args'])
+    if args['prior_model'] and prior_model is None:
+        assert 'prior_args' in args, (f'Requested prior model {args.prior_model} but the '
+                                      f'arguments are lacking the key "prior_args".')
+        assert hasattr(priors, args['prior_model']), (f'Unknown prior model {args["prior_model"]}. '
+                                                      f'Available models are {", ".join(priors.__all__)}')
+        # instantiate prior model if it was not passed to create_model (i.e. when loading a model)
+        prior_model = getattr(priors, args['prior_model'])(**args['prior_args'])
 
     # OUTPUT NET
     model = OutputNetwork(model, args['embedding_dimension'], args['activation'],

@@ -16,7 +16,7 @@ except ImportError:
     from pytorch_lightning.plugins.ddp_plugin import DDPPlugin
 
 from torchmdnet.module import LNNP
-from torchmdnet import datasets
+from torchmdnet import datasets, priors
 from torchmdnet.data import DataModule
 from torchmdnet.models import create_model, load_model
 from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse
@@ -66,6 +66,7 @@ def get_args():
 
     # model architecture
     parser.add_argument('--model', type=str, default='graph-network', choices=['graph-network', 'transformer'], help='Which model to train')
+    parser.add_argument('--prior-model', type=str, default=None, choices=priors.__all__, help='Which prior model to use')
 
     # architectural args
     parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
@@ -117,12 +118,14 @@ def main():
     data.setup('fit')
 
     prior = None
-    if hasattr(data.dataset, 'prior_model'):
-        # get the prior model if the dataset defines one
-        prior = data.dataset.prior_model(args)
-        args.prior_class = prior.__class__.__name__
+    if args.prior_model:
+        assert hasattr(priors, args.prior_model), (f'Unknown prior model {args["prior_model"]}. '
+                                                   f'Available models are {", ".join(priors.__all__)}')
+        # initialize the prior model
+        prior = getattr(priors, args.prior_model)(args, data.dataset)
         args.prior_args = prior.get_init_args()
 
+    # initialize lightning module
     model = LNNP(args, prior_model=prior, mean=data.mean, std=data.std)
 
     checkpoint_callback = ModelCheckpoint(

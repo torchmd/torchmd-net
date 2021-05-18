@@ -3,14 +3,15 @@ import torch
 from torch import nn
 
 
+__all__ = ['Atomref']
+
 class BasePrior(nn.Module, metaclass=ABCMeta):
     r"""Base class for prior models.
-    Derive this class to make custom prior models, which can be returned by the `prior_model`
-    function of a dataset class. As an example, have a look at `torchmdnet.datasets.QM9`, which
-    uses a `torchmdnet.priors.Atomref` prior.
+    Derive this class to make custom prior models, which take some arguments and a dataset as input.
+    As an example, have a look at the `torchmdnet.priors.Atomref` prior.
     """
 
-    def __init__(self):
+    def __init__(self, dataset=None):
         super(BasePrior, self).__init__()
 
     @abstractmethod
@@ -39,10 +40,17 @@ class BasePrior(nn.Module, metaclass=ABCMeta):
 
 
 class Atomref(BasePrior):
-    def __init__(self, max_z, atomref=None):
+    r"""Atomref prior model.
+    When using this in combination with some dataset, the dataset class must implement
+    the function `get_atomref`, which returns the atomic reference values as a tensor.
+    """
+
+    def __init__(self, max_z, dataset=None):
         super(Atomref, self).__init__()
-        if atomref is None:
+        if dataset is None:
             atomref = torch.zeros(max_z, 1)
+        else:
+            atomref = dataset.get_atomref()
 
         if atomref.ndim == 1:
             atomref = atomref.view(-1, 1)
