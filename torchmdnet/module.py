@@ -71,6 +71,11 @@ class LNNP(LightningModule):
             # force/derivative loss
             loss_dy = loss_fn(deriv, batch.dy)
 
+            if stage in ['train', 'val'] and self.hparams.ema_alpha_dy < 1:
+                # apply exponential smoothing over batches to dy
+                loss_dy = self.hparams.ema_alpha_dy * loss_dy + (1 - self.hparams.ema_alpha_dy) * self.ema[stage + '_dy']
+                self.ema[stage + '_dy'] = loss_dy.detach()
+
             if self.hparams.force_weight > 0:
                 self.losses[stage + '_dy'].append(loss_dy.detach())
 
@@ -78,9 +83,10 @@ class LNNP(LightningModule):
             # energy/prediction loss
             loss_y = loss_fn(pred, batch.y)
 
-            if stage in ['train', 'val'] and self.hparams.ema_alpha < 1:
-                loss_y = self.hparams.ema_alpha * loss_y + (1 - self.hparams.ema_alpha) * self.ema[stage]
-                self.ema[stage] = loss_y.detach()
+            if stage in ['train', 'val'] and self.hparams.ema_alpha_y < 1:
+                # apply exponential smoothing over batches to y
+                loss_y = self.hparams.ema_alpha_y * loss_y + (1 - self.hparams.ema_alpha_y) * self.ema[stage + '_y']
+                self.ema[stage + '_y'] = loss_y.detach()
 
             if self.hparams.energy_weight > 0:
                 self.losses[stage + '_y'].append(loss_y.detach())
@@ -145,4 +151,5 @@ class LNNP(LightningModule):
                        'train_dy': [], 'val_dy': [], 'test_dy': []}
 
     def _reset_ema_dict(self):
-        self.ema = {'train': 0, 'val': 0}
+        self.ema = {'train_y': 0, 'val_y': 0,
+                    'train_dy': 0, 'val_dy': 0}
