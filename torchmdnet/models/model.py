@@ -65,7 +65,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
 
 
 def load_model(filepath, args=None, device='cpu'):
-    ckpt = torch.load(filepath, map_location=device)
+    ckpt = torch.load(filepath, map_location='cpu')
     if args is None:
         args = ckpt['hyper_parameters']
 
@@ -73,4 +73,4 @@ def load_model(filepath, args=None, device='cpu'):
 
     state_dict = {re.sub(r'^model\.', '', k): v for k, v in ckpt['state_dict'].items()}
     model.load_state_dict(state_dict)
-    return model
+    return model.to(device)
