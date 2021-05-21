@@ -78,7 +78,7 @@ def get_args():
     parser.add_argument('--neighbor-embedding', type=bool, default=False, help='If a neighbor embedding should be applied before interactions')
 
     # Transformer specific
-    parser.add_argument('--distance-influence', type=str, default='both', choices=['keys', 'values', 'both'], help='Where distance information is included inside the attention')
+    parser.add_argument('--distance-influence', type=str, default='both', choices=['keys', 'values', 'both', 'none'], help='Where distance information is included inside the attention')
     parser.add_argument('--attn-activation', default='silu', choices=['silu', 'ssp', 'tanh', 'sigmoid'], help='Attention activation function')
     parser.add_argument('--num-heads', type=int, default=8, help='Number of attention heads')
 

@@ -2,7 +2,7 @@ import math
 import torch
 from torch import nn
 import torch.nn.functional as F
-from torch_geometric.nn import MessagePassing
+from torch_geometric.nn import radius_graph, MessagePassing
 
 
 class NeighborEmbedding(MessagePassing):
@@ -130,6 +130,22 @@ class CosineCutoff(nn.Module):
             # remove contributions beyond the cutoff radius
             cutoffs = cutoffs * (distances < self.cutoff_upper).float()
             return cutoffs
+
+
+class Distance(nn.Module):
+    def __init__(self, cutoff_lower, cutoff_upper):
+        super(Distance, self).__init__()
+        self.cutoff_lower = cutoff_lower
+        self.cutoff_upper = cutoff_upper
+
+    def forward(self, pos, batch):
+        edge_index = radius_graph(pos, r=self.cutoff_upper, batch=batch)
+        edge_weight = (pos[edge_index[0]] - pos[edge_index[1]]).norm(dim=-1)
+        
+        lower_mask = edge_weight >= self.cutoff_lower
+        edge_index = edge_index[:,lower_mask]
+        edge_weight = edge_weight[lower_mask]
+        return edge_index, edge_weight
 
 
 rbf_class_mapping = {

@@ -1,6 +1,6 @@
 from torch import nn
-from torch_geometric.nn import radius_graph, MessagePassing
-from torchmdnet.models.utils import (NeighborEmbedding, CosineCutoff,
+from torch_geometric.nn import MessagePassing
+from torchmdnet.models.utils import (NeighborEmbedding, CosineCutoff, Distance,
                                      rbf_class_mapping, act_class_mapping)
 
 
@@ -42,7 +42,7 @@ class TorchMD_T(nn.Module):
                  num_heads=8, distance_influence='both', cutoff_lower=0.0, cutoff_upper=5.0, max_z=100):
         super(TorchMD_T, self).__init__()
 
-        assert distance_influence in ['keys', 'values', 'both']
+        assert distance_influence in ['keys', 'values', 'both', 'none']
         assert rbf_type in rbf_class_mapping, (f'Unknown RBF type "{rbf_type}". '
                                                f'Choose from {", ".join(rbf_class_mapping.keys())}.')
         assert activation in act_class_mapping, (f'Unknown activation function "{activation}". '
@@ -67,6 +67,7 @@ class TorchMD_T(nn.Module):
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels)
 
+        self.distance = Distance(cutoff_lower, cutoff_upper)
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
         )
@@ -96,9 +97,7 @@ class TorchMD_T(nn.Module):
     def forward(self, z, pos, batch=None):
         x = self.embedding(z)
 
-        edge_index = radius_graph(pos, r=self.cutoff_upper, batch=batch)
-        row, col = edge_index
-        edge_weight = (pos[row] - pos[col]).norm(dim=-1)
+        edge_index, edge_weight = self.distance(pos, batch)
         edge_attr = self.distance_expansion(edge_weight)
 
         if self.neighbor_embedding:
@@ -183,7 +182,7 @@ class MultiHeadAttention(MessagePassing):
         k = self.k_proj(x_norm).reshape(head_shape)
         v = self.v_proj(x_norm).reshape(head_shape)
 
-        dk = self.act(self.dk_proj(f_ij)).reshape(head_shape)if self.dk_proj else 1.0
+        dk = self.act(self.dk_proj(f_ij)).reshape(head_shape) if self.dk_proj else 1.0
         dv = self.act(self.dv_proj(f_ij)).reshape(head_shape) if self.dv_proj else 1.0
 
         out = self.propagate(edge_index, q=q, k=k, v=v, dk=dk, dv=dv, r_ij=r_ij)
