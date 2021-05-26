@@ -6,21 +6,34 @@ from sklearn.model_selection import train_test_split
 from os.path import dirname, join, exists
 
 
-def train_val_test_split(dset_len, val_ratio, test_ratio, seed, order=None):
-    shuffle = True if order is None else False
-    valtest_ratio = val_ratio + test_ratio
-    idx_train = list(range(dset_len))
-    idx_test = []
-    idx_val = []
-    if valtest_ratio > 0 and dset_len > 0:
-        idx_train, idx_tmp = train_test_split(range(dset_len), test_size=valtest_ratio, random_state=seed, shuffle=shuffle)
-        if test_ratio == 0:
-            idx_val = idx_tmp
-        elif val_ratio == 0:
-            idx_test = idx_tmp
-        else:
-            test_val_ratio = test_ratio / (test_ratio + val_ratio)
-            idx_val, idx_test = train_test_split(idx_tmp, test_size=test_val_ratio, random_state=seed, shuffle=shuffle)
+def train_val_test_split(dset_len, train_size, val_size, test_size, seed, order=None):
+    assert (train_size is None) + (val_size is None) + (test_size is None) <= 1,\
+        'Only one of train_size, val_size, test_size is allowed to be None.'
+
+    train_size = round(dset_len * train_size) if isinstance(train_size, float) else train_size
+    val_size = round(dset_len * val_size) if isinstance(val_size, float) else val_size
+    test_size = round(dset_len * test_size) if isinstance(test_size, float) else test_size
+
+    if train_size is None:
+        train_size = dset_len - val_size - test_size
+    elif val_size is None:
+        val_size = dset_len - train_size - test_size
+    elif test_size is None:
+        test_size = dset_len - train_size - val_size
+
+    total = train_size + val_size + test_size
+    assert dset_len >= total, (f'Dataset length ({dset_len}) is less than '
+                               f'train + val + test split length ({total})')
+    if total < dset_len:
+        print(f'Warning: {total} samples were excluded from the dataset')
+
+    idxs = np.arange(dset_len, dtype=np.int)
+    if order is None:
+        idxs = np.random.default_rng(seed).permutation(idxs)
+
+    idx_train = idxs[:train_size]
+    idx_val = idxs[train_size:train_size + val_size]
+    idx_test = idxs[train_size + val_size:total]
 
     if order is not None:
         idx_train = [order[i] for i in idx_train]
@@ -30,7 +43,7 @@ def train_val_test_split(dset_len, val_ratio, test_ratio, seed, order=None):
     return np.array(idx_train), np.array(idx_val), np.array(idx_test)
 
 
-def make_splits(dataset_len, val_ratio, test_ratio, seed, filename=None, splits=None, order=None):
+def make_splits(dataset_len, train_size, val_size, test_size, seed, filename=None, splits=None, order=None):
     if splits is not None:
         splits = np.load(splits)
         idx_train = splits['idx_train']
@@ -38,7 +51,7 @@ def make_splits(dataset_len, val_ratio, test_ratio, seed, filename=None, splits=
         idx_test = splits['idx_test']
     else:
         idx_train, idx_val, idx_test = train_val_test_split(
-            dataset_len, val_ratio, test_ratio, seed, order
+            dataset_len, train_size, val_size, test_size, seed, order
         )
 
     if filename is not None:

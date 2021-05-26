@@ -36,8 +36,9 @@ class DataModule(LightningDataModule):
 
         idx_train, idx_val, idx_test = make_splits(
             len(self.dataset),
-            self.hparams.val_ratio,
-            self.hparams.test_ratio,
+            self.hparams.train_size,
+            self.hparams.val_size,
+            self.hparams.test_size,
             self.hparams.seed,
             join(self.hparams.log_dir, 'splits.npz'),
             self.hparams.splits,
