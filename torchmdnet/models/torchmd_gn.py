@@ -57,6 +57,13 @@ class TorchMD_GN(nn.Module):
             (default: :obj:`-1`)
         max_z (int, optional): Maximum atomic number. Used for initializing embeddings.
             (default: :obj:`100`)
+        max_num_neighbors (int, optional): Maximum number of neighbors to return for a
+            given node/atom when constructing the molecular graph during forward passes.
+            This attribute is passed to the torch_cluster radius_graph routine keyword
+            max_num_neighbors, which normally defaults to 32. Users should set this to
+            higher values if they are using higher upper distance cutoffs and expect more
+            than 32 neighbors per node/atom.
+            (default: :obj:`32`)
     """
 
     def __init__(self, hidden_channels=128, num_filters=128,
@@ -64,7 +71,7 @@ class TorchMD_GN(nn.Module):
                  trainable_rbf=True, activation='silu', neighbor_embedding=True,
                  cutoff_lower=0.0, cutoff_upper=5.0, readout='add', dipole=False,
                  mean=None, std=None, atomref=None, derivative=False, atom_filter=-1,
-                 max_z=100):
+                 max_z=100, max_num_neighbors=32):
         super(TorchMD_GN, self).__init__()
 
         assert readout in ['add', 'sum', 'mean']
@@ -90,6 +97,7 @@ class TorchMD_GN(nn.Module):
         self.derivative = derivative
         self.atom_filter = atom_filter
         self.max_z = max_z
+        self.max_num_neighbors = max_num_neighbors
 
         act_class = act_class_mapping[activation]
 
@@ -130,7 +138,8 @@ class TorchMD_GN(nn.Module):
 
         h = self.embedding(z)
 
-        edge_index = radius_graph(pos, r=self.cutoff_upper, batch=batch)
+        edge_index = radius_graph(pos, r=self.cutoff_upper,
+                                  batch=batch, max_num_neighbors=self.max_num_neighbors)
         row, col = edge_index
         edge_weight = (pos[row] - pos[col]).norm(dim=-1)
         edge_attr = self.distance_expansion(edge_weight)
@@ -156,6 +165,7 @@ class TorchMD_GN(nn.Module):
                 f'cutoff_lower={self.cutoff_lower}, '
                 f'cutoff_upper={self.cutoff_upper}, '
                 f'derivative={self.derivative}, '
+                f'max_num_neighbors={self.max_num_neighbors}, '
                 f'atom_filter={self.atom_filter})')
 
 
