@@ -2,10 +2,12 @@ import sys
 import os
 import torch
 import argparse
+from functools import partial
 
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
+from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
+from pytorch_lightning.loggers import CSVLogger
 
 try:
     from pytorch_lightning.plugins import DDPPlugin
@@ -13,14 +15,18 @@ except ImportError:
     # compatibility for PyTorch Lightning versions < 1.2.0
     from pytorch_lightning.plugins.ddp_plugin import DDPPlugin
 
-from torchmdnet.utils import LoadFromFile, save_argparse, TrainCSVLogger
-from torchmdnet import LNNP
+from torchmdnet.module import LNNP
+from torchmdnet import datasets, priors
+from torchmdnet.data import DataModule
+from torchmdnet.models import create_model, load_model
+from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse
 
 
 def get_args():
     # fmt: off
     parser = argparse.ArgumentParser(description='Training')
-    parser.add_argument('--conf', '-c', type=open, action=LoadFromFile)# keep first
+    parser.add_argument('--load-model', action=LoadFromCheckpoint, help='Restart training using a model checkpoint') # keep first
+    parser.add_argument('--conf', '-c', type=open, action=LoadFromFile, help='Configuration yaml file') # keep second
     parser.add_argument('--num-epochs', default=300, type=int, help='number of epochs')
     parser.add_argument('--batch-size', default=32, type=int, help='batch size')
     parser.add_argument('--inference-batch-size', default=None, type=int, help='Batchsize for validation and tests.')
@@ -31,14 +37,15 @@ def get_args():
     parser.add_argument('--lr-warmup-steps', type=int, default=0, help='How many steps to warm-up over. Defaults to 0 for no warm-up')
     parser.add_argument('--early-stopping-patience', type=int, default=30, help='Stop training after this many epochs without improvement')
     parser.add_argument('--weight-decay', type=float, default=0.0, help='Weight decay strength')
+    parser.add_argument('--ema-alpha-y', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of y')
+    parser.add_argument('--ema-alpha-dy', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of dy')
     parser.add_argument('--ngpus', type=int, default=-1, help='Number of GPUs, -1 use all available. Use CUDA_VISIBLE_DEVICES=1, to decide gpus')
     parser.add_argument('--num-nodes', type=int, default=1, help='Number of nodes')
     parser.add_argument('--precision', type=int, default=32, choices=[16, 32], help='Floating point precision')
     parser.add_argument('--log-dir', '-l', default='/tmp/logs', help='log file')
-    parser.add_argument('--load-model', default=None, help='Restart training using a model checkpoint')
     parser.add_argument('--splits', default=None, help='Npz with splits idx_train, idx_val, idx_test')
     parser.add_argument('--val-ratio', type=float, default=0.05, help='Percentage of validation set')
-    parser.add_argument('--test-ratio', type=float, default=0.10922, help='Percentage of test set')
+    parser.add_argument('--test-ratio', type=float, default=0.1, help='Percentage of test set')
     parser.add_argument('--test-interval', type=int, default=10, help='Test interval, one test per n epochs (default: 10)')
     parser.add_argument('--save-interval', type=int, default=10, help='Save interval, one save per n epochs (default: 10)')
     parser.add_argument('--seed', type=int, default=1, help='random seed (default: 1)')
@@ -47,8 +54,9 @@ def get_args():
     parser.add_argument('--redirect', type=bool, default=False, help='Redirect stdout and stderr to log_dir/log')
 
     # dataset specific
-    parser.add_argument('--dataset', default=None, type=str, choices=['QM9', 'ANI1', 'custom'], help='Name of the torch_geometric dataset')
+    parser.add_argument('--dataset', default=None, type=str, choices=datasets.__all__, help='Name of the torch_geometric dataset')
     parser.add_argument('--dataset-root', default='~/data', type=str, help='Data storage directory (not used if dataset is "CG")')
+    parser.add_argument('--dataset-arg', default=None, type=str, help='Additional dataset argument, e.g. target property for QM9 or molecule for MD17')
     parser.add_argument('--coord-files', default=None, type=str, help='Custom coordinate files glob')
     parser.add_argument('--embed-files', default=None, type=str, help='Custom embedding files glob')
     parser.add_argument('--energy-files', default=None, type=str, help='Custom energy files glob')
@@ -58,6 +66,7 @@ def get_args():
 
     # model architecture
     parser.add_argument('--model', type=str, default='graph-network', choices=['graph-network', 'transformer'], help='Which model to train')
+    parser.add_argument('--prior-model', type=str, default=None, choices=priors.__all__, help='Which prior model to use')
 
     # architectural args
     parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
@@ -69,27 +78,27 @@ def get_args():
     parser.add_argument('--neighbor-embedding', type=bool, default=False, help='If a neighbor embedding should be applied before interactions')
 
     # Transformer specific
-    parser.add_argument('--distance-influence', type=str, default='both', choices=['keys', 'values', 'both'], help='Where distance information is included inside the attention')
+    parser.add_argument('--distance-influence', type=str, default='both', choices=['keys', 'values', 'both', 'none'], help='Where distance information is included inside the attention')
     parser.add_argument('--attn-activation', default='silu', choices=['silu', 'ssp', 'tanh', 'sigmoid'], help='Attention activation function')
     parser.add_argument('--num-heads', type=int, default=8, help='Number of attention heads')
 
     # other args
-    parser.add_argument('--label', default=None, type=str, help='Target property, e.g. energy_U0, forces')
     parser.add_argument('--derivative', default=False, type=bool, help='If true, take the derivative of the prediction w.r.t coordinates')
     parser.add_argument('--cutoff-lower', type=float, default=0.0, help='Lower cutoff in model')
     parser.add_argument('--cutoff-upper', type=float, default=5.0, help='Upper cutoff in model')
     parser.add_argument('--atom-filter', type=int, default=-1, help='Only sum over atoms with Z > atom_filter')
     parser.add_argument('--max-z', type=int, default=100, help='Maximum atomic number that fits in the embedding matrix')
+    parser.add_argument('--standardize', type=bool, default=False, help='If true, multiply prediction by dataset std and add mean')
+    parser.add_argument('--reduce-op', type=str, default='add', choices=['add', 'mean'], help='Reduce operation to apply to atomic predictions')
+    parser.add_argument('--dipole', type=bool, default=False, help='Use the magnitude of the dipole moment to make the prediction')
     # fmt: on
- 
-    args = parser.parse_args()
 
-    assert args.label is not None, 'Please specify a label.'
+    args = parser.parse_args()
 
     if args.redirect:
         sys.stdout = open(os.path.join(args.log_dir, 'log'), 'w')
         sys.stderr = sys.stdout
- 
+
     if args.inference_batch_size is None:
         args.inference_batch_size = args.batch_size
 
@@ -103,7 +112,22 @@ def main():
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 
-    model = LNNP(args)
+    # initialize data module
+    data = DataModule(args)
+    data.prepare_data()
+    data.setup('fit')
+
+    prior = None
+    if args.prior_model:
+        assert hasattr(priors, args.prior_model), (f'Unknown prior model {args["prior_model"]}. '
+                                                   f'Available models are {", ".join(priors.__all__)}')
+        # initialize the prior model
+        prior = getattr(priors, args.prior_model)(args, data.dataset)
+        args.prior_args = prior.get_init_args()
+
+    # initialize lightning module
+    model = LNNP(args, prior_model=prior, mean=data.mean, std=data.std)
+
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.log_dir,
         monitor='val_loss',
@@ -112,32 +136,30 @@ def main():
         filename='{epoch}-{val_loss:.4f}-{test_loss:.4f}'
     )
     early_stopping = EarlyStopping('val_loss', patience=args.early_stopping_patience)
-    
+
     tb_logger = pl.loggers.TensorBoardLogger(args.log_dir, name='tensorbord', version='')
-    csv_logger = TrainCSVLogger(args.log_dir, name='', version='',
-                                requires_metric=['train_loss', 'val_loss'])
+    csv_logger = CSVLogger(args.log_dir, name='', version='')
 
     ddp_plugin = None
     if 'ddp' in args.distributed_backend:
-        ddp_plugin = DDPPlugin(find_unused_parameters=False)
+        ddp_plugin = DDPPlugin(find_unused_parameters=False, num_nodes=args.num_nodes)
 
     trainer = pl.Trainer(
         max_epochs=args.num_epochs,
         gpus=args.ngpus,
         num_nodes=args.num_nodes,
-        distributed_backend=args.distributed_backend,
+        accelerator=args.distributed_backend,
         default_root_dir=args.log_dir,
         auto_lr_find=False,
         resume_from_checkpoint=args.load_model,
-        checkpoint_callback=checkpoint_callback,
-        callbacks=[early_stopping],
+        callbacks=[early_stopping, checkpoint_callback],
         logger=[tb_logger, csv_logger],
         reload_dataloaders_every_epoch=False,
         precision=args.precision,
         plugins=[ddp_plugin]
     )
 
-    trainer.fit(model)
+    trainer.fit(model, data)
 
     # run test set after completing the fit
     trainer.test()

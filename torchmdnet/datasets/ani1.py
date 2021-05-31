@@ -4,6 +4,7 @@ from tqdm import tqdm
 from urllib import request
 import torch
 from torch_geometric.data import InMemoryDataset, extract_tar, Data
+from torchmdnet.priors import Atomref
 import h5py
 
 
@@ -27,8 +28,7 @@ class ANI1(InMemoryDataset):
         'O': -75.0362229210 * HAR2EV
     }
 
-    def __init__(self, root, label, transform=None, pre_transform=None):
-        self.label = label
+    def __init__(self, root, transform=None, pre_transform=None, **kwargs):
         super(ANI1, self).__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -71,7 +71,7 @@ class ANI1(InMemoryDataset):
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
 
-    def get_atomref(self):
-        out = torch.zeros(100)
+    def get_atomref(self, max_z=100):
+        out = torch.zeros(max_z)
         out[list(self.element_numbers.values())] = torch.tensor(list(self.self_energies.values()))
         return out.view(-1, 1)

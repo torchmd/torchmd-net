@@ -1,11 +1,17 @@
+import torch
 from torch_geometric.transforms import Compose
 from torch_geometric.datasets import QM9 as QM9_geometric
 from torch_geometric.nn.models.schnet import qm9_target_dict
+from torchmdnet.priors import Atomref
 
 
 class QM9(QM9_geometric):
-    def __init__(self, root, label, transform=None, *args, **kwargs):
-        self.label = label
+    def __init__(self, root, transform=None, dataset_arg=None):
+        assert dataset_arg is not None, ('Please pass the desired property to '
+                                         'train on via "dataset_arg". Available '
+                                         f'properties are {", ".join(qm9_target_dict.values())}.')
+
+        self.label = dataset_arg
         label2idx = dict(zip(qm9_target_dict.values(), qm9_target_dict.keys()))
         self.label_idx = label2idx[self.label]
 
@@ -14,13 +20,19 @@ class QM9(QM9_geometric):
         else:
             transform = Compose([transform, self._filter_label])
 
-        super(QM9, self).__init__(root, transform=transform, *args, **kwargs)
+        super(QM9, self).__init__(root, transform=transform)
 
-    def get_atomref(self):
-        return self.atomref(self.label_idx)
-    
+    def get_atomref(self, max_z=100):
+        atomref = self.atomref(self.label_idx)
+        if atomref.size(0) != max_z:
+            tmp = torch.zeros(max_z).unsqueeze(1)
+            idx = min(max_z, atomref.size(0))
+            tmp[:idx] = atomref[:idx]
+            return tmp
+        return atomref
+
     def _filter_label(self, batch):
-        batch.y = batch.y[:,self.label_idx].unsqueeze(1)
+        batch.y = batch.y[:, self.label_idx].unsqueeze(1)
         return batch
 
     def download(self):
