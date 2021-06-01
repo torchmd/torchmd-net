@@ -70,13 +70,13 @@ class TorchMD_GN(nn.Module):
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         self.max_z = max_z
-        self.max_num_neighbors = max_num_neighbors
 
         act_class = act_class_mapping[activation]
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels)
 
-        self.distance = Distance(cutoff_lower, cutoff_upper)
+        self.distance = Distance(cutoff_lower, cutoff_upper,
+                                 max_num_neighbors=max_num_neighbors)
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
         )
@@ -103,7 +103,7 @@ class TorchMD_GN(nn.Module):
     def forward(self, z, pos, batch=None):
         x = self.embedding(z)
 
-        edge_index, edge_weight = self.distance(pos, batch, self.max_num_neighbors)
+        edge_index, edge_weight = self.distance(pos, batch)
         edge_attr = self.distance_expansion(edge_weight)
 
         if self.neighbor_embedding:
@@ -127,7 +127,6 @@ class TorchMD_GN(nn.Module):
                 f'cutoff_lower={self.cutoff_lower}, '
                 f'cutoff_upper={self.cutoff_upper}, '
                 f'derivative={self.derivative}, '
-                f'max_num_neighbors={self.max_num_neighbors}, '
                 f'atom_filter={self.atom_filter})')
 
 
