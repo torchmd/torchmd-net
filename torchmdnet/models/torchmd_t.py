@@ -131,9 +131,7 @@ class TorchMD_T(nn.Module):
                 f'num_heads={self.num_heads}, '
                 f'distance_influence={self.distance_influence}, '
                 f'cutoff_lower={self.cutoff_lower}, '
-                f'cutoff_upper={self.cutoff_upper}, '
-                f'derivative={self.derivative}, '
-                f'atom_filter={self.atom_filter})')
+                f'cutoff_upper={self.cutoff_upper})')
 
 
 class MultiHeadAttention(MessagePassing):

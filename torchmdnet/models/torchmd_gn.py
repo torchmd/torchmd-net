@@ -125,9 +125,7 @@ class TorchMD_GN(nn.Module):
                 f'activation={self.activation}, '
                 f'neighbor_embedding={self.neighbor_embedding}, '
                 f'cutoff_lower={self.cutoff_lower}, '
-                f'cutoff_upper={self.cutoff_upper}, '
-                f'derivative={self.derivative}, '
-                f'atom_filter={self.atom_filter})')
+                f'cutoff_upper={self.cutoff_upper})')
 
 
 class InteractionBlock(nn.Module):
