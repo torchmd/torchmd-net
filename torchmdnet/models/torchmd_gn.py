@@ -38,12 +38,20 @@ class TorchMD_GN(nn.Module):
             (default: :obj:`5.0`)
         max_z (int, optional): Maximum atomic number. Used for initializing embeddings.
             (default: :obj:`100`)
+        max_num_neighbors (int, optional): Maximum number of neighbors to return for a
+            given node/atom when constructing the molecular graph during forward passes.
+            This attribute is passed to the torch_cluster radius_graph routine keyword
+            max_num_neighbors, which normally defaults to 32. Users should set this to
+            higher values if they are using higher upper distance cutoffs and expect more
+            than 32 neighbors per node/atom.
+            (default: :obj:`32`)
     """
 
     def __init__(self, hidden_channels=128, num_filters=128,
                  num_layers=6, num_rbf=50, rbf_type='expnorm',
                  trainable_rbf=True, activation='silu', neighbor_embedding=True,
-                 cutoff_lower=0.0, cutoff_upper=5.0, max_z=100):
+                 cutoff_lower=0.0, cutoff_upper=5.0, max_z=100,
+                 max_num_neighbors=32):
         super(TorchMD_GN, self).__init__()
 
         assert rbf_type in rbf_class_mapping, (f'Unknown RBF type "{rbf_type}". '
@@ -67,7 +75,8 @@ class TorchMD_GN(nn.Module):
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels)
 
-        self.distance = Distance(cutoff_lower, cutoff_upper)
+        self.distance = Distance(cutoff_lower, cutoff_upper,
+                                 max_num_neighbors=max_num_neighbors)
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
         )
@@ -116,7 +125,9 @@ class TorchMD_GN(nn.Module):
                 f'activation={self.activation}, '
                 f'neighbor_embedding={self.neighbor_embedding}, '
                 f'cutoff_lower={self.cutoff_lower}, '
-                f'cutoff_upper={self.cutoff_upper})')
+                f'cutoff_upper={self.cutoff_upper}, '
+                f'derivative={self.derivative}, '
+                f'atom_filter={self.atom_filter})')
 
 
 class InteractionBlock(nn.Module):
