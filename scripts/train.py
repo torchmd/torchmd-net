@@ -138,7 +138,8 @@ def main():
     )
     early_stopping = EarlyStopping('val_loss', patience=args.early_stopping_patience)
 
-    tb_logger = pl.loggers.TensorBoardLogger(args.log_dir, name='tensorbord', version='')
+    tb_logger = pl.loggers.TensorBoardLogger(args.log_dir, name='tensorbord', version='',
+                                             default_hp_metric=False)
     csv_logger = CSVLogger(args.log_dir, name='', version='')
 
     ddp_plugin = None
