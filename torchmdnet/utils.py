@@ -95,3 +95,18 @@ def save_argparse(args, filename, exclude=None):
         yaml.dump(args, open(filename, 'w'))
     else:
         raise ValueError('Configuration file should end with yaml or yml')
+
+
+def number(text):
+    if text is None or text == 'None':
+        return None
+
+    try:
+        num_int = int(text)
+    except ValueError:
+        num_int = None
+    num_float = float(text)
+
+    if num_int == num_float:
+        return num_int
+    return num_float
