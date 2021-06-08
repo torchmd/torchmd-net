@@ -23,7 +23,7 @@ rbf_type: expnorm
 save_interval: 10
 seed: 1
 test_interval: 10
-test_ratio: 0.10922
+test_size: 0.1
 trainable_rbf: true
-val_ratio: 0.05
+val_size: 0.05
 weight_decay: 0.0
