@@ -2,7 +2,6 @@ import yaml
 import argparse
 import numpy as np
 import torch
-from sklearn.model_selection import train_test_split
 from os.path import dirname, join, exists
 
 
