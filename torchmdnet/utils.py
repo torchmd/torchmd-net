@@ -26,10 +26,10 @@ def train_val_test_split(dset_len, train_size, val_size, test_size, seed, order=
          f'testing ({test_size}) splits ended up with a negative size.')
 
     total = train_size + val_size + test_size
-    assert dset_len >= total, (f'Dataset length ({dset_len}) is less than '
-                               f'train + val + test split length ({total})')
+    assert dset_len >= total, (f'The dataset ({dset_len}) is smaller than the '
+                               f'combined split sizes ({total}).')
     if total < dset_len:
-        print(f'Warning: {total} samples were excluded from the dataset')
+        print(f'Warning: {dset_len - total} samples were excluded from the dataset')
 
     idxs = np.arange(dset_len, dtype=np.int)
     if order is None:
