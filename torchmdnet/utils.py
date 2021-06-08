@@ -21,6 +21,10 @@ def train_val_test_split(dset_len, train_size, val_size, test_size, seed, order=
     elif test_size is None:
         test_size = dset_len - train_size - val_size
 
+    assert train_size >= 0 and val_size >= 0 and test_size >= 0,\
+        (f'One of training ({train_size}), validation ({val_size}) or '
+         f'testing ({test_size}) splits ended up with a negative size.')
+
     total = train_size + val_size + test_size
     assert dset_len >= total, (f'Dataset length ({dset_len}) is less than '
                                f'train + val + test split length ({total})')
