@@ -186,17 +186,17 @@ class MultiHeadAttention(MessagePassing):
     def forward(self, x, edge_index, r_ij, f_ij):
         head_shape = (-1, self.num_heads, self.head_dim)
 
-        x_norm = self.layernorm(x)
-        q = self.q_proj(x_norm).reshape(head_shape)
-        k = self.k_proj(x_norm).reshape(head_shape)
-        v = self.v_proj(x_norm).reshape(head_shape)
+        x = self.layernorm(x)
+        q = self.q_proj(x).reshape(head_shape)
+        k = self.k_proj(x).reshape(head_shape)
+        v = self.v_proj(x).reshape(head_shape)
 
         dk = self.act(self.dk_proj(f_ij)).reshape(head_shape) if self.dk_proj else 1.0
         dv = self.act(self.dv_proj(f_ij)).reshape(head_shape) if self.dv_proj else 1.0
 
         out = self.propagate(edge_index, q=q, k=k, v=v, dk=dk, dv=dv, r_ij=r_ij)
         out = self.o_proj(out.reshape(-1, self.num_heads * self.head_dim))
-        return x + out
+        return out
 
     def message(self, q_i, k_j, v_j, dk, dv, r_ij):
         attn = (q_i * k_j * dk).sum(dim=-1)
