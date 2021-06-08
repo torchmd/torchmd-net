@@ -133,15 +133,17 @@ class CosineCutoff(nn.Module):
 
 
 class Distance(nn.Module):
-    def __init__(self, cutoff_lower, cutoff_upper):
+    def __init__(self, cutoff_lower, cutoff_upper, max_num_neighbors=32):
         super(Distance, self).__init__()
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
+        self.max_num_neighbors = max_num_neighbors
 
     def forward(self, pos, batch):
-        edge_index = radius_graph(pos, r=self.cutoff_upper, batch=batch)
+        edge_index = radius_graph(pos, r=self.cutoff_upper, batch=batch,
+                                  max_num_neighbors=self.max_num_neighbors)
         edge_weight = (pos[edge_index[0]] - pos[edge_index[1]]).norm(dim=-1)
-        
+
         lower_mask = edge_weight >= self.cutoff_lower
         edge_index = edge_index[:,lower_mask]
         edge_weight = edge_weight[lower_mask]
