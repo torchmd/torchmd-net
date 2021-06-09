@@ -24,6 +24,13 @@ class NeighborEmbedding(MessagePassing):
         self.combine.bias.data.fill_(0)
 
     def forward(self, z, x, edge_index, edge_weight, edge_attr):
+        # remove self loops
+        mask = edge_index[0] != edge_index[1]
+        if not mask.all():
+            edge_index = edge_index[:,mask]
+            edge_weight = edge_weight[mask]
+            edge_attr = edge_attr[mask]
+
         C = self.cutoff(edge_weight)
         W = self.distance_proj(edge_attr) * C.view(-1, 1)
 
@@ -133,14 +140,15 @@ class CosineCutoff(nn.Module):
 
 
 class Distance(nn.Module):
-    def __init__(self, cutoff_lower, cutoff_upper, max_num_neighbors=32):
+    def __init__(self, cutoff_lower, cutoff_upper, max_num_neighbors=32, loop=False):
         super(Distance, self).__init__()
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         self.max_num_neighbors = max_num_neighbors
+        self.loop = loop
 
     def forward(self, pos, batch):
-        edge_index = radius_graph(pos, r=self.cutoff_upper, batch=batch,
+        edge_index = radius_graph(pos, r=self.cutoff_upper, batch=batch, loop=self.loop,
                                   max_num_neighbors=self.max_num_neighbors)
         edge_weight = (pos[edge_index[0]] - pos[edge_index[1]]).norm(dim=-1)
 

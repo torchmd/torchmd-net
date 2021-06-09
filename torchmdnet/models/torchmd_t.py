@@ -76,7 +76,7 @@ class TorchMD_T(nn.Module):
         self.embedding = nn.Embedding(self.max_z, hidden_channels)
 
         self.distance = Distance(cutoff_lower, cutoff_upper,
-                                 max_num_neighbors=max_num_neighbors)
+                                 max_num_neighbors=max_num_neighbors, loop=True)
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
         )
