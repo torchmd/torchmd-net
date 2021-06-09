@@ -150,7 +150,17 @@ class Distance(nn.Module):
     def forward(self, pos, batch):
         edge_index = radius_graph(pos, r=self.cutoff_upper, batch=batch, loop=self.loop,
                                   max_num_neighbors=self.max_num_neighbors)
-        edge_weight = (pos[edge_index[0]] - pos[edge_index[1]]).norm(dim=-1)
+        edge_vec = pos[edge_index[0]] - pos[edge_index[1]]
+
+        if self.loop:
+            # mask out self loops when computing distances because
+            # the norm of 0 produces NaN gradients
+            # NOTE: might imfluence force predictions as self loop gradients are ignored
+            mask = edge_index[0] != edge_index[1]
+            edge_weight = torch.zeros(edge_vec.size(0), device=edge_vec.device)
+            edge_weight[mask] = edge_vec[mask].norm(dim=-1)
+        else:
+            edge_weight = edge_vec.norm(dim=-1)
 
         lower_mask = edge_weight >= self.cutoff_lower
         edge_index = edge_index[:,lower_mask]
