@@ -28,6 +28,8 @@ class DataModule(LightningDataModule):
                 self.hparams.energy_files,
                 self.hparams.force_files
             )
+        elif self.hparams.dataset == 'HDF5':
+            self.dataset = datasets.HDF5(self.hparams.dataset_root)
         else:
             self.dataset = getattr(datasets, self.hparams.dataset)(
                 self.hparams.dataset_root,
