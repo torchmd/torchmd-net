@@ -191,16 +191,22 @@ class MultiHeadAttention(MessagePassing):
         k = self.k_proj(x).reshape(head_shape)
         v = self.v_proj(x).reshape(head_shape)
 
-        dk = self.act(self.dk_proj(f_ij)).reshape(head_shape) if self.dk_proj else 1.0
-        dv = self.act(self.dv_proj(f_ij)).reshape(head_shape) if self.dv_proj else 1.0
+        dk = self.act(self.dk_proj(f_ij)).reshape(head_shape) if self.dk_proj else None
+        dv = self.act(self.dv_proj(f_ij)).reshape(head_shape) if self.dv_proj else None
 
         out = self.propagate(edge_index, q=q, k=k, v=v, dk=dk, dv=dv, r_ij=r_ij)
         out = self.o_proj(out.reshape(-1, self.num_heads * self.head_dim))
         return out
 
     def message(self, q_i, k_j, v_j, dk, dv, r_ij):
-        attn = (q_i * k_j * dk).sum(dim=-1)
+        # compute attention matrix
+        if dk is None:
+            attn = (q_i * k_j).sum(dim=-1)
+        else:
+            attn = (q_i * k_j * dk).sum(dim=-1)
         attn = self.attn_activation(attn) * self.cutoff(r_ij).unsqueeze(1)
-        v_j = v_j * dv
+        # weighted sum over values
+        if dv is not None:
+            v_j = v_j * dv
         v_j = v_j * attn.unsqueeze(2)
         return v_j
