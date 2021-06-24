@@ -17,7 +17,7 @@ class HDF5(Dataset):
         filename (string): A semicolon separated list of HDF5 files.
     """
 
-    def __init__(self, filename):
+    def __init__(self, filename, **kwargs):
         super(HDF5, self).__init__()
         files = [h5py.File(f, 'r') for f in filename.split(';')]
         self.index = []
