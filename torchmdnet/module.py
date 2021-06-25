@@ -32,7 +32,7 @@ class LNNP(LightningModule):
                                       patience=self.hparams.lr_patience,
                                       min_lr=self.hparams.lr_min)
         lr_scheduler = {'scheduler': scheduler,
-                        'monitor': 'val_loss',
+                        'monitor': 'train_loss',
                         'interval': 'epoch',
                         'frequency': 1}
         return [optimizer], [lr_scheduler]
