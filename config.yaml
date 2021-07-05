@@ -1,0 +1,139 @@
+seed_everything: 19384
+trainer:
+  logger:
+  - class_path: pytorch_lightning.loggers.TensorBoardLogger
+    init_args:
+      save_dir: ./notebooks/chign_run/
+      name: tensorboard
+      version: ''
+      log_graph: false
+      default_hp_metric: true
+      prefix: ''
+  - class_path: pytorch_lightning.loggers.CSVLogger
+    init_args:
+      save_dir: ./notebooks/chign_run/
+      name: ''
+      version: ''
+      prefix: ''
+  checkpoint_callback: true
+  callbacks:
+  - class_path: pytorch_lightning.callbacks.EarlyStopping
+    init_args:
+      monitor: val_loss
+      min_delta: 0.0
+      patience: 10
+      verbose: false
+      mode: min
+      strict: true
+      check_finite: true
+      check_on_train_epoch_end: false
+  - class_path: pytorch_lightning.callbacks.model_checkpoint.ModelCheckpoint
+    init_args:
+      dirpath: ./notebooks/chign_run/
+      filename: '{epoch}-{val_loss:.4f}-{test_loss:.4f}'
+      monitor: val_loss
+      verbose: false
+      save_top_k: 10
+      save_weights_only: false
+      mode: min
+      auto_insert_metric_name: true
+      period: 10
+  default_root_dir: null
+  gradient_clip_val: 0.0
+  gradient_clip_algorithm: norm
+  process_position: 0
+  num_nodes: 1
+  num_processes: 1
+  gpus: -1
+  auto_select_gpus: false
+  tpu_cores: null
+  log_gpu_memory: null
+  progress_bar_refresh_rate: null
+  overfit_batches: 0.0
+  track_grad_norm: inf
+  check_val_every_n_epoch: 1
+  fast_dev_run: false
+  accumulate_grad_batches: 1
+  max_epochs: 10
+  min_epochs: null
+  max_steps: null
+  min_steps: null
+  max_time: null
+  limit_train_batches: 1.0
+  limit_val_batches: 1.0
+  limit_test_batches: 1.0
+  limit_predict_batches: 1.0
+  val_check_interval: 1.0
+  flush_logs_every_n_steps: 100
+  log_every_n_steps: 50
+  accelerator: null
+  sync_batchnorm: false
+  precision: 32
+  weights_summary: top
+  weights_save_path: null
+  num_sanity_val_steps: 2
+  truncated_bptt_steps: null
+  resume_from_checkpoint: null
+  profiler: null
+  benchmark: false
+  deterministic: false
+  reload_dataloaders_every_epoch: false
+  auto_lr_find: false
+  replace_sampler_ddp: true
+  terminate_on_nan: true
+  auto_scale_batch_size: false
+  prepare_data_per_node: true
+  plugins:
+    class_path: pytorch_lightning.plugins.DDPPlugin
+    init_args:
+      num_nodes: 1
+      parallel_devices: null
+      cluster_environment: null
+      sync_batchnorm: false
+      ddp_comm_state: null
+  amp_backend: native
+  amp_level: O2
+  distributed_backend: null
+  move_metrics_to_cpu: false
+  multiple_trainloader_mode: max_size_cycle
+  stochastic_weight_avg: false
+model:
+  embedding_size: 128
+  hidden_channels: 128
+  num_filters: 128
+  num_interactions: 2
+  num_rbf: 200
+  rbf_type: expnorm
+  trainable_rbf: false
+  activation: tanh
+  neighbor_embedding: true
+  cutoff_lower: 0.0
+  cutoff_upper: 30.0
+  readout: add
+  dipole: false
+  n_layers: 3
+  reduction_factor: 1
+  mean: null
+  std: null
+  atomref: null
+  derivative: true
+  cfconv_aggr: mean
+  lr: 0.0001
+  weight_decay: 0
+  lr_factor: 0.9999
+  lr_patience: 100
+  lr_min: 1.0e-07
+  target_name: forces
+  lr_warmup_steps: 0
+  test_interval: 1
+data:
+  dataset_name: chignolin
+  dataset_root: /local/scratch/chignolin/
+  log_dir: ./notebooks/chign_run/
+  val_ratio: 0.1
+  test_ratio: 0.1
+  splits: null
+  batch_size: 512
+  inference_batch_size: 128
+  num_workers: 2
+  train_stride: 100
