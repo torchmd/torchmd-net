@@ -140,11 +140,12 @@ class CosineCutoff(nn.Module):
 
 
 class Distance(nn.Module):
-    def __init__(self, cutoff_lower, cutoff_upper, max_num_neighbors=32, loop=False):
+    def __init__(self, cutoff_lower, cutoff_upper, max_num_neighbors=32, return_vecs=False, loop=False):
         super(Distance, self).__init__()
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         self.max_num_neighbors = max_num_neighbors
+        self.return_vecs = return_vecs
         self.loop = loop
 
     def forward(self, pos, batch):
@@ -165,6 +166,10 @@ class Distance(nn.Module):
         lower_mask = edge_weight >= self.cutoff_lower
         edge_index = edge_index[:,lower_mask]
         edge_weight = edge_weight[lower_mask]
+
+        if self.return_vecs:
+            edge_vec = edge_vec[lower_mask]
+            return edge_index, edge_weight, edge_vec
         return edge_index, edge_weight
 
 
