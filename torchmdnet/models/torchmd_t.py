@@ -180,6 +180,7 @@ class MultiHeadAttention(MessagePassing):
 
     def reset_parameters(self):
         self.layernorm.reset_parameters()
+        self.layernorm_vec.reset_parameters()
         nn.init.xavier_uniform_(self.q_proj.weight)
         self.q_proj.bias.data.fill_(0)
         nn.init.xavier_uniform_(self.k_proj.weight)
