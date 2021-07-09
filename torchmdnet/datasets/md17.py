@@ -4,17 +4,19 @@ import numpy as np
 
 
 class MD17(InMemoryDataset):
+    """Machine learning of accurate energy-conserving molecular force fields (Chmiela et al. 2017)
+    This class provides functionality for loading MD trajectories from the original dataset, not the revised versions.
+    See http://www.quantum-machine.org/gdml/#datasets for details.
+    """
 
     raw_url = 'http://www.quantum-machine.org/gdml/data/npz/'
 
     molecule_files = dict(
         aspirin='aspirin_dft.npz',
-        azobenzene='azobenzene_dft.npz',
-        benzene='benzene_dft.npz',
+        benzene='benzene_old_dft.npz',
         ethanol='ethanol_dft.npz',
         malonaldehyde='malonaldehyde_dft.npz',
         naphthalene='naphthalene_dft.npz',
-        paracetamol='paracetamol_dft.npz',
         salicylic_acid='salicylic_dft.npz',
         toluene='toluene_dft.npz',
         uracil='uracil_dft.npz',
