@@ -156,7 +156,6 @@ class MultiHeadAttention(MessagePassing):
         self.head_dim = hidden_channels // num_heads
 
         self.layernorm = nn.LayerNorm(hidden_channels)
-        self.layernorm_vec = nn.LayerNorm(hidden_channels)
         self.act = activation()
         self.attn_activation = attn_activation()
         self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)
@@ -180,7 +179,6 @@ class MultiHeadAttention(MessagePassing):
 
     def reset_parameters(self):
         self.layernorm.reset_parameters()
-        self.layernorm_vec.reset_parameters()
         nn.init.xavier_uniform_(self.q_proj.weight)
         self.q_proj.bias.data.fill_(0)
         nn.init.xavier_uniform_(self.k_proj.weight)
@@ -204,7 +202,6 @@ class MultiHeadAttention(MessagePassing):
         k = self.k_proj(x).reshape(-1, self.num_heads, self.head_dim)
         v = self.v_proj(x).reshape(-1, self.num_heads, self.head_dim * 3)
 
-        vec = self.layernorm_vec(vec)
         vec1, vec2 = torch.split(self.vec_proj(vec), self.hidden_channels, dim=-1)
         vec = vec.reshape(-1, 3, self.num_heads, self.head_dim)
         vec_norm = vec2.norm(dim=1).reshape(-1, self.num_heads, self.head_dim)
@@ -223,14 +220,12 @@ class MultiHeadAttention(MessagePassing):
         return dx, dvec
 
     def message(self, q_i, k_j, v_j, vn_j, vec_j, dk, dv, r_ij, d_ij):
-        cutoff = self.cutoff(r_ij).unsqueeze(1)
-
         # attention mechanism
         if dk is None:
             attn = (q_i * k_j * vn_j).sum(dim=-1)
         else:
             attn = (q_i * k_j * vn_j * dk).sum(dim=-1)
-        attn = self.attn_activation(attn) * cutoff
+        attn = self.attn_activation(attn) * self.cutoff(r_ij).unsqueeze(1)
 
         if dv is not None:
             v_j = v_j * dv
@@ -239,7 +234,6 @@ class MultiHeadAttention(MessagePassing):
         # update scalar features
         x = x * attn.unsqueeze(2)
         # update vector features
-        d_ij = d_ij * cutoff
         vec = vec_j * vec1.unsqueeze(1) + vec2.unsqueeze(1) * d_ij.unsqueeze(2).unsqueeze(3)
         return x, vec
 
