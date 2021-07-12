@@ -124,7 +124,7 @@ def main():
         assert hasattr(priors, args.prior_model), (f'Unknown prior model {args["prior_model"]}. '
                                                    f'Available models are {", ".join(priors.__all__)}')
         # initialize the prior model
-        prior = getattr(priors, args.prior_model)(args, data.dataset)
+        prior = getattr(priors, args.prior_model)(dataset=data.dataset)
         args.prior_args = prior.get_init_args()
 
     # initialize lightning module

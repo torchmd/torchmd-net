@@ -4,7 +4,6 @@ from tqdm import tqdm
 from urllib import request
 import torch
 from torch_geometric.data import InMemoryDataset, extract_tar, Data
-from torchmdnet.priors import Atomref
 import h5py
 
 

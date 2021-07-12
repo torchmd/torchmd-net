@@ -2,7 +2,6 @@ import torch
 from torch_geometric.transforms import Compose
 from torch_geometric.datasets import QM9 as QM9_geometric
 from torch_geometric.nn.models.schnet import qm9_target_dict
-from torchmdnet.priors import Atomref
 
 
 class QM9(QM9_geometric):
@@ -24,6 +23,8 @@ class QM9(QM9_geometric):
 
     def get_atomref(self, max_z=100):
         atomref = self.atomref(self.label_idx)
+        if atomref is None:
+            return None
         if atomref.size(0) != max_z:
             tmp = torch.zeros(max_z).unsqueeze(1)
             idx = min(max_z, atomref.size(0))
