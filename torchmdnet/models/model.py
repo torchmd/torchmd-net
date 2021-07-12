@@ -27,7 +27,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         max_num_neighbors=args['max_num_neighbors'],
     )
 
-    # REPRESENTATION
+    # representation network
     if args['model'] == 'graph-network':
         model = TorchMD_GN(
             num_filters=args['embedding_dimension'],
@@ -43,12 +43,13 @@ def create_model(args, prior_model=None, mean=None, std=None):
     else:
         raise ValueError(f'Unknown architecture: {args["model"]}')
 
-    # AtomFilter
+    # atom filter
     if not args['derivative'] and args['atom_filter'] > -1:
         model = AtomFilter(model, args['atom_filter'])
     elif args['atom_filter'] > -1:
         raise ValueError('Derivative and atom filter can\'t be used together')
 
+    # prior model
     if args['prior_model'] and prior_model is None:
         assert 'prior_args' in args, (f'Requested prior model {args.prior_model} but the '
                                       f'arguments are lacking the key "prior_args".')
@@ -57,7 +58,11 @@ def create_model(args, prior_model=None, mean=None, std=None):
         # instantiate prior model if it was not passed to create_model (i.e. when loading a model)
         prior_model = getattr(priors, args['prior_model'])(**args['prior_args'])
 
-    # OUTPUT NET
+    if prior_model and args['dipole']:
+        rank_zero_warn('Prior model was given and dipole is True. Dropping the prior model.')
+        prior_model = None
+
+    # output network
     model = OutputNetwork(model, args['embedding_dimension'], args['activation'],
                           reduce_op=args['reduce_op'], dipole=args['dipole'],
                           prior_model=prior_model, mean=mean, std=std,
