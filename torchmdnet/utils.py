@@ -68,9 +68,13 @@ class LoadFromFile(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         if values.name.endswith('yaml') or values.name.endswith('yml'):
             with values as f:
-                namespace.__dict__.update(yaml.load(f, Loader=yaml.FullLoader))
+                config = yaml.load(f, Loader=yaml.FullLoader)
+            for key in config.keys():
+                if key not in namespace:
+                    raise ValueError(f'Unknown argument in config file: {key}')
+            namespace.__dict__.update(config)
         else:
-            raise ValueError('configuration file must end with yaml or yml')
+            raise ValueError('Configuration file must end with yaml or yml')
 
 
 class LoadFromCheckpoint(argparse.Action):
@@ -81,7 +85,11 @@ class LoadFromCheckpoint(argparse.Action):
             print('Failed to locate the checkpoint\'s hparams.yaml file. Relying on command line args.')
             return
         with open(hparams_path, 'r') as f:
-            namespace.__dict__.update(yaml.load(f, Loader=yaml.FullLoader))
+            config = yaml.load(f, Loader=yaml.FullLoader)
+        for key in config.keys():
+            if key not in namespace and key != 'prior_args':
+                raise ValueError(f'Unknown argument in the model checkpoint: {key}')
+        namespace.__dict__.update(config)
         namespace.__dict__.update(load_model=values)
 
 
