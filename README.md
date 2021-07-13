@@ -7,24 +7,23 @@ conda create --name torchmd python=3.8
 conda activate torchmd
 ```
 
+### Install PyTorch
 Then, install PyTorch according to your hardware specifications (more information [here](https://pytorch.org/get-started/locally/#start-locally)), e.g. for CUDA 11.1 and the most recent version of PyTorch use
 ```
-conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c conda-forge
+conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c nvidia
 ```
+### Install PyTorch Geometric
+Install `pytorch-geometric` with its dependencies through
+```
+conda install pytorch-geometric -c rusty1s -c conda-forge
+```
+To install PyTorch Geometric via pip or for PyTorch < 1.8, see https://github.com/rusty1s/pytorch_geometric#installation.
 
+### Install TorchMD-Net
 Download and install the `torchmd-net` repository via
 ```
 git clone https://github.com/compsciencelab/torchmd-net.git
 pip install -e torchmd-net/
-```
-
-Finally, install `torch-geometric` with its dependencies as it is specified [here](https://github.com/rusty1s/pytorch_geometric#installation). Example for PyTorch 1.8 and CUDA 11.1:
-```
-pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cu111.html
-pip install torch-sparse -f https://pytorch-geometric.com/whl/torch-1.8.0+cu111.html
-pip install torch-cluster -f https://pytorch-geometric.com/whl/torch-1.8.0+cu111.html
-pip install torch-spline-conv -f https://pytorch-geometric.com/whl/torch-1.8.0+cu111.html
-pip install torch-geometric
 ```
 
 ## Usage
