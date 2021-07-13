@@ -2,3 +2,4 @@ pytorch-lightning
 matplotlib
 scipy
 h5py
+ase
