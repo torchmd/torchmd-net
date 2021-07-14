@@ -8,7 +8,7 @@ from torch import nn
 from torch.autograd import grad
 
 
-__all__ = ['Scalar', 'Dipole']
+__all__ = ['Scalar', 'DipoleMoment', 'ElectronicSpatialExtent']
 
 
 class OutputModel(nn.Module, metaclass=ABCMeta):
@@ -48,11 +48,10 @@ class Scalar(OutputModel):
         return self.output_network(x)
 
 
-class Dipole(OutputModel):
+class DipoleMoment(OutputModel):
     def __init__(self, is_equivariant, hidden_channels, activation='silu'):
-        super(Dipole, self).__init__(allow_prior_model=False)
+        super(DipoleMoment, self).__init__(allow_prior_model=False)
         self.is_equivariant = is_equivariant
-        act_class = act_class_mapping[activation]
 
         if is_equivariant:
             self.output_network = nn.ModuleList([
@@ -61,6 +60,7 @@ class Dipole(OutputModel):
                 GatedEquivariantBlock(hidden_channels // 2, 1, activation=activation),
             ])
         else:
+            act_class = act_class_mapping[activation]
             self.output_network = nn.Sequential(
                 nn.Linear(hidden_channels, hidden_channels // 2),
                 act_class(),
@@ -100,6 +100,32 @@ class Dipole(OutputModel):
 
     def post_reduce(self, x):
         return torch.norm(x, dim=-1, keepdim=True)
+
+
+class ElectronicSpatialExtent(OutputModel):
+    def __init__(self, is_equivariant, hidden_channels, activation='silu'):
+        super(ElectronicSpatialExtent, self).__init__(allow_prior_model=False)
+        self.is_equivariant = is_equivariant
+
+        act_class = act_class_mapping[activation]
+        self.output_network = nn.Sequential(
+            nn.Linear(hidden_channels, hidden_channels // 2),
+            act_class(),
+            nn.Linear(hidden_channels // 2, 1)
+        )
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.xavier_uniform_(self.output_network[0].weight)
+        self.output_network[0].bias.data.fill_(0)
+        nn.init.xavier_uniform_(self.output_network[2].weight)
+        self.output_network[2].bias.data.fill_(0)
+
+    def pre_reduce(self, x, v, z, pos, batch):
+        x = self.output_network(x)
+        x = pos.norm(dim=1, keepdim=True) ** 2 * x
+        return x
 
 
 class TorchMD_Net(nn.Module):
