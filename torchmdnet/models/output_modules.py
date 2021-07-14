@@ -8,7 +8,7 @@ from torch import nn
 from torch.autograd import grad
 
 
-__all__ = ['ScalarOutput', 'DipoleOutput']
+__all__ = ['Scalar', 'Dipole']
 
 
 class OutputModel(nn.Module, metaclass=ABCMeta):
@@ -27,9 +27,9 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
         return x
 
 
-class ScalarOutput(OutputModel):
+class Scalar(OutputModel):
     def __init__(self, is_equivariant, hidden_channels, activation='silu'):
-        super(ScalarOutput, self).__init__(allow_prior_model=True)
+        super(Scalar, self).__init__(allow_prior_model=True)
         act_class = act_class_mapping[activation]
         self.output_network = nn.Sequential(
             nn.Linear(hidden_channels, hidden_channels // 2),
@@ -48,14 +48,18 @@ class ScalarOutput(OutputModel):
         return self.output_network(x)
 
 
-class DipoleOutput(OutputModel):
+class Dipole(OutputModel):
     def __init__(self, is_equivariant, hidden_channels, activation='silu'):
-        super(DipoleOutput, self).__init__(allow_prior_model=False)
+        super(Dipole, self).__init__(allow_prior_model=False)
         self.is_equivariant = is_equivariant
         act_class = act_class_mapping[activation]
 
         if is_equivariant:
-            self.output_network = GatedEquivariantBlock(hidden_channels, hidden_channels // 2, 1, activation)
+            self.output_network = nn.ModuleList([
+                GatedEquivariantBlock(hidden_channels, hidden_channels // 2,
+                                      activation=activation, scalar_activation=True),
+                GatedEquivariantBlock(hidden_channels // 2, 1, activation=activation),
+            ])
         else:
             self.output_network = nn.Sequential(
                 nn.Linear(hidden_channels, hidden_channels // 2),
@@ -70,7 +74,8 @@ class DipoleOutput(OutputModel):
 
     def reset_parameters(self):
         if self.is_equivariant:
-            self.output_network.reset_parameters()
+            self.output_network[0].reset_parameters()
+            self.output_network[1].reset_parameters()
         else:
             nn.init.xavier_uniform_(self.output_network[0].weight)
             self.output_network[0].bias.data.fill_(0)
@@ -79,7 +84,8 @@ class DipoleOutput(OutputModel):
 
     def pre_reduce(self, x, v, z, pos, batch):
         if self.is_equivariant:
-            x, v = self.output_network(x, v)
+            for layer in self.output_network:
+                x, v = layer(x, v)
         else:
             x = self.output_network(x)
 
@@ -170,11 +176,15 @@ class TorchMD_Net(nn.Module):
 
 
 class GatedEquivariantBlock(nn.Module):
-    def __init__(self, hidden_channels, intermediate_channels, out_channels, activation='silu', scalar_activation=False):
+    def __init__(self, hidden_channels, out_channels, intermediate_channels=None,
+                 activation='silu', scalar_activation=False):
         super(GatedEquivariantBlock, self).__init__()
         self.hidden_channels = hidden_channels
         self.out_channels = out_channels
         self.scalar_activation = scalar_activation
+
+        if intermediate_channels is None:
+            intermediate_channels = hidden_channels
 
         self.vec1_proj = nn.Linear(hidden_channels, hidden_channels, bias=False)
         self.vec2_proj = nn.Linear(hidden_channels, out_channels, bias=False)
@@ -185,6 +195,9 @@ class GatedEquivariantBlock(nn.Module):
             act_class(),
             nn.Linear(intermediate_channels, out_channels * 2)
         )
+
+        if scalar_activation:
+            self.act = act_class()
 
     def reset_parameters(self):
         nn.init.xavier_uniform_(self.vec1_proj.weight)
@@ -201,4 +214,7 @@ class GatedEquivariantBlock(nn.Module):
         x = torch.cat([x, vec1], dim=-1)
         x, v = torch.split(self.update_net(x), self.out_channels, dim=-1)
         v = v.unsqueeze(1) * vec2
+
+        if self.scalar_activation:
+            x = self.act(x)
         return x, v
