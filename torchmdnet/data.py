@@ -105,10 +105,6 @@ class DataModule(LightningDataModule):
         return dl
 
     def _standardize(self):
-        if self.atomref is not None:
-            pl.utilities.rank_zero_warn('Standardizing when using a dataset with '
-                                        'atomrefs likely leads to unwanted behaviour.')
-
         data = tqdm(self._get_dataloader(self.train_dataset, 'val', store_dataloader=False),
                     desc='computing mean and std')
         ys = torch.cat([batch.y.clone() for batch in data])
