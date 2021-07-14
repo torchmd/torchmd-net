@@ -165,7 +165,7 @@ class MultiHeadAttention(MessagePassing):
         self.v_proj = nn.Linear(hidden_channels, hidden_channels * 3)
         self.o_proj = nn.Linear(hidden_channels, hidden_channels * 3)
 
-        self.vec_proj = nn.Linear(hidden_channels, hidden_channels * 2)
+        self.vec_proj = nn.Linear(hidden_channels, hidden_channels * 3)
 
         self.dk_proj = None
         if distance_influence in ['keys', 'both']:
@@ -202,9 +202,9 @@ class MultiHeadAttention(MessagePassing):
         k = self.k_proj(x).reshape(-1, self.num_heads, self.head_dim)
         v = self.v_proj(x).reshape(-1, self.num_heads, self.head_dim * 3)
 
-        vec1, vec2 = torch.split(self.vec_proj(vec), self.hidden_channels, dim=-1)
+        vec1, vec2, vec3 = torch.split(self.vec_proj(vec), self.hidden_channels, dim=-1)
         vec = vec.reshape(-1, 3, self.num_heads, self.head_dim)
-        vec_norm = vec2.norm(dim=1).reshape(-1, self.num_heads, self.head_dim)
+        vec_norm = vec3.norm(dim=1).reshape(-1, self.num_heads, self.head_dim)
         vec_dot = (vec1 * vec2).sum(dim=1)
 
         dk = self.act(self.dk_proj(f_ij)).reshape(-1, self.num_heads, self.head_dim) if self.dk_proj else None
