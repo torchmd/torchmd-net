@@ -4,7 +4,8 @@ from pytorch_lightning.utilities import rank_zero_warn
 
 from torchmdnet.models.torchmd_gn import TorchMD_GN
 from torchmdnet.models.torchmd_t import TorchMD_T
-from torchmdnet.models.output_modules import OutputNetwork
+from torchmdnet.models.torchmd_et import TorchMD_ET
+from torchmdnet.models import output_modules
 from torchmdnet.models.wrappers import AtomFilter
 from torchmdnet import priors
 
@@ -29,12 +30,22 @@ def create_model(args, prior_model=None, mean=None, std=None):
 
     # representation network
     if args['model'] == 'graph-network':
-        model = TorchMD_GN(
+        is_equivariant = False
+        representation_model = TorchMD_GN(
             num_filters=args['embedding_dimension'],
             **shared_args
         )
     elif args['model'] == 'transformer':
-        model = TorchMD_T(
+        is_equivariant = False
+        representation_model = TorchMD_T(
+            attn_activation=args['attn_activation'],
+            num_heads=args['num_heads'],
+            distance_influence=args['distance_influence'],
+            **shared_args
+        )
+    elif args['model'] == 'equivariant-transformer':
+        is_equivariant = True
+        representation_model = TorchMD_ET(
             attn_activation=args['attn_activation'],
             num_heads=args['num_heads'],
             distance_influence=args['distance_influence'],
@@ -45,7 +56,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
 
     # atom filter
     if not args['derivative'] and args['atom_filter'] > -1:
-        model = AtomFilter(model, args['atom_filter'])
+        representation_model = AtomFilter(representation_model, args['atom_filter'])
     elif args['atom_filter'] > -1:
         raise ValueError('Derivative and atom filter can\'t be used together')
 
@@ -58,15 +69,12 @@ def create_model(args, prior_model=None, mean=None, std=None):
         # instantiate prior model if it was not passed to create_model (i.e. when loading a model)
         prior_model = getattr(priors, args['prior_model'])(**args['prior_args'])
 
-    if prior_model and args['dipole']:
-        rank_zero_warn('Prior model was given and dipole is True. Dropping the prior model.')
-        prior_model = None
+    # create output network
+    output_model = getattr(output_modules, args['output_model'])(is_equivariant, args['embedding_dimension'], args['activation'])
 
-    # output network
-    model = OutputNetwork(model, args['embedding_dimension'], args['activation'],
-                          reduce_op=args['reduce_op'], dipole=args['dipole'],
-                          prior_model=prior_model, mean=mean, std=std,
-                          derivative=args['derivative'])
+    # combine representation and output network
+    model = output_modules.TorchMD_Net(representation_model, output_model, prior_model=prior_model,
+                                       reduce_op=args['reduce_op'], mean=mean, std=std, derivative=args['derivative'])
     return model
 
 

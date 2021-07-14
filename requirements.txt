@@ -1,4 +1,4 @@
-pytorch-lightning
+pytorch-lightning>=1.2
 matplotlib
 scipy
 h5py

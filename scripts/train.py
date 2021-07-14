@@ -8,17 +8,12 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
-
-try:
-    from pytorch_lightning.plugins import DDPPlugin
-except ImportError:
-    # compatibility for PyTorch Lightning versions < 1.2.0
-    from pytorch_lightning.plugins.ddp_plugin import DDPPlugin
+from pytorch_lightning.plugins import DDPPlugin
 
 from torchmdnet.module import LNNP
 from torchmdnet import datasets, priors
 from torchmdnet.data import DataModule
-from torchmdnet.models import create_model, load_model
+from torchmdnet.models import create_model, load_model, output_modules
 from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, number
 
 
@@ -66,7 +61,8 @@ def get_args():
     parser.add_argument('--force-weight', default=1.0, type=float, help='Weighting factor for forces in the loss function')
 
     # model architecture
-    parser.add_argument('--model', type=str, default='graph-network', choices=['graph-network', 'transformer'], help='Which model to train')
+    parser.add_argument('--model', type=str, default='graph-network', choices=['graph-network', 'transformer', 'equivariant-transformer'], help='Which model to train')
+    parser.add_argument('--output-model', type=str, default='ScalarOutput', choices=output_modules.__all__, help='The type of output model')
     parser.add_argument('--prior-model', type=str, default=None, choices=priors.__all__, help='Which prior model to use')
 
     # architectural args
@@ -92,7 +88,6 @@ def get_args():
     parser.add_argument('--max-num-neighbors', type=int, default=32, help='Maximum number of neighbors to consider in the network')
     parser.add_argument('--standardize', type=bool, default=False, help='If true, multiply prediction by dataset std and add mean')
     parser.add_argument('--reduce-op', type=str, default='add', choices=['add', 'mean'], help='Reduce operation to apply to atomic predictions')
-    parser.add_argument('--dipole', type=bool, default=False, help='Use the magnitude of the dipole moment to make the prediction')
     # fmt: on
 
     args = parser.parse_args()
