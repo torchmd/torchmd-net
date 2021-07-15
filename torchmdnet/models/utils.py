@@ -173,6 +173,51 @@ class Distance(nn.Module):
         return edge_index, edge_weight
 
 
+class GatedEquivariantBlock(nn.Module):
+    def __init__(self, hidden_channels, out_channels, intermediate_channels=None,
+                 activation='silu', scalar_activation=False):
+        super(GatedEquivariantBlock, self).__init__()
+        self.hidden_channels = hidden_channels
+        self.out_channels = out_channels
+        self.scalar_activation = scalar_activation
+
+        if intermediate_channels is None:
+            intermediate_channels = hidden_channels
+
+        self.vec1_proj = nn.Linear(hidden_channels, hidden_channels, bias=False)
+        self.vec2_proj = nn.Linear(hidden_channels, out_channels, bias=False)
+
+        act_class = act_class_mapping[activation]
+        self.update_net = nn.Sequential(
+            nn.Linear(hidden_channels * 2, intermediate_channels),
+            act_class(),
+            nn.Linear(intermediate_channels, out_channels * 2)
+        )
+
+        if scalar_activation:
+            self.act = act_class()
+
+    def reset_parameters(self):
+        nn.init.xavier_uniform_(self.vec1_proj.weight)
+        nn.init.xavier_uniform_(self.vec2_proj.weight)
+        nn.init.xavier_uniform_(self.update_net[0].weight)
+        self.update_net[0].bias.data.fill_(0)
+        nn.init.xavier_uniform_(self.update_net[2].weight)
+        self.update_net[2].bias.data.fill_(0)
+
+    def forward(self, x, v):
+        vec1 = torch.norm(self.vec1_proj(v), dim=-2)
+        vec2 = self.vec2_proj(v)
+
+        x = torch.cat([x, vec1], dim=-1)
+        x, v = torch.split(self.update_net(x), self.out_channels, dim=-1)
+        v = v.unsqueeze(1) * vec2
+
+        if self.scalar_activation:
+            x = self.act(x)
+        return x, v
+
+
 rbf_class_mapping = {
     'gauss': GaussianSmearing,
     'expnorm': ExpNormalSmearing
