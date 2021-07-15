@@ -62,7 +62,7 @@ def get_args():
 
     # model architecture
     parser.add_argument('--model', type=str, default='graph-network', choices=['graph-network', 'transformer', 'equivariant-transformer'], help='Which model to train')
-    parser.add_argument('--output-model', type=str, default='ScalarOutput', choices=output_modules.__all__, help='The type of output model')
+    parser.add_argument('--output-model', type=str, default='Scalar', choices=output_modules.__all__, help='The type of output model')
     parser.add_argument('--prior-model', type=str, default=None, choices=priors.__all__, help='Which prior model to use')
 
     # architectural args
