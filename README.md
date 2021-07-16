@@ -3,11 +3,8 @@
 ## How to install
 
 ```
-pip install torch==1.8.1+cu111 torchvision==0.9.1+cu111 -f https://download.pytorch.org/whl/torch_stable.html
+pip3 install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f https://download.pytorch.org/whl/torch_stable.html
 
-conda install pytorch-geometric -c rusty1s -c conda-forge  
-
-OR
 
 pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cu111.html
 pip install torch-sparse -f https://pytorch-geometric.com/whl/torch-1.8.0+cu111.html
@@ -37,7 +34,7 @@ Use the github version of pytorch-lightning to use the beta cli feature (https:/
 
 ```
 cd torchmd-net2
-python script/train_2.py --help
-python script/train_2.py --conf examples/default_config.yaml
+python scripts/train_2.py --help
+python scripts/train_2.py --conf examples/default_config.yaml
 
 ```
