@@ -15,6 +15,18 @@ pip install git+https://github.com/PyTorchLightning/pytorch-lightning.git@a4abb6
 pip install .
 ```
 
+OR
+
+```
+conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c nvidia
+
+conda install pytorch-geometric -c rusty1s -c conda-forge
+
+pip install git+https://github.com/PyTorchLightning/pytorch-lightning.git@master
+
+pip install .
+```
+
 Use the github version of pytorch-lightning to use the beta cli feature (https://pytorch-lightning.readthedocs.io/en/latest/common/lightning_cli.html).
 
 ## play with the cli
