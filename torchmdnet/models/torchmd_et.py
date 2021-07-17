@@ -203,27 +203,26 @@ class EquivariantMultiHeadAttention(MessagePassing):
 
         vec1, vec2, vec3 = torch.split(self.vec_proj(vec), self.hidden_channels, dim=-1)
         vec = vec.reshape(-1, 3, self.num_heads, self.head_dim)
-        vec_norm = vec3.norm(dim=1).reshape(-1, self.num_heads, self.head_dim)
         vec_dot = (vec1 * vec2).sum(dim=1)
 
         dk = self.act(self.dk_proj(f_ij)).reshape(-1, self.num_heads, self.head_dim) if self.dk_proj else None
         dv = self.act(self.dv_proj(f_ij)).reshape(-1, self.num_heads, self.head_dim * 3) if self.dv_proj else None
 
-        x, vec = self.propagate(edge_index, q=q, k=k, v=v, vn=vec_norm, vec=vec, dk=dk, dv=dv, r_ij=r_ij, d_ij=d_ij)
+        x, vec = self.propagate(edge_index, q=q, k=k, v=v, vec=vec, dk=dk, dv=dv, r_ij=r_ij, d_ij=d_ij)
         x = x.reshape(-1, self.hidden_channels)
         vec = vec.reshape(-1, 3, self.hidden_channels)
-        
+
         o1, o2, o3 = torch.split(self.o_proj(x), self.hidden_channels, dim=1)
         dx = vec_dot * o2 + o3
-        dvec = vec1 * o1.unsqueeze(1) + vec
+        dvec = vec3 * o1.unsqueeze(1) + vec
         return dx, dvec
 
-    def message(self, q_i, k_j, v_j, vn_j, vec_j, dk, dv, r_ij, d_ij):
+    def message(self, q_i, k_j, v_j, vec_j, dk, dv, r_ij, d_ij):
         # attention mechanism
         if dk is None:
-            attn = (q_i * k_j * vn_j).sum(dim=-1)
+            attn = (q_i * k_j).sum(dim=-1)
         else:
-            attn = (q_i * k_j * vn_j * dk).sum(dim=-1)
+            attn = (q_i * k_j * dk).sum(dim=-1)
         attn = self.attn_activation(attn) * self.cutoff(r_ij).unsqueeze(1)
 
         if dv is not None:
