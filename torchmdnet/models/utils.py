@@ -184,8 +184,8 @@ class GatedEquivariantBlock(nn.Module):
         if intermediate_channels is None:
             intermediate_channels = hidden_channels
 
-        self.vec1_proj = nn.Linear(hidden_channels, hidden_channels, bias=False)
-        self.vec2_proj = nn.Linear(hidden_channels, out_channels, bias=False)
+        self.vec1_proj = nn.Linear(hidden_channels, hidden_channels)
+        self.vec2_proj = nn.Linear(hidden_channels, out_channels)
 
         act_class = act_class_mapping[activation]
         self.update_net = nn.Sequential(
