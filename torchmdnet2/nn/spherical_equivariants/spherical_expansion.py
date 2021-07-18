@@ -5,6 +5,7 @@ from e3nn import o3
 from torch_scatter import scatter
 
 from .invariants.radial_basis import splined_radial_integrals
+from ..cutoff import ShiftedCosineCutoff
 from ...neighbor_list import torch_neighbor_list
 
 def mult_ln_lm(x_ln, x_lm):
@@ -30,13 +31,23 @@ def species_dependant_reduction_ids(data, species2idx):
     return ids
 
 class SphericalExpension(nn.Module):
-    def __init__(self, max_radial, max_angular, interaction_cutoff,
-                        gaussian_sigma_constant, species):
+    """
+    Computes the spherical expansion of an atomic density. For a given atom :math:`i` in an atomic structure, the expansion coefficients are computed as:
+
+    .. math::
+
+        c^i_{anlm} = \sum_{(j,b) \in i} \delta_{ab} I_{nl}(r_{ij} Y_l^m(\hat{\mathbf{r}}_{ij})) f_c(r_{ij})
+
+    where the sum runs over the neighbors :math:`j` of atom i with atomic type :math:`b`, :math:`f_c` is a cutoff function, :math:`I_{nl}` is the radial integral and :math:`Y_l^m` are spherical harmonics.
+
+    """
+    def __init__(self, nmax, lmax, rc, sigma, species, smooth_width=0.5):
         super(SphericalExpension, self).__init__()
-        self.nmax = max_radial
-        self.lmax = max_angular
-        self.rc = interaction_cutoff
-        self.sigma = gaussian_sigma_constant
+        self.nmax = nmax
+        self.lmax = lmax
+        self.rc = rc
+        self.sigma = sigma
+        self.cutoff = ShiftedCosineCutoff(rc, smooth_width)
 
         self.species, _ = torch.sort(species)
         self.n_species = len(species)
@@ -62,7 +73,7 @@ class SphericalExpension(nn.Module):
 
         reduction_ids = species_dependant_reduction_ids(data, self.species2idx)
         Ylm = self.Ylm(data.direction_vectors)
-        RIln = self.Rln(data.distances).view(-1,self.lmax+1,self.nmax)
+        RIln = self.Rln(data.distances).view(-1,self.lmax+1,self.nmax) * self.cutoff(data.distances)[:, None, None]
         n_atoms = torch.sum(data.n_atoms)
         # return Ylm, RIln
         cij_nlm = mult_ln_lm(RIln, Ylm)
