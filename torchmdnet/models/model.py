@@ -73,11 +73,14 @@ def create_model(args, prior_model=None, mean=None, std=None):
         prior_model = getattr(priors, args['prior_model'])(**args['prior_args'])
 
     # create output network
-    output_model = getattr(output_modules, args['output_model'])(is_equivariant, args['embedding_dimension'], args['activation'])
+    output_model = getattr(output_modules, args['output_model'])(
+        is_equivariant, args['embedding_dimension'], args['activation']
+    )
 
     # combine representation and output network
     model = TorchMD_Net(representation_model, output_model, prior_model=prior_model,
-                                       reduce_op=args['reduce_op'], mean=mean, std=std, derivative=args['derivative'])
+                        reduce_op=args['reduce_op'], mean=mean, std=std,
+                        derivative=args['derivative'])
     return model
 
 
