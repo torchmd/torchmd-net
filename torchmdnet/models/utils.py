@@ -20,6 +20,8 @@ def visualize_basis(basis_type, num_rbf=50, cutoff_lower=0, cutoff_upper=5):
         cutoff_upper (float, optional): The upper cutoff of the basis.
             (default: :obj:`5`)
     """
+    import matplotlib.pyplot as plt
+
     distances = torch.linspace(cutoff_lower-1, cutoff_upper+1, 1000) 
     basis_kwargs = {'num_rbf':num_rbf, 'cutoff_lower':cutoff_lower, 'cutoff_upper':cutoff_upper}
     basis_expansion = rbf_class_mapping[basis_type](**basis_kwargs)
