@@ -43,13 +43,11 @@ class TorchMD_GN(nn.Module):
             This attribute is passed to the torch_cluster radius_graph routine keyword
             max_num_neighbors, which normally defaults to 32. Users should set this to
             higher values if they are using higher upper distance cutoffs and expect more
-            than 32 neighbors per node/atom.
-            (default: :obj:`32`)
+            than 32 neighbors per node/atom. (default: :obj:`32`)
         aggr (str, optional): Aggregation scheme for continuous filter
             convolution ouput. Can be one of 'add', 'mean', or 'max' (see
             https://pytorch-geometric.readthedocs.io/en/latest/notes/create_gnn.html
-            for more details).
-            (default: :obj:`"add"`
+            for more details). (default: :obj:`"add"`)
     """
 
     def __init__(self, hidden_channels=128, num_filters=128,
@@ -63,9 +61,7 @@ class TorchMD_GN(nn.Module):
                                                f'Choose from {", ".join(rbf_class_mapping.keys())}.')
         assert activation in act_class_mapping, (f'Unknown activation function "{activation}". '
                                                  f'Choose from {", ".join(act_class_mapping.keys())}.')
-
-        if aggr not in ['add', 'mean', 'max']:
-            raise ValueError("aggr must be one of: 'add', 'mean', or 'max'")
+        assert aggr in ['add', 'mean', 'max'], 'Argument aggr must be one of: "add", "mean", or "max"'
 
         self.hidden_channels = hidden_channels
         self.num_filters = num_filters
