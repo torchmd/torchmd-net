@@ -43,68 +43,36 @@ class Model(pl.LightningModule):
             min_lr=self.lr_min
         )
         lr_scheduler = {'scheduler': scheduler,
-                        'monitor': 'val_loss',
+                        'monitor': 'validation_loss',
                         'interval': 'epoch',
                         'frequency': 1}
         return [optimizer], [lr_scheduler]
 
-    # def forward(self, z, pos, batch=None):
-    #     # return self.model(z, pos, batch=batch)
-    #     return self(z, pos, batch=batch)
-
-    def training_step(self, batch, batch_idx):
-        return self.step(batch, mse_loss, 'train')
-
-    def validation_step(self, batch, batch_idx):
-        return self.step(batch, mse_loss, 'val')
-
-    def test_step(self, batch, batch_idx):
-        return self.step(batch, l1_loss, 'test')
-
-    def setup(self, stage):
-        pass
-
-    def step(self, batch, loss_fn, stage):
-        batch = batch.to(self.device)
-
-        with torch.set_grad_enabled(stage == 'train' or self.derivative):
-            pred = self(batch.z, batch.pos, batch.batch)
-        if self.derivative:
-            # "use" both outputs of the model's forward function but discard the first to only use the derivative and
-            # avoid 'RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one.',
-            # which otherwise get's thrown because of setting 'find_unused_parameters=False' in the DDPPlugin
-            out, deriv = pred
-            pred = deriv + out.sum() * 0
-
-        loss = loss_fn(pred, batch[self.target_name])
-        
-        if stage == 'val':
-            # PyTorch Lightning requires this in order for ReduceLROnPlateau to work
-            self.log('val_loss', loss.detach().cpu())
+    def training_step(self, data, batch_idx):
+        loss = self.step(data, 'training')
         return loss
 
-    def optimizer_step(self, *args, **kwargs):
-        optimizer = kwargs['optimizer'] if 'optimizer' in kwargs else args[2]
-        if self.trainer.global_step < self.lr_warmup_steps:
-            lr_scale = min(1., float(self.trainer.global_step + 1) / float(self.lr_warmup_steps))
 
-            for pg in optimizer.param_groups:
-                pg['lr'] = lr_scale * self.lr
-        super().optimizer_step(*args, **kwargs)
+    def validation_step(self, data, batch_idx):
+        loss = self.step(data, 'validation')
+        return loss
 
-        # zero_grad call might be unnecessary here if we have Trainer(..., enable_pl_optimizer=True)
-        optimizer.zero_grad()
+    def test_step(self, data, batch_idx):
+        loss = self.step(data, 'test')
+        return loss
 
-    def train_epoch_end(self, outputs):
-        avg_loss = torch.stack(outputs).mean()
-        self.log('train_loss', avg_loss.detach().cpu())
 
-    def test_epoch_end(self, outputs):
-        avg_loss = torch.stack(outputs).mean()
-        self.log('test_loss', avg_loss.detach().cpu())
+    def step(self, data, stage):
+        with torch.set_grad_enabled(stage == 'train' or self.derivative):
+            pred = self(data.z, data.pos, data.batch)
 
-    def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack(outputs).mean()
-        self.log('val_loss', avg_loss.detach().cpu())
+        loss = 0
+        facs = {'forces': 1.}
+        for k,fac in facs.items():
+            loss += fac * (pred[k] - data[k]).pow(2).mean()
 
+        # Add sync_dist=True to sync logging across all GPU workers
+        self.log(f'{stage}_loss', loss, on_step=True, on_epoch=True, sync_dist=True, prog_bar=True)
+
+        return loss
 

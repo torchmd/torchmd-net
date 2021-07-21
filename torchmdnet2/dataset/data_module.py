@@ -33,20 +33,34 @@ class DataModule(pl.LightningDataModule):
         self.log_dir = log_dir
         self.splits = splits
         self.train_stride = train_stride
+        self.splits_fn = os.path.join(self.log_dir, 'splits.npz')
 
-    def setup(self, stage):
-        self.dataset = dataset_map[self.dataset_name](self.dataset_root)
-        idx_train, idx_val, idx_test = make_splits(
-            len(self.dataset),
+    def prepare_data(self):
+        # make sure the dataset is downloaded
+        dataset = dataset_map[self.dataset_name](self.dataset_root)
+        # setup the train/test/val split
+        self.idx_train, self.idx_val, self.idx_test = make_splits(
+            len(dataset),
             self.val_ratio,
             self.test_ratio,
-            filename=os.path.join(self.log_dir, 'splits.npz'),
+            filename=self.splits_fn,
             splits=self.splits,
         )
 
-        self.train_dataset = self.dataset[idx_train[::self.train_stride]]
-        self.val_dataset = self.dataset[idx_val]
-        self.test_dataset = self.dataset[idx_test]
+
+
+    def setup(self, stage = None):
+        dataset = dataset_map[self.dataset_name](self.dataset_root)
+        self.idx_train, self.idx_val, self.idx_test = make_splits(
+            len(dataset),
+            self.val_ratio,
+            self.test_ratio,
+            splits=self.splits_fn,
+        )
+
+        self.train_dataset = dataset[self.idx_train[::self.train_stride]]
+        self.val_dataset = dataset[self.idx_val]
+        self.test_dataset = dataset[self.idx_test]
 
 
     def train_dataloader(self):

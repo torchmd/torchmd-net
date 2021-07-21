@@ -192,9 +192,9 @@ class SchNet(Model):
         if self.scale is not None:
             out = self.scale * out
 
-        if self.derivative:
+        if self.derivative and not self.dipole:
             dy = -torch.autograd.grad(out, pos, grad_outputs=torch.ones_like(out), create_graph=True, retain_graph=True)[0]
-            return out, dy
+            return {'energy':out, 'forces':dy}
 
         return out
 
