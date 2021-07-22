@@ -1,7 +1,7 @@
 import ase
 from torchmdnet.models.utils import act_class_mapping
 from torch_scatter import scatter
-
+from typing import Optional
 import torch
 from torch import nn
 from torch.autograd import grad
@@ -49,7 +49,7 @@ class OutputNetwork(nn.Module):
         nn.init.xavier_uniform_(self.output_network[2].weight)
         self.output_network[2].bias.data.fill_(0)
 
-    def forward(self, z, pos, batch=None):
+    def forward(self, z, pos, batch: Optional[torch.Tensor] = None):
         assert z.dim() == 1 and z.dtype == torch.long
         batch = torch.zeros_like(z) if batch is None else batch
 
@@ -82,7 +82,10 @@ class OutputNetwork(nn.Module):
             out = torch.norm(out, dim=-1, keepdim=True)
 
         if self.derivative:
-            dy = -grad(out, pos, grad_outputs=torch.ones_like(out),
-                    create_graph=True, retain_graph=True)[0]
-            return out, dy
+            grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(out)]
+            dy = grad([out], [pos], grad_outputs=grad_outputs,
+                      create_graph=True, retain_graph=True)[0]
+            if dy is None:
+                raise RuntimeError('Autograd returned None for the force prediction.')
+            return out, -dy
         return out

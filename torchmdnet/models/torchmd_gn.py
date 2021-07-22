@@ -87,7 +87,7 @@ class TorchMD_GN(nn.Module):
         )
         self.neighbor_embedding = NeighborEmbedding(
             hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z
-        ) if neighbor_embedding else None
+        ).jittable() if neighbor_embedding else None
 
         self.interactions = nn.ModuleList()
         for _ in range(num_layers):
@@ -106,13 +106,13 @@ class TorchMD_GN(nn.Module):
         for interaction in self.interactions:
             interaction.reset_parameters()
 
-    def forward(self, z, pos, batch=None):
+    def forward(self, z, pos, batch):
         x = self.embedding(z)
 
         edge_index, edge_weight = self.distance(pos, batch)
         edge_attr = self.distance_expansion(edge_weight)
 
-        if self.neighbor_embedding:
+        if self.neighbor_embedding is not None:
             x = self.neighbor_embedding(z, x, edge_index, edge_weight, edge_attr)
 
         for interaction in self.interactions:
@@ -145,7 +145,7 @@ class InteractionBlock(nn.Module):
             nn.Linear(num_filters, num_filters),
         )
         self.conv = CFConv(hidden_channels, hidden_channels, num_filters,
-                           self.mlp, cutoff_lower, cutoff_upper, aggr=aggr)
+                           self.mlp, cutoff_lower, cutoff_upper, aggr=aggr).jittable()
         self.act = activation()
         self.lin = nn.Linear(hidden_channels, hidden_channels)
 
@@ -188,7 +188,8 @@ class CFConv(MessagePassing):
         W = self.net(edge_attr) * C.view(-1, 1)
 
         x = self.lin1(x)
-        x = self.propagate(edge_index, x=x, W=W)
+        # propagate_type: (x: Tensor, W: Tensor)
+        x = self.propagate(edge_index, x=x, W=W, size=None)
         x = self.lin2(x)
         return x
 
