@@ -4,6 +4,7 @@ import torch
 import argparse
 import yaml
 import subprocess
+from time import ctime
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
@@ -11,7 +12,7 @@ from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.plugins import DDPPlugin
 
 
-sys.path.insert(0,'/local/git/torchmd-net2/')
+sys.path.insert(0,'/home/musil/git/torchmd-net/')
 
 from torchmdnet2.utils import LoadFromFile, save_argparse, Args
 from torchmdnet2.models import SchNet
@@ -20,11 +21,42 @@ from torchmdnet2.dataset import DataModule
 from pytorch_lightning.utilities.cli import LightningCLI
 
 
+# profiler:
+#     class_path: pytorch_lightning.profiler.PyTorchProfiler
+#     init_args:
+#       dirpath: '/local_scratch/musil/chign/test_1/prof/'
+#       filename: 'test'
+#       emit_nvtx: false
+#       export_to_chrome: true
+#       profiler_kwargs:
+#         with_stack: true
+#         export_to_flame_graph: true
+
+from jsonargparse import lazy_instance
+
+class MyLightningCLI(LightningCLI):
+
+    def instantiate_classes(self):
+        self.config_init = self.parser.instantiate_classes(self.config)
+        self.datamodule = self.config_init.get('data')
+        self.model = self.config_init['model']
+        
+        if isinstance(self.config_init['trainer'].get('profiler'), pl.profiler.PyTorchProfiler):
+            init_args = self.config['trainer']['profiler']['init_args']
+            init_args.update(with_stack=True, export_to_flame_graph=True)
+            self.config_init['trainer']['profiler'] = pl.profiler.PyTorchProfiler(**init_args)
+
+        self.instantiate_trainer()
+
 if __name__ == "__main__":
 
     git = {
         'log': subprocess.getoutput('git log --format="%H" -n 1 -z'),
         'status': subprocess.getoutput('git status -z'),
     }
+    print('Start: {}'.format(ctime()))
 
-    cli = LightningCLI(SchNet, DataModule)
+    cli = MyLightningCLI(SchNet, DataModule, save_config_callback=None)
+
+    print('Finish: {}'.format(ctime()))
+

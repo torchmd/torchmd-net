@@ -158,8 +158,10 @@ class SchNet(Model):
             pos.requires_grad_()
 
         h = self.embedding(z)
-
-        edge_index = radius_graph(pos, r=self.cutoff_upper, batch=batch)
+        
+        max_num_neighbors = torch.bincount(batch).max()
+        edge_index = radius_graph(pos, r=self.cutoff_upper, batch=batch,
+                                    max_num_neighbors=max_num_neighbors)
         row, col = edge_index
         edge_weight = (pos[row] - pos[col]).norm(dim=-1)
         edge_attr = self.distance_expansion(edge_weight)
