@@ -88,4 +88,5 @@ class OutputNetwork(nn.Module):
             if dy is None:
                 raise RuntimeError('Autograd returned None for the force prediction.')
             return out, -dy
-        return out
+        # TODO: return only `out` once Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
+        return out, None
