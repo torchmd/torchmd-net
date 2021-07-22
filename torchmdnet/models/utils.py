@@ -202,6 +202,10 @@ class Distance(nn.Module):
 
 
 class GatedEquivariantBlock(nn.Module):
+    """Gated Equivariant Block as defined in Schütt et al. (2021):
+    Equivariant message passing for the prediction of tensorial properties and molecular spectra
+    """
+
     def __init__(self, hidden_channels, out_channels, intermediate_channels=None,
                  activation='silu', scalar_activation=False):
         super(GatedEquivariantBlock, self).__init__()
