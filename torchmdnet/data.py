@@ -3,11 +3,7 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import Dataset
 from torch_geometric.data import DataLoader
-from torch_scatter import scatter
-
-import pytorch_lightning as pl
 from pytorch_lightning import LightningDataModule
-
 from torchmdnet import datasets
 from torchmdnet.utils import make_splits
 

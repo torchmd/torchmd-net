@@ -2,7 +2,6 @@ import sys
 import os
 import torch
 import argparse
-from functools import partial
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping
@@ -13,7 +12,7 @@ from pytorch_lightning.plugins import DDPPlugin
 from torchmdnet.module import LNNP
 from torchmdnet import datasets, priors
 from torchmdnet.data import DataModule
-from torchmdnet.models import create_model, load_model, output_modules
+from torchmdnet.models import output_modules
 from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, number
 
 

@@ -88,7 +88,7 @@ class TorchMD_ET(nn.Module):
         self.attention_layers = nn.ModuleList()
         for _ in range(num_layers):
             layer = EquivariantMultiHeadAttention(hidden_channels, num_rbf, distance_influence, num_heads,
-                                       act_class, attn_act_class, cutoff_lower, cutoff_upper)
+                                                  act_class, attn_act_class, cutoff_lower, cutoff_upper)
             self.attention_layers.append(layer)
 
         self.out_norm = nn.LayerNorm(hidden_channels)

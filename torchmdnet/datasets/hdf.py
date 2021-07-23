@@ -2,6 +2,7 @@ import torch
 from torch_geometric.data import Dataset, Data
 import h5py
 
+
 class HDF5(Dataset):
     """A custom dataset that loads data from a HDF5 file.
 

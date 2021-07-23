@@ -164,6 +164,6 @@ class TorchMD_Net(nn.Module):
         # compute gradients with respect to coordinates
         if self.derivative:
             dy = -grad(out, pos, grad_outputs=torch.ones_like(out),
-                    create_graph=True, retain_graph=True)[0]
+                       create_graph=True, retain_graph=True)[0]
             return out, dy
         return out
