@@ -6,6 +6,7 @@ from pytorch_lightning.utilities import rank_zero_warn
 
 __all__ = ['Atomref']
 
+
 class BasePrior(nn.Module, metaclass=ABCMeta):
     r"""Base class for prior models.
     Derive this class to make custom prior models, which take some arguments and a dataset as input.

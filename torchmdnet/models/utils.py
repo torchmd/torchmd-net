@@ -22,8 +22,8 @@ def visualize_basis(basis_type, num_rbf=50, cutoff_lower=0, cutoff_upper=5):
     """
     import matplotlib.pyplot as plt
 
-    distances = torch.linspace(cutoff_lower-1, cutoff_upper+1, 1000) 
-    basis_kwargs = {'num_rbf':num_rbf, 'cutoff_lower':cutoff_lower, 'cutoff_upper':cutoff_upper}
+    distances = torch.linspace(cutoff_lower - 1, cutoff_upper + 1, 1000)
+    basis_kwargs = {'num_rbf': num_rbf, 'cutoff_lower': cutoff_lower, 'cutoff_upper': cutoff_upper}
     basis_expansion = rbf_class_mapping[basis_type](**basis_kwargs)
     expanded_distances = basis_expansion(distances)
 
@@ -110,7 +110,7 @@ class ExpNormalSmearing(nn.Module):
         self.trainable = trainable
 
         self.cutoff_fn = CosineCutoff(0, cutoff_upper)
-        self.alpha = 5.0/(cutoff_upper - cutoff_lower)
+        self.alpha = 5.0 / (cutoff_upper - cutoff_lower)
 
         means, betas = self._initial_params()
         if trainable:
@@ -135,7 +135,7 @@ class ExpNormalSmearing(nn.Module):
 
     def forward(self, dist):
         dist = dist.unsqueeze(-1)
-        return self.cutoff_fn(dist) * torch.exp(-self.betas * (torch.exp(self.alpha*(-dist + self.cutoff_lower)) - self.means) ** 2)
+        return self.cutoff_fn(dist) * torch.exp(-self.betas * (torch.exp(self.alpha * (-dist + self.cutoff_lower)) - self.means) ** 2)
 
 
 class ShiftedSoftplus(nn.Module):
