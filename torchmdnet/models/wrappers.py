@@ -31,20 +31,14 @@ class AtomFilter(BaseWrapper):
         self.remove_threshold = remove_threshold
 
     def forward(self, z, pos, batch=None):
-        output = self.model(z, pos, batch=batch)
-
-        has_vector_features = len(output) == 5
-        if has_vector_features:
-            x, v, z, pos, batch = output
-        else:
-            x, z, pos, batch = output
+        x, v, z, pos, batch = self.model(z, pos, batch=batch)
 
         n_samples = len(batch.unique())
 
         # drop atoms according to the filter
         atom_mask = z > self.remove_threshold
         x = x[atom_mask]
-        if has_vector_features:
+        if v is not None:
             v = v[atom_mask]
         z = z[atom_mask]
         pos = pos[atom_mask]
@@ -54,6 +48,4 @@ class AtomFilter(BaseWrapper):
             "Some samples were completely filtered out by the atom filter. "
             f"Make sure that at least one atom per sample exists with Z > {self.remove_threshold}."
         )
-        if has_vector_features:
-            return x, v, z, pos, batch
-        return x, z, pos, batch
+        return x, v, z, pos, batch

@@ -144,7 +144,7 @@ class TorchMD_GN(nn.Module):
     def forward(self, z, pos, batch):
         x = self.embedding(z)
 
-        edge_index, edge_weight = self.distance(pos, batch)
+        edge_index, edge_weight, _ = self.distance(pos, batch)
         edge_attr = self.distance_expansion(edge_weight)
 
         if self.neighbor_embedding is not None:
@@ -153,7 +153,7 @@ class TorchMD_GN(nn.Module):
         for interaction in self.interactions:
             x = x + interaction(x, edge_index, edge_weight, edge_attr)
 
-        return x, z, pos, batch
+        return x, None, z, pos, batch
 
     def __repr__(self):
         return (

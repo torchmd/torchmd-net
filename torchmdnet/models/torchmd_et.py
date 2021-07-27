@@ -1,3 +1,4 @@
+from typing import Optional, Tuple
 import torch
 from torch import nn
 from torch_geometric.nn import MessagePassing
@@ -111,7 +112,7 @@ class TorchMD_ET(nn.Module):
         self.neighbor_embedding = (
             NeighborEmbedding(
                 hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z
-            )
+            ).jittable()
             if neighbor_embedding
             else None
         )
@@ -127,7 +128,7 @@ class TorchMD_ET(nn.Module):
                 attn_act_class,
                 cutoff_lower,
                 cutoff_upper,
-            )
+            ).jittable()
             self.attention_layers.append(layer)
 
         self.out_norm = nn.LayerNorm(hidden_channels)
@@ -143,15 +144,19 @@ class TorchMD_ET(nn.Module):
             attn.reset_parameters()
         self.out_norm.reset_parameters()
 
-    def forward(self, z, pos, batch=None):
+    def forward(self, z, pos, batch):
         x = self.embedding(z)
 
         edge_index, edge_weight, edge_vec = self.distance(pos, batch)
+        assert (
+            edge_vec is not None
+        ), "Distance module did not return directional information"
+
         edge_attr = self.distance_expansion(edge_weight)
         mask = edge_index[0] != edge_index[1]
-        edge_vec[mask] = edge_vec[mask] / edge_vec[mask].norm(dim=1).unsqueeze(1)
+        edge_vec[mask] = edge_vec[mask] / torch.norm(edge_vec[mask], dim=1).unsqueeze(1)
 
-        if self.neighbor_embedding:
+        if self.neighbor_embedding is not None:
             x = self.neighbor_embedding(z, x, edge_index, edge_weight, edge_attr)
 
         vec = torch.zeros(x.size(0), 3, x.size(1), device=x.device)
@@ -268,8 +273,18 @@ class EquivariantMultiHeadAttention(MessagePassing):
             else None
         )
 
+        # propagate_type: (q: Tensor, k: Tensor, v: Tensor, vec: Tensor, dk: Tensor, dv: Tensor, r_ij: Tensor, d_ij: Tensor)
         x, vec = self.propagate(
-            edge_index, q=q, k=k, v=v, vec=vec, dk=dk, dv=dv, r_ij=r_ij, d_ij=d_ij
+            edge_index,
+            q=q,
+            k=k,
+            v=v,
+            vec=vec,
+            dk=dk,
+            dv=dv,
+            r_ij=r_ij,
+            d_ij=d_ij,
+            size=None,
         )
         x = x.reshape(-1, self.hidden_channels)
         vec = vec.reshape(-1, 3, self.hidden_channels)
@@ -299,8 +314,19 @@ class EquivariantMultiHeadAttention(MessagePassing):
         ).unsqueeze(3)
         return x, vec
 
-    def aggregate(self, features, index, ptr, dim_size):
+    def aggregate(
+        self,
+        features: Tuple[torch.Tensor, torch.Tensor],
+        index: torch.Tensor,
+        ptr: Optional[torch.Tensor],
+        dim_size: Optional[int],
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         x, vec = features
         x = scatter(x, index, dim=self.node_dim, dim_size=dim_size)
         vec = scatter(vec, index, dim=self.node_dim, dim_size=dim_size)
         return x, vec
+
+    def update(
+        self, inputs: Tuple[torch.Tensor, torch.Tensor]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        return inputs

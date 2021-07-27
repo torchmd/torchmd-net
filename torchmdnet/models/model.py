@@ -1,4 +1,5 @@
 import re
+from typing import Optional, List
 import torch
 from torch.autograd import grad
 from torch import nn
@@ -36,7 +37,9 @@ def create_model(args, prior_model=None, mean=None, std=None):
     # representation network
     if args["model"] == "graph-network":
         is_equivariant = False
-        representation_model = TorchMD_GN(num_filters=args["embedding_dimension"], **shared_args)
+        representation_model = TorchMD_GN(
+            num_filters=args["embedding_dimension"], **shared_args
+        )
     elif args["model"] == "transformer":
         is_equivariant = False
         representation_model = TorchMD_T(
@@ -76,8 +79,9 @@ def create_model(args, prior_model=None, mean=None, std=None):
         prior_model = getattr(priors, args["prior_model"])(**args["prior_args"])
 
     # create output network
-    output_model = getattr(output_modules, args["output_model"])(
-        is_equivariant, args["embedding_dimension"], args["activation"]
+    output_prefix = "Equivariant" if is_equivariant else ""
+    output_model = getattr(output_modules, output_prefix + args["output_model"])(
+        args["embedding_dimension"], args["activation"]
     )
 
     # combine representation and output network
@@ -147,7 +151,7 @@ class TorchMD_Net(nn.Module):
         if self.prior_model is not None:
             self.prior_model.reset_parameters()
 
-    def forward(self, z, pos, batch=None):
+    def forward(self, z, pos, batch: Optional[torch.Tensor] = None):
         assert z.dim() == 1 and z.dtype == torch.long
         batch = torch.zeros_like(z) if batch is None else batch
 
@@ -155,13 +159,7 @@ class TorchMD_Net(nn.Module):
             pos.requires_grad_(True)
 
         # run the potentially wrapped representation model
-        representation = self.representation_model(z, pos, batch=batch)
-
-        if len(representation) == 5:
-            x, v, z, pos, batch = representation
-        else:
-            v = None
-            x, z, pos, batch = representation
+        x, v, z, pos, batch = self.representation_model(z, pos, batch=batch)
 
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch)

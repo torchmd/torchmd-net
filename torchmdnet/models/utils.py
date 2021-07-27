@@ -1,4 +1,5 @@
 import math
+from typing import Optional
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -233,7 +234,8 @@ class Distance(nn.Module):
         if self.return_vecs:
             edge_vec = edge_vec[lower_mask]
             return edge_index, edge_weight, edge_vec
-        return edge_index, edge_weight
+        # TODO: return only `edge_index` and `edge_weight` once Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
+        return edge_index, edge_weight, None
 
 
 class GatedEquivariantBlock(nn.Module):
@@ -250,9 +252,7 @@ class GatedEquivariantBlock(nn.Module):
         scalar_activation=False,
     ):
         super(GatedEquivariantBlock, self).__init__()
-        self.hidden_channels = hidden_channels
         self.out_channels = out_channels
-        self.scalar_activation = scalar_activation
 
         if intermediate_channels is None:
             intermediate_channels = hidden_channels
@@ -267,8 +267,7 @@ class GatedEquivariantBlock(nn.Module):
             nn.Linear(intermediate_channels, out_channels * 2),
         )
 
-        if scalar_activation:
-            self.act = act_class()
+        self.act = act_class() if scalar_activation else None
 
     def reset_parameters(self):
         nn.init.xavier_uniform_(self.vec1_proj.weight)
@@ -286,7 +285,7 @@ class GatedEquivariantBlock(nn.Module):
         x, v = torch.split(self.update_net(x), self.out_channels, dim=-1)
         v = v.unsqueeze(1) * vec2
 
-        if self.scalar_activation:
+        if self.act is not None:
             x = self.act(x)
         return x, v
 
