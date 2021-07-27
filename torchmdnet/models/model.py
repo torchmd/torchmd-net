@@ -5,7 +5,6 @@ from torch.autograd import grad
 from torch import nn
 from torch_scatter import scatter
 from pytorch_lightning.utilities import rank_zero_warn
-from typing import Optional, List
 from torchmdnet.models.torchmd_gn import TorchMD_GN
 from torchmdnet.models.torchmd_t import TorchMD_T
 from torchmdnet.models.torchmd_et import TorchMD_ET
