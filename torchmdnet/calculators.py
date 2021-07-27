@@ -3,12 +3,14 @@ from torchmdnet.models import load_model
 
 
 class External:
-    def __init__(self, netfile, embeddings, device='cpu'):
+    def __init__(self, netfile, embeddings, device="cpu"):
         self.model = load_model(netfile, device=device)
         self.device = device
         self.n_atoms = embeddings.size(1)
         self.embeddings = embeddings.reshape(-1).to(device)
-        self.batch = torch.arange(embeddings.size(0), device=device).repeat_interleave(embeddings.size(1))
+        self.batch = torch.arange(embeddings.size(0), device=device).repeat_interleave(
+            embeddings.size(1)
+        )
         self.model.eval()
 
     def calculate(self, pos, box):

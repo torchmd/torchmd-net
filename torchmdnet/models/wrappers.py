@@ -12,6 +12,7 @@ class BaseWrapper(nn.Module, metaclass=ABCMeta):
     features`v`. Wrappers that are applied after REDUCE should only
     return the model's output.
     """
+
     def __init__(self, model):
         super(BaseWrapper, self).__init__()
         self.model = model
@@ -49,9 +50,10 @@ class AtomFilter(BaseWrapper):
         pos = pos[atom_mask]
         batch = batch[atom_mask]
 
-        assert len(batch.unique()) == n_samples,\
-            ('Some samples were completely filtered out by the atom filter. '
-             f'Make sure that at least one atom per sample exists with Z > {self.remove_threshold}.')
+        assert len(batch.unique()) == n_samples, (
+            "Some samples were completely filtered out by the atom filter. "
+            f"Make sure that at least one atom per sample exists with Z > {self.remove_threshold}."
+        )
         if has_vector_features:
             return x, v, z, pos, batch
         return x, z, pos, batch

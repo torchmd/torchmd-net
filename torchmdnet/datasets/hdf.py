@@ -20,18 +20,18 @@ class HDF5(Dataset):
 
     def __init__(self, filename, **kwargs):
         super(HDF5, self).__init__()
-        files = [h5py.File(f, 'r') for f in filename.split(';')]
+        files = [h5py.File(f, "r") for f in filename.split(";")]
         self.index = []
         self.has_forces = False
         for file in files:
             for group_name in file:
                 group = file[group_name]
-                types = group['types']
-                pos = group['pos']
-                energy = group['energy']
-                if 'forces' in group:
+                types = group["types"]
+                pos = group["pos"]
+                energy = group["energy"]
+                if "forces" in group:
                     self.has_forces = True
-                    forces = group['forces']
+                    forces = group["forces"]
                     for i in range(len(energy)):
                         self.index.append((types, pos, energy, forces, i))
                 else:
@@ -41,10 +41,19 @@ class HDF5(Dataset):
     def get(self, idx):
         if self.has_forces:
             types, pos, energy, forces, i = self.index[idx]
-            return Data(pos=torch.from_numpy(pos[i]), z=torch.from_numpy(types[i]).to(torch.long), y=torch.tensor([[energy[i]]]), dy=torch.from_numpy(forces[i]))
+            return Data(
+                pos=torch.from_numpy(pos[i]),
+                z=torch.from_numpy(types[i]).to(torch.long),
+                y=torch.tensor([[energy[i]]]),
+                dy=torch.from_numpy(forces[i]),
+            )
         else:
             types, pos, energy, i = self.index[idx]
-            return Data(pos=torch.from_numpy(pos[i]), z=torch.from_numpy(types[i]).to(torch.long), y=torch.tensor([[energy[i]]]))
+            return Data(
+                pos=torch.from_numpy(pos[i]),
+                z=torch.from_numpy(types[i]).to(torch.long),
+                y=torch.tensor([[energy[i]]]),
+            )
 
     def len(self):
         return len(self.index)

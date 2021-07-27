@@ -92,13 +92,13 @@ def get_args():
     args = parser.parse_args()
 
     if args.redirect:
-        sys.stdout = open(os.path.join(args.log_dir, 'log'), 'w')
+        sys.stdout = open(os.path.join(args.log_dir, "log"), "w")
         sys.stderr = sys.stdout
 
     if args.inference_batch_size is None:
         args.inference_batch_size = args.batch_size
 
-    save_argparse(args, os.path.join(args.log_dir, 'input.yaml'), exclude=['conf'])
+    save_argparse(args, os.path.join(args.log_dir, "input.yaml"), exclude=["conf"])
 
     return args
 
@@ -111,12 +111,14 @@ def main():
     # initialize data module
     data = DataModule(args)
     data.prepare_data()
-    data.setup('fit')
+    data.setup("fit")
 
     prior = None
     if args.prior_model:
-        assert hasattr(priors, args.prior_model), (f'Unknown prior model {args["prior_model"]}. '
-                                                   f'Available models are {", ".join(priors.__all__)}')
+        assert hasattr(priors, args.prior_model), (
+            f'Unknown prior model {args["prior_model"]}. '
+            f'Available models are {", ".join(priors.__all__)}'
+        )
         # initialize the prior model
         prior = getattr(priors, args.prior_model)(dataset=data.dataset)
         args.prior_args = prior.get_init_args()
@@ -126,19 +128,20 @@ def main():
 
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.log_dir,
-        monitor='val_loss',
-        save_top_k=10, # -1 to save all
+        monitor="val_loss",
+        save_top_k=10,  # -1 to save all
         period=args.save_interval,
-        filename='{epoch}-{val_loss:.4f}-{test_loss:.4f}'
+        filename="{epoch}-{val_loss:.4f}-{test_loss:.4f}",
     )
-    early_stopping = EarlyStopping('val_loss', patience=args.early_stopping_patience)
+    early_stopping = EarlyStopping("val_loss", patience=args.early_stopping_patience)
 
-    tb_logger = pl.loggers.TensorBoardLogger(args.log_dir, name='tensorbord', version='',
-                                             default_hp_metric=False)
-    csv_logger = CSVLogger(args.log_dir, name='', version='')
+    tb_logger = pl.loggers.TensorBoardLogger(
+        args.log_dir, name="tensorbord", version="", default_hp_metric=False
+    )
+    csv_logger = CSVLogger(args.log_dir, name="", version="")
 
     ddp_plugin = None
-    if 'ddp' in args.distributed_backend:
+    if "ddp" in args.distributed_backend:
         ddp_plugin = DDPPlugin(find_unused_parameters=False, num_nodes=args.num_nodes)
 
     trainer = pl.Trainer(
@@ -153,7 +156,7 @@ def main():
         logger=[tb_logger, csv_logger],
         reload_dataloaders_every_epoch=False,
         precision=args.precision,
-        plugins=[ddp_plugin]
+        plugins=[ddp_plugin],
     )
 
     trainer.fit(model, data)

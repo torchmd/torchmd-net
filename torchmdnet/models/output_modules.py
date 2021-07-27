@@ -6,7 +6,7 @@ import torch
 from torch import nn
 
 
-__all__ = ['Scalar', 'DipoleMoment', 'ElectronicSpatialExtent']
+__all__ = ["Scalar", "DipoleMoment", "ElectronicSpatialExtent"]
 
 
 class OutputModel(nn.Module, metaclass=ABCMeta):
@@ -26,23 +26,32 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
 
 
 class Scalar(OutputModel):
-    def __init__(self, is_equivariant, hidden_channels, activation='silu',
-                 allow_prior_model=True):
+    def __init__(
+        self, is_equivariant, hidden_channels, activation="silu", allow_prior_model=True
+    ):
         super(Scalar, self).__init__(allow_prior_model=allow_prior_model)
         self.is_equivariant = is_equivariant
 
         if is_equivariant:
-            self.output_network = nn.ModuleList([
-                GatedEquivariantBlock(hidden_channels, hidden_channels // 2,
-                                      activation=activation, scalar_activation=True),
-                GatedEquivariantBlock(hidden_channels // 2, 1, activation=activation),
-            ])
+            self.output_network = nn.ModuleList(
+                [
+                    GatedEquivariantBlock(
+                        hidden_channels,
+                        hidden_channels // 2,
+                        activation=activation,
+                        scalar_activation=True,
+                    ),
+                    GatedEquivariantBlock(
+                        hidden_channels // 2, 1, activation=activation
+                    ),
+                ]
+            )
         else:
             act_class = act_class_mapping[activation]
             self.output_network = nn.Sequential(
                 nn.Linear(hidden_channels, hidden_channels // 2),
                 act_class(),
-                nn.Linear(hidden_channels // 2, 1)
+                nn.Linear(hidden_channels // 2, 1),
             )
 
         self.reset_parameters()
@@ -67,12 +76,13 @@ class Scalar(OutputModel):
 
 
 class DipoleMoment(Scalar):
-    def __init__(self, is_equivariant, hidden_channels, activation='silu'):
-        super(DipoleMoment, self).__init__(is_equivariant, hidden_channels,
-                                           activation, allow_prior_model=False)
+    def __init__(self, is_equivariant, hidden_channels, activation="silu"):
+        super(DipoleMoment, self).__init__(
+            is_equivariant, hidden_channels, activation, allow_prior_model=False
+        )
 
         atomic_mass = torch.from_numpy(ase.data.atomic_masses).float()
-        self.register_buffer('atomic_mass', atomic_mass)
+        self.register_buffer("atomic_mass", atomic_mass)
 
     def pre_reduce(self, x, v, z, pos, batch):
         if self.is_equivariant:
@@ -95,7 +105,7 @@ class DipoleMoment(Scalar):
 
 
 class ElectronicSpatialExtent(OutputModel):
-    def __init__(self, is_equivariant, hidden_channels, activation='silu'):
+    def __init__(self, is_equivariant, hidden_channels, activation="silu"):
         super(ElectronicSpatialExtent, self).__init__(allow_prior_model=False)
         self.is_equivariant = is_equivariant
 
@@ -103,7 +113,7 @@ class ElectronicSpatialExtent(OutputModel):
         self.output_network = nn.Sequential(
             nn.Linear(hidden_channels, hidden_channels // 2),
             act_class(),
-            nn.Linear(hidden_channels // 2, 1)
+            nn.Linear(hidden_channels // 2, 1),
         )
 
         self.reset_parameters()
