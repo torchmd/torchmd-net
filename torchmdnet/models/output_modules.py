@@ -1,7 +1,7 @@
 import ase
 from torchmdnet.models.utils import act_class_mapping
 from torch_scatter import scatter
-from typing import Optional
+from typing import Optional, List
 import torch
 from torch import nn
 from torch.autograd import grad
