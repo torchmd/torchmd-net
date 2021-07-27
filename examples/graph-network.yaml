@@ -2,6 +2,8 @@ activation: silu
 batch_size: 128
 cutoff_lower: 0.0
 cutoff_upper: 5.0
+dataset: QM9
+dataset_arg: energy_U0
 distributed_backend: ddp
 early_stopping_patience: 100
 embedding_dimension: 256
@@ -14,7 +16,6 @@ lr_warmup_steps: 0
 neighbor_embedding: true
 ngpus: -1
 num_epochs: 3000
-num_filters: 256
 num_layers: 6
 num_nodes: 1
 num_rbf: 64

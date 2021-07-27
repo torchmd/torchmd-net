@@ -4,7 +4,7 @@ from torch.autograd import grad
 from torch import nn
 from torch_scatter import scatter
 from pytorch_lightning.utilities import rank_zero_warn
-
+from typing import Optional, List
 from torchmdnet.models.torchmd_gn import TorchMD_GN
 from torchmdnet.models.torchmd_t import TorchMD_T
 from torchmdnet.models.torchmd_et import TorchMD_ET
@@ -36,9 +36,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
     # representation network
     if args["model"] == "graph-network":
         is_equivariant = False
-        representation_model = TorchMD_GN(
-            num_filters=args["embedding_dimension"], **shared_args
-        )
+        representation_model = TorchMD_GN(num_filters=args["embedding_dimension"], **shared_args)
     elif args["model"] == "transformer":
         is_equivariant = False
         representation_model = TorchMD_T(
@@ -186,12 +184,16 @@ class TorchMD_Net(nn.Module):
 
         # compute gradients with respect to coordinates
         if self.derivative:
-            dy = -grad(
-                out,
-                pos,
-                grad_outputs=torch.ones_like(out),
+            grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(out)]
+            dy = grad(
+                [out],
+                [pos],
+                grad_outputs=grad_outputs,
                 create_graph=True,
                 retain_graph=True,
             )[0]
-            return out, dy
-        return out
+            if dy is None:
+                raise RuntimeError("Autograd returned None for the force prediction.")
+            return out, -dy
+        # TODO: return only `out` once Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
+        return out, None

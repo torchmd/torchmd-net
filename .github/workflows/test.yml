@@ -1,0 +1,57 @@
+name: Test code
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest"]
+        python-version: ["3.7"]
+
+    defaults: # Needed for conda
+      run:
+        shell: bash -l {0}
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        lfs: true
+
+    - name: Cache conda
+      uses: actions/cache@v1
+      env:
+        # Increase this value to reset cache if environment.yml has not changed
+        CACHE_NUMBER: 0
+      with:
+        path: ~/conda_pkgs_dir
+        key:
+          ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-${{ hashFiles('environment.yml') }}
+
+    - uses: conda-incubator/setup-miniconda@v2
+      with:
+        activate-environment: torchmd-net
+        channels: acellera,conda-forge,defaults
+        channel-priority: true
+        environment-file: environment.yml
+        # python-version: ${{ matrix.python-version }}
+        # auto-update-conda: true
+        use-only-tar-bz2: true # IMPORTANT: This needs to be set for caching to work properly!
+        auto-activate-base: false
+
+    - run: which pip
+
+    - name: Install pip dependencies
+      run: |
+        pip install flake8 pytest
+        pip install .
+
+    - name: Lint with flake8
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics

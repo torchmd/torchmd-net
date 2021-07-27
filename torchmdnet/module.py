@@ -64,12 +64,12 @@ class LNNP(LightningModule):
 
     def step(self, batch, loss_fn, stage):
         with torch.set_grad_enabled(stage == "train" or self.hparams.derivative):
-            pred = self(batch.z, batch.pos, batch.batch)
+            # TODO: the model doesn't necessarily need to return a derivative once
+            # Union typing works under TorchScript (https://github.com/pytorch/pytorch/pull/53180)
+            pred, deriv = self(batch.z, batch.pos, batch.batch)
 
         loss_y, loss_dy = 0, 0
         if self.hparams.derivative:
-            pred, deriv = pred
-
             if "y" not in batch:
                 # "use" both outputs of the model's forward function but discard the first
                 # to only use the derivative and avoid 'Expected to have finished reduction

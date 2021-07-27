@@ -2,7 +2,8 @@ import math
 import torch
 from torch import nn
 import torch.nn.functional as F
-from torch_geometric.nn import radius_graph, MessagePassing
+from torch_geometric.nn import MessagePassing
+from torch_cluster import radius_graph
 
 
 def visualize_basis(basis_type, num_rbf=50, cutoff_lower=0, cutoff_upper=5):
@@ -65,7 +66,8 @@ class NeighborEmbedding(MessagePassing):
         W = self.distance_proj(edge_attr) * C.view(-1, 1)
 
         x_neighbors = self.embedding(z)
-        x_neighbors = self.propagate(edge_index, x=x_neighbors, W=W)
+        # propagate_type: (x: Tensor, W: Tensor)
+        x_neighbors = self.propagate(edge_index, x=x_neighbors, W=W, size=None)
         x_neighbors = self.combine(torch.cat([x, x_neighbors], dim=1))
         return x_neighbors
 
@@ -220,9 +222,9 @@ class Distance(nn.Module):
             # NOTE: might influence force predictions as self loop gradients are ignored
             mask = edge_index[0] != edge_index[1]
             edge_weight = torch.zeros(edge_vec.size(0), device=edge_vec.device)
-            edge_weight[mask] = edge_vec[mask].norm(dim=-1)
+            edge_weight[mask] = torch.norm(edge_vec[mask], dim=-1)
         else:
-            edge_weight = edge_vec.norm(dim=-1)
+            edge_weight = torch.norm(edge_vec, dim=-1)
 
         lower_mask = edge_weight >= self.cutoff_lower
         edge_index = edge_index[:, lower_mask]

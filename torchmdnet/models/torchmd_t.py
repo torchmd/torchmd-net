@@ -105,7 +105,7 @@ class TorchMD_T(nn.Module):
         self.neighbor_embedding = (
             NeighborEmbedding(
                 hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z
-            )
+            ).jittable()
             if neighbor_embedding
             else None
         )
@@ -121,7 +121,7 @@ class TorchMD_T(nn.Module):
                 attn_act_class,
                 cutoff_lower,
                 cutoff_upper,
-            )
+            ).jittable()
             self.attention_layers.append(layer)
 
         self.out_norm = nn.LayerNorm(hidden_channels)
@@ -137,13 +137,13 @@ class TorchMD_T(nn.Module):
             attn.reset_parameters()
         self.out_norm.reset_parameters()
 
-    def forward(self, z, pos, batch=None):
+    def forward(self, z, pos, batch):
         x = self.embedding(z)
 
         edge_index, edge_weight = self.distance(pos, batch)
         edge_attr = self.distance_expansion(edge_weight)
 
-        if self.neighbor_embedding:
+        if self.neighbor_embedding is not None:
             x = self.neighbor_embedding(z, x, edge_index, edge_weight, edge_attr)
 
         for attn in self.attention_layers:
@@ -238,10 +238,21 @@ class MultiHeadAttention(MessagePassing):
         k = self.k_proj(x).reshape(head_shape)
         v = self.v_proj(x).reshape(head_shape)
 
-        dk = self.act(self.dk_proj(f_ij)).reshape(head_shape) if self.dk_proj else None
-        dv = self.act(self.dv_proj(f_ij)).reshape(head_shape) if self.dv_proj else None
+        dk = (
+            self.act(self.dk_proj(f_ij)).reshape(head_shape)
+            if self.dk_proj is not None
+            else None
+        )
+        dv = (
+            self.act(self.dv_proj(f_ij)).reshape(head_shape)
+            if self.dv_proj is not None
+            else None
+        )
 
-        out = self.propagate(edge_index, q=q, k=k, v=v, dk=dk, dv=dv, r_ij=r_ij)
+        # propagate_type: (q: Tensor, k: Tensor, v: Tensor, dk: Tensor, dv: Tensor, r_ij: Tensor)
+        out = self.propagate(
+            edge_index, q=q, k=k, v=v, dk=dk, dv=dv, r_ij=r_ij, size=None
+        )
         out = self.o_proj(out.reshape(-1, self.num_heads * self.head_dim))
         return out
 
