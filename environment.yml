@@ -6,10 +6,10 @@ channels:
 dependencies:
   - matplotlib
   - pip
-  # Note: pytorch from conda-forge is not compatible with pytorch-scatter and friends due to C++11 ABI
   - pytorch==1.8.0
   - pytorch-geometric=1.7.2=py36_torch_1.8.0_cpu
   - pytorch-lightning==1.3.1
-  # Dependency of torch-geometric and friends
   - ase
+  - h5py
   - tqdm
+  - scipy
