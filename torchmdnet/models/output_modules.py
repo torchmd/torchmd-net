@@ -8,9 +8,18 @@ from torch.autograd import grad
 
 
 class OutputNetwork(nn.Module):
-    def __init__(self, representation_model, hidden_channels, activation='silu',
-                 reduce_op='add', dipole=False, prior_model=None,
-                 mean=None, std=None, derivative=False):
+    def __init__(
+        self,
+        representation_model,
+        hidden_channels,
+        activation="silu",
+        reduce_op="add",
+        dipole=False,
+        prior_model=None,
+        mean=None,
+        std=None,
+        derivative=False,
+    ):
         super(OutputNetwork, self).__init__()
         self.representation_model = representation_model
 
@@ -24,18 +33,18 @@ class OutputNetwork(nn.Module):
         mean = torch.scalar_tensor(0) if mean is None else mean
         std = torch.scalar_tensor(1) if std is None else std
 
-        self.register_buffer('mean', mean)
-        self.register_buffer('std', std)
+        self.register_buffer("mean", mean)
+        self.register_buffer("std", std)
 
         atomic_mass = torch.from_numpy(ase.data.atomic_masses).float()
-        self.register_buffer('atomic_mass', atomic_mass)
+        self.register_buffer("atomic_mass", atomic_mass)
 
         act_class = act_class_mapping[activation]
 
         self.output_network = nn.Sequential(
             nn.Linear(hidden_channels, hidden_channels // 2),
             act_class(),
-            nn.Linear(hidden_channels // 2, 1)
+            nn.Linear(hidden_channels // 2, 1),
         )
 
         self.reset_parameters()
@@ -83,10 +92,15 @@ class OutputNetwork(nn.Module):
 
         if self.derivative:
             grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(out)]
-            dy = grad([out], [pos], grad_outputs=grad_outputs,
-                      create_graph=True, retain_graph=True)[0]
+            dy = grad(
+                [out],
+                [pos],
+                grad_outputs=grad_outputs,
+                create_graph=True,
+                retain_graph=True,
+            )[0]
             if dy is None:
-                raise RuntimeError('Autograd returned None for the force prediction.')
+                raise RuntimeError("Autograd returned None for the force prediction.")
             return out, -dy
         # TODO: return only `out` once Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
         return out, None
