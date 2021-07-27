@@ -19,6 +19,7 @@ class OutputNetwork(nn.Module):
         mean=None,
         std=None,
         derivative=False,
+        heads=["default"],
     ):
         super(OutputNetwork, self).__init__()
         self.representation_model = representation_model
@@ -41,24 +42,31 @@ class OutputNetwork(nn.Module):
 
         act_class = act_class_mapping[activation]
 
-        self.output_network = nn.Sequential(
-            nn.Linear(hidden_channels, hidden_channels // 2),
-            act_class(),
-            nn.Linear(hidden_channels // 2, 1),
+        self.head_map = {head: i for i, head in enumerate(heads)}
+        self.output_networks = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(hidden_channels, hidden_channels // 2),
+                    act_class(),
+                    nn.Linear(hidden_channels // 2, 1),
+                )
+                for _ in range(len(heads))
+            ]
         )
-
         self.reset_parameters()
 
     def reset_parameters(self):
         self.representation_model.reset_parameters()
         if self.prior_model is not None:
             self.prior_model.reset_parameters()
-        nn.init.xavier_uniform_(self.output_network[0].weight)
-        self.output_network[0].bias.data.fill_(0)
-        nn.init.xavier_uniform_(self.output_network[2].weight)
-        self.output_network[2].bias.data.fill_(0)
 
-    def forward(self, z, pos, batch: Optional[torch.Tensor] = None):
+        for outnet in self.output_networks:
+            nn.init.xavier_uniform_(outnet[0].weight)
+            outnet[0].bias.data.fill_(0)
+            nn.init.xavier_uniform_(outnet[2].weight)
+            outnet[2].bias.data.fill_(0)
+
+    def forward(self, z, pos, label_types=None, batch: Optional[torch.Tensor] = None):
         assert z.dim() == 1 and z.dtype == torch.long
         batch = torch.zeros_like(z) if batch is None else batch
 
@@ -67,7 +75,18 @@ class OutputNetwork(nn.Module):
 
         # run the potentially wrapped representation model
         x, z, pos, batch = self.representation_model(z, pos, batch=batch)
-        x = self.output_network(x)
+
+        res = []
+        for outnet in self.output_networks:
+            res.append(outnet(x))
+        x = torch.hstack(res)
+
+        # If the type of each label is defined (i.e. which head it matches to), return only that prediction
+        if label_types is not None and not any([label_types is None]):
+            label_idx = torch.tensor([self.head_map[lt] for lt in label_types])
+            idx = torch.zeros_like(batch)
+            idx[batch] = label_idx[batch]
+            x = x.gather(1, idx.long().view(-1, 1))
 
         if self.dipole:
             # Get center of mass.

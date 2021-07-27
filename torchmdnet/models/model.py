@@ -78,6 +78,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         mean=mean,
         std=std,
         derivative=args["derivative"],
+        heads=args["heads"] if "heads" in args else ["default"],
     )
     return model
 
