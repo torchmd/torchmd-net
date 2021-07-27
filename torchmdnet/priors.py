@@ -4,7 +4,8 @@ from torch import nn
 from pytorch_lightning.utilities import rank_zero_warn
 
 
-__all__ = ['Atomref']
+__all__ = ["Atomref"]
+
 
 class BasePrior(nn.Module, metaclass=ABCMeta):
     r"""Base class for prior models.
@@ -49,19 +50,21 @@ class Atomref(BasePrior):
     def __init__(self, max_z=None, dataset=None):
         super(Atomref, self).__init__()
         if max_z is None and dataset is None:
-            raise ValueError('Can\'t instantiate Atomref prior, all arguments are None.')
+            raise ValueError("Can't instantiate Atomref prior, all arguments are None.")
         if dataset is None:
             atomref = torch.zeros(max_z, 1)
         else:
             atomref = dataset.get_atomref()
             if atomref is None:
-                rank_zero_warn('The atomref returned by the dataset is None, defaulting to zeros with max. '
-                               'atomic number 99. Maybe atomref is not defined for the current target.')
+                rank_zero_warn(
+                    "The atomref returned by the dataset is None, defaulting to zeros with max. "
+                    "atomic number 99. Maybe atomref is not defined for the current target."
+                )
                 atomref = torch.zeros(100, 1)
 
         if atomref.ndim == 1:
             atomref = atomref.view(-1, 1)
-        self.register_buffer('initial_atomref', atomref)
+        self.register_buffer("initial_atomref", atomref)
         self.atomref = nn.Embedding(len(atomref), 1)
         self.atomref.weight.data.copy_(atomref)
 

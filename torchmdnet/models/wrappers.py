@@ -11,6 +11,7 @@ class BaseWrapper(nn.Module, metaclass=ABCMeta):
     the model's output, `z`, `pos` and `batch`. Wrappers that are applied
     after REDUCE should only return the model's output.
     """
+
     def __init__(self, model):
         super(BaseWrapper, self).__init__()
         self.model = model
@@ -40,7 +41,8 @@ class AtomFilter(BaseWrapper):
         pos = pos[atom_mask]
         batch = batch[atom_mask]
 
-        assert len(batch.unique()) == n_samples,\
-            ('Some samples were completely filtered out by the atom filter. '
-             f'Make sure that at least one atom per sample exists with Z > {self.remove_threshold}.')
+        assert len(batch.unique()) == n_samples, (
+            "Some samples were completely filtered out by the atom filter. "
+            f"Make sure that at least one atom per sample exists with Z > {self.remove_threshold}."
+        )
         return x, z, pos, batch
