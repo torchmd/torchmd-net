@@ -9,6 +9,7 @@ from torch_geometric.nn import radius_graph, MessagePassing
 
 from .utils import Model
 
+
 class SchNet(Model):
     r"""The SchNet Graph Network architecture.
     Code adapted from https://github.com/rusty1s/pytorch_geometric/blob/d7d8e5e2edada182d820bbb1eec5f016f50db1e0/torch_geometric/nn/models/schnet.py#L38
@@ -77,6 +78,8 @@ class SchNet(Model):
                  cfconv_aggr: str ='mean', **kwargs):
 
         super(SchNet, self).__init__(**kwargs)
+
+        self.save_hyperparameters()
 
         assert readout in ['add', 'sum', 'mean']
         assert cfconv_aggr in ['add', 'sum', 'mean', None]
@@ -158,7 +161,7 @@ class SchNet(Model):
             pos.requires_grad_()
 
         h = self.embedding(z)
-        
+
         max_num_neighbors = torch.bincount(batch).max()
         edge_index = radius_graph(pos, r=self.cutoff_upper, batch=batch,
                                     max_num_neighbors=max_num_neighbors)

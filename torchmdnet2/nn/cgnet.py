@@ -52,6 +52,13 @@ class CGnet(nn.Module):
                                      grad_outputs=torch.ones_like(baseline_energy),
                                     create_graph=True,
                                     retain_graph=True)[0]
+        if isinstance(energy, dict):
+            energy, forces = energy['energy'], energy['forces']
+            baseline_energy = self.baseline(data.pos, data.idx.shape[0])
+            forces += -grad(baseline_energy, data.pos,
+                                     grad_outputs=torch.ones_like(baseline_energy),
+                                    create_graph=True,
+                                    retain_graph=True)[0]
         else:
             energy += self.baseline(data.pos, data.idx.shape[0])
             forces = -grad(energy,data.pos,
