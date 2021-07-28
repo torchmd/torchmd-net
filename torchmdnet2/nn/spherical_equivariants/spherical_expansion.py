@@ -4,7 +4,7 @@ import torch.nn as nn
 from e3nn import o3
 from torch_scatter import scatter
 
-from .invariants.radial_basis import splined_radial_integrals
+from ..radial_basis import splined_radial_integrals
 from ..cutoff import ShiftedCosineCutoff
 from ...neighbor_list import torch_neighbor_list
 

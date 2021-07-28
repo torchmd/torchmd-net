@@ -1,24 +1,18 @@
 seed_everything: 19384
 trainer:
   resume_from_checkpoint: null
-  profiler:
-    class_path: pytorch_lightning.profiler.PyTorchProfiler
-    init_args:
-      dirpath: '/local_scratch/musil/chign/test_1/prof/'
-      filename: 'test'
-      emit_nvtx: false
-      export_to_chrome: true
+  profiler: null
   accelerator: 'ddp'
   benchmark: false
   logger:
     - class_path: pytorch_lightning.loggers.TensorBoardLogger
       init_args:
-        save_dir: '/local_scratch/musil/chign/test_1/'
+        save_dir: '/local_scratch/musil/chign/test_2/'
         name: tensorboard
         version: ''
     - class_path: pytorch_lightning.loggers.CSVLogger
       init_args:
-        save_dir: '/local_scratch/musil/chign/test_1/'
+        save_dir: '/local_scratch/musil/chign/test_2/'
         name: ''
         version: ''
   checkpoint_callback: true
@@ -29,28 +23,28 @@ trainer:
         patience: 10
     - class_path: pytorch_lightning.callbacks.model_checkpoint.ModelCheckpoint
       init_args:
-        dirpath: '/local_scratch/musil/chign/test_1/'
+        dirpath: '/local_scratch/musil/chign/test_2/'
         monitor: 'validation_loss'
-        save_top_k: 10
-        every_n_epochs: 10
-        filename: '{epoch}-{val_loss:.4f}-{test_loss:.4f}'
-  default_root_dir: null
+        save_top_k: 5
+        every_n_epochs: 2
+        filename: '{epoch}-{validation_loss:.4f}-{test_loss:.4f}'
+  default_root_dir: '/local_scratch/musil/chign/test_2/'
   log_every_n_steps: 10
   gradient_clip_val: 0
   gradient_clip_algorithm: norm
   process_position: 0
   num_nodes: 1
   num_processes: 1
-  gpus: -1
+  gpus: 2
   log_gpu_memory: null
   track_grad_norm: inf
   check_val_every_n_epoch: 1
   fast_dev_run: false
   accumulate_grad_batches: 1
-  max_epochs: 2
+  max_epochs: 6
   max_time: null
   plugins:
-    class_path: pytorch_lightning.plugins.DDPPlugin
+    - class_path: pytorch_lightning.plugins.DDPPlugin
   precision: 32
   weights_summary: top
   deterministic: true
@@ -85,10 +79,10 @@ model:
 data:
   dataset_name: chignolin
   dataset_root: '/local_scratch/musil/datasets/chignolin/'
-  log_dir: '/local_scratch/musil/chign/test_1/'
+  log_dir: '/local_scratch/musil/chign/test_2/'
   val_ratio: 0.1
   test_ratio: 0.1
   batch_size: 1024
   inference_batch_size: 1024
   num_workers: 6
-  train_stride: 2
+  train_stride: 10

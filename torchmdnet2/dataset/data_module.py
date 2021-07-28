@@ -39,7 +39,7 @@ class DataModule(pl.LightningDataModule):
         # make sure the dataset is downloaded
         dataset = dataset_map[self.dataset_name](self.dataset_root)
         # setup the train/test/val split
-        self.idx_train, self.idx_val, self.idx_test = make_splits(
+        idx_train, idx_val, idx_test = make_splits(
             len(dataset),
             self.val_ratio,
             self.test_ratio,

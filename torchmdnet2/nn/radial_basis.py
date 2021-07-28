@@ -5,18 +5,22 @@ from itertools import product
 
 from torchcubicspline import natural_cubic_spline_coeffs
 
-from ...interpolator import NaturalCubicSpline
+from .interpolator import NaturalCubicSpline
 
-def splined_radial_integrals(nmax, lmax, rc, sigma, mesh_size=600):
+def fit_splined_radial_integrals(nmax, lmax, rc, sigma, mesh_size=600):
     c = 0.5/sigma**2
     length, channels = mesh_size, nmax*lmax
     dists = torch.linspace(0, rc, length)
     x = torch.from_numpy(o_ri_gto(rc, nmax, lmax, dists, c)).reshape(
                                                 (length, channels))
     coeffs = natural_cubic_spline_coeffs(dists, x)
-    Rln = NaturalCubicSpline(coeffs).to(device='cpu', dtype=torch.float32)
+    return coeffs
 
-    return Rln
+def splined_radial_integrals(nmax, lmax, rc, sigma, mesh_size=600):
+    coeffs = fit_splined_radial_integrals(nmax, lmax, rc, sigma, mesh_size)
+    Rnl = NaturalCubicSpline(coeffs)
+    
+    return Rnl
 
 def dn(n,rcut,nmax):
     sn = rcut*max(np.sqrt(n),1)/nmax
