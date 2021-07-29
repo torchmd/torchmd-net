@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from ..spherical_expansion import SphericalExpension
+from ..spherical_expansion import SphericalExpansion
 
 def powerspectrum(se_, nsp, nmax, lmax):
     J = se_.shape[0]
@@ -30,7 +30,7 @@ def powerspectrum(se_, nsp, nmax, lmax):
 
 class PowerSpectrum(nn.Module):
     def __init__(self, max_radial, max_angular, interaction_cutoff,
-                                gaussian_sigma_constant, species, normalize=True):
+                                gaussian_sigma_constant, species, normalize=True, smooth_width=0.5):
         super(PowerSpectrum, self).__init__()
         self.nmax = max_radial
         self.lmax = max_angular
@@ -44,7 +44,7 @@ class PowerSpectrum(nn.Module):
         for isp, sp in enumerate(self.species):
             self.species2idx[sp] = isp
 
-        self.se = SphericalExpension(max_radial, max_angular, interaction_cutoff, gaussian_sigma_constant, species)
+        self.se = SphericalExpansion(max_radial, max_angular, interaction_cutoff, gaussian_sigma_constant, species, smooth_width=smooth_width)
 
         self.D = int((self.n_species*self.nmax+1)**2/2) * (self.lmax+1)
 

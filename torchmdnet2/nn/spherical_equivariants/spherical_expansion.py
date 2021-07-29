@@ -12,7 +12,7 @@ def mult_ln_lm(x_ln, x_lm):
     idx = 0
     J, lmax, nmax = x_ln.shape
     _, lmmax = x_lm.shape
-    x_out = torch.zeros((J, nmax, lmmax))
+    x_out = torch.zeros((J, nmax, lmmax), dtype=x_lm.dtype)
     for l in range(lmax):
         l_block_length = 2*l+1
         x_out[...,idx:(idx+l_block_length)] = torch.einsum('jn,jm->jnm',
@@ -30,7 +30,7 @@ def species_dependant_reduction_ids(data, species2idx):
         ids[ii] = species2idx[sp_j]+ n_species*data.idx_i[ii]
     return ids
 
-class SphericalExpension(nn.Module):
+class SphericalExpansion(nn.Module):
     """
     Computes the spherical expansion of an atomic density. For a given atom :math:`i` in an atomic structure, the expansion coefficients are computed as:
 
@@ -42,7 +42,7 @@ class SphericalExpension(nn.Module):
 
     """
     def __init__(self, nmax, lmax, rc, sigma, species, smooth_width=0.5):
-        super(SphericalExpension, self).__init__()
+        super(SphericalExpansion, self).__init__()
         self.nmax = nmax
         self.lmax = lmax
         self.rc = rc
@@ -77,7 +77,6 @@ class SphericalExpension(nn.Module):
         n_atoms = torch.sum(data.n_atoms)
         # return Ylm, RIln
         cij_nlm = mult_ln_lm(RIln, Ylm)
-
         ci_anlm = scatter(cij_nlm, reduction_ids,
                             dim_size=self.n_species*n_atoms, dim=0, reduce='sum')
 

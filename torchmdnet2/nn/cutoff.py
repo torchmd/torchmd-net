@@ -1,6 +1,6 @@
 import torch.nn as nn
 import torch
-
+from numpy import pi
 
 
 class ShiftedCosineCutoff(nn.Module):
@@ -31,9 +31,10 @@ class ShiftedCosineCutoff(nn.Module):
         """
         # Compute values of cutoff function
         cutoffs = torch.ones_like(distances)
-        cutoffs[distances > self.cutoff - self.smooth_width] = 0.5 + 0.5 * torch.cos(torch.pi * (distances - self.cutoff + self.smooth_width) / self.smooth_width)
-        
+        mask = distances > self.cutoff - self.smooth_width
+        cutoffs[mask] = 0.5 + 0.5 * torch.cos(pi * (distances[mask] - self.cutoff + self.smooth_width) / self.smooth_width)
+
         # Remove contributions beyond the cutoff radius
         cutoffs[distances > self.cutoff] = 0.
 
-        return cutoffs
+        return cutoffs.view(-1)

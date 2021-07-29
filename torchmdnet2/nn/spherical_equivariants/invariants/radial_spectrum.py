@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from ..spherical_expansion import SphericalExpension
+from ..spherical_expansion import SphericalExpansion
 
 
 class RadialSpectrum(nn.Module):
@@ -20,7 +20,7 @@ class RadialSpectrum(nn.Module):
         for isp, sp in enumerate(self.species):
             self.species2idx[sp] = isp
 
-        self.se = SphericalExpension(max_radial, 0, interaction_cutoff, gaussian_sigma_constant, species)
+        self.se = SphericalExpansion(max_radial, 0, interaction_cutoff, gaussian_sigma_constant, species)
 
         self.D = self.n_species*self.nmax
 
