@@ -63,7 +63,7 @@ class ANI1(InMemoryDataset):
 
                     elements = elements.expand(positions.size(0), -1)
                     for z, pos, energy in zip(elements, positions, energies):
-                        data_list.append(Data(z=z, pos=pos, y=energy))
+                        data_list.append(Data(z=z, pos=pos, y=energy.view(1, 1)))
 
         if self.pre_filter is not None:
             data_list = [data for data in data_list if self.pre_filter(data)]

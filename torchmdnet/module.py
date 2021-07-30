@@ -94,6 +94,9 @@ class LNNP(LightningModule):
                 self.losses[stage + "_dy"].append(loss_dy.detach())
 
         if "y" in batch:
+            if batch.y.ndim == 1:
+                batch.y = batch.y.unsqueeze(1)
+
             # energy/prediction loss
             loss_y = loss_fn(pred, batch.y)
 
