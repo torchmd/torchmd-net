@@ -1,10 +1,10 @@
 import torch
-from torchmdnet.models import load_model
+from torchmdnet.models.model import load_model
 
 
 class External:
     def __init__(self, netfile, embeddings, device="cpu"):
-        self.model = load_model(netfile, device=device)
+        self.model = load_model(netfile, device=device, derivative=True)
         self.device = device
         self.n_atoms = embeddings.size(1)
         self.embeddings = embeddings.reshape(-1).to(device)

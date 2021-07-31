@@ -96,10 +96,14 @@ def create_model(args, prior_model=None, mean=None, std=None):
     return model
 
 
-def load_model(filepath, args=None, device="cpu"):
+def load_model(filepath, args=None, device="cpu", **kwargs):
     ckpt = torch.load(filepath, map_location="cpu")
     if args is None:
         args = ckpt["hyper_parameters"]
+
+    for key, value in kwargs.items():
+        assert key in args, "Unknown hyperparameter '{key}'."
+        args[key] = value
 
     model = create_model(args)
 
