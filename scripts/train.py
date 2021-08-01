@@ -105,8 +105,7 @@ def get_args():
 
 def main():
     args = get_args()
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed_all(args.seed)
+    pl.seed_everything(args.seed, workers=True)
 
     # initialize data module
     data = DataModule(args)
