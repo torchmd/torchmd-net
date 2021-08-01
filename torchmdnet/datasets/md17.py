@@ -22,46 +22,73 @@ class MD17(InMemoryDataset):
         uracil="uracil_dft.npz",
     )
 
-    molecules = list(molecule_files.keys())
+    available_molecules = list(molecule_files.keys())
 
     def __init__(self, root, transform=None, pre_transform=None, dataset_arg=None):
         assert dataset_arg is not None, (
-            "Please pass the desired molecule to "
-            'train on via "dataset_arg". Available '
-            f'molecules are {", ".join(MD17.molecules)}.'
+            "Please provide the desired comma separated molecule(s) through"
+            f"'dataset_arg'. Available molecules are {', '.join(MD17.available_molecules)} "
+            "or 'all' to train on the combined dataset."
         )
 
-        self.molecule = dataset_arg
+        if dataset_arg == "all":
+            dataset_arg = ",".join(MD17.available_molecules)
+        self.molecules = dataset_arg.split(",")
+
         super(MD17, self).__init__(root, transform, pre_transform)
-        self.data, self.slices = torch.load(self.processed_paths[0])
+
+        self.offsets = [0]
+        self.data_all, self.slices_all = [], []
+        for path in self.processed_paths:
+            data, slices = torch.load(path)
+            self.data_all.append(data)
+            self.slices_all.append(slices)
+            self.offsets.append(
+                len(slices[list(slices.keys())[0]]) - 1 + self.offsets[-1]
+            )
+
+    def len(self):
+        return sum(
+            len(slices[list(slices.keys())[0]]) - 1 for slices in self.slices_all
+        )
+
+    def get(self, idx):
+        data_idx = 0
+        while data_idx < len(self.data_all) - 1 and idx >= self.offsets[data_idx + 1]:
+            data_idx += 1
+        self.data = self.data_all[data_idx]
+        self.slices = self.slices_all[data_idx]
+        return super(MD17, self).get(idx - self.offsets[data_idx])
 
     @property
     def raw_file_names(self):
-        return [MD17.molecule_files[self.molecule]]
+        return [MD17.molecule_files[mol] for mol in self.molecules]
 
     @property
     def processed_file_names(self):
-        return [f"md17-{self.molecule}.pt"]
+        return [f"md17-{mol}.pt" for mol in self.molecules]
 
     def download(self):
-        download_url(MD17.raw_url + self.raw_file_names[0], self.raw_dir)
+        for file_name in self.molecules:
+            download_url(MD17.raw_url + file_name, self.raw_dir)
 
     def process(self):
-        data_npz = np.load(self.raw_paths[0])
-        z = torch.from_numpy(data_npz["z"]).long()
-        positions = torch.from_numpy(data_npz["R"]).float()
-        energies = torch.from_numpy(data_npz["E"]).float()
-        forces = torch.from_numpy(data_npz["F"]).float()
+        for path in self.raw_paths:
+            data_npz = np.load(path)
+            z = torch.from_numpy(data_npz["z"]).long()
+            positions = torch.from_numpy(data_npz["R"]).float()
+            energies = torch.from_numpy(data_npz["E"]).float()
+            forces = torch.from_numpy(data_npz["F"]).float()
 
-        samples = []
-        for pos, y, dy in zip(positions, energies, forces):
-            samples.append(Data(z=z, pos=pos, y=y.unsqueeze(1), dy=dy))
+            samples = []
+            for pos, y, dy in zip(positions, energies, forces):
+                samples.append(Data(z=z, pos=pos, y=y.unsqueeze(1), dy=dy))
 
-        if self.pre_filter is not None:
-            samples = [data for data in samples if self.pre_filter(data)]
+            if self.pre_filter is not None:
+                samples = [data for data in samples if self.pre_filter(data)]
 
-        if self.pre_transform is not None:
-            samples = [self.pre_transform(data) for data in samples]
+            if self.pre_transform is not None:
+                samples = [self.pre_transform(data) for data in samples]
 
-        data, slices = self.collate(samples)
-        torch.save((data, slices), self.processed_paths[0])
+            data, slices = self.collate(samples)
+            torch.save((data, slices), self.processed_paths[0])
