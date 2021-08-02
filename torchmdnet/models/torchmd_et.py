@@ -264,12 +264,12 @@ class EquivariantMultiHeadAttention(MessagePassing):
 
         dk = (
             self.act(self.dk_proj(f_ij)).reshape(-1, self.num_heads, self.head_dim)
-            if self.dk_proj
+            if self.dk_proj is not None
             else None
         )
         dv = (
             self.act(self.dv_proj(f_ij)).reshape(-1, self.num_heads, self.head_dim * 3)
-            if self.dv_proj
+            if self.dv_proj is not None
             else None
         )
 
