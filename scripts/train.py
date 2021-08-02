@@ -1,6 +1,5 @@
 import sys
 import os
-import torch
 import argparse
 
 import pytorch_lightning as pl
@@ -19,8 +18,8 @@ from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, nu
 def get_args():
     # fmt: off
     parser = argparse.ArgumentParser(description='Training')
-    parser.add_argument('--load-model', action=LoadFromCheckpoint, help='Restart training using a model checkpoint') # keep first
-    parser.add_argument('--conf', '-c', type=open, action=LoadFromFile, help='Configuration yaml file') # keep second
+    parser.add_argument('--load-model', action=LoadFromCheckpoint, help='Restart training using a model checkpoint')  # keep first
+    parser.add_argument('--conf', '-c', type=open, action=LoadFromFile, help='Configuration yaml file')  # keep second
     parser.add_argument('--num-epochs', default=300, type=int, help='number of epochs')
     parser.add_argument('--batch-size', default=32, type=int, help='batch size')
     parser.add_argument('--inference-batch-size', default=None, type=int, help='Batchsize for validation and tests.')

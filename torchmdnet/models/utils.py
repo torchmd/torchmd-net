@@ -233,7 +233,8 @@ class Distance(nn.Module):
         if self.return_vecs:
             edge_vec = edge_vec[lower_mask]
             return edge_index, edge_weight, edge_vec
-        # TODO: return only `edge_index` and `edge_weight` once Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
+        # TODO: return only `edge_index` and `edge_weight` once
+        # Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
         return edge_index, edge_weight, None
 
 
