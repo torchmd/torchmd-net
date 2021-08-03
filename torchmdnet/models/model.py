@@ -186,8 +186,10 @@ class TorchMD_Net(nn.Module):
 
         # If the head of each sample is defined (i.e. which head it matches to), select only that prediction
         if head_labels is not None and not any([head_labels is None]):
-            label_idx = torch.tensor([self.head_map[lt] for lt in head_labels])
-            idx = torch.zeros_like(batch)
+            label_idx = torch.tensor(
+                [self.head_map[lt] for lt in head_labels], device=x.device
+            )
+            idx = torch.zeros_like(batch, device=x.device)
             idx[batch] = label_idx[batch]
             x = x.gather(2, idx.long().view(-1, 1))
 
