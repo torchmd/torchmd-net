@@ -4,6 +4,7 @@ import torch
 from torch.autograd import grad
 from torch import nn
 from torch_scatter import scatter
+from copy import deepcopy
 from pytorch_lightning.utilities import rank_zero_warn
 from torchmdnet.models.torchmd_gn import TorchMD_GN
 from torchmdnet.models.torchmd_t import TorchMD_T
@@ -92,6 +93,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         mean=mean,
         std=std,
         derivative=args["derivative"],
+        output_heads=args["output_heads"] if "output_heads" in args else ["default"],
     )
     return model
 
@@ -122,10 +124,10 @@ class TorchMD_Net(nn.Module):
         mean=None,
         std=None,
         derivative=False,
+        output_heads=["default"],
     ):
         super(TorchMD_Net, self).__init__()
         self.representation_model = representation_model
-        self.output_model = output_model
 
         if output_model.allow_prior_model:
             self.prior_model = prior_model
@@ -137,6 +139,11 @@ class TorchMD_Net(nn.Module):
                     "not allow prior models. Dropping the prior model."
                 )
             )
+
+        self.head_map = {head: i for i, head in enumerate(output_heads)}
+        self.output_models = nn.ModuleList(
+            [deepcopy(output_model) for _ in range(len(output_heads))]
+        )
 
         self.reduce_op = reduce_op
         self.derivative = derivative
@@ -150,11 +157,18 @@ class TorchMD_Net(nn.Module):
 
     def reset_parameters(self):
         self.representation_model.reset_parameters()
-        self.output_model.reset_parameters()
+        for model in self.output_models:
+            model.reset_parameters()
         if self.prior_model is not None:
             self.prior_model.reset_parameters()
 
-    def forward(self, z, pos, batch: Optional[torch.Tensor] = None):
+    def forward(
+        self,
+        z,
+        pos,
+        batch: Optional[torch.Tensor] = None,
+        head_labels: Optional[torch.Tensor] = None,
+    ):
         assert z.dim() == 1 and z.dtype == torch.long
         batch = torch.zeros_like(z) if batch is None else batch
 
@@ -164,8 +178,18 @@ class TorchMD_Net(nn.Module):
         # run the potentially wrapped representation model
         x, v, z, pos, batch = self.representation_model(z, pos, batch=batch)
 
-        # apply the output network
-        x = self.output_model.pre_reduce(x, v, z, pos, batch)
+        # apply the output networks
+        res = []
+        for outnet in self.output_models:
+            res.append(outnet.pre_reduce(x, v, z, pos, batch))
+        x = torch.hstack(res)
+
+        # If the head of each sample is defined (i.e. which head it matches to), select only that prediction
+        if head_labels is not None and not any([head_labels is None]):
+            label_idx = torch.tensor([self.head_map[lt] for lt in head_labels])
+            idx = torch.zeros_like(batch)
+            idx[batch] = label_idx[batch]
+            x = x.gather(1, idx.long().view(-1, 1))
 
         # apply prior model
         if self.prior_model is not None:
@@ -175,13 +199,13 @@ class TorchMD_Net(nn.Module):
         out = scatter(x, batch, dim=0, reduce=self.reduce_op)
 
         # standardize if no prior model is given and the output model allows priors
-        if self.prior_model is None and self.output_model.allow_prior_model:
+        if self.prior_model is None and self.output_models[0].allow_prior_model:
             if self.std is not None:
                 out = out * self.std
             if self.mean is not None:
                 out = out + self.mean
 
-        out = self.output_model.post_reduce(out)
+        out = self.output_models[0].post_reduce(out)
 
         # compute gradients with respect to coordinates
         if self.derivative:
