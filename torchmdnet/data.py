@@ -132,3 +132,6 @@ class Subset(Dataset):
 
     def __len__(self):
         return len(self.indices)
+
+    def __repr__(self):
+        return f"{self.dataset.__class__.__name__}({len(self)}/{len(self.dataset)})"
