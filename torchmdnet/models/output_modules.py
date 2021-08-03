@@ -94,7 +94,7 @@ class DipoleMoment(Scalar):
         return x
 
     def post_reduce(self, x):
-        return torch.norm(x, dim=-1, keepdim=True)
+        return torch.norm(x, dim=1, keepdim=True)
 
 
 class EquivariantDipoleMoment(EquivariantScalar):
@@ -116,7 +116,7 @@ class EquivariantDipoleMoment(EquivariantScalar):
         return x + v.squeeze()
 
     def post_reduce(self, x):
-        return torch.norm(x, dim=-1, keepdim=True)
+        return torch.norm(x, dim=1, keepdim=True)
 
 
 class ElectronicSpatialExtent(OutputModel):

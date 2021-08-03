@@ -182,14 +182,14 @@ class TorchMD_Net(nn.Module):
         res = []
         for outnet in self.output_models:
             res.append(outnet.pre_reduce(x, v, z, pos, batch))
-        x = torch.hstack(res)
+        x = torch.stack(res, 2)
 
         # If the head of each sample is defined (i.e. which head it matches to), select only that prediction
         if head_labels is not None and not any([head_labels is None]):
             label_idx = torch.tensor([self.head_map[lt] for lt in head_labels])
             idx = torch.zeros_like(batch)
             idx[batch] = label_idx[batch]
-            x = x.gather(1, idx.long().view(-1, 1))
+            x = x.gather(2, idx.long().view(-1, 1))
 
         # apply prior model
         if self.prior_model is not None:
