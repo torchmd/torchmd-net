@@ -4,6 +4,7 @@ import torch
 from torch.utils.data import Dataset
 from torch_geometric.data import DataLoader
 from pytorch_lightning import LightningDataModule
+from pytorch_lightning.utilities import rank_zero_warn
 from torchmdnet import datasets
 from torchmdnet.utils import make_splits
 
@@ -109,7 +110,14 @@ class DataModule(LightningDataModule):
             self._get_dataloader(self.train_dataset, "val", store_dataloader=False),
             desc="computing mean and std",
         )
-        ys = torch.cat([batch.y.clone() for batch in data])
+        try:
+            ys = torch.cat([batch.y.clone() for batch in data])
+        except AttributeError:
+            rank_zero_warn(
+                "Standardize is true but failed to compute dataset mean and standard deviation. "
+                "Maybe the dataset only contains forces."
+            )
+            return
 
         self._mean = ys.mean()
         self._std = ys.std()
