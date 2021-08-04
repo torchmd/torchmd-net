@@ -7,13 +7,13 @@ from typing import Tuple
 
 def torch_neighbor_list(data, rcut, self_interaction=True, num_workers=1, max_num_neighbors=1000):
     if torch.any(data.pbc):
-        idx_i, idx_j, cell_shifts = torch_neighbor_list_pbc(data, rcut, self_interaction=self_interaction, num_workers=num_workers, max_num_neighbors=max_num_neighbors)
+        idx_i, idx_j, cell_shifts, self_interaction_mask = torch_neighbor_list_pbc(data, rcut, self_interaction=self_interaction, num_workers=num_workers, max_num_neighbors=max_num_neighbors)
     else:
-        idx_i, idx_j = torch_neighbor_list_no_pbc(data, rcut, self_interaction=self_interaction,
+        idx_i, idx_j, self_interaction_mask = torch_neighbor_list_no_pbc(data, rcut, self_interaction=self_interaction,
                                                num_workers=num_workers, max_num_neighbors=max_num_neighbors)
-        cell_shifts = torch.zeros((idx_i.shape[0], 3), dtype=data.pos.dtype)
+        cell_shifts = torch.zeros((idx_i.shape[0], 3), dtype=data.pos.dtype, device=data.pos.device)
 
-    return idx_i, idx_j, cell_shifts
+    return idx_i, idx_j, cell_shifts, self_interaction_mask
 
 @torch.jit.script
 def compute_images(positions: torch.Tensor, cell: torch.Tensor, pbc: torch.Tensor, cutoff: float, batch: torch.Tensor, n_atoms: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -38,7 +38,7 @@ def compute_images(positions: torch.Tensor, cell: torch.Tensor, pbc: torch.Tenso
 
         batch_images.append(i_structure*torch.ones(images[-1].shape[0], dtype=torch.int64, device=cell.device))
         shifts_expanded.append(shift_expanded)
-        shifts_idx_.append(shifts_idx)
+        shifts_idx_.append(shifts_idx.repeat(1, n_atoms[i_structure]).view((-1, 3)))
     return (torch.cat(images, dim=0), torch.cat(batch_images, dim=0),
                 torch.cat(shifts_expanded, dim=0), torch.cat(shifts_idx_, dim=0))
 
@@ -54,8 +54,8 @@ def torch_neighbor_list_no_pbc(data, rcut, self_interaction=True, num_workers=1,
 
     edge_index = radius_graph(data.pos, rcut, batch=data.batch, max_num_neighbors = max_num_neighbors,
                         num_workers=num_workers, flow='target_to_source', loop=self_interaction)
-
-    return edge_index[0], edge_index[1]
+    self_interaction_mask = edge_index[0] != edge_index[1]
+    return edge_index[0], edge_index[1], self_interaction_mask
 
 
 
@@ -86,19 +86,20 @@ def torch_neighbor_list_pbc(data, rcut, self_interaction=True, num_workers=1, ma
 
     j_idx = get_j_idx(edge_index,batch_images, data.n_atoms)
 
+    # find self interactions
+    is_central_cell = shifts_idx.to(dtype=torch.float32)[edge_index[1]].norm(dim=1) < 0.1
+    mask = torch.cat([is_central_cell.view(-1,1), (edge_index[0] == j_idx).view(-1,1)], dim=1)
+    self_interaction_mask = torch.logical_not(torch.all(mask,dim=1))
+
     if self_interaction:
         idx_i, idx_j = edge_index[0], j_idx
         cell_shifts = shifts_expanded[edge_index[1]]
     else:
         # remove self interaction
-        is_central_cell = shifts_idx.to(torch.float32)[edge_index[1]].norm(dim=1) < 0.1
+        idx_i, idx_j = edge_index[0][self_interaction_mask], j_idx[self_interaction_mask]
+        cell_shifts = shifts_expanded[edge_index[1][self_interaction_mask]]
 
-        mask = torch.cat([is_central_cell.view(-1,1), (edge_index[0] == j_idx).view(-1,1)], dim=1)
-        mask = torch.logical_not(torch.all(mask,dim=1))
-        idx_i, idx_j = edge_index[0][mask], j_idx[mask]
-        cell_shifts = shift_expanded[edge_index[1][mask]]
-
-    return idx_i, idx_j, cell_shifts
+    return idx_i, idx_j, cell_shifts, self_interaction_mask
 
 
 def wrap_positions(data, eps=1e-7):
