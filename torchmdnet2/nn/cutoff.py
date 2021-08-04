@@ -1,7 +1,6 @@
 import torch.nn as nn
 import torch
-from numpy import pi
-
+import math
 
 class ShiftedCosineCutoff(nn.Module):
     r"""Class of Behler cosine cutoff.
@@ -32,9 +31,8 @@ class ShiftedCosineCutoff(nn.Module):
         # Compute values of cutoff function
         cutoffs = torch.ones_like(distances)
         mask = distances > self.cutoff - self.smooth_width
-        cutoffs[mask] = 0.5 + 0.5 * torch.cos(pi * (distances[mask] - self.cutoff + self.smooth_width) / self.smooth_width)
-
-        # Remove contributions beyond the cutoff radius
+        cutoffs[mask] = 0.5 + 0.5 * torch.cos(math.pi * (distances[mask] - self.cutoff + self.smooth_width) / self.smooth_width)
         cutoffs[distances > self.cutoff] = 0.
 
         return cutoffs.view(-1)
+        

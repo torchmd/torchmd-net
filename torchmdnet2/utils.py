@@ -30,6 +30,12 @@ else:
     from tqdm import tqdm
 
 
+def load_yaml(fn):
+    with open(fn, 'r') as f:
+        data = yaml.safe_load(f)
+    return data
+
+
 def train_val_test_split(dset_len,val_ratio,test_ratio, seed=None, order=None):
     shuffle = True if order is None else False
     valtest_ratio = val_ratio + test_ratio
