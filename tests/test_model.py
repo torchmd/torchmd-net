@@ -38,7 +38,7 @@ def test_forward_torchscript(model_name):
 
     z, pos, batch = create_example_batch()
     model = torch.jit.script(
-        create_model(load_example_args(model_name, remove_prior=True))
+        create_model(load_example_args(model_name, remove_prior=True, derivative=True))
     )
     model(z, pos, batch=batch)
 
