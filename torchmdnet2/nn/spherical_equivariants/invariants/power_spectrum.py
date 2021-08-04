@@ -1,31 +1,27 @@
 import torch
 import torch.nn as nn
-import numpy as np
-
+import math
 from ..spherical_expansion import SphericalExpansion
 
 def powerspectrum(se_, nsp, nmax, lmax):
     J = se_.shape[0]
     se = se_.view((J, nsp, nmax, lmax**2))
-    ps = torch.zeros(J, nsp, nmax, nsp, nmax, lmax, dtype=se.dtype)
+    ps = torch.zeros(J, nsp, nmax, nsp, nmax, lmax, dtype=se.dtype, device=se.device)
     idx = 0
     for l in range(lmax):
         lbs = 2*l+1
         ps[..., l] = torch.sum(torch.einsum('ianl,ibml->ianbml', se[..., idx:idx+lbs], se[..., idx:idx+lbs]),
-                                   dim=5) / np.sqrt(lbs)
+                                   dim=5) / math.sqrt(lbs)
         idx += lbs
-
     ps = ps.view(J, nsp* nmax, nsp* nmax, lmax)
-    PS = torch.zeros(J, int((nsp* nmax+1)**2/2), lmax, dtype=se.dtype)
+    PS = torch.zeros(J, int((nsp* nmax+1)**2/2), lmax, dtype=se.dtype, device=se.device)
 
-    SQRT_2 = 1.4142135623730951
-    fac = SQRT_2 * torch.ones((nsp*nmax,nsp*nmax))
+    fac = math.sqrt(2.) * torch.ones((nsp*nmax,nsp*nmax))
     fac[range(nsp*nmax), range(nsp*nmax)] = 1.
     ids = [(i,j) for i in range(nsp*nmax)
                 for j in range(nsp*nmax) if j >= i]
     for ii, (i, j) in enumerate(ids):
             PS[:, ii, :] = fac[i,j]*ps[:, i, j, :]
-
     return PS.view(J, -1)
 
 class PowerSpectrum(nn.Module):
@@ -52,7 +48,6 @@ class PowerSpectrum(nn.Module):
         ci_anlm = self.se(data)
         pi_anbml = powerspectrum(ci_anlm, self.n_species,
                                         self.nmax, self.lmax+1)
-
         if self.normalize:
             return torch.nn.functional.normalize(
                 pi_anbml.view(-1, self.D), dim=1)

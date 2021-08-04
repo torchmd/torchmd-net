@@ -7,6 +7,7 @@ from torch_scatter import scatter
 from ..radial_basis import splined_radial_integrals
 from ..cutoff import ShiftedCosineCutoff
 from ...neighbor_list import torch_neighbor_list
+from ..math_utils import safe_norm, safe_normalization
 
 def mult_ln_lm(x_ln, x_lm):
     idx = 0
@@ -30,15 +31,6 @@ def species_dependant_reduction_ids(data, species2idx):
         ids[ii] = species2idx[sp_j]+ n_species*data.idx_i[ii]
     return ids
 
-def safe_norm(input, dim=0, eps_=1e-16):
-    eps = torch.tensor([eps_], dtype=input.dtype, device=input.device)
-    return torch.sqrt(torch.square(input).sum(dim=dim, keepdims=True) + eps) - torch.sqrt(eps)
-
-def safe_normalization(input, norms, eps_=1e-12):
-    mask = (norms > eps_).flatten()
-    out = input.clone()
-    out[mask] = input[mask] / norms[mask]
-    return out
 
 class SphericalExpansion(nn.Module):
     """
