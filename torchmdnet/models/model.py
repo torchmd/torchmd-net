@@ -127,9 +127,8 @@ class TorchMD_Net(nn.Module):
         self.representation_model = representation_model
         self.output_model = output_model
 
-        if output_model.allow_prior_model:
-            self.prior_model = prior_model
-        else:
+        self.prior_model = prior_model
+        if not output_model.allow_prior_model and prior_model is not None:
             self.prior_model = None
             rank_zero_warn(
                 (

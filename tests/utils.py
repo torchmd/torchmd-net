@@ -3,12 +3,15 @@ from os.path import dirname, join
 import torch
 
 
-def load_example_args(model_type, prior=True):
+def load_example_args(model_name, remove_prior=False, **kwargs):
     with open(join(dirname(dirname(__file__)), "examples", "example.yaml"), "r") as f:
         args = yaml.load(f, Loader=yaml.FullLoader)
-    args["model"] = model_type
-    if not prior:
+    args["model"] = model_name
+    if remove_prior:
         args["prior_model"] = None
+    for key, val in kwargs.items():
+        assert key in args, f"Broken test! Unknown key '{key}'."
+        args[key] = val
     return args
 
 
