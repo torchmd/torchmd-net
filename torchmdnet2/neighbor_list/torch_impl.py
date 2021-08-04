@@ -6,7 +6,14 @@ from typing import Tuple
 
 
 def torch_neighbor_list(data, rcut, self_interaction=True, num_workers=1, max_num_neighbors=1000):
-    if torch.any(data.pbc):
+    if 'pbc' in data:
+        pbc = data.pbc
+    else:
+        pbc = torch.zeros(3, dtype=bool)
+
+    if torch.any(pbc):
+        if 'cell' not in data:
+            raise ValueError(f'Periodic systems need to have a unit cell defined')
         idx_i, idx_j, cell_shifts, self_interaction_mask = torch_neighbor_list_pbc(data, rcut, self_interaction=self_interaction, num_workers=num_workers, max_num_neighbors=max_num_neighbors)
     else:
         idx_i, idx_j, self_interaction_mask = torch_neighbor_list_no_pbc(data, rcut, self_interaction=self_interaction,
