@@ -1,6 +1,7 @@
 import yaml
 from os.path import dirname, join
 import torch
+from torch_geometric.data import Dataset, Data
 
 
 def load_example_args(model_name, remove_prior=False, **kwargs):
@@ -25,3 +26,42 @@ def create_example_batch(n_atoms=6, multiple_batches=True):
     if multiple_batches:
         batch[len(batch) // 2 :] = 1
     return z, pos, batch
+
+
+class DummyDataset(Dataset):
+    def __init__(
+        self,
+        dataset_root=None,
+        dataset_arg=None,
+        num_samples=1000,
+        energy=True,
+        forces=True,
+        atom_types=[1, 6, 7, 8, 9],
+        min_atoms=3,
+        max_atoms=10
+    ):
+        super(DummyDataset, self).__init__()
+        assert energy or forces, "The dataset must define at least one of energies and forces."
+
+        self.z, self.pos = [], []
+        self.energies = [] if energy else None
+        self.forces = [] if forces else None
+        for i in range(num_samples):
+            num_atoms = int(torch.randint(min_atoms, max_atoms, (1,)))
+            self.z.append(torch.tensor(atom_types)[torch.randint(0, len(atom_types), (num_atoms,))])
+            self.pos.append(torch.randn(num_atoms, 3))
+            if energy:
+                self.energies.append(torch.randn(1, 1))
+            if forces:
+                self.forces.append(torch.randn(num_atoms, 3))
+
+    def get(self, idx):
+        features = dict(z=self.z[idx].clone(), pos=self.pos[idx].clone())
+        if self.energies is not None:
+            features["y"] = self.energies[idx].clone()
+        if self.forces is not None:
+            features["dy"] = self.forces[idx].clone()
+        return Data(**features)
+
+    def len(self):
+        return len(self.z)
