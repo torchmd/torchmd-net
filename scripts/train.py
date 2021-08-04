@@ -9,9 +9,10 @@ from pytorch_lightning.loggers import CSVLogger
 from pytorch_lightning.plugins import DDPPlugin
 
 from torchmdnet.module import LNNP
-from torchmdnet import datasets, priors
+from torchmdnet import datasets, priors, models
 from torchmdnet.data import DataModule
 from torchmdnet.models import output_modules
+from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping
 from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, number
 
 
@@ -59,7 +60,7 @@ def get_args():
     parser.add_argument('--force-weight', default=1.0, type=float, help='Weighting factor for forces in the loss function')
 
     # model architecture
-    parser.add_argument('--model', type=str, default='graph-network', choices=['graph-network', 'transformer', 'equivariant-transformer'], help='Which model to train')
+    parser.add_argument('--model', type=str, default='graph-network', choices=models.__all__, help='Which model to train')
     parser.add_argument('--output-model', type=str, default='Scalar', choices=output_modules.__all__, help='The type of output model')
     parser.add_argument('--prior-model', type=str, default=None, choices=priors.__all__, help='Which prior model to use')
 
@@ -67,14 +68,14 @@ def get_args():
     parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
     parser.add_argument('--num-layers', type=int, default=6, help='Number of interaction layers in the model')
     parser.add_argument('--num-rbf', type=int, default=64, help='Number of radial basis functions in model')
-    parser.add_argument('--activation', type=str, default='silu', choices=['silu', 'ssp', 'tanh', 'sigmoid'], help='Activation function')
-    parser.add_argument('--rbf-type', type=str, default='expnorm', choices=['gauss', 'expnorm'], help='Type of distance expansion')
+    parser.add_argument('--activation', type=str, default='silu', choices=list(act_class_mapping.keys()), help='Activation function')
+    parser.add_argument('--rbf-type', type=str, default='expnorm', choices=list(rbf_class_mapping.keys()), help='Type of distance expansion')
     parser.add_argument('--trainable-rbf', type=bool, default=False, help='If distance expansion functions should be trainable')
     parser.add_argument('--neighbor-embedding', type=bool, default=False, help='If a neighbor embedding should be applied before interactions')
 
     # Transformer specific
     parser.add_argument('--distance-influence', type=str, default='both', choices=['keys', 'values', 'both', 'none'], help='Where distance information is included inside the attention')
-    parser.add_argument('--attn-activation', default='silu', choices=['silu', 'ssp', 'tanh', 'sigmoid'], help='Attention activation function')
+    parser.add_argument('--attn-activation', default='silu', choices=list(act_class_mapping.keys()), help='Attention activation function')
     parser.add_argument('--num-heads', type=int, default=8, help='Number of attention heads')
 
     # other args
