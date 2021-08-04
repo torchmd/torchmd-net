@@ -12,14 +12,14 @@ def mult_ln_lm(x_ln, x_lm):
     idx = 0
     J, lmax, nmax = x_ln.shape
     _, lmmax = x_lm.shape
-    x_out = torch.zeros((J, nmax, lmmax), dtype=x_lm.dtype)
+    x_out = torch.zeros((J, nmax, lmmax), dtype=x_ln.dtype,
+                                            device=x_ln.device)
     for l in range(lmax):
         l_block_length = 2*l+1
         x_out[...,idx:(idx+l_block_length)] = torch.einsum('jn,jm->jnm',
                                                            x_ln[:,l,:], x_lm[:, idx:(idx+l_block_length)])
 
         idx += l_block_length
-
     return x_out
 
 def species_dependant_reduction_ids(data, species2idx):
@@ -29,6 +29,16 @@ def species_dependant_reduction_ids(data, species2idx):
     for ii, sp_j in enumerate(zj):
         ids[ii] = species2idx[sp_j]+ n_species*data.idx_i[ii]
     return ids
+
+def safe_norm(input, dim=0, eps_=1e-16):
+    eps = torch.tensor([eps_], dtype=input.dtype, device=input.device)
+    return torch.sqrt(torch.square(input).sum(dim=dim, keepdims=True) + eps) - torch.sqrt(eps)
+
+def safe_normalization(input, norms, eps_=1e-12):
+    mask = (norms > eps_).flatten()
+    out = input.clone()
+    out[mask] = input[mask] / norms[mask]
+    return out
 
 class SphericalExpansion(nn.Module):
     """
@@ -64,20 +74,21 @@ class SphericalExpansion(nn.Module):
 
     def forward(self, data):
         if 'direction_vectors' not in data or 'distances' not in data:
-            idx_i, idx_j, cell_shifts = torch_neighbor_list(data, self.rc, self_interaction=True)
+            idx_i, idx_j, cell_shifts, self_interaction_mask = torch_neighbor_list(data, self.rc, self_interaction=True)
             rij = (data.pos[idx_j] - data.pos[idx_i] + cell_shifts)
-            data.distances = rij.norm(dim=1).view(-1, 1)
-            data.direction_vectors = torch.nn.functional.normalize(rij, dim=1)
+
+            data.distances = safe_norm(rij, dim=1)
+            data.direction_vectors = safe_normalization(rij, data.distances)
+
             data.idx_i = idx_i
             data.idx_j = idx_j
-
         reduction_ids = species_dependant_reduction_ids(data, self.species2idx)
         Ylm = self.Ylm(data.direction_vectors)
         RIln = self.Rln(data.distances).view(-1,self.lmax+1,self.nmax) * self.cutoff(data.distances)[:, None, None]
+
         n_atoms = torch.sum(data.n_atoms)
-        # return Ylm, RIln
+
         cij_nlm = mult_ln_lm(RIln, Ylm)
         ci_anlm = scatter(cij_nlm, reduction_ids,
                             dim_size=self.n_species*n_atoms, dim=0, reduce='sum')
-
         return ci_anlm.view(n_atoms, self.n_species, self.nmax, (self.lmax+1)**2)

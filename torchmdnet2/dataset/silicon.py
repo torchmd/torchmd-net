@@ -2,6 +2,7 @@ import torch
 from torch_geometric.data import Data, InMemoryDataset, download_url
 from ase.io import read, write
 from copy import deepcopy
+from ..utils import tqdm
 
 
 def build_self_contributions(frames, configuration_name='isolated_atom',
