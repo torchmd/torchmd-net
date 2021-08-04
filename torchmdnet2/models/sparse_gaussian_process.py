@@ -24,36 +24,37 @@ class SGPRModel(Model):
         self.create_graph = True
         self.derivative = derivative
         self.stress = None
-#         self.automatic_optimization = False
+    #     self.automatic_optimization = False
     # def configure_optimizers(self):
     #     line_search_fn='strong_wolfe'
-    #     line_search_fn=None
+    #     # line_search_fn=None
     #     optimizer = torch.optim.LBFGS(self.parameters(), lr=1e-3, max_iter=100,
     #                                     tolerance_grad=1e-5,
     #                                     tolerance_change=1e-5,
     #                                     line_search_fn=line_search_fn )
     #     return optimizer
 
-#     def training_step(self, batch, batch_idx):
-#         opt = self.optimizers()
-#         loss = self.step(batch, 'training')
-#         opt.zero_grad()
-#         self.manual_backward(loss, retain_graph=True)
+    # def training_step(self, batch, batch_idx):
+    #     opt = self.optimizers()
+    #     # loss = self.step(batch, 'training')
+    #     # opt.zero_grad()
+    #     # self.manual_backward(loss, retain_graph=True)
+    #     # loss.backward(retain_graph=True)
+    #     def closure():
+    #         loss = self.step(batch, 'training')
+    #         opt.zero_grad()
+    #         self.manual_backward(loss, retain_graph=True)
+    #         # loss.backward(retain_graph=True)
+    #         return loss
 
-#         def closure():
-#             loss = self.step(batch, 'training')
-#             opt.zero_grad()
-#             self.manual_backward(loss, retain_graph=True)
-#             return loss
-
-#         opt.step(closure=closure)
+    #     opt.step(closure=closure)
 
     def step(self, data, stage):
         with torch.set_grad_enabled(self.derivative is not None):
             pred = self(data)
 
         losses = []
-        facs = {'forces': 1., 'energy': 1.}
+        facs = {'forces': 1000., 'energy': 1.}
         for k in pred.keys():
             ll = facs[k] * (pred[k] - data[k]).pow(2).mean()
             losses.append(ll)
@@ -84,4 +85,3 @@ class SGPRModel(Model):
             return {self.property:y, self.derivative:dy_dr}
         else:
             return {self.property:y}
-            
