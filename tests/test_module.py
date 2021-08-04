@@ -35,10 +35,10 @@ def test_train(model_name, tmpdir):
         train_size=0.8,
         val_size=0.05,
         test_size=None,
-        log_dir=tmpdir,
+        derivative=True,
     )
     module = LNNP(args)
     datamodule = DataModule(args, DummyDataset())
-    trainer = pl.Trainer(max_steps=100)
+    trainer = pl.Trainer(max_steps=100, default_root_dir=tmpdir)
     trainer.fit(module, datamodule)
     trainer.test()
