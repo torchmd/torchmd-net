@@ -1,5 +1,6 @@
 import torch
 from torch_geometric.data import InMemoryDataset, download_url, Data
+from pytorch_lightning.utilities import rank_zero_warn
 import numpy as np
 
 
@@ -34,6 +35,12 @@ class MD17(InMemoryDataset):
         if dataset_arg == "all":
             dataset_arg = ",".join(MD17.available_molecules)
         self.molecules = dataset_arg.split(",")
+
+        if len(self.molecules) > 1:
+            rank_zero_warn(
+                "MD17 molecules have different reference energies, "
+                "which is not accounted for during training."
+            )
 
         super(MD17, self).__init__(root, transform, pre_transform)
 
