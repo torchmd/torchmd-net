@@ -44,6 +44,9 @@ class PowerSpectrum(nn.Module):
 
         self.D = int((self.n_species*self.nmax+1)**2/2) * (self.lmax+1)
 
+    def size(self):
+        return int((self.n_species*self.nmax+1)**2/2) * (self.lmax+1)
+
     def forward(self, data):
         ci_anlm = self.se(data)
         pi_anbml = powerspectrum(ci_anlm, self.n_species,
