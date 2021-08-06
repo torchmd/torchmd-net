@@ -33,9 +33,9 @@ def compute_images(positions: torch.Tensor, cell: torch.Tensor, pbc: torch.Tenso
 
     images, batch_images, shifts_expanded, shifts_idx_ = [], [], [], []
     for i_structure, num_repeats in enumerate(num_repeats_):
-        r1 = torch.arange(-num_repeats[0], num_repeats[0] + 1, device=cell.device)
-        r2 = torch.arange(-num_repeats[1], num_repeats[1] + 1, device=cell.device)
-        r3 = torch.arange(-num_repeats[2], num_repeats[2] + 1, device=cell.device)
+        r1 = torch.arange(-num_repeats[0], num_repeats[0] + 1, device=cell.device, dtype=torch.long)
+        r2 = torch.arange(-num_repeats[1], num_repeats[1] + 1, device=cell.device, dtype=torch.long)
+        r3 = torch.arange(-num_repeats[2], num_repeats[2] + 1, device=cell.device, dtype=torch.long)
         shifts_idx = torch.cartesian_prod(r1, r2, r3)
         shifts = torch.matmul(shifts_idx.to(cell.dtype), cell[i_structure])
         pos = positions[batch == i_structure]
@@ -94,7 +94,7 @@ def torch_neighbor_list_pbc(data, rcut, self_interaction=True, num_workers=1, ma
     j_idx = get_j_idx(edge_index,batch_images, data.n_atoms)
 
     # find self interactions
-    is_central_cell = shifts_idx.to(dtype=torch.float32)[edge_index[1]].norm(dim=1) < 0.1
+    is_central_cell = (shifts_idx[edge_index[1]] == 0).all(dim=1)
     mask = torch.cat([is_central_cell.view(-1,1), (edge_index[0] == j_idx).view(-1,1)], dim=1)
     self_interaction_mask = torch.logical_not(torch.all(mask,dim=1))
 

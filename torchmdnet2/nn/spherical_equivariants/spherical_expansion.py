@@ -8,12 +8,17 @@ from ..radial_basis import splined_radial_integrals
 from ..cutoff import ShiftedCosineCutoff
 from ...neighbor_list import torch_neighbor_list
 from ..math_utils import safe_norm, safe_normalization
+from typing import List
 
-def mult_ln_lm(x_ln, x_lm):
-    idx = 0
+
+
+@torch.jit.script
+def mult_ln_lm(x_ln: torch.Tensor, x_lm: torch.Tensor) -> torch.Tensor:
+
     J, lmax, nmax = x_ln.shape
     _, lmmax = x_lm.shape
-    x_out = torch.zeros((J, nmax, lmmax), dtype=x_ln.dtype,
+    idx = 0
+    x_out = torch.empty((J, nmax, lmmax), dtype=x_ln.dtype,
                                             device=x_ln.device)
     for l in range(lmax):
         l_block_length = 2*l+1
@@ -21,14 +26,14 @@ def mult_ln_lm(x_ln, x_lm):
                                                            x_ln[:,l,:], x_lm[:, idx:(idx+l_block_length)])
 
         idx += l_block_length
+
     return x_out
 
-def species_dependant_reduction_ids(data, species2idx):
-    zj = data.z[data.idx_j]
-    ids = torch.zeros_like(data.idx_i)
+@torch.jit.script
+def species_dependant_reduction_ids(z: torch.Tensor, idx_j: torch.Tensor, idx_i: torch.Tensor, species2idx: torch.Tensor):
+    zj = z[idx_j]
     n_species = len(torch.unique(species2idx))-1
-    for ii, sp_j in enumerate(zj):
-        ids[ii] = species2idx[sp_j]+ n_species*data.idx_i[ii]
+    ids = species2idx[zj]+ n_species*idx_i
     return ids
 
 
@@ -53,9 +58,10 @@ class SphericalExpansion(nn.Module):
 
         self.species, _ = torch.sort(species)
         self.n_species = len(species)
-        self.species2idx = -1*torch.ones(torch.max(species)+1,dtype=torch.int32)
+        species2idx = -1*torch.ones(torch.max(species)+1,dtype=torch.long)
         for isp, sp in enumerate(self.species):
-            self.species2idx[sp] = isp
+            species2idx[sp] = isp
+        self.register_buffer("species2idx", species2idx)
 
         self.Rln = splined_radial_integrals(self.nmax, self.lmax+1,
                                 self.rc, self.sigma, mesh_size=600)
@@ -74,7 +80,7 @@ class SphericalExpansion(nn.Module):
 
             data.idx_i = idx_i
             data.idx_j = idx_j
-        reduction_ids = species_dependant_reduction_ids(data, self.species2idx)
+        reduction_ids = species_dependant_reduction_ids(data.z, data.idx_j, data.idx_i, self.species2idx)
         Ylm = self.Ylm(data.direction_vectors)
         RIln = self.Rln(data.distances).view(-1,self.lmax+1,self.nmax) * self.cutoff(data.distances)[:, None, None]
 

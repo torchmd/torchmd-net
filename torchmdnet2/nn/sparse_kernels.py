@@ -6,11 +6,11 @@ def pow(input, power):
     if power == 1:
         return input
     elif power == 2:
-        return input.square()
+        return input * input
     elif power == 3:
-        return input.square() * input
+        return input * input * input
     elif power == 4:
-        out = input.square()
+        out = input * input
         return out * out
     else:
         return torch.pow(input, power)
