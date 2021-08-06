@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import math
 from ..spherical_expansion import SphericalExpansion
+from typing import List, Union
 
 def powerspectrum(se_, nsp, nmax, lmax):
     J = se_.shape[0]
@@ -25,18 +26,21 @@ def powerspectrum(se_, nsp, nmax, lmax):
     return PS.view(J, -1)
 
 class PowerSpectrum(nn.Module):
-    def __init__(self, max_radial, max_angular, interaction_cutoff,
-                                gaussian_sigma_constant, species, normalize=True, smooth_width=0.5):
+    def __init__(self, max_radial: int, max_angular: int,
+                    interaction_cutoff: float,
+                                gaussian_sigma_constant: float, species: Union[List[int], torch.Tensor], normalize: bool =True, smooth_width: float=0.5):
         super(PowerSpectrum, self).__init__()
         self.nmax = max_radial
         self.lmax = max_angular
         self.rc = interaction_cutoff
         self.sigma = gaussian_sigma_constant
         self.normalize = normalize
-
+        if isinstance(species, list):
+            species = torch.tensor(species, dtype=torch.long)
         self.species, _ = torch.sort(species)
+        
         self.n_species = len(species)
-        self.species2idx = -1*torch.ones(torch.max(species)+1,dtype=torch.int32)
+        self.species2idx = -1*torch.ones(torch.max(species)+1,dtype=torch.long)
         for isp, sp in enumerate(self.species):
             self.species2idx[sp] = isp
 

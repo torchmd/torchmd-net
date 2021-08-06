@@ -13,10 +13,10 @@ from ..utils import make_splits, TestingContext
 
 class Model(pl.LightningModule):
     def __init__(self, #model: pl.LightningModule,
-    lr=1e-4, weight_decay=0, lr_factor=0.8,
-    lr_patience=10, lr_min=1e-7, target_name='forces',
-    lr_warmup_steps=0,
-    test_interval=1,
+    lr:float =1e-4, weight_decay:float=0, lr_factor:float=0.8,
+    lr_patience:int=10, lr_min:float=1e-7, target_name='forces',
+    lr_warmup_steps:int=0,
+    test_interval:int=1,
 ):
         super(Model, self).__init__()
         #self.model = model

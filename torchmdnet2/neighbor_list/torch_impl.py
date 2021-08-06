@@ -1,6 +1,6 @@
 import torch
 
-from torch_cluster import radius
+from torch_cluster import radius, radius_graph
 
 from typing import Tuple
 

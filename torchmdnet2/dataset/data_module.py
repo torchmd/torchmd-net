@@ -15,7 +15,7 @@ from .chignolin import ChignolinDataset
 
 
 class DataModule(pl.LightningDataModule):
-    def __init__(self, dataset_cls: InMemoryDataset,  dataset_root: str,
+    def __init__(self, dataset: InMemoryDataset, 
                  log_dir: str,
                 val_ratio: float = 0.1,
                 test_ratio: float = 0.1,
@@ -24,8 +24,8 @@ class DataModule(pl.LightningDataModule):
                 train_stride: int = 1) -> None:
         super(DataModule, self).__init__()
 
-        self.dataset_root = dataset_root
-        self.dataset_cls = dataset_cls
+        self.dataset_root = dataset.root
+        self.dataset_cls = type(dataset)
 
 
         self.batch_size = batch_size

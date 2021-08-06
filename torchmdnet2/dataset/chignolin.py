@@ -168,7 +168,7 @@ class ChignolinDataset(InMemoryDataset):
                 force = torch.from_numpy(cg_forces[i_frame].reshape(n_beads, 3))
 
                 data = Data(z=z, pos=pos, forces=force, idx=ii_frame,
-                            name='chignolin', n_beads=n_beads, traj_idx=i_traj)
+                            name='chignolin', n_atoms=n_beads, traj_idx=i_traj)
                 if self.pre_filter != None and not self.pre_filter(data):
                     continue
                 if self.pre_transform != None:

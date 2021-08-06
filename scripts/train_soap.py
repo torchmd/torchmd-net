@@ -12,10 +12,10 @@ from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.plugins import DDPPlugin
 
 
-sys.path.insert(0,'../')
+sys.path.insert(0,'/home/musil/git/torchmd-net/')
 
 from torchmdnet2.utils import LoadFromFile, save_argparse, Args
-from torchmdnet2.models import SchNet
+from torchmdnet2.models import MLPModel
 from torchmdnet2.dataset import DataModule
 
 from pytorch_lightning.utilities.cli import LightningCLI
@@ -42,7 +42,8 @@ if __name__ == "__main__":
     }
     print('Start: {}'.format(ctime()))
 
-    cli = LightningCLI(SchNet, DataModule, save_config_overwrite=True)
+    cli = LightningCLI(MLPModel, DataModule, save_config_overwrite=True,
+                plugins=pytorch_lightning.plugins.DDPPlugin(find_unused_parameters=False))
     print(cli.trainer.checkpoint_callback.best_model_path)
 
     print('Finish: {}'.format(ctime()))

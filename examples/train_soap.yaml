@@ -7,12 +7,12 @@ trainer:
   logger:
     - class_path: pytorch_lightning.loggers.TensorBoardLogger
       init_args:
-        save_dir: '/local_scratch/musil/chign/test_2/'
+        save_dir: '/local_scratch/musil/chign/test_3/'
         name: tensorboard
         version: ''
     - class_path: pytorch_lightning.loggers.CSVLogger
       init_args:
-        save_dir: '/local_scratch/musil/chign/test_2/'
+        save_dir: '/local_scratch/musil/chign/test_3/'
         name: ''
         version: ''
   checkpoint_callback: true
@@ -23,19 +23,19 @@ trainer:
         patience: 10
     - class_path: pytorch_lightning.callbacks.model_checkpoint.ModelCheckpoint
       init_args:
-        dirpath: '/local_scratch/musil/chign/test_2/'
+        dirpath: '/local_scratch/musil/chign/test_3/'
         monitor: 'validation_loss'
         save_top_k: 5
         every_n_epochs: 2
         filename: '{epoch}-{validation_loss:.4f}-{test_loss:.4f}'
-  default_root_dir: '/local_scratch/musil/chign/test_2/'
+  default_root_dir: '/local_scratch/musil/chign/test_3/'
   log_every_n_steps: 10
   gradient_clip_val: 0
   gradient_clip_algorithm: norm
   process_position: 0
   num_nodes: 1
   num_processes: 1
-  gpus: 2
+  gpus: 4
   log_gpu_memory: null
   track_grad_norm: inf
   check_val_every_n_epoch: 1
@@ -53,22 +53,35 @@ trainer:
   amp_backend: native
   amp_level: O2
 model:
-  embedding_size: 128
-  hidden_channels: 128
-  num_filters: 128
-  num_interactions: 2
-  num_rbf: 200
-  rbf_type: expnorm
-  trainable_rbf: false
-  activation: tanh
-  neighbor_embedding: true
-  cutoff_lower: 0.0
-  cutoff_upper: 30.0
-  n_layers: 3
-  reduction_factor: 1
-  cfconv_aggr: mean
-  target_name: forces
-  derivative: true
+  calculator:
+    class_path: torchmdnet2.nn.spherical_equivariants.PowerSpectrum
+    init_args:
+      max_radial: 10
+      max_angular: 3
+      interaction_cutoff: 15
+      gaussian_sigma_constant: 1.5
+      normalize: true
+      smooth_width: 0.5
+      species:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+  hidden_widths:
+    - 500
+    - 500
+    - 200
+    - 100
+  activation_func:
+    class_path: torch.nn.Tanh
+  property: 'energy'
+  derivative: 'forces'
+  factors:
+    forces: 1.
   lr: 0.0001
   weight_decay: 0
   lr_factor: 0.9999
@@ -77,12 +90,14 @@ model:
   lr_warmup_steps: 0
   test_interval: 1
 data:
-  dataset_name: chignolin
-  dataset_root: '/local_scratch/musil/datasets/chignolin/'
-  log_dir: '/local_scratch/musil/chign/test_2/'
-  val_ratio: 0.1
-  test_ratio: 0.1
-  batch_size: 1024
-  inference_batch_size: 1024
+  dataset:
+    class_path: torchmdnet2.dataset.ChignolinDataset
+    init_args:
+      root: '/local_scratch/musil/datasets/chignolin/'
+  log_dir: '/local_scratch/musil/chign/test_3/'
+  val_ratio: 0.01
+  test_ratio: 0.01
+  batch_size: 56
+  inference_batch_size: 56
   num_workers: 6
-  train_stride: 10
+  train_stride: 100
