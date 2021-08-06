@@ -20,6 +20,8 @@ from torchmdnet2.dataset import DataModule
 
 from pytorch_lightning.utilities.cli import LightningCLI
 
+from pytorch_lightning.accelerators import GPUAccelerator, CPUAccelerator
+from pytorch_lightning.plugins import NativeMixedPrecisionPlugin, DDPPlugin
 
 # class MyLightningCLI(LightningCLI):
 #     def instantiate_classes(self):
@@ -42,8 +44,16 @@ if __name__ == "__main__":
     }
     print('Start: {}'.format(ctime()))
 
+
+    # accelerator = CPUAccelerator(
+    #     precision_plugin=NativeMixedPrecisionPlugin(),
+    #     training_type_plugin=DDPPlugin(find_unused_parameters=False),
+    # )
+
     cli = LightningCLI(MLPModel, DataModule, save_config_overwrite=True,
-                plugins=pytorch_lightning.plugins.DDPPlugin(find_unused_parameters=False))
+                # trainer_defaults={'accelerator':accelerator}
+    )
+    
     print(cli.trainer.checkpoint_callback.best_model_path)
 
     print('Finish: {}'.format(ctime()))
