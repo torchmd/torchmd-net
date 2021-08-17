@@ -4,11 +4,14 @@
 import torch
 import numpy as np
 
-from torch_geometric.data import Data
+from torch_geometric.data import Data, DataLoader
 
 import os
 import time
 import warnings
+
+from .utils import tqdm
+
 
 class Simulation(object):
     """Simulate an artificial trajectory from a CGnet.
@@ -167,7 +170,7 @@ class Simulation(object):
                  save_interval=10, random_seed=None,
                  device=torch.device('cpu'),
                  export_interval=None, log_interval=None,
-                 log_type='write', filename=None):
+                 log_type='write', filename=None, batch_size=10):
 
         self.initial_coordinates = initial_coordinates
         self.embeddings = embeddings
@@ -194,7 +197,7 @@ class Simulation(object):
         self.device = device
         self.export_interval = export_interval
         self.log_interval = log_interval
-
+        self.batch_size = batch_size
         if log_type not in ['print', 'write']:
             raise ValueError(
                 "log_type can be either 'print' or 'write'"
@@ -592,18 +595,31 @@ class Simulation(object):
         in order to average forces and potentials over more than one model.
         """
         n_frames, n_beads, _ = x_old.shape
-        batch = torch.zeros((n_frames*n_beads,), device=x_old.device, dtype=torch.int64)
-        pos = x_old.reshape((-1, 3))
-        z = self.embeddings.reshape((-1))
-        idx = torch.zeros((n_frames,), device=x_old.device, dtype=torch.int64)
-        ii = 0
+        # batch = torch.zeros((n_frames*n_beads,), device=x_old.device, dtype=torch.int64)
+        # pos = x_old.reshape((-1, 3))
+        # z = self.embeddings.reshape((-1))
+        # idx = torch.zeros((n_frames,), device=x_old.device, dtype=torch.long)
+        # n_atoms = n_beads * torch.ones((n_frames,), device=x_old.device, dtype=torch.long)
+        # ii = 0
+        data_list = []
         for iframe in range(n_frames):
-            batch[ii:ii+n_beads] = iframe
-            idx[iframe] = iframe
-            ii += n_beads
-        data = Data(z=z, pos=pos, batch=batch, idx=idx)
-        potential, forces = self.model(data)
+            # batch[ii:ii+n_beads] = iframe
+            # idx[iframe] = iframe
+            # ii += n_beads
 
+            data_list.append(Data(z=self.embeddings[iframe], pos=x_old[iframe], idx=iframe, n_atoms=n_beads).to(device=x_old.device))
+
+        potential = torch.zeros(n_frames, device=x_old.device, dtype=x_old.dtype)
+        forces = torch.zeros_like(x_old)
+        ii = 0
+        dataloader = DataLoader(data_list, batch_size=self.batch_size, shuffle=False)
+        for data in tqdm(dataloader, desc='Batch', leave=False):
+            batch_size = data.n_atoms.shape[0]
+            # data.to(device=x_old.device)
+            pp, ff = self.model(data)
+            potential[ii:ii+batch_size] = pp.flatten()
+            forces[ii:ii+batch_size] = ff.view((batch_size, n_beads, 3))
+            ii += batch_size
         return potential, forces.reshape((-1, n_beads, 3))
 
 
@@ -664,7 +680,7 @@ class Simulation(object):
             # v_old = v_old + torch.randn(size=v_old.size(),
             #                             generator=self.rng).to(self.device)
 
-        for t in range(self.length):
+        for t in tqdm(range(self.length), desc='Simulation timestep'):
             # produce potential and forces from model
             potential, forces = self.calculate_potential_and_forces(x_old)
             potential = potential.detach()

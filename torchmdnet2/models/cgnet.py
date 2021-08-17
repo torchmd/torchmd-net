@@ -1,3 +1,4 @@
+from .schnet import SchNet
 from torch import nn
 from torch.autograd import grad
 import torch
@@ -43,7 +44,10 @@ class CGnet(nn.Module):
         """
         data.pos.requires_grad_()
 
-        energy = self.model(data.z, data.pos, data.batch)
+        if isinstance(self.model, SchNet):
+            energy = self.model(data.z, data.pos, data.batch)
+        else:
+            energy = self.model(data)
 
         if isinstance(energy, tuple):
             energy, forces = energy
