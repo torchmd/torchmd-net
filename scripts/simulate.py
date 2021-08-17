@@ -99,7 +99,7 @@ if __name__ == "__main__":
                     save_interval=save_interval, beta=baseline_model.beta,
                     save_potential=True, device=device,
                     log_interval=100, log_type='print',
-                    batch_size=100)
+                    batch_size=300)
 
     traj = sim.simulate()
 

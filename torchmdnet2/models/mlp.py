@@ -113,7 +113,7 @@ class MLPModel(Model):
                 y,
                 data.pos,
                 grad_outputs=torch.ones_like(y),
-                retain_graph=True,
+                retain_graph=self.training,
                 create_graph=self.training
             )[0]
             return {self.property:y, self.derivative:dy_dr}
