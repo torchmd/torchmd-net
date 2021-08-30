@@ -67,7 +67,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
     # prior model
     if args["prior_model"] and prior_model is None:
         assert "prior_args" in args, (
-            f"Requested prior model {args.prior_model} but the "
+            f"Requested prior model {args['prior_model']} but the "
             f'arguments are lacking the key "prior_args".'
         )
         assert hasattr(priors, args["prior_model"]), (
