@@ -129,7 +129,7 @@ def main():
         dirpath=args.log_dir,
         monitor="val_loss",
         save_top_k=10,  # -1 to save all
-        every_n_val_epochs=args.save_interval,
+        every_n_epochs=args.save_interval,
         filename="{epoch}-{val_loss:.4f}-{test_loss:.4f}",
     )
     early_stopping = EarlyStopping("val_loss", patience=args.early_stopping_patience)
@@ -154,7 +154,6 @@ def main():
         logger=[tb_logger, csv_logger],
         precision=args.precision,
         plugins=plugins,
-        replace_sampler_ddp=False,
     )
 
     trainer.fit(model, data)

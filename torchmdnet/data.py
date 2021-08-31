@@ -99,7 +99,9 @@ class DataModule(LightningDataModule):
         dl = DataLoader(
             dataset=dataset,
             batch_size=batch_size,
-            shuffle=shuffle,
+            sampler=torch.utils.data.DistributedSampler(
+                dataset, num_replicas=self.hparams_["num_nodes"], shuffle=shuffle
+            ),
             num_workers=self.hparams_["num_workers"],
             pin_memory=True,
         )
