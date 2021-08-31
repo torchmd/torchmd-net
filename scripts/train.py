@@ -139,9 +139,11 @@ def main():
     )
     csv_logger = CSVLogger(args.log_dir, name="", version="")
 
-    ddp_plugin = None
+    plugins = []
     if "ddp" in args.distributed_backend:
-        ddp_plugin = DDPPlugin(find_unused_parameters=False, num_nodes=args.num_nodes)
+        plugins.append(
+            DDPPlugin(find_unused_parameters=False, num_nodes=args.num_nodes)
+        )
 
     trainer = pl.Trainer(
         max_epochs=args.num_epochs,
@@ -149,13 +151,11 @@ def main():
         num_nodes=args.num_nodes,
         accelerator=args.distributed_backend,
         default_root_dir=args.log_dir,
-        auto_lr_find=False,
         resume_from_checkpoint=args.load_model,
         callbacks=[early_stopping, checkpoint_callback],
         logger=[tb_logger, csv_logger],
-        reload_dataloaders_every_epoch=False,
         precision=args.precision,
-        plugins=[ddp_plugin],
+        plugins=plugins,
     )
 
     trainer.fit(model, data)
