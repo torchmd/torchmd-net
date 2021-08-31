@@ -12,7 +12,7 @@ from torchmdnet.utils import make_splits
 class DataModule(LightningDataModule):
     def __init__(self, hparams, dataset=None):
         super(DataModule, self).__init__()
-        self.hparams = hparams.__dict__ if hasattr(hparams, "__dict__") else hparams
+        self.hparams_ = hparams.__dict__ if hasattr(hparams, "__dict__") else hparams
         self._mean = None
         self._std = None
         self._saved_dataloaders = dict()
@@ -20,27 +20,27 @@ class DataModule(LightningDataModule):
 
     def setup(self, stage):
         if self.dataset is None:
-            if self.hparams["dataset"] == "Custom":
+            if self.hparams_["dataset"] == "Custom":
                 self.dataset = datasets.Custom(
-                    self.hparams["coord_files"],
-                    self.hparams["embed_files"],
-                    self.hparams["energy_files"],
-                    self.hparams["force_files"],
+                    self.hparams_["coord_files"],
+                    self.hparams_["embed_files"],
+                    self.hparams_["energy_files"],
+                    self.hparams_["force_files"],
                 )
             else:
-                self.dataset = getattr(datasets, self.hparams["dataset"])(
-                    self.hparams["dataset_root"],
-                    dataset_arg=self.hparams["dataset_arg"],
+                self.dataset = getattr(datasets, self.hparams_["dataset"])(
+                    self.hparams_["dataset_root"],
+                    dataset_arg=self.hparams_["dataset_arg"],
                 )
 
         idx_train, idx_val, idx_test = make_splits(
             len(self.dataset),
-            self.hparams["train_size"],
-            self.hparams["val_size"],
-            self.hparams["test_size"],
-            self.hparams["seed"],
-            join(self.hparams["log_dir"], "splits.npz"),
-            self.hparams["splits"],
+            self.hparams_["train_size"],
+            self.hparams_["val_size"],
+            self.hparams_["test_size"],
+            self.hparams_["seed"],
+            join(self.hparams_["log_dir"], "splits.npz"),
+            self.hparams_["splits"],
         )
         print(f"train {len(idx_train)}, val {len(idx_val)}, test {len(idx_test)}")
 
@@ -48,7 +48,7 @@ class DataModule(LightningDataModule):
         self.val_dataset = Subset(self.dataset, idx_val)
         self.test_dataset = Subset(self.dataset, idx_test)
 
-        if self.hparams["standardize"]:
+        if self.hparams_["standardize"]:
             self._standardize()
 
     def train_dataloader(self):
@@ -58,7 +58,7 @@ class DataModule(LightningDataModule):
         loaders = [self._get_dataloader(self.val_dataset, "val")]
         if (
             len(self.test_dataset) > 0
-            and self.trainer.current_epoch % self.hparams["test_interval"] == 0
+            and self.trainer.current_epoch % self.hparams_["test_interval"] == 0
         ):
             loaders.append(self._get_dataloader(self.test_dataset, "test"))
         return loaders
@@ -90,17 +90,17 @@ class DataModule(LightningDataModule):
             return self._saved_dataloaders[stage]
 
         if stage == "train":
-            batch_size = self.hparams["batch_size"]
+            batch_size = self.hparams_["batch_size"]
             shuffle = True
         elif stage in ["val", "test"]:
-            batch_size = self.hparams["inference_batch_size"]
+            batch_size = self.hparams_["inference_batch_size"]
             shuffle = False
 
         dl = DataLoader(
             dataset=dataset,
             batch_size=batch_size,
             shuffle=shuffle,
-            num_workers=self.hparams["num_workers"],
+            num_workers=self.hparams_["num_workers"],
             pin_memory=True,
         )
 
