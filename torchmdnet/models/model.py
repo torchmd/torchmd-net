@@ -37,7 +37,8 @@ def create_model(args, prior_model=None, mean=None, std=None):
     if args["model"] == "graph-network":
         is_equivariant = False
         representation_model = TorchMD_GN(
-            num_filters=args["embedding_dimension"], **shared_args
+            num_filters=args["embedding_dimension"],
+            aggr=args['aggr'], **shared_args
         )
     elif args["model"] == "transformer":
         is_equivariant = False
