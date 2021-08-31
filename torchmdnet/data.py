@@ -96,14 +96,21 @@ class DataModule(LightningDataModule):
             batch_size = self.hparams_["inference_batch_size"]
             shuffle = False
 
+        if self.hparams_["distributed_backend"] == "ddp":
+            dl_kwargs = dict(
+                sampler=torch.utils.data.DistributedSampler(
+                    dataset, num_replicas=self.trainer.num_processes, shuffle=shuffle
+                )
+            )
+        else:
+            dl_kwargs = dict(shuffle=shuffle)
+
         dl = DataLoader(
             dataset=dataset,
             batch_size=batch_size,
-            sampler=torch.utils.data.DistributedSampler(
-                dataset, num_replicas=self.trainer.num_processes, shuffle=shuffle
-            ),
             num_workers=self.hparams_["num_workers"],
             pin_memory=True,
+            **dl_kwargs,
         )
 
         if store_dataloader:
