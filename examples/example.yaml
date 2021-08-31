@@ -1,4 +1,5 @@
 activation: silu
+aggr: add
 atom_filter: -1
 attn_activation: silu
 batch_size: 16
