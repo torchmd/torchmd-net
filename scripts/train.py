@@ -141,9 +141,7 @@ def main():
 
     plugins = []
     if "ddp" in args.distributed_backend:
-        plugins.append(
-            DDPPlugin(find_unused_parameters=False, num_nodes=args.num_nodes)
-        )
+        plugins.append(DDPPlugin(find_unused_parameters=False))
 
     trainer = pl.Trainer(
         max_epochs=args.num_epochs,
@@ -156,6 +154,7 @@ def main():
         logger=[tb_logger, csv_logger],
         precision=args.precision,
         plugins=plugins,
+        replace_sampler_ddp=False,
     )
 
     trainer.fit(model, data)
