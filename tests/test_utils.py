@@ -13,6 +13,9 @@ def test_make_splits_outputs():
     assert isinstance(result[0], torch.Tensor)
     assert isinstance(result[1], torch.Tensor)
     assert isinstance(result[2], torch.Tensor)
+    assert len(result)[0] == 70
+    assert len(result)[1] == 20
+    assert len(result)[2] == 10
     assert sum_lengths(*result) == len(torch.unique(torch.cat(result)))
     assert max(map(max, result)) == 99
     assert min(map(min, result)) == 0
