@@ -1,7 +1,7 @@
 from os.path import join
 from tqdm import tqdm
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Subset
 from torch_geometric.data import DataLoader
 from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities import rank_zero_warn
@@ -124,25 +124,3 @@ class DataModule(LightningDataModule):
 
         self._mean = ys.mean()
         self._std = ys.std()
-
-
-class Subset(Dataset):
-    r"""Subset of a bigger dataset, given a list of indices.
-
-    Arguments:
-        dataset (Dataset): The complete dataset
-        indices (array-like): Sequence of indices defining the subset
-    """
-
-    def __init__(self, dataset, indices):
-        self.dataset = dataset
-        self.indices = indices
-
-    def __getitem__(self, idx):
-        return self.dataset[int(self.indices[idx])]
-
-    def __len__(self):
-        return len(self.indices)
-
-    def __repr__(self):
-        return f"{self.dataset.__class__.__name__}({len(self)}/{len(self.dataset)})"
