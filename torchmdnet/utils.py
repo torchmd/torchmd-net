@@ -3,20 +3,22 @@ import argparse
 import numpy as np
 import torch
 from os.path import dirname, join, exists
+from pytorch_lightning.utilities import rank_zero_warn
 
 
 def train_val_test_split(dset_len, train_size, val_size, test_size, seed, order=None):
     assert (train_size is None) + (val_size is None) + (
         test_size is None
     ) <= 1, "Only one of train_size, val_size, test_size is allowed to be None."
+    is_float = (
+        isinstance(train_size, float),
+        isinstance(val_size, float),
+        isinstance(test_size, float),
+    )
 
-    train_size = (
-        round(dset_len * train_size) if isinstance(train_size, float) else train_size
-    )
-    val_size = round(dset_len * val_size) if isinstance(val_size, float) else val_size
-    test_size = (
-        round(dset_len * test_size) if isinstance(test_size, float) else test_size
-    )
+    train_size = round(dset_len * train_size) if is_float[0] else train_size
+    val_size = round(dset_len * val_size) if is_float[1] else val_size
+    test_size = round(dset_len * test_size) if is_float[2] else test_size
 
     if train_size is None:
         train_size = dset_len - val_size - test_size
@@ -24,6 +26,14 @@ def train_val_test_split(dset_len, train_size, val_size, test_size, seed, order=
         val_size = dset_len - train_size - test_size
     elif test_size is None:
         test_size = dset_len - train_size - val_size
+
+    if train_size + val_size + test_size > dset_len:
+        if is_float[2]:
+            test_size -= 1
+        elif is_float[1]:
+            val_size -= 1
+        elif is_float[0]:
+            train_size -= 1
 
     assert train_size >= 0 and val_size >= 0 and test_size >= 0, (
         f"One of training ({train_size}), validation ({val_size}) or "
@@ -36,7 +46,7 @@ def train_val_test_split(dset_len, train_size, val_size, test_size, seed, order=
         f"combined split sizes ({total})."
     )
     if total < dset_len:
-        print(f"Warning: {dset_len - total} samples were excluded from the dataset")
+        rank_zero_warn(f"{dset_len - total} samples were excluded from the dataset")
 
     idxs = np.arange(dset_len, dtype=np.int)
     if order is None:
