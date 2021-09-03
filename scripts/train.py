@@ -1,13 +1,12 @@
 import sys
 import os
 import argparse
-
+import logging
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
 from pytorch_lightning.plugins import DDPPlugin
-
 from torchmdnet.module import LNNP
 from torchmdnet import datasets, priors, models
 from torchmdnet.data import DataModule
@@ -95,6 +94,9 @@ def get_args():
     if args.redirect:
         sys.stdout = open(os.path.join(args.log_dir, "log"), "w")
         sys.stderr = sys.stdout
+        logging.getLogger("pytorch_lightning").addHandler(
+            logging.StreamHandler(sys.stdout)
+        )
 
     if args.inference_batch_size is None:
         args.inference_batch_size = args.batch_size
