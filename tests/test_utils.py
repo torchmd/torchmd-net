@@ -1,3 +1,4 @@
+from os.path import join, exists
 from pytest import mark, raises
 import torch
 from torchmdnet.utils import make_splits
@@ -48,6 +49,23 @@ def test_make_splits_sizes():
     assert sum_lengths(*make_splits(100, None, 20, 10, 1234)) == 100
     assert sum_lengths(*make_splits(100, 70, 20, 0.1, 1234)) == 100
     assert sum_lengths(*make_splits(100, 70, 20, 0.05, 1234)) == 95
+
+
+def test_make_splits_save_load(tmpdir):
+    path = join(tmpdir, "splits.npz")
+    train, val, test = make_splits(100, 0.7, 0.2, 0.1, 1234, filename=path)
+    assert exists(path)
+    trainl, vall, testl = make_splits(None, None, None, None, None, splits=path)
+    assert (train == trainl).all() and (val == vall).all() and (test == testl).all()
+
+
+def test_make_splits_order():
+    train, val, test = make_splits(
+        100, 0.7, 0.2, 0.1, 1234, order=torch.arange(100, 0, -1, dtype=torch.int)
+    )
+    assert (train == torch.arange(100, 30, -1, dtype=torch.int)).all()
+    assert (val == torch.arange(30, 10, -1, dtype=torch.int)).all()
+    assert (test == torch.arange(10, 0, -1, dtype=torch.int)).all()
 
 
 def test_make_splits_errors():
