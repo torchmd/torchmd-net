@@ -31,11 +31,6 @@ def test_forward_output_modules(model_name, output_model):
 
 @mark.parametrize("model_name", models.__all__)
 def test_forward_torchscript(model_name):
-    if model_name == "equivariant-transformer":
-        # TODO: also test equivariant Transformer after the release of
-        # https://github.com/rusty1s/pytorch_geometric/commit/673f94729b6a520b994699da5aa8dd3d1a1f670b
-        pytest.skip("currently only works on the torch-geometric main branch")
-
     z, pos, batch = create_example_batch()
     model = torch.jit.script(
         create_model(load_example_args(model_name, remove_prior=True, derivative=True))
