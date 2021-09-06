@@ -79,9 +79,9 @@ class TorchMD_ET(nn.Module):
             f'Unknown activation function "{activation}". '
             f'Choose from {", ".join(act_class_mapping.keys())}.'
         )
-        assert attn_activation in act_class_mapping or attn_activation == "softmax", (
+        assert attn_activation in act_class_mapping, (
             f'Unknown attention activation function "{attn_activation}". '
-            f'Choose from {", ".join(act_class_mapping.keys())}, softmax.'
+            f'Choose from {", ".join(act_class_mapping.keys())}.'
         )
 
         self.hidden_channels = hidden_channels
@@ -216,11 +216,7 @@ class EquivariantMultiHeadAttention(MessagePassing):
 
         self.layernorm = nn.LayerNorm(hidden_channels)
         self.act = activation()
-        self.attn_activation = (
-            act_class_mapping[attn_activation]()
-            if attn_activation in act_class_mapping
-            else attn_activation
-        )
+        self.attn_activation = act_class_mapping[attn_activation]()
         self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)
 
         self.q_proj = nn.Linear(hidden_channels, hidden_channels)
@@ -301,7 +297,7 @@ class EquivariantMultiHeadAttention(MessagePassing):
         dvec = vec3 * o1.unsqueeze(1) + vec
         return dx, dvec
 
-    def message(self, edge_index, q_i, k_j, v_j, vec_j, dk, dv, r_ij, d_ij):
+    def message(self, q_i, k_j, v_j, vec_j, dk, dv, r_ij, d_ij):
         # attention mechanism
         if dk is None:
             attn = (q_i * k_j).sum(dim=-1)
@@ -309,15 +305,7 @@ class EquivariantMultiHeadAttention(MessagePassing):
             attn = (q_i * k_j * dk).sum(dim=-1)
 
         # attention activation function
-        if self.attn_activation == "softmax":
-            attn = (
-                torch.sparse.softmax(torch.sparse_coo_tensor(edge_index, attn), dim=0)
-                .coalesce()
-                .values()
-            )
-        else:
-            attn = self.attn_activation(attn)
-        attn = attn * self.cutoff(r_ij).unsqueeze(1)
+        attn = self.attn_activation(attn) * self.cutoff(r_ij).unsqueeze(1)
 
         # value pathway
         if dv is not None:

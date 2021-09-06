@@ -75,7 +75,7 @@ def get_args():
 
     # Transformer specific
     parser.add_argument('--distance-influence', type=str, default='both', choices=['keys', 'values', 'both', 'none'], help='Where distance information is included inside the attention')
-    parser.add_argument('--attn-activation', default='silu', choices=list(act_class_mapping.keys()) + ["softmax"], help='Attention activation function')
+    parser.add_argument('--attn-activation', default='silu', choices=list(act_class_mapping.keys()), help='Attention activation function')
     parser.add_argument('--num-heads', type=int, default=8, help='Number of attention heads')
 
     # other args
