@@ -4,11 +4,12 @@ from torchmdnet.data import DataModule
 from utils import load_example_args, DummyDataset
 
 
-def test_datamodule_create():
+def test_datamodule_create(tmpdir):
     args = load_example_args("graph-network")
     args["train_size"] = 800
     args["val_size"] = 100
     args["test_size"] = 100
+    args["log_dir"] = tmpdir
 
     dataset = DummyDataset()
     data = DataModule(args, dataset=dataset)
@@ -26,12 +27,13 @@ def test_datamodule_create():
 
 @mark.parametrize("energy,forces", [(True, True), (True, False), (False, True)])
 @mark.parametrize("has_atomref", [True, False])
-def test_datamodule_standardize(energy, forces, has_atomref):
+def test_datamodule_standardize(energy, forces, has_atomref, tmpdir):
     args = load_example_args("graph-network")
     args["standardize"] = True
     args["train_size"] = 800
     args["val_size"] = 100
     args["test_size"] = 100
+    args["log_dir"] = tmpdir
 
     dataset = DummyDataset(energy=energy, forces=forces, has_atomref=has_atomref)
     data = DataModule(args, dataset=dataset)
