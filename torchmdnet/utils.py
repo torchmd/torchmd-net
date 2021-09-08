@@ -151,3 +151,7 @@ def number(text):
     if num_int == num_float:
         return num_int
     return num_float
+
+
+class MissingEnergyException(Exception):
+    pass

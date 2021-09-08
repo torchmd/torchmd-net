@@ -39,6 +39,7 @@ class DummyDataset(Dataset):
         atom_types=[1, 6, 7, 8, 9],
         min_atoms=3,
         max_atoms=10,
+        has_atomref=False,
     ):
         super(DummyDataset, self).__init__()
         assert (
@@ -60,6 +61,15 @@ class DummyDataset(Dataset):
                 self.energies.append(torch.randn(1, 1))
             if forces:
                 self.forces.append(torch.randn(num_atoms, 3))
+
+        self.atomref = None
+        if has_atomref:
+            self.atomref = torch.randn(100, 1)
+
+            def _get_atomref(self):
+                return self.atomref
+
+            DummyDataset.get_atomref = _get_atomref
 
     def get(self, idx):
         features = dict(z=self.z[idx].clone(), pos=self.pos[idx].clone())

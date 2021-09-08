@@ -1,20 +1,20 @@
 from os.path import join
 from tqdm import tqdm
 import torch
-from torch.utils.data import Dataset, Subset
+from torch.utils.data import Subset
 from torch_geometric.data import DataLoader
 from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities import rank_zero_warn
 from torchmdnet import datasets
-from torchmdnet.utils import make_splits
+from torchmdnet.utils import make_splits, MissingEnergyException
+from torch_scatter import scatter
 
 
 class DataModule(LightningDataModule):
     def __init__(self, hparams, dataset=None):
         super(DataModule, self).__init__()
         self.hparams = hparams.__dict__ if hasattr(hparams, "__dict__") else hparams
-        self._mean = None
-        self._std = None
+        self._mean, self._std = None, None
         self._saved_dataloaders = dict()
         self.dataset = dataset
 
@@ -33,7 +33,7 @@ class DataModule(LightningDataModule):
                     dataset_arg=self.hparams["dataset_arg"],
                 )
 
-        idx_train, idx_val, idx_test = make_splits(
+        self.idx_train, self.idx_val, self.idx_test = make_splits(
             len(self.dataset),
             self.hparams["train_size"],
             self.hparams["val_size"],
@@ -42,11 +42,13 @@ class DataModule(LightningDataModule):
             join(self.hparams["log_dir"], "splits.npz"),
             self.hparams["splits"],
         )
-        print(f"train {len(idx_train)}, val {len(idx_val)}, test {len(idx_test)}")
+        print(
+            f"train {len(self.idx_train)}, val {len(self.idx_val)}, test {len(self.idx_test)}"
+        )
 
-        self.train_dataset = Subset(self.dataset, idx_train)
-        self.val_dataset = Subset(self.dataset, idx_val)
-        self.test_dataset = Subset(self.dataset, idx_test)
+        self.train_dataset = Subset(self.dataset, self.idx_train)
+        self.val_dataset = Subset(self.dataset, self.idx_val)
+        self.test_dataset = Subset(self.dataset, self.idx_test)
 
         if self.hparams["standardize"]:
             self._standardize()
@@ -109,13 +111,21 @@ class DataModule(LightningDataModule):
         return dl
 
     def _standardize(self):
+        def get_energy(batch, atomref):
+            if batch.y is None:
+                raise MissingEnergyException()
+
+            if atomref is None:
+                return batch.y.clone()
+            return (batch.y - scatter(atomref[batch.z], batch.batch, dim=0)).clone()
+
         data = tqdm(
             self._get_dataloader(self.train_dataset, "val", store_dataloader=False),
             desc="computing mean and std",
         )
         try:
-            ys = torch.cat([batch.y.clone() for batch in data])
-        except AttributeError:
+            ys = torch.cat([get_energy(batch, self.atomref) for batch in data])
+        except MissingEnergyException:
             rank_zero_warn(
                 "Standardize is true but failed to compute dataset mean and standard deviation. "
                 "Maybe the dataset only contains forces."
