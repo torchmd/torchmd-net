@@ -117,20 +117,27 @@ class DataModule(LightningDataModule):
 
             if atomref is None:
                 return batch.y.clone()
-            return (batch.y - scatter(atomref[batch.z], batch.batch, dim=0)).clone()
+
+            # remove atomref energies from the target energy
+            atomref_energy = scatter(atomref[batch.z], batch.batch, dim=0)
+            return (batch.y.squeeze() - atomref_energy.squeeze()).clone()
 
         data = tqdm(
             self._get_dataloader(self.train_dataset, "val", store_dataloader=False),
             desc="computing mean and std",
         )
         try:
-            ys = torch.cat([get_energy(batch, self.atomref) for batch in data])
+            # only remove atomref energies if the atomref prior is used
+            atomref = self.atomref if self.hparams["prior_model"] == "Atomref" else None
+            # extract energies from the data
+            ys = torch.cat([get_energy(batch, atomref) for batch in data])
         except MissingEnergyException:
             rank_zero_warn(
-                "Standardize is true but failed to compute dataset mean and standard deviation. "
-                "Maybe the dataset only contains forces."
+                "Standardize is true but failed to compute dataset mean and "
+                "standard deviation. Maybe the dataset only contains forces."
             )
             return
 
-        self._mean = ys.mean()
-        self._std = ys.std()
+        # compute mean and standard deviation
+        self._mean = ys.mean(dim=0)
+        self._std = ys.std(dim=0)
