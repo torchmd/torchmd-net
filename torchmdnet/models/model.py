@@ -14,11 +14,6 @@ from torchmdnet import priors
 
 
 def create_model(args, prior_model=None, mean=None, std=None):
-    if prior_model is not None and (mean is not None or std is not None):
-        rank_zero_warn(
-            "Prior model and standardize are given, only using the prior model."
-        )
-
     shared_args = dict(
         hidden_channels=args["embedding_dimension"],
         num_layers=args["num_layers"],
@@ -166,6 +161,10 @@ class TorchMD_Net(nn.Module):
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch)
 
+        # scale by data standard deviation
+        if self.std is not None:
+            x = x * self.std
+
         # apply prior model
         if self.prior_model is not None:
             x = self.prior_model(x, z, pos, batch)
@@ -173,13 +172,11 @@ class TorchMD_Net(nn.Module):
         # aggregate atoms
         out = scatter(x, batch, dim=0, reduce=self.reduce_op)
 
-        # standardize if no prior model is given and the output model allows priors
-        if self.prior_model is None and self.output_model.allow_prior_model:
-            if self.std is not None:
-                out = out * self.std
-            if self.mean is not None:
-                out = out + self.mean
+        # shift by data mean
+        if self.mean is not None:
+            out = out + self.mean
 
+        # apply output model after reduction
         out = self.output_model.post_reduce(out)
 
         # compute gradients with respect to coordinates
