@@ -5,9 +5,6 @@ from torch.autograd import grad
 from torch import nn
 from torch_scatter import scatter
 from pytorch_lightning.utilities import rank_zero_warn
-from torchmdnet.models.torchmd_gn import TorchMD_GN
-from torchmdnet.models.torchmd_t import TorchMD_T
-from torchmdnet.models.torchmd_et import TorchMD_ET
 from torchmdnet.models import output_modules
 from torchmdnet.models.wrappers import AtomFilter
 from torchmdnet import priors
@@ -30,11 +27,15 @@ def create_model(args, prior_model=None, mean=None, std=None):
 
     # representation network
     if args["model"] == "graph-network":
+        from torchmdnet.models.torchmd_gn import TorchMD_GN
+
         is_equivariant = False
         representation_model = TorchMD_GN(
             num_filters=args["embedding_dimension"], aggr=args["aggr"], **shared_args
         )
     elif args["model"] == "transformer":
+        from torchmdnet.models.torchmd_t import TorchMD_T
+
         is_equivariant = False
         representation_model = TorchMD_T(
             attn_activation=args["attn_activation"],
@@ -43,6 +44,8 @@ def create_model(args, prior_model=None, mean=None, std=None):
             **shared_args,
         )
     elif args["model"] == "equivariant-transformer":
+        from torchmdnet.models.torchmd_et import TorchMD_ET
+
         is_equivariant = True
         representation_model = TorchMD_ET(
             attn_activation=args["attn_activation"],
