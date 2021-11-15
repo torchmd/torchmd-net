@@ -76,7 +76,7 @@ class MD17(InMemoryDataset):
         return [f"md17-{mol}.pt" for mol in self.molecules]
 
     def download(self):
-        for file_name in self.molecules:
+        for file_name in self.raw_file_names:
             download_url(MD17.raw_url + file_name, self.raw_dir)
 
     def process(self):
