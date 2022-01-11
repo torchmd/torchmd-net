@@ -5,7 +5,7 @@ from .models.torchmd_gn import TorchMD_GN
 
 class TorchMD_GN_optimized(pt.nn.Module):
 
-    def __init__(self, model: TorchMD_GN):
+    def __init__(self, model):
 
         from NNPOps.CFConv import CFConv
         from NNPOps.CFConvNeighbors import CFConvNeighbors
@@ -20,13 +20,12 @@ class TorchMD_GN_optimized(pt.nn.Module):
 
         self.neighbors = CFConvNeighbors(self.model.cutoff_upper)
 
-        self.convs = []
-        for inter in self.model.interactions:
-            width = 1.0 # ???
-            conv = CFConv(gaussianWidth=width, activation='ssp',
-                            weights1=inter.mlp[0].weight.T, biases1=inter.mlp[0].bias,
-                            weights2=inter.mlp[2].weight.T, biases2=inter.mlp[2].bias)
-            self.convs.append(conv)
+        offset = self.model.distance_expansion.offset
+        width = offset[1] - offset[0]
+        self.convs = [CFConv(gaussianWidth=width, activation='ssp',
+                             weights1=inter.mlp[0].weight.T, biases1=inter.mlp[0].bias,
+                             weights2=inter.mlp[2].weight.T, biases2=inter.mlp[2].bias)
+                      for inter in self.model.interactions]
 
     def forward(self, z, pos, batch):
 
@@ -34,19 +33,13 @@ class TorchMD_GN_optimized(pt.nn.Module):
 
         x = self.model.embedding(z)
 
-        # edge_index, edge_weight, _ = self.model.distance(pos, batch)
-        # edge_attr = self.model.distance_expansion(edge_weight)
-
-        # for interaction in self.model.interactions:
-        #     x = x + interaction(x, edge_index, edge_weight, edge_attr)
-
         self.neighbors.build(pos)
         for inter, conv in zip(self.model.interactions, self.convs):
-            x = inter.conv.lin1(x)
-            x = conv(self.neighbors, pos, x)
-            x = inter.conv.lin2(x)
-            x = inter.act(x)
-            x = inter.lin(x)
+            y = inter.conv.lin1(x)
+            y = conv(self.neighbors, pos, y)
+            y = inter.conv.lin2(y)
+            y = inter.act(y)
+            x = x + inter.lin(y)
 
         return x, None, z, pos, batch
 
