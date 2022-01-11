@@ -1,10 +1,20 @@
+from pytest import mark
 import torch as pt
 from torchmdnet.models.model import create_model
 from torchmdnet.optimize import optimize
 
-def test_gn():
+@mark.parametrize('device', ['cpu', 'cuda'])
+def test_gn(device):
 
-    # SchNet TorchMD_GN(rbf_type='gauss', trainable_rbf=False, activation='ssp', neighbor_embedding=False)
+    device = pt.device(device)
+
+    # Generate random inputs
+    num_atoms = 10
+    elements = pt.randint(1, 100, (num_atoms,)).to(device)
+    positions = (10 * pt.rand((num_atoms, 3)) - 5).to(device)
+
+    # Crate a non-optimized model
+    #   SchNet: TorchMD_GN(rbf_type='gauss', trainable_rbf=False, activation='ssp', neighbor_embedding=False)
     args = {
         'embedding_dimension': 128,
         'num_layers': 6,
@@ -25,26 +35,16 @@ def test_gn():
         'output_model': 'Scalar',
         'reduce_op': 'add'
     }
-    model = create_model(args)
-    print(model)
+    ref_model = create_model(args).to(device)
 
-    num_atoms = 10
-    elements = pt.randint(1, 100, (num_atoms,))
-    positions = 10 * pt.rand((num_atoms, 3))
-    print(elements)
-    print(positions)
+    # Execute the non-optimized model
+    ref_energy, ref_gradient = ref_model(elements, positions)
 
+    # Optimize the model
+    model = optimize(ref_model).to(device)
+
+    # Execute the optimize model
     energy, gradient = model(elements, positions)
-    print(energy)
-    print(gradient)
-    ref_energy = energy.clone()
-    ref_gradient = gradient.clone()
 
-    model = optimize(model)
-    print(model)
-
-    energy, gradient = model(elements, positions)
-    print(energy)
-    print(gradient)
-    assert pt.allclose(energy, ref_energy)
-    assert pt.allclose(gradient, ref_gradient)
+    assert pt.allclose(ref_energy, energy, atol=5e-7)
+    assert pt.allclose(ref_gradient, gradient, atol=5e-7)
