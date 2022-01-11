@@ -64,5 +64,5 @@ def test_cfconv(device, num_atoms, num_filters, num_rbfs, cutoff_upper):
     total.backward()
     grad = pos.grad.clone()
 
-    assert pt.allclose(ref_output, output)
-    assert pt.allclose(ref_grad, grad)
+    assert pt.allclose(ref_output, output, atol=5e-7)
+    assert pt.allclose(ref_grad, grad, atol=5e-7)
