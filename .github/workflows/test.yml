@@ -1,6 +1,14 @@
 name: Test code
 
-on: [push]
+on:
+  push:
+    branches:
+      - "master"
+  pull_request:
+    branches:
+      - "master"
+  schedule:
+    - cron: "0 0 * * 0" # Run every Sunday at 0:00
 
 jobs:
   build:
