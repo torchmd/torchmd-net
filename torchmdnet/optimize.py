@@ -1,4 +1,7 @@
 import torch as pt
+from NNPOps.CFConv import CFConv
+from NNPOps.CFConvNeighbors import CFConvNeighbors
+
 from .models.model import TorchMD_Net
 from .models.torchmd_gn import TorchMD_GN
 
@@ -7,16 +10,21 @@ class TorchMD_GN_optimized(pt.nn.Module):
 
     def __init__(self, model):
 
-        from NNPOps.CFConv import CFConv
-        from NNPOps.CFConvNeighbors import CFConvNeighbors
+        if model.rbf_type != 'gauss':
+            raise ValueError('Only rbf_type="gauss" is supproted')
+        if model.trainable_rbf:
+            raise ValueError('trainalbe_rbf=True is not supported')
+        if model.activation != 'ssp':
+            raise ValueError('Only activation="ssp" is supported')
+        if model.neighbor_embedding:
+            raise ValueError('neighbor_embedding=True is not supported')
+        if model.cutoff_lower != 0.0:
+            raise ValueError('Only lower_cutoff=0.0 is supported')
+        if model.aggr != 'add':
+            raise ValueError('Only aggr="add" is supported')
 
         super().__init__()
         self.model = model
-
-        if self.model.cutoff_lower != 0.0:
-            raise ValueError('Lower cutoff has to be 0.0')
-        if self.model.neighbor_embedding:
-            raise ValueError('Neighbor embedding is not supported')
 
         self.neighbors = CFConvNeighbors(self.model.cutoff_upper)
 
@@ -54,6 +62,6 @@ def optimize(model):
     if isinstance(model.representation_model, TorchMD_GN):
         model.representation_model = TorchMD_GN_optimized(model.representation_model)
     else:
-        raise ValueError('Unsupported model')
+        raise ValueError('Unsupported model! Only TorchMD_GN is suppored.')
 
     return model
