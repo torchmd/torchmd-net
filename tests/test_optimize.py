@@ -4,12 +4,12 @@ from torchmdnet.models.model import create_model
 from torchmdnet.optimize import optimize
 
 @mark.parametrize('device', ['cpu', 'cuda'])
-def test_gn(device):
+@mark.parametrize('num_atoms', [10, 100])
+def test_gn(device, num_atoms):
 
     device = pt.device(device)
 
     # Generate random inputs
-    num_atoms = 10
     elements = pt.randint(1, 100, (num_atoms,)).to(device)
     positions = (10 * pt.rand((num_atoms, 3)) - 5).to(device)
 
@@ -26,7 +26,7 @@ def test_gn(device):
         'cutoff_lower': 0.0,
         'cutoff_upper': 5.0,
         'max_z': 100,
-        'max_num_neighbors': 32,
+        'max_num_neighbors': num_atoms,
         'model': 'graph-network',
         'aggr': 'add',
         'derivative': True,
@@ -47,4 +47,4 @@ def test_gn(device):
     energy, gradient = model(elements, positions)
 
     assert pt.allclose(ref_energy, energy, atol=5e-7)
-    assert pt.allclose(ref_gradient, gradient, atol=5e-7)
+    assert pt.allclose(ref_gradient, gradient, atol=5e-6)
