@@ -39,7 +39,8 @@ jobs:
         key:
           ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-${{ hashFiles('environment.yml') }}
 
-    - uses: conda-incubator/setup-miniconda@v2
+    - name: Create a conda environment
+      uses: conda-incubator/setup-miniconda@v2
       with:
         activate-environment: torchmd-net
         channels: acellera,conda-forge,defaults
@@ -50,12 +51,11 @@ jobs:
         use-only-tar-bz2: true # IMPORTANT: This needs to be set for caching to work properly!
         auto-activate-base: false
 
-    - run: which pip
+    - name: Install the package
+      run: pip install .
 
-    - name: Install pip dependencies
-      run: |
-        pip install flake8 pytest
-        pip install .
+    - name: List the conda environment
+      run: conda list
 
     - name: Lint with flake8
       run: |

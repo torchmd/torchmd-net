@@ -3,15 +3,20 @@ channels:
   - raimis
   - conda-forge
 dependencies:
+  - ase
+  - h5py
   - matplotlib
   - pip
   - python
-  - pytorch
+  - pytorch==1.10.0
   # The official PyTorch Geometric package is not compatible with conda-forge,
   # while the package on conda-forge is broken
   # (https://github.com/pyg-team/pytorch_geometric/issues/3660).
   # Until a better solution is found a have custom package to plug the gap.
   - raimis::pytorch-geometric==2.0.2
   - pytorch-lightning==1.5.8
-  - h5py
+  - setuptools==59.5.0 # Pin due to https://github.com/pytorch/pytorch/pull/69904
   - tqdm
+  # Dev tools
+  - flake8
+  - pytest
