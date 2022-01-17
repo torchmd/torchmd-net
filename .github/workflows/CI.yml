@@ -1,4 +1,4 @@
-name: Test code
+name: CI
 
 on:
   push:
@@ -11,51 +11,37 @@ on:
     - cron: "0 0 * * 0" # Run every Sunday at 0:00
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ["ubuntu-latest"]
-        python-version: ["3.7"]
-
+  test:
+    runs-on: "ubuntu-latest"
     defaults: # Needed for conda
       run:
         shell: bash -l {0}
 
     steps:
-    - uses: actions/checkout@v2
-      with:
-        lfs: true
+    - name: Check out
+      uses: actions/checkout@v2
 
-    - name: Cache conda
+    - name: Cache conda packages
       uses: actions/cache@v1
+      with:
+        path: ~/conda_pkgs_dir
+        key: ${{ runner.os }}-${{ env.CACHE_NUMBER }}-${{ hashFiles('environment.yml') }}
       env:
         # Increase this value to reset cache if environment.yml has not changed
         CACHE_NUMBER: 0
-      with:
-        path: ~/conda_pkgs_dir
-        key:
-          ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-${{ hashFiles('environment.yml') }}
 
-    - uses: conda-incubator/setup-miniconda@v2
+    - name: Create a conda environment
+      uses: conda-incubator/setup-miniconda@v2
       with:
         activate-environment: torchmd-net
-        channels: acellera,conda-forge,defaults
-        channel-priority: true
         environment-file: environment.yml
-        # python-version: ${{ matrix.python-version }}
-        # auto-update-conda: true
         use-only-tar-bz2: true # IMPORTANT: This needs to be set for caching to work properly!
-        auto-activate-base: false
 
-    - run: which pip
+    - name: Install the package
+      run: pip install .
 
-    - name: Install pip dependencies
-      run: |
-        pip install flake8 pytest
-        pip install .
+    - name: List the conda environment
+      run: conda list
 
     - name: Lint with flake8
       run: |
@@ -65,5 +51,4 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
     - name: Run tests
-      run: |
-        pytest
+      run: pytest
