@@ -16,14 +16,8 @@ def test_create_model(model_name):
     LNNP(load_example_args(model_name), prior_model=Atomref(100))
 
 
-@mark.parametrize(
-    "checkpoint",
-    glob(
-        join(dirname(dirname(__file__)), "examples", "pretrained", "**", "*.ckpt"),
-        recursive=True,
-    ),
-)
-def test_load_model(checkpoint):
+def test_load_model():
+    checkpoint = join(dirname(dirname(__file__)), "tests", "example.ckpt")
     load_model(checkpoint)
 
 
@@ -37,9 +31,12 @@ def test_train(model_name, tmpdir):
         test_size=None,
         log_dir=tmpdir,
         derivative=True,
+        embedding_dimension=32,
+        num_layers=3,
+        num_rbf=16,
     )
     module = LNNP(args)
     datamodule = DataModule(args, DummyDataset())
-    trainer = pl.Trainer(max_steps=100, default_root_dir=tmpdir)
+    trainer = pl.Trainer(max_steps=10, default_root_dir=tmpdir)
     trainer.fit(module, datamodule)
     trainer.test()

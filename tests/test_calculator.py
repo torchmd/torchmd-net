@@ -9,14 +9,8 @@ from torchmdnet.models.model import load_model
 from utils import create_example_batch
 
 
-@mark.parametrize(
-    "checkpoint",
-    glob(
-        join(dirname(dirname(__file__)), "examples", "pretrained", "**", "*.ckpt"),
-        recursive=True,
-    ),
-)
-def test_compare_forward(checkpoint):
+def test_compare_forward():
+    checkpoint = join(dirname(dirname(__file__)), "tests", "example.ckpt")
     z, pos, _ = create_example_batch(multiple_batches=False)
     calc = External(checkpoint, z.unsqueeze(0))
     model = load_model(checkpoint, derivative=True)
@@ -28,14 +22,8 @@ def test_compare_forward(checkpoint):
     assert_allclose(f_calc, f_pred.unsqueeze(0))
 
 
-@mark.parametrize(
-    "checkpoint",
-    glob(
-        join(dirname(dirname(__file__)), "examples", "pretrained", "**", "*.ckpt"),
-        recursive=True,
-    ),
-)
-def test_compare_forward_multiple(checkpoint):
+def test_compare_forward_multiple():
+    checkpoint = join(dirname(dirname(__file__)), "tests", "example.ckpt")
     z1, pos1, _ = create_example_batch(multiple_batches=False)
     z2, pos2, _ = create_example_batch(multiple_batches=False)
     calc = External(checkpoint, torch.stack([z1, z2], dim=0))
