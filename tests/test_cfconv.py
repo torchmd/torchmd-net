@@ -1,3 +1,4 @@
+import pytest
 from pytest import mark
 import torch as pt
 from torchmdnet.models.torchmd_gn import CFConv as RefCFConv
@@ -10,6 +11,9 @@ from NNPOps.CFConvNeighbors import CFConvNeighbors
 @mark.parametrize(['num_atoms', 'num_filters', 'num_rbfs'], [(3, 5, 7), (3, 7, 5), (5, 3, 7), (5, 7, 3), (7, 3, 5), (7, 5, 3)])
 @mark.parametrize('cutoff_upper', [5.0, 10.0])
 def test_cfconv(device, num_atoms, num_filters, num_rbfs, cutoff_upper):
+
+    if not pt.cuda.is_available() and device == 'cuda':
+        pytest.skip('No GPU')
 
     device = pt.device(device)
 

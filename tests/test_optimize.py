@@ -1,3 +1,4 @@
+import pytest
 from pytest import mark
 import torch as pt
 from torchmdnet.models.model import create_model
@@ -6,6 +7,9 @@ from torchmdnet.optimize import optimize
 @mark.parametrize('device', ['cpu', 'cuda'])
 @mark.parametrize('num_atoms', [10, 100])
 def test_gn(device, num_atoms):
+
+    if not pt.cuda.is_available() and device == 'cuda':
+        pytest.skip('No GPU')
 
     device = pt.device(device)
 
