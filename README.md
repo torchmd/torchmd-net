@@ -3,29 +3,28 @@
 TorchMD-Net provides state-of-the-art graph neural networks and equivariant transformer neural networks potentials for learning molecular potentials. It offers an efficient and fast implementation and it is integrated in GPU-accelerated molecular dynamics code like [ACEMD](https://www.acellera.com/products/molecular-dynamics-software-gpu-acemd/) and [OpenMM](https://www.openmm.org). See the full paper at https://arxiv.org/abs/2202.02541.
 
 ## Installation
-Create a new conda environment using Python 3.8 via
+
+### Get source code
+
+Clone the repository:
 ```
-conda create --name torchmd python=3.8
-conda activate torchmd
+git clone https://github.com/torchmd/torchmd-net.git
+cd torchmd-net
 ```
 
-### Install PyTorch
-Then, install PyTorch according to your hardware specifications (more information [here](https://pytorch.org/get-started/locally/#start-locally)), e.g. for CUDA 11.1 and the most recent version of PyTorch use
+### Install dependencies
+
+Create a Conda environment and activate it:
 ```
-conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c nvidia
+conda env create -f environment.yml
+conda activate torchmd-net
 ```
-### Install PyTorch Geometric
-Install `pytorch-geometric` with its dependencies through
-```
-conda install pytorch-geometric -c rusty1s -c conda-forge
-```
-To install PyTorch Geometric via pip or for PyTorch < 1.8, see https://github.com/rusty1s/pytorch_geometric#installation.
 
 ### Install TorchMD-Net
-Download and install the `torchmd-net` repository via
+
+Install TorchMD-Net into the Conda environment:
 ```
-git clone https://github.com/compsciencelab/torchmd-net.git
-pip install -e torchmd-net/
+pip install -e .
 ```
 
 ## Performance
