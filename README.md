@@ -1,6 +1,6 @@
-# TorchMD-net
+# TorchMD-NET
 
-TorchMD-Net provides state-of-the-art graph neural networks and equivariant transformer neural networks potentials for learning molecular potentials. It offers an efficient and fast implementation and it is integrated in GPU-accelerated molecular dynamics code like [ACEMD](https://www.acellera.com/products/molecular-dynamics-software-gpu-acemd/) and [OpenMM](https://www.openmm.org). See the full paper at https://arxiv.org/abs/2202.02541.
+TorchMD-NET provides state-of-the-art graph neural networks and equivariant transformer neural networks potentials for learning molecular potentials. It offers an efficient and fast implementation and it is integrated in GPU-accelerated molecular dynamics code like [ACEMD](https://www.acellera.com/products/molecular-dynamics-software-gpu-acemd/) and [OpenMM](https://www.openmm.org). See the full paper at https://arxiv.org/abs/2202.02541.
 
 ## Installation
 
@@ -20,15 +20,15 @@ conda env create -f environment.yml
 conda activate torchmd-net
 ```
 
-### Install TorchMD-Net
+### Install TorchMD-NET
 
-Install TorchMD-Net into the Conda environment:
+Install TorchMD-NET into the Conda environment:
 ```
 pip install -e .
 ```
 
 ## Performance
-The TorchMD-net equivariant Transformer (ET) is competitive with previous methods on the MD17 benchmark dataset.
+The TorchMD-NET equivariant Transformer (ET) is competitive with previous methods on the MD17 benchmark dataset.
 
 
 ![image](https://user-images.githubusercontent.com/36135990/146565069-a3c03827-5ee2-44b0-89b0-9e02e129b6df.png)
