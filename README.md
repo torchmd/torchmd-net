@@ -4,23 +4,17 @@ TorchMD-NET provides state-of-the-art graph neural networks and equivariant tran
 
 ## Installation
 
-### Get source code
-
 Clone the repository:
 ```
 git clone https://github.com/torchmd/torchmd-net.git
 cd torchmd-net
 ```
 
-### Install dependencies
-
 Create a Conda environment and activate it:
 ```
 conda env create -f environment.yml
 conda activate torchmd-net
 ```
-
-### Install TorchMD-NET
 
 Install TorchMD-NET into the Conda environment:
 ```
