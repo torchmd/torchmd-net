@@ -51,4 +51,4 @@ def test_gn(device, num_atoms):
     energy, gradient = model(elements, positions)
 
     assert pt.allclose(ref_energy, energy, atol=5e-7)
-    assert pt.allclose(ref_gradient, gradient, atol=5e-6)
+    assert pt.allclose(ref_gradient, gradient, atol=1e-5)
