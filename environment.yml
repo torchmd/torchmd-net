@@ -1,11 +1,14 @@
 name: torchmd-net
 channels:
   - raimis
+  - mmh
   - conda-forge
 dependencies:
   - ase
   - h5py
   - matplotlib
+  # An official NNPOps packages still not available
+  - mmh::nnpops==0.2
   - pip
   - python
   - pytorch==1.10.0
