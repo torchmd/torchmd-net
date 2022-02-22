@@ -224,7 +224,7 @@ class EquivariantMultiHeadAttention(MessagePassing):
         self.v_proj = nn.Linear(hidden_channels, hidden_channels * 3)
         self.o_proj = nn.Linear(hidden_channels, hidden_channels * 3)
 
-        self.vec_proj = nn.Linear(hidden_channels, hidden_channels * 3)
+        self.vec_proj = nn.Linear(hidden_channels, hidden_channels * 3, bias=False)
 
         self.dk_proj = None
         if distance_influence in ["keys", "both"]:
@@ -247,7 +247,6 @@ class EquivariantMultiHeadAttention(MessagePassing):
         nn.init.xavier_uniform_(self.o_proj.weight)
         self.o_proj.bias.data.fill_(0)
         nn.init.xavier_uniform_(self.vec_proj.weight)
-        self.vec_proj.bias.data.fill_(0)
         if self.dk_proj:
             nn.init.xavier_uniform_(self.dk_proj.weight)
             self.dk_proj.bias.data.fill_(0)

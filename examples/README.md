@@ -11,7 +11,7 @@ Use the `CUDA_VISIBLE_DEVICES` environment variable to select which and how many
 You can access several pretrained checkpoint files under the following URLs:
 - equivariant Transformer pretrained on QM9 (U0): http://pub.htmd.org/et-qm9.zip
 - equivariant Transformer pretrained on MD17 (aspirin): http://pub.htmd.org/et-md17.zip
-- equivariant Transformer pretrained on ANI1: http://pub.htmd.org/et-ani1.zip
+- equivariant Transformer pretrained on ANI1: http://pub.htmd.org/et-ani1.zip (broken on main, fix will follow soon)
 - invariant Transformer pretrained on ANI1: http://pub.htmd.org/t-ani1.zip
 
 The checkpoints can be loaded using the `load_model` function in TorchMD-Net. Additional model arguments (e.g. turning on force prediction on top of energies) for inference can also be passed to the function. See the following example code for loading an ET pretrained on the ANI1 dataset:
