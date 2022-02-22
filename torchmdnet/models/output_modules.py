@@ -145,3 +145,15 @@ class ElectronicSpatialExtent(OutputModel):
 
 class EquivariantElectronicSpatialExtent(ElectronicSpatialExtent):
     pass
+
+
+class EquivariantVectorOutput(EquivariantScalar):
+    def __init__(self, hidden_channels, activation="silu"):
+        super(EquivariantVectorOutput, self).__init__(
+            hidden_channels, activation, allow_prior_model=False
+        )
+
+    def pre_reduce(self, x, v, z, pos, batch):
+        for layer in self.output_network:
+            x, v = layer(x, v)
+        return v.squeeze()
