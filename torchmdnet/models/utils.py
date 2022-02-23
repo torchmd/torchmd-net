@@ -56,11 +56,11 @@ class NeighborEmbedding(MessagePassing):
 
     def forward(self, z, x, edge_index, edge_weight, edge_attr):
         # remove self loops
-        mask = edge_index[0] != edge_index[1]
-        if not mask.all():
-            edge_index = edge_index[:, mask]
-            edge_weight = edge_weight[mask]
-            edge_attr = edge_attr[mask]
+        # mask = edge_index[0] != edge_index[1]
+        # if not mask.all():
+        #     edge_index = edge_index[:, mask]
+        #     edge_weight = edge_weight[mask]
+        #     edge_attr = edge_attr[mask]
 
         C = self.cutoff(edge_weight)
         W = self.distance_proj(edge_attr) * C.view(-1, 1)

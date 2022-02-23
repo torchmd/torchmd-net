@@ -174,7 +174,8 @@ class TorchMD_Net(nn.Module):
             x = self.prior_model(x, z, pos, batch)
 
         # aggregate atoms
-        out = scatter(x, batch, dim=0, reduce=self.reduce_op)
+        out = x.sum(0, keepdim=True) if self.reduce_op == "simple_add" else \
+              scatter(x, batch, dim=0, reduce=self.reduce_op)
 
         # shift by data mean
         if self.mean is not None:
