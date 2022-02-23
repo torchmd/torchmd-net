@@ -4,6 +4,7 @@ from torchmdnet.models.utils import (
     NeighborEmbedding,
     CosineCutoff,
     Distance,
+    DistanceBruteForce,
     rbf_class_mapping,
     act_class_mapping,
 )
@@ -70,6 +71,7 @@ class TorchMD_GN(nn.Module):
         max_z=100,
         max_num_neighbors=32,
         aggr="add",
+        neighbors="simple"
     ):
         super(TorchMD_GN, self).__init__()
 
@@ -99,14 +101,19 @@ class TorchMD_GN(nn.Module):
         self.cutoff_upper = cutoff_upper
         self.max_z = max_z
         self.aggr = aggr
+        self.neighbors = neighbors
 
         act_class = act_class_mapping[activation]
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels)
 
-        self.distance = Distance(
-            cutoff_lower, cutoff_upper, max_num_neighbors=max_num_neighbors
-        )
+        if self.neighbors == "simple":
+            self.distance = Distance(cutoff_lower, cutoff_upper, max_num_neighbors=max_num_neighbors)
+        elif self.neighbors == "brute_force":
+            self.distance = DistanceBruteForce()
+        else:
+            raise ValueError('neighbours')
+
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
         )
