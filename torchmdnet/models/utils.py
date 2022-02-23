@@ -238,6 +238,24 @@ class Distance(nn.Module):
         return edge_index, edge_weight, None
 
 
+class DistanceBruteForce(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, pos, batch):
+
+        num_nodes = len(pos)
+        indices = torch.arange(0, num_nodes, device=pos.device)
+        edge_index = torch.stack(torch.meshgrid(indices, indices, indexing='ij'))
+        edge_index = edge_index.reshape((2, -1))[:,1:].reshape((2, -1, num_nodes + 1))[:,:,:-1].reshape((2, -1))
+
+        left, right = edge_index
+        edge_vec = torch.index_select(pos, 0, left) - torch.index_select(pos, 0, right)
+        edge_weight = torch.norm(edge_vec, dim=-1)
+
+        return edge_index, edge_weight, None
+
+
 class GatedEquivariantBlock(nn.Module):
     """Gated Equivariant Block as defined in Schütt et al. (2021):
     Equivariant message passing for the prediction of tensorial properties and molecular spectra
