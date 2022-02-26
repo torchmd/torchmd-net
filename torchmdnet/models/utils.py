@@ -245,12 +245,14 @@ class DistanceBruteForce(nn.Module):
     def forward(self, pos, batch):
 
         num_nodes = len(pos)
-        indices = torch.arange(0, num_nodes, device=pos.device)
-        edge_index = torch.stack(torch.meshgrid(indices, indices, indexing='ij'))
-        edge_index = edge_index.reshape((2, -1))[:,1:].reshape((2, -1, num_nodes + 1))[:,:,:-1].reshape((2, -1))
+        indices = torch.arange(0, num_nodes * (num_nodes - 1), device=pos.device)
 
-        left, right = edge_index
-        edge_vec = torch.index_select(pos, 0, left) - torch.index_select(pos, 0, right)
+        row = torch.div(indices, num_nodes - 1, rounding_mode='floor')
+        column = torch.div(indices, num_nodes, rounding_mode='floor')
+        column = torch.remainder(indices + column + 1, num_nodes)
+
+        edge_index = torch.vstack((row, column))
+        edge_vec = torch.index_select(pos, 0, row) - torch.index_select(pos, 0, column)
         edge_weight = torch.norm(edge_vec, dim=-1)
 
         return edge_index, edge_weight, None
