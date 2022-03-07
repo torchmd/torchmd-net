@@ -18,7 +18,7 @@ template <typename scalar_t, int num_dims>
     using Accessor = PackedTensorAccessor32<scalar_t, num_dims, RestrictPtrTraits>;
 
 template <typename scalar_t, int num_dims> 
-inline Accessor<scalar_t, num_dims> get_accessor(Tensor tensor) {
+inline Accessor<scalar_t, num_dims> get_accessor(const Tensor& tensor) {
     return tensor.packed_accessor32<scalar_t, num_dims, RestrictPtrTraits>();
 };
 
