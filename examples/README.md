@@ -11,13 +11,13 @@ Use the `CUDA_VISIBLE_DEVICES` environment variable to select which and how many
 You can access several pretrained checkpoint files under the following URLs:
 - equivariant Transformer pretrained on QM9 (U0): http://pub.htmd.org/et-qm9.zip
 - equivariant Transformer pretrained on MD17 (aspirin): http://pub.htmd.org/et-md17.zip
-- equivariant Transformer pretrained on ANI1: http://pub.htmd.org/et-ani1.zip (broken on main, fix will follow soon)
+- equivariant Transformer pretrained on ANI1: http://pub.htmd.org/et-ani1.zip
 - invariant Transformer pretrained on ANI1: http://pub.htmd.org/t-ani1.zip
 
 The checkpoints can be loaded using the `load_model` function in TorchMD-Net. Additional model arguments (e.g. turning on force prediction on top of energies) for inference can also be passed to the function. See the following example code for loading an ET pretrained on the ANI1 dataset:
 ```python
 from torchmdnet.models.model import load_model
-model = load_model("ANI1-equivariant_transformer/epoch=209-val_loss=0.0003-test_loss=0.0093.ckpt", derivative=True)
+model = load_model("ANI1-equivariant_transformer/epoch=359-val_loss=0.0004-test_loss=0.0120.ckpt ", derivative=True)
 ```
 The following example shows how to run inference on the model checkpoint. For single molecules, you just have to pass atomic numbers and position tensors, to evaluate the model on multiple molecules simultaneously, also include a batch tensor, which contains the molecule index of each atom.
 ```python
