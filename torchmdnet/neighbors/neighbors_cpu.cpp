@@ -25,7 +25,7 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions) {
     const Tensor vectors = index_select(positions, 0, rows) - index_select(positions, 0, columns);
     const Tensor distances = frobenius_norm(vectors, 1);
 
-    return {rows, vectors, distances};
+    return {rows, columns, distances};
 }
 
 TORCH_LIBRARY_IMPL(neighbors, CPU, m) {

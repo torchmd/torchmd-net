@@ -150,7 +150,7 @@ public:
 };
 
 TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
-    m.impl("get_neighbor_list", [&](const Tensor& positions){
+    m.impl("get_neighbor_list", [](const Tensor& positions){
         const tensor_list neighbors = Autograd::apply(positions);
         return make_tuple(neighbors[0], neighbors[1], neighbors[2]);
     });
