@@ -8,6 +8,7 @@ from pytorch_lightning.utilities import rank_zero_warn
 from torchmdnet.models import output_modules
 from torchmdnet.models.wrappers import AtomFilter
 from torchmdnet import priors
+import warnings
 
 
 def create_model(args, prior_model=None, mean=None, std=None):
@@ -103,7 +104,8 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
         args = ckpt["hyper_parameters"]
 
     for key, value in kwargs.items():
-        assert key in args, "Unknown hyperparameter '{key}'."
+        if not key in args:
+            warnings.warn(f'Unknown hyperparameter: {key}={value}')
         args[key] = value
 
     model = create_model(args)
