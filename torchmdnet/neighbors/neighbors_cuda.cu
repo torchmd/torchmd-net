@@ -37,9 +37,8 @@ template <typename scalar_t> __global__ void forward_kernel(
     const int32_t num_neighbors = distances.size(0);
     if (index >= num_neighbors) return;
 
-    const int32_t num_atoms = positions.size(0);
-    const int32_t row = index / (num_atoms - 1);
-    const int32_t column = (index + index / num_atoms + 1) % num_atoms;
+    const int32_t row = (__float2int_rd(__fsqrt_ru(__int2float_ru(8 * index + 1))) + 1) / 2;
+    const int32_t column = index - row * (row - 1) / 2;
 
     const scalar_t delta_x = positions[row][0] - positions[column][0];
     const scalar_t delta_y = positions[row][1] - positions[column][1];
@@ -66,7 +65,7 @@ template <typename scalar_t> __global__ void backward_kernel(
     const int32_t num_neighbors = distances.size(0);
     if (index >= num_neighbors) return;
 
-    const scalar_t grad = grad_distances[index] / distances[index]; // TODO debug
+    const scalar_t grad = grad_distances[index] / distances[index];
     const scalar_t grad_x = deltas[index][0] * grad;
     const scalar_t grad_y = deltas[index][1] * grad;
     const scalar_t grad_z = deltas[index][2] * grad;
@@ -91,7 +90,7 @@ public:
         TORCH_CHECK(positions.is_contiguous(), "Expected \"positions\" to be contiguous");
 
         const int num_atoms = positions.size(0);
-        const int num_neighbors = num_atoms*(num_atoms - 1);
+        const int num_neighbors = num_atoms * (num_atoms - 1) / 2;
         const int num_threads = 128;
         const int num_blocks = (num_neighbors + num_threads - 1) / num_threads;
         const auto stream = getCurrentCUDAStream(positions.get_device());

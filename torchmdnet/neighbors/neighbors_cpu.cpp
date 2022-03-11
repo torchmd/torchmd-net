@@ -4,9 +4,8 @@
 using std::tuple;
 using torch::index_select;
 using torch::arange;
-using torch::div;
 using torch::frobenius_norm;
-using torch::remainder;
+using torch::kInt32;
 using torch::Tensor;
 
 static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions) {
@@ -16,11 +15,11 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions) {
     TORCH_CHECK(positions.is_contiguous(), "Expected \"positions\" to be contiguous");
 
     const int num_atoms = positions.size(0);
-    const int num_neighbors = num_atoms * (num_atoms - 1);
+    const int num_neighbors = num_atoms * (num_atoms - 1) / 2;
 
-    const Tensor indices = arange(0, num_neighbors, positions.options().dtype(torch::kInt32));
-    const Tensor rows = div(indices, num_atoms - 1, "floor");
-    const Tensor columns = remainder(indices + div(indices, num_atoms, "floor") + 1, num_atoms);
+    const Tensor indices = arange(0, num_neighbors, positions.options().dtype(kInt32));
+    const Tensor rows = (((8 * indices + 1).sqrt() + 1) / 2).to(kInt32);
+    const Tensor columns = (indices - rows * (rows - 1) / 2).to(kInt32);
 
     const Tensor vectors = index_select(positions, 0, rows) - index_select(positions, 0, columns);
     const Tensor distances = frobenius_norm(vectors, 1);
