@@ -40,3 +40,6 @@ class Ace(Dataset):
 
     def len(self):
         return len(self.mol_indices)
+
+    def get_atomref(self):
+        raise NotImplementedError
