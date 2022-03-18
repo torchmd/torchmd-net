@@ -1,3 +1,4 @@
+from glob import glob
 import h5py
 import torch as pt
 from torch_geometric.data import Dataset, Data
@@ -5,11 +6,11 @@ from torch_geometric.data import Dataset, Data
 
 class Ace(Dataset):
 
-    def __init__(self, filenames):
+    def __init__(self, filenames, **kwargs):
         super().__init__()
 
         # Open HDF5 files
-        self.files = [h5py.File(name) for name in filenames]
+        self.files = [h5py.File(name) for name in glob(filenames)]
 
         # Index samples
         self.mol_indices = []
@@ -29,11 +30,11 @@ class Ace(Dataset):
 
         # Get molecular data
         return Data(
-            q=pt.tensor(mol.attrs['charge'], dtype=pt.int8),
-            s=pt.tensor(mol.attrs['spin'], dtype=pt.int8),
-            z=pt.tensor(mol['atomic_numbers'], dtype=pt.int8),
+            q=pt.tensor(mol.attrs['charge'], dtype=pt.long),
+            s=pt.tensor(mol.attrs['spin'], dtype=pt.long),
+            z=pt.tensor(mol['atomic_numbers'], dtype=pt.long),
             pos=pt.tensor(mol['positions'][iconf], dtype=pt.float32),
-            y=pt.tensor(mol['energy'][iconf], dtype=pt.float64),
+            y=pt.tensor(mol['energy'][iconf], dtype=pt.float32),
             dy=pt.tensor(mol['forces'][iconf], dtype=pt.float32),
             d=pt.tensor(mol['dipole_moment'][iconf], dtype=pt.float32))
 
