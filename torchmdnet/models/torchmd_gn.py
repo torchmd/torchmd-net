@@ -141,7 +141,7 @@ class TorchMD_GN(nn.Module):
         for interaction in self.interactions:
             interaction.reset_parameters()
 
-    def forward(self, z, pos, batch):
+    def forward(self, z, pos, q, s, batch):
         x = self.embedding(z)
 
         edge_index, edge_weight, _ = self.distance(pos, batch)

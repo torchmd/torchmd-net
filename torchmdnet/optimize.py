@@ -35,7 +35,7 @@ class TorchMD_GN_optimized(pt.nn.Module):
                              weights2=inter.mlp[2].weight.T, biases2=inter.mlp[2].bias)
                       for inter in self.model.interactions]
 
-    def forward(self, z, pos, batch):
+    def forward(self, z, pos, q, s, batch):
 
         assert pt.all(batch == 0)
 

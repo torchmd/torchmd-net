@@ -156,12 +156,14 @@ class TorchMD_Net(nn.Module):
     def forward(self, z, pos, q: Optional[torch.Tensor] = None, s: Optional[torch.Tensor] = None, batch: Optional[torch.Tensor] = None):
         assert z.dim() == 1 and z.dtype == torch.long
         batch = torch.zeros_like(z) if batch is None else batch
+        q = torch.zeros_like(z) if q is None else q
+        s = torch.zeros_like(z) if s is None else s
 
         if self.derivative:
             pos.requires_grad_(True)
 
         # run the potentially wrapped representation model
-        x, v, z, pos, batch = self.representation_model(z, pos, batch=batch)
+        x, v, z, pos, batch = self.representation_model(z, pos, q, s, batch)
 
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch)
