@@ -66,7 +66,7 @@ def test_forward_output(model_name, output_model, overwrite_reference=False):
     z, pos, batch = create_example_batch(n_atoms=5)
 
     # run step
-    pred, deriv = model(z, pos, batch)
+    pred, deriv = model(z, pos, batch=batch)
 
     # load reference outputs
     expected_path = join(dirname(__file__), "expected.pkl")

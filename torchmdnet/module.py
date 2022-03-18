@@ -10,6 +10,12 @@ from torchmdnet.models.model import create_model, load_model
 class LNNP(LightningModule):
     def __init__(self, hparams, prior_model=None, mean=None, std=None):
         super(LNNP, self).__init__()
+
+        if "charge" not in hparams:
+            hparams["charge"] = False
+        if "spin" not in hparams:
+            hparams["spin"] = False
+
         self.save_hyperparameters(hparams)
 
         if self.hparams.load_model:
@@ -46,8 +52,8 @@ class LNNP(LightningModule):
         }
         return [optimizer], [lr_scheduler]
 
-    def forward(self, z, pos, batch=None):
-        return self.model(z, pos, batch=batch)
+    def forward(self, z, pos, q=None, s=None, batch=None):
+        return self.model(z, pos, q=q, s=s, batch=batch)
 
     def training_step(self, batch, batch_idx):
         return self.step(batch, mse_loss, "train")
@@ -66,7 +72,14 @@ class LNNP(LightningModule):
         with torch.set_grad_enabled(stage == "train" or self.hparams.derivative):
             # TODO: the model doesn't necessarily need to return a derivative once
             # Union typing works under TorchScript (https://github.com/pytorch/pytorch/pull/53180)
-            pred, deriv = self(batch.z, batch.pos, batch.batch)
+            if self.hparams.charge and self.hparams.spin:
+                pred, deriv = self(batch.z, batch.pos, q=batch.q, s=batch.s, batch=batch.batch)
+            elif self.hparams.charge:
+                pred, deriv = self(batch.z, batch.pos, q=batch.q, batch=batch.batch)
+            elif self.hparams.spin:
+                pred, deriv = self(batch.z, batch.pos, s=batch.s, batch=batch.batch)
+            else:
+                pred, deriv = self(batch.z, batch.pos, batch=batch.batch)
 
         loss_y, loss_dy = 0, 0
         if self.hparams.derivative:
