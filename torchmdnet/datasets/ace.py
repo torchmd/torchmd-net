@@ -15,7 +15,7 @@ class Ace(Dataset):
         # Index samples
         self.mol_indices = []
         for ifile, file_ in enumerate(self.files):
-            for imol, name in enumerate(file_):
+            for name in file_:
                 if 'error' in file_[name]:
                     continue # Skip failed molecules
                 num_confs = len(file_[name]['energy'])
