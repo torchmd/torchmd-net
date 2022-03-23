@@ -18,8 +18,8 @@ def test_scalar_invariance():
     pos = torch.randn(100, 3)
     batch = torch.arange(50, dtype=torch.long).repeat_interleave(2)
 
-    y = model(z, pos, batch=batch)[0]
-    y_rot = model(z, pos @ rotate, batch=batch)[0]
+    y = model(z, pos, batch)[0]
+    y_rot = model(z, pos @ rotate, batch)[0]
     torch.testing.assert_allclose(y, y_rot)
 
 
@@ -42,6 +42,6 @@ def test_vector_equivariance():
     pos = torch.randn(100, 3)
     batch = torch.arange(50, dtype=torch.long).repeat_interleave(2)
 
-    y = model(z, pos, batch=batch)[0]
-    y_rot = model(z, pos @ rotate, batch=batch)[0]
+    y = model(z, pos, batch)[0]
+    y_rot = model(z, pos @ rotate, batch)[0]
     torch.testing.assert_allclose(y @ rotate, y_rot)
