@@ -102,7 +102,7 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
 
     for key, value in kwargs.items():
         if not key in args:
-            warnings.warn(f'Unknown hyperparameter: {key}={value}')
+            warnings.warn(f"Unknown hyperparameter: {key}={value}")
         args[key] = value
 
     model = create_model(args)
