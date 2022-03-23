@@ -7,20 +7,19 @@ from .models.torchmd_gn import TorchMD_GN
 
 
 class TorchMD_GN_optimized(pt.nn.Module):
-
     def __init__(self, model):
 
-        if model.rbf_type != 'gauss':
+        if model.rbf_type != "gauss":
             raise ValueError('Only rbf_type="gauss" is supproted')
         if model.trainable_rbf:
-            raise ValueError('trainalbe_rbf=True is not supported')
-        if model.activation != 'ssp':
+            raise ValueError("trainalbe_rbf=True is not supported")
+        if model.activation != "ssp":
             raise ValueError('Only activation="ssp" is supported')
         if model.neighbor_embedding:
-            raise ValueError('neighbor_embedding=True is not supported')
+            raise ValueError("neighbor_embedding=True is not supported")
         if model.cutoff_lower != 0.0:
-            raise ValueError('Only lower_cutoff=0.0 is supported')
-        if model.aggr != 'add':
+            raise ValueError("Only lower_cutoff=0.0 is supported")
+        if model.aggr != "add":
             raise ValueError('Only aggr="add" is supported')
 
         super().__init__()
@@ -30,10 +29,17 @@ class TorchMD_GN_optimized(pt.nn.Module):
 
         offset = self.model.distance_expansion.offset
         width = offset[1] - offset[0]
-        self.convs = [CFConv(gaussianWidth=width, activation='ssp',
-                             weights1=inter.mlp[0].weight.T, biases1=inter.mlp[0].bias,
-                             weights2=inter.mlp[2].weight.T, biases2=inter.mlp[2].bias)
-                      for inter in self.model.interactions]
+        self.convs = [
+            CFConv(
+                gaussianWidth=width,
+                activation="ssp",
+                weights1=inter.mlp[0].weight.T,
+                biases1=inter.mlp[0].bias,
+                weights2=inter.mlp[2].weight.T,
+                biases2=inter.mlp[2].bias,
+            )
+            for inter in self.model.interactions
+        ]
 
     def forward(self, z, pos, batch):
 
@@ -52,7 +58,7 @@ class TorchMD_GN_optimized(pt.nn.Module):
         return x, None, z, pos, batch
 
     def __repr__(self):
-        return 'Optimized: ' + repr(self.model)
+        return "Optimized: " + repr(self.model)
 
 
 def optimize(model):
@@ -62,6 +68,6 @@ def optimize(model):
     if isinstance(model.representation_model, TorchMD_GN):
         model.representation_model = TorchMD_GN_optimized(model.representation_model)
     else:
-        raise ValueError('Unsupported model! Only TorchMD_GN is suppored.')
+        raise ValueError("Unsupported model! Only TorchMD_GN is suppored.")
 
     return model
