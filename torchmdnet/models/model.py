@@ -153,7 +153,7 @@ class TorchMD_Net(nn.Module):
         if self.prior_model is not None:
             self.prior_model.reset_parameters()
 
-    def forward(self, z, pos, q: Optional[torch.Tensor] = None, s: Optional[torch.Tensor] = None, batch: Optional[torch.Tensor] = None):
+    def forward(self, z, pos, batch: Optional[torch.Tensor] = None, q: Optional[torch.Tensor] = None, s: Optional[torch.Tensor] = None):
         assert z.dim() == 1 and z.dtype == torch.long
         batch = torch.zeros_like(z) if batch is None else batch
         q = torch.zeros_like(z) if q is None else q

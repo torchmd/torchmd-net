@@ -52,8 +52,8 @@ class LNNP(LightningModule):
         }
         return [optimizer], [lr_scheduler]
 
-    def forward(self, z, pos, q=None, s=None, batch=None):
-        return self.model(z, pos, q=q, s=s, batch=batch)
+    def forward(self, z, pos, batch=None, q=None, s=None):
+        return self.model(z, pos, batch=batch, q=q, s=s)
 
     def training_step(self, batch, batch_idx):
         return self.step(batch, mse_loss, "train")
