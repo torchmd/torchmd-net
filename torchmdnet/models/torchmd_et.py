@@ -152,7 +152,8 @@ class TorchMD_ET(nn.Module):
                 pos: Tensor,
                 batch: Tensor,
                 q: Optional[Tensor] = None,
-                s: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
+                s: Optional[Tensor] = None
+                ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
 
         x = self.embedding(z)
 
@@ -176,7 +177,7 @@ class TorchMD_ET(nn.Module):
             vec = vec + dvec
         x = self.out_norm(x)
 
-        return x, vec
+        return x, vec, z, pos, batch
 
     def __repr__(self):
         return (

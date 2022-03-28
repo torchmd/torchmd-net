@@ -143,7 +143,8 @@ class TorchMD_T(nn.Module):
                 pos: Tensor,
                 batch: Tensor,
                 s: Optional[Tensor] = None,
-                q: Optional[Tensor] = None) -> Tuple[Tensor, Optional[Tensor]]:
+                q: Optional[Tensor] = None
+                ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
 
         x = self.embedding(z)
 
@@ -157,7 +158,7 @@ class TorchMD_T(nn.Module):
             x = x + attn(x, edge_index, edge_weight, edge_attr)
         x = self.out_norm(x)
 
-        return x, None
+        return x, None, z, pos, batch
 
     def __repr__(self):
         return (

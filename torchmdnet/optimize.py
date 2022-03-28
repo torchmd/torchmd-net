@@ -47,7 +47,8 @@ class TorchMD_GN_optimized(pt.nn.Module):
                 pos: pt.Tensor,
                 batch: pt.Tensor,
                 q: Optional[pt.Tensor] = None,
-                s: Optional[pt.Tensor] = None) -> Tuple[pt.Tensor, Optional[pt.Tensor]]:
+                s: Optional[pt.Tensor] = None
+                ) -> Tuple[pt.Tensor, Optional[pt.Tensor], pt.Tensor, pt.Tensor, pt.Tensor]:
 
         assert pt.all(batch == 0)
 
@@ -61,7 +62,7 @@ class TorchMD_GN_optimized(pt.nn.Module):
             y = inter.act(y)
             x = x + inter.lin(y)
 
-        return x, None
+        return x, None, z, pos, batch
 
     def __repr__(self):
         return "Optimized: " + repr(self.model)
