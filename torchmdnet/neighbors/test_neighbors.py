@@ -4,7 +4,7 @@ import pytest
 import torch as pt
 from torchmdnet.neighbors import get_neighbor_list
 
-@pytest.mark.parametrize('num_atoms', range(1, 11))
+@pytest.mark.parametrize('num_atoms', [1, 2, 3, 4, 5, 10, 100, 1000, 10000])
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 def test_neighbors(num_atoms, device):
 
