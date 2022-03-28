@@ -8,6 +8,9 @@ from torchmdnet.neighbors import get_neighbor_list
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 def test_neighbors(num_atoms, device):
 
+    if not pt.cuda.is_available() and device == 'cuda':
+        pytest.skip('No GPU')
+
     positions = pt.randn((num_atoms, 3), device=device)
     device = positions.device
 
