@@ -37,7 +37,8 @@ template <typename scalar_t> __global__ void forward_kernel(
     const int32_t num_neighbors = distances.size(0);
     if (index >= num_neighbors) return;
 
-    const int32_t row = (__float2int_rd(__fsqrt_ru(__int2float_ru(8 * index + 1))) + 1) / 2;
+    int32_t row = floor((sqrtf(8 * index + 1) + 1) / 2);
+    if (row * (row - 1) > 2 * index) row--;
     const int32_t column = index - row * (row - 1) / 2;
 
     const scalar_t delta_x = positions[row][0] - positions[column][0];
@@ -86,6 +87,7 @@ public:
     static tensor_list forward(AutogradContext* ctx, const Tensor positions) {
 
         TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
+        TORCH_CHECK(positions.size(0) > 0, "Expected the 1nd dimension size of \"positions\" to be more than 0");
         TORCH_CHECK(positions.size(1) == 3, "Expected the 2nd dimension size of \"positions\" to be 3");
         TORCH_CHECK(positions.is_contiguous(), "Expected \"positions\" to be contiguous");
 
