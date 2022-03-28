@@ -6,6 +6,7 @@ channels:
 dependencies:
   - ase
   - h5py
+  - gxx_linux-64
   - matplotlib
   # An official NNPOps packages still not available
   - mmh::nnpops==0.2
