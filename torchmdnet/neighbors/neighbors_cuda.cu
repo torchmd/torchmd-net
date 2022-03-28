@@ -1,11 +1,13 @@
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAStream.h>
 #include <torch/extension.h>
+#include <algorithm>
 #include <tuple>
 
 using c10::cuda::CUDAStreamGuard;
 using c10::cuda::getCurrentCUDAStream;
 using std::make_tuple;
+using std::max;
 using torch::autograd::AutogradContext;
 using torch::autograd::Function;
 using torch::autograd::tensor_list;
@@ -94,7 +96,7 @@ public:
         const int num_atoms = positions.size(0);
         const int num_neighbors = num_atoms * (num_atoms - 1) / 2;
         const int num_threads = 128;
-        const int num_blocks = (num_neighbors + num_threads - 1) / num_threads;
+        const int num_blocks = max((num_neighbors + num_threads - 1) / num_threads, 1);
         const auto stream = getCurrentCUDAStream(positions.get_device());
 
         const TensorOptions options = positions.options();
@@ -125,7 +127,7 @@ public:
         const int num_atoms = ctx->saved_data["num_atoms"].toInt();
         const int num_neighbors = grad_distances.size(0);
         const int num_threads = 128;
-        const int num_blocks = (num_neighbors + num_threads - 1) / num_threads;
+        const int num_blocks = max((num_neighbors + num_threads - 1) / num_threads, 1);
         const auto stream = getCurrentCUDAStream(grad_distances.get_device());
 
         const tensor_list neighbors = ctx->get_saved_variables();
