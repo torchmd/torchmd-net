@@ -1,3 +1,4 @@
+from typing import Optional, Tuple
 import torch as pt
 from NNPOps.CFConv import CFConv
 from NNPOps.CFConvNeighbors import CFConvNeighbors
@@ -41,7 +42,13 @@ class TorchMD_GN_optimized(pt.nn.Module):
             for inter in self.model.interactions
         ]
 
-    def forward(self, z, pos, batch):
+    def forward(self,
+                z: pt.Tensor,
+                pos: pt.Tensor,
+                batch: pt.Tensor,
+                q: Optional[pt.Tensor] = None,
+                s: Optional[pt.Tensor] = None
+                ) -> Tuple[pt.Tensor, Optional[pt.Tensor], pt.Tensor, pt.Tensor, pt.Tensor]:
 
         assert pt.all(batch == 0)
 
