@@ -1,5 +1,6 @@
 from abc import abstractmethod, ABCMeta
-from torch import nn
+from typing import Optional, Tuple
+from torch import nn, Tensor
 
 
 class BaseWrapper(nn.Module, metaclass=ABCMeta):
@@ -30,8 +31,15 @@ class AtomFilter(BaseWrapper):
         super(AtomFilter, self).__init__(model)
         self.remove_threshold = remove_threshold
 
-    def forward(self, z, pos, batch=None):
-        x, v, z, pos, batch = self.model(z, pos, batch=batch)
+    def forward(
+        self,
+        z: Tensor,
+        pos: Tensor,
+        batch: Tensor,
+        q: Optional[Tensor] = None,
+        s: Optional[Tensor] = None,
+    ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
+        x, v, z, pos, batch = self.model(z, pos, batch=batch, q=q, s=s)
 
         n_samples = len(batch.unique())
 
