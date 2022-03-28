@@ -1,9 +1,9 @@
 import os
-import torch.utils.cpp_extension
+import torch as pt
+from torch.utils import cpp_extension
 
-src_dir = os.path.dirname(__file__)
-sources = ['neighbors.cpp', 'neighbors_cpu.cpp', 'neighbors_cuda.cu']
-sources = [os.path.join(src_dir, name) for name in sources]
+sources = ['neighbors.cpp', 'neighbors_cpu.cpp'] + ['neighbors_cuda.cu'] if pt.cuda.is_available() else []
+sources = [os.path.join(os.path.dirname(__file__), name) for name in sources]
 
-torch.utils.cpp_extension.load(name='neighbors', sources=sources, is_python_module=False)
-get_neighbor_list = torch.ops.neighbors.get_neighbor_list
+cpp_extension.load(name='neighbors', sources=sources, is_python_module=False)
+get_neighbor_list = pt.ops.neighbors.get_neighbor_list
