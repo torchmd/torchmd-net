@@ -110,7 +110,7 @@ def get_args():
 
 def main():
     args = get_args()
-    pl.seed_everything(args.seed, workers=True)
+    pl.seed_everything(args.seed)
 
     # initialize data module
     data = DataModule(args)
@@ -134,7 +134,7 @@ def main():
         dirpath=args.log_dir,
         monitor="val_loss",
         save_top_k=10,  # -1 to save all
-        period=args.save_interval,
+        every_n_epochs=args.save_interval,
         filename="{epoch}-{val_loss:.4f}-{test_loss:.4f}",
     )
     early_stopping = EarlyStopping("val_loss", patience=args.early_stopping_patience)

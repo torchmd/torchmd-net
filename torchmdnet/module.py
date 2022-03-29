@@ -154,7 +154,7 @@ class LNNP(LightningModule):
                 self.trainer.reset_val_dataloader(self)
 
     def validation_epoch_end(self, validation_step_outputs):
-        if not self.trainer.running_sanity_check:
+        if not self.trainer.sanity_checking:
             # construct dict of logged metrics
             result_dict = {
                 "epoch": self.current_epoch,
