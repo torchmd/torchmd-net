@@ -110,7 +110,7 @@ def get_args():
 
 def main():
     args = get_args()
-    pl.seed_everything(args.seed)
+    pl.seed_everything(args.seed, workers=True)
 
     # initialize data module
     data = DataModule(args)
