@@ -7,9 +7,10 @@ using torch::index_select;
 using torch::arange;
 using torch::frobenius_norm;
 using torch::kInt32;
+using torch::stack;
 using torch::Tensor;
 
-static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions) {
+static tuple<Tensor, Tensor> forward(const Tensor& positions) {
 
     TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
     TORCH_CHECK(positions.size(0) > 0, "Expected the 1nd dimension size of \"positions\" to be more than 0");
@@ -24,10 +25,11 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions) {
     rows -= (rows * (rows - 1) > 2 * indices).to(kInt32);
     const Tensor columns = indices - div(rows * (rows - 1), 2, "floor");
 
+    const Tensor neighbors = stack({rows, columns});
     const Tensor vectors = index_select(positions, 0, rows) - index_select(positions, 0, columns);
     const Tensor distances = frobenius_norm(vectors, 1);
 
-    return {rows, columns, distances};
+    return {neighbors, distances};
 }
 
 TORCH_LIBRARY_IMPL(neighbors, CPU, m) {
