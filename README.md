@@ -35,6 +35,9 @@ mkdir output
 CUDA_VISIBLE_DEVICES=0 python torchmd-net/scripts/torchmd_train.py --conf torchmd-net/examples/graph-network.yaml --dataset QM9 --log-dir output/
 ```
 
+## Pretrained models
+Pretrained models are available at https://github.com/torchmd/torchmd-net/tree/main/examples.
+
 ## Creating a new dataset
 If you want to train on custom data, first have a look at `torchmdnet.datasets.Custom`, which provides functionalities for 
 loading a NumPy dataset consisting of atom types and coordinates, as well as energies, forces or both as the labels.
