@@ -6,4 +6,4 @@ sources = ['neighbors.cpp', 'neighbors_cpu.cpp'] + (['neighbors_cuda.cu'] if pt.
 sources = [os.path.join(os.path.dirname(__file__), name) for name in sources]
 
 cpp_extension.load(name='neighbors', sources=sources, is_python_module=False)
-get_neighbor_list = pt.ops.neighbors.get_neighbor_list
+get_neighbor_pairs = pt.ops.neighbors.get_neighbor_pairs

@@ -105,7 +105,7 @@ public:
         const Tensor deltas = empty({num_neighbors, 3}, options);
         const Tensor distances = empty(num_neighbors, options);
 
-        AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "get_neighbor_list", [&]() {
+        AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "get_neighbor_pairs_forward", [&]() {
             const CUDAStreamGuard guard(stream);
             forward_kernel<<<num_blocks, num_threads, 0, stream>>>(
                 get_accessor<scalar_t, 2>(positions),
@@ -135,7 +135,7 @@ public:
         const Tensor distances = neighbors[2];
         const Tensor grad_positions = zeros({num_atoms, 3}, grad_distances.options());
 
-        AT_DISPATCH_FLOATING_TYPES(grad_distances.scalar_type(), "get_neighbor_list", [&]() {
+        AT_DISPATCH_FLOATING_TYPES(grad_distances.scalar_type(), "get_neighbor_pairs_backward", [&]() {
             const CUDAStreamGuard guard(stream);
             backward_kernel<<<num_blocks, num_threads, 0, stream>>>(
                 get_accessor<int32_t, 2>(neighbors),
@@ -150,7 +150,7 @@ public:
 };
 
 TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
-    m.impl("get_neighbor_list", [](const Tensor& positions){
+    m.impl("get_neighbor_pairs", [](const Tensor& positions){
         const tensor_list results = Autograd::apply(positions);
         return make_tuple(results[0], results[1]);
     });
