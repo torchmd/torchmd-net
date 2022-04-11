@@ -131,8 +131,8 @@ public:
 
         const tensor_list data = ctx->get_saved_variables();
         const Tensor neighbors = data[0];
-        const Tensor deltas = neighbors[1];
-        const Tensor distances = neighbors[2];
+        const Tensor deltas = data[1];
+        const Tensor distances = data[2];
         const Tensor grad_positions = zeros({num_atoms, 3}, grad_distances.options());
 
         AT_DISPATCH_FLOATING_TYPES(grad_distances.scalar_type(), "get_neighbor_pairs_backward", [&]() {
