@@ -1,4 +1,3 @@
-from torchmdnet.datasets.ani1x import ANI1X
 from .qm9 import QM9
 from .md17 import MD17
 from .ani1 import ANI1
