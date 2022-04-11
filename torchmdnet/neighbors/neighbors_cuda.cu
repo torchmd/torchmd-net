@@ -12,6 +12,7 @@ using torch::autograd::AutogradContext;
 using torch::autograd::Function;
 using torch::autograd::tensor_list;
 using torch::empty;
+using torch::full;
 using torch::kInt32;
 using torch::PackedTensorAccessor32;
 using torch::RestrictPtrTraits;
@@ -34,6 +35,7 @@ template<> __device__ __forceinline__ double sqrt_(double x) { return ::sqrt(x);
 
 template <typename scalar_t> __global__ void forward_kernel(
     const Accessor<scalar_t, 2> positions,
+    const scalar_t cutoff2,
     Accessor<int32_t, 2> neighbors,
     Accessor<scalar_t, 2> deltas,
     Accessor<scalar_t, 1> distances
@@ -49,14 +51,16 @@ template <typename scalar_t> __global__ void forward_kernel(
     const scalar_t delta_x = positions[row][0] - positions[column][0];
     const scalar_t delta_y = positions[row][1] - positions[column][1];
     const scalar_t delta_z = positions[row][2] - positions[column][2];
-    const scalar_t distance = sqrt_(delta_x * delta_x + delta_y * delta_y + delta_z * delta_z);
+    const scalar_t distance2 = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z;
+
+    if (distance2 > cutoff2) return;
 
     neighbors[0][index] = row;
     neighbors[1][index] = column;
     deltas[index][0] = delta_x;
     deltas[index][1] = delta_y;
     deltas[index][2] = delta_z;
-    distances[index] = distance;
+    distances[index] = sqrt_(distance2);
 }
 
 template <typename scalar_t> __global__ void backward_kernel(
@@ -70,17 +74,21 @@ template <typename scalar_t> __global__ void backward_kernel(
     const int32_t num_neighbors = distances.size(0);
     if (index >= num_neighbors) return;
 
+    const int32_t row = neighbors[0][index];
+    if (row < 0) return;
+
+    const int32_t column = neighbors[1][index];
+    if (column < 0) return;
+
     const scalar_t grad = grad_distances[index] / distances[index];
     const scalar_t grad_x = deltas[index][0] * grad;
     const scalar_t grad_y = deltas[index][1] * grad;
     const scalar_t grad_z = deltas[index][2] * grad;
 
-    const int32_t row = neighbors[0][index];
     atomicAdd(&grad_positions[row][0], grad_x);
     atomicAdd(&grad_positions[row][1], grad_y);
     atomicAdd(&grad_positions[row][2], grad_z);
 
-    const int32_t column = neighbors[1][index];
     atomicAdd(&grad_positions[column][0], -grad_x);
     atomicAdd(&grad_positions[column][1], -grad_y);
     atomicAdd(&grad_positions[column][2], -grad_z);
@@ -105,14 +113,17 @@ public:
         const auto stream = getCurrentCUDAStream(positions.get_device());
 
         const TensorOptions options = positions.options();
-        const Tensor neighbors = empty({2, num_neighbors}, options.dtype(kInt32));
+        const Tensor neighbors = full({2, num_neighbors}, -1, options.dtype(kInt32));
         const Tensor deltas = empty({num_neighbors, 3}, options);
         const Tensor distances = empty(num_neighbors, options);
 
         AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "get_neighbor_pairs_forward", [&]() {
             const CUDAStreamGuard guard(stream);
+            const scalar_t cutoff_ = cutoff.to<scalar_t>();
+            TORCH_CHECK(cutoff_ > 0, "Expected \"cutoff\" to be positive");
             forward_kernel<<<num_blocks, num_threads, 0, stream>>>(
                 get_accessor<scalar_t, 2>(positions),
+                cutoff_ * cutoff_,
                 get_accessor<int32_t, 2>(neighbors),
                 get_accessor<scalar_t, 2>(deltas),
                 get_accessor<scalar_t, 1>(distances));
