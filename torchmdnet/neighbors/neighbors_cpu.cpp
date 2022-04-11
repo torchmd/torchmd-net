@@ -7,10 +7,13 @@ using torch::index_select;
 using torch::arange;
 using torch::frobenius_norm;
 using torch::kInt32;
+using torch::Scalar;
 using torch::stack;
 using torch::Tensor;
 
-static tuple<Tensor, Tensor> forward(const Tensor& positions) {
+static tuple<Tensor, Tensor> forward(const Tensor& positions,
+                                     const Scalar& cutoff,
+                                     const Scalar& max_num_neighbors) {
 
     TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
     TORCH_CHECK(positions.size(0) > 0, "Expected the 1nd dimension size of \"positions\" to be more than 0");

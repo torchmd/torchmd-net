@@ -15,6 +15,7 @@ using torch::empty;
 using torch::kInt32;
 using torch::PackedTensorAccessor32;
 using torch::RestrictPtrTraits;
+using torch::Scalar;
 using torch::Tensor;
 using torch::TensorOptions;
 using torch::zeros;
@@ -87,7 +88,10 @@ template <typename scalar_t> __global__ void backward_kernel(
 
 class Autograd : public Function<Autograd> {
 public:
-    static tensor_list forward(AutogradContext* ctx, const Tensor positions) {
+    static tensor_list forward(AutogradContext* ctx,
+                               const Tensor& positions,
+                               const Scalar& cutoff,
+                               const Scalar& max_num_neighbors) {
 
         TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
         TORCH_CHECK(positions.size(0) > 0, "Expected the 1nd dimension size of \"positions\" to be more than 0");
@@ -145,13 +149,14 @@ public:
                 get_accessor<scalar_t, 2>(grad_positions));
         });
 
-        return {grad_positions};
+        return {grad_positions, Tensor(), Tensor()};
       }
 };
 
 TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
-    m.impl("get_neighbor_pairs", [](const Tensor& positions){
-        const tensor_list results = Autograd::apply(positions);
-        return make_tuple(results[0], results[1]);
+    m.impl("get_neighbor_pairs",
+        [](const Tensor& positions, const Scalar& cutoff, const Scalar& max_num_neighbors){
+            const tensor_list results = Autograd::apply(positions, cutoff, max_num_neighbors);
+            return make_tuple(results[0], results[1]);
     });
 }
