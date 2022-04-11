@@ -34,9 +34,11 @@ template<> __device__ __forceinline__ float sqrt_(float x) { return ::sqrtf(x); 
 template<> __device__ __forceinline__ double sqrt_(double x) { return ::sqrt(x); };
 
 template <typename scalar_t> __global__ void forward_kernel(
-    const Accessor<scalar_t, 2> positions,
     const int32_t num_all_pairs,
+    const Accessor<scalar_t, 2> positions,
     const scalar_t cutoff2,
+    const bool store_all_pairs,
+    Accessor<int32_t, 1> i_curr_pair,
     Accessor<int32_t, 2> neighbors,
     Accessor<scalar_t, 2> deltas,
     Accessor<scalar_t, 1> distances
@@ -55,12 +57,14 @@ template <typename scalar_t> __global__ void forward_kernel(
 
     if (distance2 > cutoff2) return;
 
-    neighbors[0][index] = row;
-    neighbors[1][index] = column;
-    deltas[index][0] = delta_x;
-    deltas[index][1] = delta_y;
-    deltas[index][2] = delta_z;
-    distances[index] = sqrt_(distance2);
+    const int32_t i_pair = store_all_pairs ? index : atomicAdd(&i_curr_pair[0], 1);
+
+    neighbors[0][i_pair] = row;
+    neighbors[1][i_pair] = column;
+    deltas[i_pair][0] = delta_x;
+    deltas[i_pair][1] = delta_y;
+    deltas[i_pair][2] = delta_z;
+    distances[i_pair] = sqrt_(distance2);
 }
 
 template <typename scalar_t> __global__ void backward_kernel(
@@ -71,8 +75,8 @@ template <typename scalar_t> __global__ void backward_kernel(
     Accessor<scalar_t, 2> grad_positions
 ) {
     const int32_t index = blockIdx.x * blockDim.x + threadIdx.x;
-    const int32_t num_neighbors = distances.size(0);
-    if (index >= num_neighbors) return;
+    const int32_t num_pairs = neighbors.size(1);
+    if (index >= num_pairs) return;
 
     const int32_t row = neighbors[0][index];
     if (row < 0) return;
@@ -113,14 +117,16 @@ public:
         const int num_atoms = positions.size(0);
         const int num_all_pairs = num_atoms * (num_atoms - 1) / 2;
         const int num_exp_pairs = num_atoms * max_num_neighbors_;
-        const bool all_pairs = num_all_pairs <= num_exp_pairs;
-        const int num_pairs = all_pairs ? num_all_pairs : num_exp_pairs;
+        const bool store_all_pairs = num_all_pairs <= num_exp_pairs;
+        const int num_pairs = store_all_pairs ? num_all_pairs : num_exp_pairs;
 
         const int num_threads = 128;
         const int num_blocks = max((num_all_pairs + num_threads - 1) / num_threads, 1);
         const auto stream = getCurrentCUDAStream(positions.get_device());
 
         const TensorOptions options = positions.options();
+        const Tensor i_curr_pair = store_all_pairs ? empty(1, options.dtype(kInt32)) :
+                                                     zeros(1, options.dtype(kInt32));
         const Tensor neighbors = full({2, num_pairs}, -1, options.dtype(kInt32));
         const Tensor deltas = empty({num_pairs, 3}, options);
         const Tensor distances = full(num_pairs, 0, options);
@@ -130,9 +136,11 @@ public:
             const scalar_t cutoff_ = cutoff.to<scalar_t>();
             TORCH_CHECK(cutoff_ > 0, "Expected \"cutoff\" to be positive");
             forward_kernel<<<num_blocks, num_threads, 0, stream>>>(
-                get_accessor<scalar_t, 2>(positions),
                 num_all_pairs,
+                get_accessor<scalar_t, 2>(positions),
                 cutoff_ * cutoff_,
+                store_all_pairs,
+                get_accessor<int32_t, 1>(i_curr_pair),
                 get_accessor<int32_t, 2>(neighbors),
                 get_accessor<scalar_t, 2>(deltas),
                 get_accessor<scalar_t, 1>(distances));
