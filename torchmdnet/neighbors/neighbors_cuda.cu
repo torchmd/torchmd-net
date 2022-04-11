@@ -35,14 +35,14 @@ template<> __device__ __forceinline__ double sqrt_(double x) { return ::sqrt(x);
 
 template <typename scalar_t> __global__ void forward_kernel(
     const Accessor<scalar_t, 2> positions,
+    const int32_t num_all_pairs,
     const scalar_t cutoff2,
     Accessor<int32_t, 2> neighbors,
     Accessor<scalar_t, 2> deltas,
     Accessor<scalar_t, 1> distances
 ) {
     const int32_t index = blockIdx.x * blockDim.x + threadIdx.x;
-    const int32_t num_neighbors = distances.size(0);
-    if (index >= num_neighbors) return;
+    if (index >= num_all_pairs) return;
 
     int32_t row = floor((sqrtf(8 * index + 1) + 1) / 2);
     if (row * (row - 1) > 2 * index) row--;
@@ -106,16 +106,24 @@ public:
         TORCH_CHECK(positions.size(1) == 3, "Expected the 2nd dimension size of \"positions\" to be 3");
         TORCH_CHECK(positions.is_contiguous(), "Expected \"positions\" to be contiguous");
 
+        const int max_num_neighbors_ = max_num_neighbors.to<int>();
+        TORCH_CHECK(max_num_neighbors_ > 0, "Expected \"max_num_neighbors\" to be positive");
+
+        // Decide the algorithm
         const int num_atoms = positions.size(0);
-        const int num_neighbors = num_atoms * (num_atoms - 1) / 2;
+        const int num_all_pairs = num_atoms * (num_atoms - 1) / 2;
+        const int num_exp_pairs = num_atoms * max_num_neighbors_;
+        const bool all_pairs = num_all_pairs <= num_exp_pairs;
+        const int num_pairs = all_pairs ? num_all_pairs : num_exp_pairs;
+
         const int num_threads = 128;
-        const int num_blocks = max((num_neighbors + num_threads - 1) / num_threads, 1);
+        const int num_blocks = max((num_all_pairs + num_threads - 1) / num_threads, 1);
         const auto stream = getCurrentCUDAStream(positions.get_device());
 
         const TensorOptions options = positions.options();
-        const Tensor neighbors = full({2, num_neighbors}, -1, options.dtype(kInt32));
-        const Tensor deltas = empty({num_neighbors, 3}, options);
-        const Tensor distances = empty(num_neighbors, options);
+        const Tensor neighbors = full({2, num_pairs}, -1, options.dtype(kInt32));
+        const Tensor deltas = empty({num_pairs, 3}, options);
+        const Tensor distances = full(num_pairs, 0, options);
 
         AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "get_neighbor_pairs_forward", [&]() {
             const CUDAStreamGuard guard(stream);
@@ -123,6 +131,7 @@ public:
             TORCH_CHECK(cutoff_ > 0, "Expected \"cutoff\" to be positive");
             forward_kernel<<<num_blocks, num_threads, 0, stream>>>(
                 get_accessor<scalar_t, 2>(positions),
+                num_all_pairs,
                 cutoff_ * cutoff_,
                 get_accessor<int32_t, 2>(neighbors),
                 get_accessor<scalar_t, 2>(deltas),
@@ -139,9 +148,9 @@ public:
 
         const Tensor grad_distances = grad_inputs[1];
         const int num_atoms = ctx->saved_data["num_atoms"].toInt();
-        const int num_neighbors = grad_distances.size(0);
+        const int num_pairs = grad_distances.size(0);
         const int num_threads = 128;
-        const int num_blocks = max((num_neighbors + num_threads - 1) / num_threads, 1);
+        const int num_blocks = max((num_pairs + num_threads - 1) / num_threads, 1);
         const auto stream = getCurrentCUDAStream(grad_distances.get_device());
 
         const tensor_list data = ctx->get_saved_variables();

@@ -21,9 +21,9 @@ static tuple<Tensor, Tensor> forward(const Tensor& positions,
     TORCH_CHECK(positions.is_contiguous(), "Expected \"positions\" to be contiguous");
 
     const int num_atoms = positions.size(0);
-    const int num_neighbors = num_atoms * (num_atoms - 1) / 2;
+    const int num_pairs = num_atoms * (num_atoms - 1) / 2;
 
-    const Tensor indices = arange(0, num_neighbors, positions.options().dtype(kInt32));
+    const Tensor indices = arange(0, num_pairs, positions.options().dtype(kInt32));
     Tensor rows = (((8 * indices + 1).sqrt() + 1) / 2).floor().to(kInt32);
     rows -= (rows * (rows - 1) > 2 * indices).to(kInt32);
     const Tensor columns = indices - div(rows * (rows - 1), 2, "floor");
