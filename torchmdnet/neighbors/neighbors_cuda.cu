@@ -122,7 +122,7 @@ public:
 
     static tensor_list backward(AutogradContext* ctx, tensor_list grad_inputs) {
 
-        const Tensor grad_distances = grad_inputs[2];
+        const Tensor grad_distances = grad_inputs[1];
         const int num_atoms = ctx->saved_data["num_atoms"].toInt();
         const int num_neighbors = grad_distances.size(0);
         const int num_threads = 128;
