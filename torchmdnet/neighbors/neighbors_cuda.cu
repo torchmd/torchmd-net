@@ -74,28 +74,17 @@ template <typename scalar_t> __global__ void backward_kernel(
     const Accessor<scalar_t, 1> grad_distances,
     Accessor<scalar_t, 2> grad_positions
 ) {
-    const int32_t index = blockIdx.x * blockDim.x + threadIdx.x;
+    const int32_t i_pair = blockIdx.x * blockDim.x + threadIdx.x;
     const int32_t num_pairs = neighbors.size(1);
-    if (index >= num_pairs) return;
+    if (i_pair >= num_pairs) return;
 
-    const int32_t row = neighbors[0][index];
-    if (row < 0) return;
+    const int32_t i_dir = blockIdx.y;
+    const int32_t i_atom = neighbors[i_dir][i_pair];
+    if (i_atom < 0) return;
 
-    const int32_t column = neighbors[1][index];
-    if (column < 0) return;
-
-    const scalar_t grad = grad_distances[index] / distances[index];
-    const scalar_t grad_x = deltas[index][0] * grad;
-    const scalar_t grad_y = deltas[index][1] * grad;
-    const scalar_t grad_z = deltas[index][2] * grad;
-
-    atomicAdd(&grad_positions[row][0], grad_x);
-    atomicAdd(&grad_positions[row][1], grad_y);
-    atomicAdd(&grad_positions[row][2], grad_z);
-
-    atomicAdd(&grad_positions[column][0], -grad_x);
-    atomicAdd(&grad_positions[column][1], -grad_y);
-    atomicAdd(&grad_positions[column][2], -grad_z);
+    const int32_t i_comp = blockIdx.z;
+    const scalar_t grad = deltas[i_pair][i_comp] / distances[i_pair] * grad_distances[i_pair];
+    atomicAdd(&grad_positions[i_atom][i_comp], (i_dir ? -1 : 1) * grad);
 }
 
 class Autograd : public Function<Autograd> {
@@ -158,7 +147,8 @@ public:
         const int num_atoms = ctx->saved_data["num_atoms"].toInt();
         const int num_pairs = grad_distances.size(0);
         const int num_threads = 128;
-        const int num_blocks = max((num_pairs + num_threads - 1) / num_threads, 1);
+        const int num_blocks_x = max((num_pairs + num_threads - 1) / num_threads, 1);
+        const dim3 blocks(num_blocks_x, 2, 3);
         const auto stream = getCurrentCUDAStream(grad_distances.get_device());
 
         const tensor_list data = ctx->get_saved_variables();
@@ -169,7 +159,7 @@ public:
 
         AT_DISPATCH_FLOATING_TYPES(grad_distances.scalar_type(), "get_neighbor_pairs_backward", [&]() {
             const CUDAStreamGuard guard(stream);
-            backward_kernel<<<num_blocks, num_threads, 0, stream>>>(
+            backward_kernel<<<blocks, num_threads, 0, stream>>>(
                 get_accessor<int32_t, 2>(neighbors),
                 get_accessor<scalar_t, 2>(deltas),
                 get_accessor<scalar_t, 1>(distances),
