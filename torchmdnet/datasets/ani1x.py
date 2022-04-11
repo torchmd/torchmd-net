@@ -15,7 +15,8 @@ class ANI1X(InMemoryDataset):
     raw_url = "https://figshare.com/ndownloader/files/18112775"
 
     element_numbers = {"H": 1, "C": 6, "N": 7, "O": 8}
-
+    
+    # Taken from torchmdnet.datasets.ani1.ANI1
     self_energies = {
         "H": -0.500607632585 * au_to_eV,
         "C": -37.8302333826 * au_to_eV,
