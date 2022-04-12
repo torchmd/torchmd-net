@@ -21,15 +21,19 @@ Install TorchMD-NET into the Conda environment:
 pip install -e .
 ```
 
-## Accuracy
-The TorchMD-NET equivariant Transformer (ET) is competitive with previous methods on the MD17 benchmark dataset.
-
-
-![image](https://user-images.githubusercontent.com/36135990/146565069-a3c03827-5ee2-44b0-89b0-9e02e129b6df.png)
+## Cite
+```
+@inproceedings{tholke2021equivariant,
+  title={Equivariant transformers for neural network based molecular potentials},
+  author={Th{\"o}lke, Philipp and De Fabritiis, Gianni},
+  booktitle={International Conference on Learning Representations},
+  year={2021}
+}
+```
 
 
 ## Usage
-Specifying training arguments can either be done via a configuration yaml file or through command line arguments directly. An example configuration file for a TorchMD Graph Network can be found at [examples/graph-network.yaml](https://github.com/compsciencelab/torchmd-net/blob/main/examples/graph-network.yaml). For an example on how to train the network on the QM9 dataset, see [examples/train_GN_QM9.sh](https://github.com/compsciencelab/torchmd-net/blob/main/examples/train_GN_QM9.sh). GPUs can be selected by their index by listing the device IDs (coming from `nvidia-smi`) in the `CUDA_VISIBLE_DEVICES` environment variable. Otherwise, the argument `--ngpus` can be used to select the number of GPUs to train on (-1 uses all available GPUs or the ones specified in `CUDA_VISIBLE_DEVICES`).
+Specifying training arguments can either be done via a configuration yaml file or through command line arguments directly. An example configuration file for a TorchMD Graph Network can be found in [examples/](https://github.com/compsciencelab/torchmd-net/blob/main/examples). For an example on how to train the network on the QM9 dataset, see [examples/](https://github.com/compsciencelab/torchmd-net/blob/main/examples). GPUs can be selected by their index by listing the device IDs (coming from `nvidia-smi`) in the `CUDA_VISIBLE_DEVICES` environment variable. Otherwise, the argument `--ngpus` can be used to select the number of GPUs to train on (-1 uses all available GPUs or the ones specified in `CUDA_VISIBLE_DEVICES`).
 ```
 mkdir output
 CUDA_VISIBLE_DEVICES=0 python torchmd-net/scripts/torchmd_train.py --conf torchmd-net/examples/graph-network.yaml --dataset QM9 --log-dir output/
