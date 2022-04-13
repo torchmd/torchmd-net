@@ -22,6 +22,9 @@ class ANI1(Dataset):
         super().__init__(root, transform, pre_transform, pre_filter)
 
         self.h5 = h5py.File(self.processed_paths[0])
+        self.ds_z = self.h5['z']
+        self.ds_pos = self.h5['pos']
+        self.ds_y = self.h5['y']
 
     @property
     def raw_file_names(self):
@@ -41,16 +44,16 @@ class ANI1(Dataset):
         tmp_file = self.processed_paths[0] + '.tmp'
         with h5py.File(tmp_file, 'w', driver='core') as h5:
 
-            h5.create_dataset('z', (0,), chunks=(1000,), maxshape=(None,),
-                              dtype=h5py.vlen_dtype('int8'))
-            h5.create_dataset('pos', (0,), chunks=(1000,), maxshape=(None,),
-                              dtype=h5py.vlen_dtype('float32'))
-            h5.create_dataset('y', (0,), chunks=(1000,), maxshape=(None,),
-                              dtype='float64')
+            ds_z = h5.create_dataset('z', (10000,), chunks=(10000,), maxshape=(None,),
+                                     dtype=h5py.vlen_dtype('int8'))
+            ds_pos = h5.create_dataset('pos', (10000,), chunks=(10000,), maxshape=(None,),
+                                       dtype=h5py.vlen_dtype('float32'))
+            ds_y = h5.create_dataset('y', (10000,), chunks=(10000,), maxshape=(None,),
+                                     dtype='float64')
 
             i_sample = 0
 
-            for path in tqdm(self.raw_paths, desc='Files'):
+            for path in tqdm(self.raw_paths[7:], desc='Files'):
                 molecules = list(h5py.File(path).values())[0].values()
 
                 for mol in tqdm(molecules, desc='Molecules', leave=False):
@@ -71,37 +74,37 @@ class ANI1(Dataset):
                         if self.pre_transform is not None:
                             data = self.pre_transform(data)
 
-                        if i_sample >= len(h5['z']):
-                            h5['z'].resize(i_sample + 1000, axis=0)
-                            h5['pos'].resize(i_sample + 1000, axis=0)
-                            h5['y'].resize(i_sample + 1000, axis=0)
+                        if i_sample >= len(ds_z):
+                            ds_z.resize(i_sample + 10000, axis=0)
+                            ds_pos.resize(i_sample + 10000, axis=0)
+                            ds_y.resize(i_sample + 10000, axis=0)
 
-                        h5['z'][i_sample] = data.z.numpy()
-                        h5['pos'][i_sample] = data.pos.flatten().numpy()
-                        h5['y'][i_sample] = data.y.numpy()
+                        ds_z[i_sample] = data.z
+                        ds_pos[i_sample] = data.pos.flatten()
+                        ds_y[i_sample] = data.y
 
                         i_sample += 1
 
-            h5['z'].resize(i_sample, axis=0)
-            h5['pos'].resize(i_sample, axis=0)
-            h5['y'].resize(i_sample, axis=0)
+            ds_z.resize(i_sample, axis=0)
+            ds_pos.resize(i_sample, axis=0)
+            ds_y.resize(i_sample, axis=0)
 
         os.rename(tmp_file, self.processed_paths[0])
 
     def len(self):
-        return len(self.h5['z'])
+        return len(self.ds_z)
 
     def get(self, idx):
 
-        z = pt.tensor(self.h5['z'][idx])
-        pos = pt.tensor(self.h5['pos'][idx]).view(-1, 3)
-        y = pt.tensor(self.h5['y'][idx]).view(1, 1)
+        z = pt.tensor(self.ds_y[idx])
+        pos = pt.tensor(self.ds_pos[idx]).view(-1, 3)
+        y = pt.tensor(self.ds_y[idx]).view(1, 1)
 
         return Data(z=z, pos=pos, y=y)
 
     def get_atomref(self, max_z=100):
 
-        out = torch.zeros(max_z)
-        out[list(self.atomic_numbers.values())] = torch.tensor(list(self.atomic_energies.values()))
+        out = pt.zeros(max_z)
+        out[list(self.atomic_numbers.values())] = pt.tensor(list(self.atomic_energies.values()))
 
         return out.view(-1, 1)
