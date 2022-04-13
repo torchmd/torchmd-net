@@ -1,7 +1,7 @@
 import h5py
 import os
 import torch as pt
-from torch_geometric.data import Data, Dataset, download_url, extract_tar 
+from torch_geometric.data import Data, Dataset, download_url, extract_tar
 from tqdm import tqdm
 
 
@@ -21,6 +21,8 @@ class ANI1(Dataset):
     def __init__(self, root, transform=None, pre_transform=None, pre_filter=None):
         super().__init__(root, transform, pre_transform, pre_filter)
 
+        self.h5 = h5py.File(self.processed_paths[0])
+
     @property
     def raw_file_names(self):
         return [os.path.join('ANI-1_release', f'ani_gdb_s{i:02d}.h5') for i in range(1, 9)]
@@ -37,16 +39,18 @@ class ANI1(Dataset):
     def process(self):
 
         tmp_file = self.processed_paths[0] + '.tmp'
-        with h5py.File(tmp_file, 'w', driver='stdio') as h5:
+        with h5py.File(tmp_file, 'w', driver='core') as h5:
 
-            h5.create_dataset('z', (0,), chunks=(1,), maxshape=(None,),
-                              dtype=h5py.vlen_dtype('int8'), compression=None)
-            h5.create_dataset('pos', (0,), chunks=(1,), maxshape=(None,),
-                              dtype=h5py.vlen_dtype('float32'), compression=None)
-            h5.create_dataset('y', (0,), chunks=(1,), maxshape=(None,),
-                              dtype=h5py.vlen_dtype('float64'), compression=None)
+            h5.create_dataset('z', (0,), chunks=(1000,), maxshape=(None,),
+                              dtype=h5py.vlen_dtype('int8'))
+            h5.create_dataset('pos', (0,), chunks=(1000,), maxshape=(None,),
+                              dtype=h5py.vlen_dtype('float32'))
+            h5.create_dataset('y', (0,), chunks=(1000,), maxshape=(None,),
+                              dtype='float64')
 
-            for path in tqdm(self.raw_paths[7:], desc='Files'):
+            i_sample = 0
+
+            for path in tqdm(self.raw_paths, desc='Files'):
                 molecules = list(h5py.File(path).values())[0].values()
 
                 for mol in tqdm(molecules, desc='Molecules', leave=False):
@@ -58,8 +62,7 @@ class ANI1(Dataset):
                     assert all_pos.shape[1] == z.shape[0]
                     assert all_pos.shape[2] == 3
 
-                    for pos, y in tqdm(zip(all_pos, all_y), desc='Conformers',
-                                       total=len(all_pos), leave=False):
+                    for pos, y in zip(all_pos, all_y):
                         data = Data(z=z, pos=pos, y=y.view(1, 1))
 
                         if self.pre_filter is not None and not self.pre_filter(data):
@@ -68,27 +71,31 @@ class ANI1(Dataset):
                         if self.pre_transform is not None:
                             data = self.pre_transform(data)
 
-                        i = len(h5['z'])
-                        h5['z'].resize(i + 1, axis=0)
-                        h5['pos'].resize(i + 1, axis=0)
-                        h5['y'].resize(i + 1, axis=0)
+                        if i_sample >= len(h5['z']):
+                            h5['z'].resize(i_sample + 1000, axis=0)
+                            h5['pos'].resize(i_sample + 1000, axis=0)
+                            h5['y'].resize(i_sample + 1000, axis=0)
 
-                        h5['z'][i] = data.z
-                        h5['pos'][i] = data.pos.flatten().numpy()
-                        h5['y'][i] = data.y
+                        h5['z'][i_sample] = data.z.numpy()
+                        h5['pos'][i_sample] = data.pos.flatten().numpy()
+                        h5['y'][i_sample] = data.y.numpy()
+
+                        i_sample += 1
+
+            h5['z'].resize(i_sample, axis=0)
+            h5['pos'].resize(i_sample, axis=0)
+            h5['y'].resize(i_sample, axis=0)
 
         os.rename(tmp_file, self.processed_paths[0])
 
     def len(self):
-        with h5py.File(self.processed_paths[0]) as h5:
-            return len(h5['z'])
+        return len(self.h5['z'])
 
     def get(self, idx):
 
-        with h5py.File(self.processed_paths[0]) as h5:
-            z = pt.tensor(h5['z'][idx])
-            pos = pt.tensor(h5['pos'][idx]).view(-1, 3)
-            y = pt.tensor(h5['y'][idx]).view(1, 1)
+        z = pt.tensor(self.h5['z'][idx])
+        pos = pt.tensor(self.h5['pos'][idx]).view(-1, 3)
+        y = pt.tensor(self.h5['y'][idx]).view(1, 1)
 
         return Data(z=z, pos=pos, y=y)
 
