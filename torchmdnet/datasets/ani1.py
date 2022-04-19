@@ -25,8 +25,11 @@ class ANI1(Dataset):
         idx_name, z_name, pos_name, y_name = self.processed_paths
         self.idx_mm = np.memmap(idx_name, mode='r', dtype=np.int64)
         self.z_mm = np.memmap(z_name, mode='r', dtype=np.int8)
-        self.pos_mm = np.memmap(pos_name, mode='r', dtype=np.float32)
+        self.pos_mm = np.memmap(pos_name, mode='r', dtype=np.float32, shape=(self.z_mm.shape[0], 3))
         self.y_mm = np.memmap(y_name, mode='r', dtype=np.float64)
+
+        print(self.z_mm.shape)
+        print(self.pos_mm.shape)
 
     @property
     def raw_file_names(self):
@@ -68,10 +71,9 @@ class ANI1(Dataset):
 
     def process(self):
 
+        print('Gather statistics...')
         num_all_confs = 0
         num_all_atoms = 0
-
-        print('Gather statistics...')
         for data in self._sample_iter():
             num_all_confs += 1
             num_all_atoms += data.z.shape[0]
@@ -85,10 +87,8 @@ class ANI1(Dataset):
         pos_mm = np.memmap(pos_name + '.tmp', mode='w+', dtype=np.float32, shape=(num_all_atoms, 3))
         y_mm = np.memmap(y_name + '.tmp', mode='w+', dtype=np.float64, shape=(num_all_confs,))
 
-        i_conf = 0
-        i_atom = 0
-
         print('Storing data...')
+        i_atom = 0
         for i_conf, data in enumerate(self._sample_iter()):
             i_next_atom = i_atom + data.z.shape[0]
 
@@ -100,7 +100,6 @@ class ANI1(Dataset):
             i_atom = i_next_atom
 
         idx_mm[-1] = num_all_atoms
-        assert i_conf == num_all_confs
         assert i_atom == num_all_atoms
 
         idx_mm.flush()
