@@ -118,9 +118,9 @@ class ANI1(Dataset):
 
     def get(self, idx):
 
-        i_fist_atom, i_last_atom = self.idx_mm[idx], self.idx_mm[idx+1]
-        z = pt.tensor(self.z_mm[i_fist_atom:i_last_atom], dtype=pt.long)
-        pos = pt.tensor(self.pos_mm[i_fist_atom:i_last_atom], dtype=pt.float32)
+        atom_slice = slice(self.idx_mm[idx], self.idx_mm[idx+1])
+        z = pt.tensor(self.z_mm[atom_slice], dtype=pt.long)
+        pos = pt.tensor(self.pos_mm[atom_slice], dtype=pt.float32)
         y = pt.tensor(self.y_mm[idx], dtype=pt.float64).view(1, 1)
 
         return Data(z=z, pos=pos, y=y)
