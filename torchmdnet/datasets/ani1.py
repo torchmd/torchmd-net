@@ -46,7 +46,7 @@ class ANI1(Dataset):
 
     def _sample_iter(self):
 
-        for path in tqdm(self.raw_paths[5:6], desc='Files'):
+        for path in tqdm(self.raw_paths, desc='Files'):
             molecules = list(h5py.File(path).values())[0].values()
 
             for mol in tqdm(molecules, desc='Molecules', leave=False):
