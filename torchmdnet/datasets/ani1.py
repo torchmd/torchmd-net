@@ -19,7 +19,7 @@ class ANI1(Dataset):
         'O': -75.0362229210 * HARTREE_TO_EV,
     }
 
-    def __init__(self, root, transform=None, pre_transform=None, pre_filter=None):
+    def __init__(self, root, transform=None, pre_transform=None, pre_filter=None, dataset_arg=None):
         super().__init__(root, transform, pre_transform, pre_filter)
 
         idx_name, z_name, pos_name, y_name = self.processed_paths
