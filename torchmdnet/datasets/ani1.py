@@ -50,9 +50,9 @@ class ANI1(Dataset):
             molecules = list(h5py.File(path).values())[0].values()
 
             for mol in tqdm(molecules, desc='Molecules', leave=False):
-                z = pt.tensor([self.atomic_numbers[atom] for atom in mol['species']])
-                all_pos = pt.tensor(mol['coordinates'][:])
-                all_y = pt.tensor(mol['energies'][:] * self.HARTREE_TO_EV)
+                z = pt.tensor([self.atomic_numbers[atom] for atom in mol['species']], dtype=pt.long)
+                all_pos = pt.tensor(mol['coordinates'][:], dtype=pt.float32)
+                all_y = pt.tensor(mol['energies'][:] * self.HARTREE_TO_EV, dtype=pt.float64)
 
                 assert all_pos.shape[0] == all_y.shape[0]
                 assert all_pos.shape[1] == z.shape[0]
@@ -94,8 +94,8 @@ class ANI1(Dataset):
 
             idx_mm[i_conf] = i_atom
             z_mm[i_atom:i_next_atom] = data.z.to(pt.int8)
-            pos_mm[i_atom:i_next_atom] = data.pos.to(pt.float32)
-            y_mm[i_conf] = data.y.to(pt.float64)
+            pos_mm[i_atom:i_next_atom] = data.pos
+            y_mm[i_conf] = data.y
 
             i_atom = i_next_atom
 
@@ -118,9 +118,9 @@ class ANI1(Dataset):
     def get(self, idx):
 
         i_fist_atom, i_last_atom = self.idx_mm[idx], self.idx_mm[idx+1]
-        z = pt.tensor(self.z_mm[i_fist_atom:i_last_atom]).to(pt.long)
-        pos = pt.tensor(self.pos_mm[i_fist_atom:i_last_atom])
-        y = pt.tensor(self.y_mm[idx]).view(1, 1)
+        z = pt.tensor(self.z_mm[i_fist_atom:i_last_atom], dtype=pt.long)
+        pos = pt.tensor(self.pos_mm[i_fist_atom:i_last_atom], dtype=pt.float32)
+        y = pt.tensor(self.y_mm[idx], dtype=pt.float64).view(1, 1)
 
         return Data(z=z, pos=pos, y=y)
 
