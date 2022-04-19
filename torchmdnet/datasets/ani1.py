@@ -118,10 +118,10 @@ class ANI1(Dataset):
 
     def get(self, idx):
 
-        atom_slice = slice(self.idx_mm[idx], self.idx_mm[idx+1])
-        z = pt.tensor(self.z_mm[atom_slice], dtype=pt.long)
-        pos = pt.tensor(self.pos_mm[atom_slice], dtype=pt.float32)
-        y = pt.tensor(self.y_mm[idx], dtype=pt.float64).view(1, 1)
+        atoms = slice(self.idx_mm[idx], self.idx_mm[idx+1])
+        z = pt.tensor(self.z_mm[atoms], dtype=pt.long)
+        pos = pt.tensor(self.pos_mm[atoms], dtype=pt.float32)
+        y = pt.tensor(self.y_mm[idx], dtype=pt.float32).view(1, 1) # It would be better to use float64, but the trainer complaints
 
         return Data(z=z, pos=pos, y=y)
 
