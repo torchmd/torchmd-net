@@ -28,8 +28,9 @@ class ANI1(Dataset):
         self.pos_mm = np.memmap(pos_name, mode='r', dtype=np.float32, shape=(self.z_mm.shape[0], 3))
         self.y_mm = np.memmap(y_name, mode='r', dtype=np.float64)
 
-        print(self.z_mm.shape)
-        print(self.pos_mm.shape)
+        assert self.idx_mm[0] == 0
+        assert self.idx_mm[-1] == len(self.z_mm)
+        assert len(self.idx_mm) == len(self.y_mm) + 1
 
     @property
     def raw_file_names(self):
@@ -71,7 +72,7 @@ class ANI1(Dataset):
 
     def process(self):
 
-        print('Gather statistics...')
+        print('Gathering statistics...')
         num_all_confs = 0
         num_all_atoms = 0
         for data in self._sample_iter():
