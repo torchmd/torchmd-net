@@ -41,13 +41,9 @@ class ANI1(Dataset):
         extract_tar(archive, self.raw_dir)
         os.remove(archive)
 
-    def process(self):
+    def _sample_iter(self):
 
-        num_all_confs = 0
-        num_all_atoms = 0
-
-        print('Gather statistics...')
-        for path in tqdm(self.raw_paths, desc='Files'):
+        for path in tqdm(self.raw_paths[5:6], desc='Files'):
             molecules = list(h5py.File(path).values())[0].values()
 
             for mol in tqdm(molecules, desc='Molecules', leave=False):
@@ -68,8 +64,17 @@ class ANI1(Dataset):
                     if self.pre_transform is not None:
                         data = self.pre_transform(data)
 
-                    num_all_confs += 1
-                    num_all_atoms += data.pos.shape[0]
+                    yield data
+
+    def process(self):
+
+        num_all_confs = 0
+        num_all_atoms = 0
+
+        print('Gather statistics...')
+        for data in self._sample_iter():
+            num_all_confs += 1
+            num_all_atoms += data.z.shape[0]
 
         print(f'  Total number of conformers: {num_all_confs}')
         print(f'  Total number of atoms: {num_all_atoms}')
@@ -80,44 +85,21 @@ class ANI1(Dataset):
         pos_mm = np.memmap(pos_name + '.tmp', mode='w+', dtype=np.float32, shape=(num_all_atoms, 3))
         y_mm = np.memmap(y_name + '.tmp', mode='w+', dtype=np.float64, shape=(num_all_confs,))
 
-        print('Storing data...')
-
         i_conf = 0
         i_atom = 0
 
-        for path in tqdm(self.raw_paths, desc='Files'):
-            molecules = list(h5py.File(path).values())[0].values()
+        print('Storing data...')
+        for i_conf, data in enumerate(self._sample_iter()):
+            i_next_atom = i_atom + data.z.shape[0]
 
-            for mol in tqdm(molecules, desc='Molecules', leave=False):
-                z = pt.tensor([self.atomic_numbers[atom] for atom in mol['species']])
-                all_pos = pt.tensor(mol['coordinates'][:])
-                all_y = pt.tensor(mol['energies'][:] * self.HARTREE_TO_EV)
+            idx_mm[i_conf] = i_atom
+            z_mm[i_atom:i_next_atom] = data.z.to(pt.int8)
+            pos_mm[i_atom:i_next_atom] = data.pos.to(pt.float32)
+            y_mm[i_conf] = data.y.to(pt.float64)
 
-                assert all_pos.shape[0] == all_y.shape[0]
-                assert all_pos.shape[1] == z.shape[0]
-                assert all_pos.shape[2] == 3
+            i_atom = i_next_atom
 
-                for pos, y in zip(all_pos, all_y):
-                    data = Data(z=z, pos=pos, y=y.view(1, 1))
-
-                    if self.pre_filter is not None and not self.pre_filter(data):
-                        continue
-
-                    if self.pre_transform is not None:
-                        data = self.pre_transform(data)
-
-                    i_next_conf = i_conf + 1
-                    i_next_atom = i_atom + data.z.shape[0]
-
-                    idx_mm[i_conf] = i_atom
-                    z_mm[i_atom:i_next_atom] = data.z.to(pt.int8)
-                    pos_mm[i_atom:i_next_atom] = data.pos.to(pt.float32)
-                    y_mm[i_conf] = data.y.to(pt.float64)
-
-                    i_conf = i_next_conf
-                    i_atom = i_next_atom
-
-        idx_mm[i_conf] = i_atom
+        idx_mm[-1] = num_all_atoms
         assert i_conf == num_all_confs
         assert i_atom == num_all_atoms
 
