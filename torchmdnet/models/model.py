@@ -1,8 +1,8 @@
 import re
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import torch
 from torch.autograd import grad
-from torch import nn
+from torch import nn, Tensor
 from torch_scatter import scatter
 from pytorch_lightning.utilities import rank_zero_warn
 from torchmdnet.models import output_modules
@@ -105,7 +105,7 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
 
     for key, value in kwargs.items():
         if not key in args:
-            warnings.warn(f'Unknown hyperparameter: {key}={value}')
+            warnings.warn(f"Unknown hyperparameter: {key}={value}")
         args[key] = value
 
     model = create_model(args)
@@ -156,7 +156,13 @@ class TorchMD_Net(nn.Module):
         if self.prior_model is not None:
             self.prior_model.reset_parameters()
 
-    def forward(self, z, pos, batch: Optional[torch.Tensor] = None):
+    def forward(self,
+                z: Tensor,
+                pos: Tensor,
+                batch: Optional[Tensor] = None,
+                q: Optional[Tensor] = None,
+                s: Optional[Tensor] = None) -> Tuple[Tensor, Optional[Tensor]]:
+
         assert z.dim() == 1 and z.dtype == torch.long
         batch = torch.zeros_like(z) if batch is None else batch
 
@@ -164,7 +170,7 @@ class TorchMD_Net(nn.Module):
             pos.requires_grad_(True)
 
         # run the potentially wrapped representation model
-        x, v, z, pos, batch = self.representation_model(z, pos, batch=batch)
+        x, v, z, pos, batch = self.representation_model(z, pos, batch, q=q, s=s)
 
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch)

@@ -21,7 +21,7 @@ Install TorchMD-NET into the Conda environment:
 pip install -e .
 ```
 
-## Performance
+## Accuracy
 The TorchMD-NET equivariant Transformer (ET) is competitive with previous methods on the MD17 benchmark dataset.
 
 

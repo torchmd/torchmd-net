@@ -1,6 +1,6 @@
 from typing import Optional, Tuple
 import torch
-from torch import nn
+from torch import Tensor, nn
 from torch_geometric.nn import MessagePassing
 from torch_scatter import scatter
 from torchmdnet.models.utils import (
@@ -147,7 +147,14 @@ class TorchMD_ET(nn.Module):
             attn.reset_parameters()
         self.out_norm.reset_parameters()
 
-    def forward(self, z, pos, batch):
+    def forward(self,
+                z: Tensor,
+                pos: Tensor,
+                batch: Tensor,
+                q: Optional[Tensor] = None,
+                s: Optional[Tensor] = None
+                ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+
         x = self.embedding(z)
 
         edge_index, edge_weight, edge_vec = self.distance(pos, batch)
