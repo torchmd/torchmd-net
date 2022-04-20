@@ -18,5 +18,7 @@ setup(
     name="torchmd-net",
     version=version,
     packages=find_packages(),
+    package_data={"torchmdnet": ["neighbors/neighbors*"]},
+    include_package_data=True,
     install_requires=requirements,
 )
