@@ -1,11 +1,13 @@
 from typing import Optional, Tuple
 from torch import Tensor, nn
 from torch_geometric.nn import MessagePassing
+from torchmdnet.messages import pass_messages
 from torchmdnet.models.utils import (
     NeighborEmbedding,
     CosineCutoff,
     Distance,
     DistanceBruteForce,
+    DistanceOptimized,
     rbf_class_mapping,
     act_class_mapping,
 )
@@ -112,6 +114,8 @@ class TorchMD_GN(nn.Module):
             self.distance = Distance(cutoff_lower, cutoff_upper, max_num_neighbors=max_num_neighbors)
         elif self.neighbors == "brute_force":
             self.distance = DistanceBruteForce()
+        elif self.neighbors == "optimized":
+            self.distance = DistanceOptimized(cutoff_upper, max_num_neighbors=max_num_neighbors)
         else:
             raise ValueError('neighbours')
 

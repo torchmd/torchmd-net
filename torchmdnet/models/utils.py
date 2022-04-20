@@ -4,7 +4,8 @@ from torch import nn
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch_cluster import radius_graph
-
+from torchmdnet.messages import pass_messages
+from torchmdnet.neighbors import get_neighbor_pairs
 
 def visualize_basis(basis_type, num_rbf=50, cutoff_lower=0, cutoff_upper=5):
     """
@@ -255,6 +256,17 @@ class DistanceBruteForce(nn.Module):
         edge_vec = torch.index_select(pos, 0, row) - torch.index_select(pos, 0, column)
         edge_weight = torch.norm(edge_vec, dim=-1)
 
+        return edge_index, edge_weight, None
+
+
+class DistanceOptimized(nn.Module):
+    def __init__(self, cutoff, max_num_neighbors=32,):
+        super().__init__()
+        self.cutoff = cutoff
+        self.max_num_neighbors = max_num_neighbors
+
+    def forward(self, pos, batch):
+        edge_index, edge_weight = get_neighbor_pairs(pos, self.cutoff, self.max_num_neighbors)
         return edge_index, edge_weight, None
 
 
