@@ -4,7 +4,7 @@ using torch::kInt32;
 using torch::logical_and;
 using torch::Tensor;
 
-static Tensor forward(const Tensor& neighbors, const Tensor& messages) {
+static Tensor forward(const Tensor& neighbors, const Tensor& messages, const Tensor& states) {
 
     TORCH_CHECK(neighbors.dim() == 2, "Expected \"neighbors\" to have two dimensions");
     TORCH_CHECK(neighbors.size(0) == 2, "Expected the 2nd dimension size of \"neighbors\" to be 2");
@@ -16,18 +16,26 @@ static Tensor forward(const Tensor& neighbors, const Tensor& messages) {
     TORCH_CHECK(messages.size(1) <= 1024, "Expected the 2nd dimension size of \"messages\" to be less than 1024");
     TORCH_CHECK(messages.is_contiguous(), "Expected \"messages\" to be contiguous");
 
-    const Tensor all_rows = neighbors[0];
-    const Tensor all_columns = neighbors[1];
+    TORCH_CHECK(states.dim() == 2, "Expected \"states\" to have two dimensions");
+    TORCH_CHECK(states.size(1) == messages.size(1), "Expected the 2nd dimension size of \"messages\" and \"states\" to be the same");
+    TORCH_CHECK(states.scalar_type() == messages.scalar_type(), "Expected the data type of \"messages\" and \"states\" to be the same");
+    TORCH_CHECK(states.is_contiguous(), "Expected \"messages\" to be contiguous");
 
-    const Tensor mask = logical_and(all_rows > -1, all_columns > -1);
-    const Tensor rows = all_rows.masked_select(mask).to(torch::kLong);
-    const Tensor columns = all_columns.masked_select(mask).to(torch::kLong);
+    const Tensor rows = neighbors[0];
+    const Tensor columns = neighbors[1];
 
-    Tensor new_messages = messages.clone();
-    new_messages.index_add_(0, rows, messages.index({columns}));
-    new_messages.index_add_(0, columns, messages.index({rows}));
+    const int num_features = messages.size(1);
 
-    return new_messages;
+    const Tensor mask = logical_and(rows > -1, columns > -1);
+    const Tensor masked_rows = rows.masked_select(mask).to(torch::kLong);
+    const Tensor masked_columns = columns.masked_select(mask).to(torch::kLong);
+    const Tensor masked_messages = messages.masked_select(mask.unsqueeze(1)).reshape({-1, num_features});
+
+    Tensor new_states = states.clone();
+    new_states.index_add_(0, masked_rows, masked_messages);
+    new_states.index_add_(0, masked_columns, masked_messages);
+
+    return new_states;
 }
 
 TORCH_LIBRARY_IMPL(messages, CPU, m) {
