@@ -39,12 +39,13 @@ def visualize_basis(basis_type, num_rbf=50, cutoff_lower=0, cutoff_upper=5):
 
 
 class NeighborEmbedding(MessagePassing):
-    def __init__(self, hidden_channels, num_rbf, cutoff_lower, cutoff_upper, max_z=100):
+    def __init__(self, hidden_channels, num_rbf, cutoff_lower, cutoff_upper, max_z=100, conv="pyg"):
         super(NeighborEmbedding, self).__init__(aggr="add")
         self.embedding = nn.Embedding(max_z, hidden_channels)
         self.distance_proj = nn.Linear(num_rbf, hidden_channels)
         self.combine = nn.Linear(hidden_channels * 2, hidden_channels)
         self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)
+        self.conv = conv
 
         self.reset_parameters()
 
@@ -67,8 +68,15 @@ class NeighborEmbedding(MessagePassing):
         W = self.distance_proj(edge_attr) * C.view(-1, 1)
 
         x_neighbors = self.embedding(z)
+
         # propagate_type: (x: Tensor, W: Tensor)
-        x_neighbors = self.propagate(edge_index, x=x_neighbors, W=W, size=None)
+        if self.conv == "pyg":
+            x = self.propagate(edge_index, x=x_neighbors, W=W, size=None)
+        elif self.conv == "optimized":
+            x = pass_messages(edge_index, W, x_neighbors)
+        else:
+            raise ValueError("conv")
+
         x_neighbors = self.combine(torch.cat([x, x_neighbors], dim=1))
         return x_neighbors
 

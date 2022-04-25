@@ -29,6 +29,9 @@ def create_model(args, prior_model=None, mean=None, std=None):
     if "neighbors" in args:
         shared_args["neighbors"] = args["neighbors"]
 
+    if "conv" in args:
+        shared_args["conv"] = args["conv"]
+
     # representation network
     if args["model"] == "graph-network":
         from torchmdnet.models.torchmd_gn import TorchMD_GN

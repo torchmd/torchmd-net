@@ -74,7 +74,8 @@ class TorchMD_GN(nn.Module):
         max_z=100,
         max_num_neighbors=32,
         aggr="add",
-        neighbors="simple"
+        neighbors="simple",
+        conv="pyg"
     ):
         super(TorchMD_GN, self).__init__()
 
@@ -106,6 +107,9 @@ class TorchMD_GN(nn.Module):
         self.aggr = aggr
         self.neighbors = neighbors
 
+        if neighbors == "optimized":
+            assert conv == "optimized"
+
         act_class = act_class_mapping[activation]
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels)
@@ -124,7 +128,7 @@ class TorchMD_GN(nn.Module):
         )
         self.neighbor_embedding = (
             NeighborEmbedding(
-                hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z
+                hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z, conv
             ).jittable()
             if neighbor_embedding
             else None
@@ -140,6 +144,7 @@ class TorchMD_GN(nn.Module):
                 cutoff_lower,
                 cutoff_upper,
                 aggr=self.aggr,
+                conv=conv
             )
             self.interactions.append(block)
 
@@ -201,6 +206,7 @@ class InteractionBlock(nn.Module):
         cutoff_lower,
         cutoff_upper,
         aggr="add",
+        conv="pyg"
     ):
         super(InteractionBlock, self).__init__()
         self.mlp = nn.Sequential(
@@ -216,6 +222,7 @@ class InteractionBlock(nn.Module):
             cutoff_lower,
             cutoff_upper,
             aggr=aggr,
+            conv=conv
         ).jittable()
         self.act = activation()
         self.lin = nn.Linear(hidden_channels, hidden_channels)
@@ -248,12 +255,14 @@ class CFConv(MessagePassing):
         cutoff_lower,
         cutoff_upper,
         aggr="add",
+        conv="pyg"
     ):
         super(CFConv, self).__init__(aggr=aggr)
         self.lin1 = nn.Linear(in_channels, num_filters, bias=False)
         self.lin2 = nn.Linear(num_filters, out_channels)
         self.net = net
         self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)
+        self.conv = conv
 
         self.reset_parameters()
 
@@ -267,8 +276,15 @@ class CFConv(MessagePassing):
         W = self.net(edge_attr) * C.view(-1, 1)
 
         x = self.lin1(x)
+
         # propagate_type: (x: Tensor, W: Tensor)
-        x = self.propagate(edge_index, x=x, W=W, size=None)
+        if self.conv == "pyg":
+            x = self.propagate(edge_index, x=x, W=W, size=None)
+        elif self.conv == "optimized":
+            x = pass_messages(edge_index, W, x)
+        else:
+            raise ValueError("conv")
+
         x = self.lin2(x)
         return x
 
