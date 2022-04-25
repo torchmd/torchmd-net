@@ -149,57 +149,36 @@ template <typename scalar_t> __global__ void forward_kernel_get_neighbors(
 
     const int32_t max_num_neighbors = distances.size(0);
 
+    const int32_t coord_offsets[14][3] = {
+        { 1,  1,  1 },
+        { 1,  1,  0 },
+        { 1,  1, -1 },
+        { 1,  0,  1 },
+        { 1,  0,  0 },
+        { 1,  0, -1 },
+        { 1, -1,  1 },
+        { 1, -1,  0 },
+        { 1, -1, -1 },
+        { 0,  1,  1 },
+        { 0,  1,  0 },
+        { 0,  1, -1 },
+        { 0,  0,  1 },
+        { 0,  0,  0 }
+    };
+
+    const int subindex = global_index % 14;
+    const auto coord_offset = coord_offsets[subindex];
+
+    coord_x += coord_offset[0];
+    coord_y += coord_offset[1];
+    coord_z += coord_offset[2];
+
     int iter = 0;
-
-    switch (global_index % 14) {
-        case 0:
-            coord_x += 1; coord_y += 1; coord_z += 1;
-            break;
-        case 1:
-            coord_x += 1; coord_y += 1; coord_z += 0;
-            break;
-        case 2:
-            coord_x += 1; coord_y += 1; coord_z += -1;
-            break;
-        case 3:
-            coord_x += 1; coord_y += 0; coord_z += 1;
-            break;
-        case 4:
-            coord_x += 1; coord_y += 0; coord_z += 0;
-            break;
-        case 5:
-            coord_x += 1; coord_y += 0; coord_z += -1;
-            break;
-        case 6:
-            coord_x += 1; coord_y += -1; coord_z += 1;
-            break;
-        case 7:
-            coord_x += 1; coord_y += -1; coord_z += 0;
-            break;
-        case 8:
-            coord_x += 1; coord_y += -1; coord_z += -1;
-            break;
-        case 9:
-            coord_x += 0; coord_y += 1; coord_z += 1;
-            break;
-        case 10:
-            coord_x += 0; coord_y += 1; coord_z += 0;
-            break;
-        case 11:
-            coord_x += 0; coord_y += 1; coord_z += -1;
-            break;
-        case 12:
-            coord_x += 0; coord_y += 0; coord_z += 1;
-            break;
-        case 13:
-            coord_x += 0; coord_y += 0; coord_z += 0;
-
-            while(index != geometric_hash[coord_x][coord_y][coord_z][iter]) {
-                iter++;
-            }
+    if (subindex == 13) {
+        while(index != geometric_hash[coord_x][coord_y][coord_z][iter]) {
             iter++;
-
-            break;
+        }
+        iter++;
     }
 
     const double radius_squared = radius * radius;
