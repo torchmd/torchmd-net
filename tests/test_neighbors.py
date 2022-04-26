@@ -4,8 +4,8 @@ from math import sqrt
 from moleculekit.molecule import Molecule
 from torchmdnet.neighbors import get_neighbor_list
 
-@pytest.mark.parametrize('molecule_file', ['alanine_dipeptide.pdb', 'testosterone.pdb'])
-@pytest.mark.parametrize('radius', [8, 10])
+@pytest.mark.parametrize('molecule_file', ['alanine_dipeptide.pdb', 'testosterone.pdb', 'chignolin.pdb', 'dhfr.pdb'])
+@pytest.mark.parametrize('radius', [8, 10, 12])
 @pytest.mark.parametrize('device', ['cpu'] + (['cuda'] if pt.cuda.is_available() else []))
 def test_neighbors(molecule_file, radius, device):
     radius_squared = radius * radius
