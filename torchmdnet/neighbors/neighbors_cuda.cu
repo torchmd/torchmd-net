@@ -269,15 +269,14 @@ public:
         const int num_partitions_y = ceil((boundary[0][1] - boundary[1][1]).item<double>() / radius) + 2;
         const int num_partitions_z = ceil((boundary[0][2] - boundary[1][2]).item<double>() / radius) + 2;
 
-        torch::Tensor geometric_hash = torch::empty({num_partitions_x, num_partitions_y, num_partitions_z, max_hash_size}, options.dtype(torch::kInt32));
+        torch::Tensor geometric_hash = torch::zeros({num_partitions_x, num_partitions_y, num_partitions_z, max_hash_size}, options.dtype(torch::kInt32));
         torch::Tensor geometric_hash_sizes = torch::zeros({num_partitions_x, num_partitions_y, num_partitions_z}, options.dtype(torch::kInt32));
 
-        const torch::Tensor debug = torch::empty({num_atoms, 8}, options.dtype(torch::kInt32));
         const torch::Tensor rows = torch::full(num_neighbors, -1, options.dtype(torch::kInt32));
         const torch::Tensor columns = torch::full(num_neighbors, -1, options.dtype(torch::kInt32));
         const torch::Tensor deltas = torch::empty({num_neighbors, 3}, options);
         const torch::Tensor distances = torch::empty(num_neighbors, options);
-        const torch::Tensor neighbors_number = torch::empty(1, options.dtype(torch::kInt32));
+        const torch::Tensor neighbors_number = torch::zeros(1, options.dtype(torch::kInt32));
 
         AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "get_neighbor_list_step1", [&]() {
             const c10::cuda::CUDAStreamGuard guard(stream);
