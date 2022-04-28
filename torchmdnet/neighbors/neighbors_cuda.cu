@@ -325,7 +325,6 @@ public:
         const torch::Tensor grad_distances = grad_inputs[2];
         const int num_atoms = ctx->saved_data["num_atoms"].toInt();
         const int num_neighbors = grad_distances.size(0);
-        const int num_threads = 128;
         const int num_blocks = (num_neighbors + num_threads - 1) / num_threads;
         const auto stream = c10::cuda::getCurrentCUDAStream(grad_distances.get_device());
 
