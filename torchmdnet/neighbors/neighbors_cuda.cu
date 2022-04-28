@@ -147,7 +147,7 @@ template <typename scalar_t> __global__ void forward_kernel_get_neighbors(
     int32_t coord_y = floor((positions[index][1] - boundary[1]) / radius) + 1;
     int32_t coord_z = floor((positions[index][2] - boundary[2]) / radius) + 1;
 
-    const int32_t max_num_neighbors = distances.size(0);
+    const int64_t max_num_neighbors = distances.size(0);
 
     const int32_t coord_offsets[14][3] = {
         { 1,  1,  1 },
@@ -238,9 +238,9 @@ public:
         TORCH_CHECK(positions.size(1) == 3, "Expected the 2nd dimension size of \"positions\" to be 3");
         TORCH_CHECK(positions.is_contiguous(), "Expected \"positions\" to be contiguous");
 
-        const int num_atoms = positions.size(0);
-        const int num_neighbors = num_atoms * num_atoms;
-        const int num_blocks = (num_atoms + num_threads + 1) / num_threads;
+        const int32_t num_atoms = positions.size(0);
+        const int32_t num_neighbors = num_atoms * num_atoms;
+        const int32_t num_blocks = (num_atoms + num_threads + 1) / num_threads;
         const auto stream = c10::cuda::getCurrentCUDAStream(positions.get_device());
 
         const torch::TensorOptions options = positions.options();
