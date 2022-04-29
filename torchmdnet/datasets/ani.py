@@ -44,6 +44,16 @@ class ANIBase(Dataset):
     def processed_file_names(self):
         return [f'{self.name}.idx.mmap', f'{self.name}.z.mmap', f'{self.name}.pos.mmap', f'{self.name}.y.mmap']
 
+    def filter_and_pre_transform(self, data):
+
+        if self.pre_filter is not None and not self.pre_filter(data):
+            continue
+
+        if self.pre_transform is not None:
+            data = self.pre_transform(data)
+
+        return data
+
     def process(self):
 
         print('Gathering statistics...')
@@ -156,13 +166,7 @@ class ANI1(ANIBase):
 
                 for pos, y in zip(all_pos, all_y):
                     data = Data(z=z, pos=pos, y=y.view(1, 1))
-
-                    if self.pre_filter is not None and not self.pre_filter(data):
-                        continue
-
-                    if self.pre_transform is not None:
-                        data = self.pre_transform(data)
-
+                    data = self.filter_and_pre_transform(data)
                     yield data
 
     # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
@@ -235,14 +239,9 @@ class ANI1X(ANIBase):
                         continue
 
                     data = Data(z=z, pos=pos, y=y.view(1, 1), dy=dy)
-
-                    if self.pre_filter is not None and not self.pre_filter(data):
-                        continue
-
-                    if self.pre_transform is not None:
-                        data = self.pre_transform(data)
-
+                    data = self.filter_and_pre_transform(data)
                     yield data
+
 
     # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
     # TODO remove when fixed
