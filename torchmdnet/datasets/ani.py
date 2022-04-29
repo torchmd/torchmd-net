@@ -27,6 +27,7 @@ class ANIBase(Dataset):
         raise NotImplementedError
 
     def __init__(self, root, transform=None, pre_transform=None, pre_filter=None, dataset_arg=None):
+        self.name = self.__class__.__name__
         super().__init__(root, transform, pre_transform, pre_filter)
 
         idx_name, z_name, pos_name, y_name = self.processed_paths
@@ -38,8 +39,6 @@ class ANIBase(Dataset):
         assert self.idx_mm[0] == 0
         assert self.idx_mm[-1] == len(self.z_mm)
         assert len(self.idx_mm) == len(self.y_mm) + 1
-
-        self.name = self.__class__.__name__
 
     @property
     def processed_file_names(self):
@@ -165,3 +164,13 @@ class ANI1(ANIBase):
             'N': -54.5680045287 * self.HARTREE_TO_EV,
             'O': -75.0362229210 * self.HARTREE_TO_EV
         }
+
+    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
+    # TODO remove when fixed
+    def download(self):
+        super().download()
+
+    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
+    # TODO remove when fixed
+    def process(self):
+        super().process()
