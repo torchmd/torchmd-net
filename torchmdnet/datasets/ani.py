@@ -44,11 +44,6 @@ class ANIBase(Dataset):
     def processed_file_names(self):
         return [f'{self.name}.idx.mmap', f'{self.name}.z.mmap', f'{self.name}.pos.mmap', f'{self.name}.y.mmap']
 
-    def download(self):
-        archive = download_url(self.raw_url, self.raw_dir)
-        extract_tar(archive, self.raw_dir)
-        os.remove(archive)
-
     def _sample_iter(self):
 
         for path in tqdm(self.raw_paths, desc='Files'):
@@ -146,6 +141,11 @@ class ANI1(ANIBase):
     @property
     def raw_file_names(self):
         return [os.path.join('ANI-1_release', f'ani_gdb_s{i:02d}.h5') for i in range(1, 9)]
+
+    def download(self):
+        archive = download_url(self.raw_url, self.raw_dir)
+        extract_tar(archive, self.raw_dir)
+        os.remove(archive)
 
     @property
     def atomic_numbers(self):
