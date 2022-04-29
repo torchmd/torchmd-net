@@ -44,37 +44,12 @@ class ANIBase(Dataset):
     def processed_file_names(self):
         return [f'{self.name}.idx.mmap', f'{self.name}.z.mmap', f'{self.name}.pos.mmap', f'{self.name}.y.mmap']
 
-    def _sample_iter(self):
-
-        for path in tqdm(self.raw_paths, desc='Files'):
-            molecules = list(h5py.File(path).values())[0].values()
-
-            for mol in tqdm(molecules, desc='Molecules', leave=False):
-                z = pt.tensor([self.atomic_numbers[atom] for atom in mol['species']], dtype=pt.long)
-                all_pos = pt.tensor(mol['coordinates'][:], dtype=pt.float32)
-                all_y = pt.tensor(mol['energies'][:] * self.HARTREE_TO_EV, dtype=pt.float64)
-
-                assert all_pos.shape[0] == all_y.shape[0]
-                assert all_pos.shape[1] == z.shape[0]
-                assert all_pos.shape[2] == 3
-
-                for pos, y in zip(all_pos, all_y):
-                    data = Data(z=z, pos=pos, y=y.view(1, 1))
-
-                    if self.pre_filter is not None and not self.pre_filter(data):
-                        continue
-
-                    if self.pre_transform is not None:
-                        data = self.pre_transform(data)
-
-                    yield data
-
     def process(self):
 
         print('Gathering statistics...')
         num_all_confs = 0
         num_all_atoms = 0
-        for data in self._sample_iter():
+        for data in self.sample_iter():
             num_all_confs += 1
             num_all_atoms += data.z.shape[0]
 
@@ -89,7 +64,7 @@ class ANIBase(Dataset):
 
         print('Storing data...')
         i_atom = 0
-        for i_conf, data in enumerate(self._sample_iter()):
+        for i_conf, data in enumerate(self.sample_iter()):
             i_next_atom = i_atom + data.z.shape[0]
 
             idx_mm[i_conf] = i_atom
@@ -165,6 +140,31 @@ class ANI1(ANIBase):
             'O': -75.0362229210 * self.HARTREE_TO_EV
         }
 
+    def sample_iter(self):
+
+        for path in tqdm(self.raw_paths, desc='Files'):
+            molecules = list(h5py.File(path).values())[0].values()
+
+            for mol in tqdm(molecules, desc='Molecules', leave=False):
+                z = pt.tensor([self.atomic_numbers[atom] for atom in mol['species']], dtype=pt.long)
+                all_pos = pt.tensor(mol['coordinates'][:], dtype=pt.float32)
+                all_y = pt.tensor(mol['energies'][:] * self.HARTREE_TO_EV, dtype=pt.float64)
+
+                assert all_pos.shape[0] == all_y.shape[0]
+                assert all_pos.shape[1] == z.shape[0]
+                assert all_pos.shape[2] == 3
+
+                for pos, y in zip(all_pos, all_y):
+                    data = Data(z=z, pos=pos, y=y.view(1, 1))
+
+                    if self.pre_filter is not None and not self.pre_filter(data):
+                        continue
+
+                    if self.pre_transform is not None:
+                        data = self.pre_transform(data)
+
+                    yield data
+
     # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
     # TODO remove when fixed
     def download(self):
@@ -209,7 +209,7 @@ class ANI1X(ANIBase):
             'O': -75.0362229210 * self.HARTREE_TO_EV
         }
 
-    def _sample_iter(self):
+    def sample_iter(self):
 
         assert len(self.raw_paths) == 1
 
