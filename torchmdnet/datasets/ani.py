@@ -47,7 +47,7 @@ class ANIBase(Dataset):
     def filter_and_pre_transform(self, data):
 
         if self.pre_filter is not None and not self.pre_filter(data):
-            continue
+            return None
 
         if self.pre_transform is not None:
             data = self.pre_transform(data)
@@ -166,8 +166,8 @@ class ANI1(ANIBase):
 
                 for pos, y in zip(all_pos, all_y):
                     data = Data(z=z, pos=pos, y=y.view(1, 1))
-                    data = self.filter_and_pre_transform(data)
-                    yield data
+                    if data := self.filter_and_pre_transform(data):
+                        yield data
 
     # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
     # TODO remove when fixed
@@ -239,8 +239,8 @@ class ANI1X(ANIBase):
                         continue
 
                     data = Data(z=z, pos=pos, y=y.view(1, 1), dy=dy)
-                    data = self.filter_and_pre_transform(data)
-                    yield data
+                    if data := self.filter_and_pre_transform(data):
+                        yield data
 
 
     # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
