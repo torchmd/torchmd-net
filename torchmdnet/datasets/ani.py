@@ -245,8 +245,8 @@ class ANI1X(ANIBase):
 
     # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
     # TODO remove when fixed
-    def process(self):
-        super().process()
+    def download(self):
+        super().download()
 
     # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
     # TODO remove when fixed
