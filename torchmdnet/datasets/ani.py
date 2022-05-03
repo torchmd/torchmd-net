@@ -102,13 +102,15 @@ class ANIBase(Dataset):
         z_mm.flush()
         pos_mm.flush()
         y_mm.flush()
-        dy_mm.flush()
+        if has_dy:
+            dy_mm.flush()
 
         os.rename(idx_mm.filename, idx_name)
         os.rename(z_mm.filename, z_name)
         os.rename(pos_mm.filename, pos_name)
         os.rename(y_mm.filename, y_name)
-        os.rename(dy_mm.filename, dy_name)
+        if has_dy:
+            os.rename(dy_mm.filename, dy_name)
 
     def len(self):
         return len(self.y_mm)
