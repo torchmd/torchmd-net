@@ -19,6 +19,9 @@ class ANIBase(Dataset):
     def raw_file_names(self):
         raise NotImplementedError
 
+    def sample_iter(self):
+        raise NotImplementedError()
+
     def get_atomref(self, max_z=100):
         raise NotImplementedError()
 
@@ -180,7 +183,7 @@ class ANI1(ANIBase):
         super().process()
 
 
-class ANI1X(ANIBase):
+class ANI1XBase(ANIBase):
 
     @property
     def raw_url(self):
@@ -194,6 +197,21 @@ class ANI1X(ANIBase):
         file = download_url(self.raw_url, self.raw_dir)
         assert len(self.raw_paths) == 1
         os.rename(file, self.raw_paths[0])
+
+    def get_atomref(self, max_z=100):
+
+        warnings.warn('Atomic references from the ANI-1 dataset are used!')
+
+        refs = pt.zeros(max_z)
+        refs[1] = -0.500607632585 * self.HARTREE_TO_EV # H
+        refs[6] = -37.8302333826 * self.HARTREE_TO_EV # C
+        refs[7] = -54.5680045287 * self.HARTREE_TO_EV # N
+        refs[8] = -75.0362229210 * self.HARTREE_TO_EV # O
+
+        return refs.view(-1, 1)
+
+
+class ANI1X(ANIBase):
 
     def sample_iter(self):
 
@@ -224,17 +242,42 @@ class ANI1X(ANIBase):
                     if data := self.filter_and_pre_transform(data):
                         yield data
 
-    def get_atomref(self, max_z=100):
+    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
+    # TODO remove when fixed
+    def download(self):
+        super().download()
 
-        warnings.warn('Atomic references from the ANI-1 dataset are used!')
+    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
+    # TODO remove when fixed
+    def process(self):
+        super().process()
 
-        refs = pt.zeros(max_z)
-        refs[1] = -0.500607632585 * self.HARTREE_TO_EV # H
-        refs[6] = -37.8302333826 * self.HARTREE_TO_EV # C
-        refs[7] = -54.5680045287 * self.HARTREE_TO_EV # N
-        refs[8] = -75.0362229210 * self.HARTREE_TO_EV # O
 
-        return refs.view(-1, 1)
+class ANI1CCX(ANIBase):
+
+    def sample_iter(self):
+
+        assert len(self.raw_paths) == 1
+
+        with h5py.File(self.raw_paths[0]) as h5:
+            for mol in tqdm(h5.values(), desc='Molecules'):
+
+                z = pt.tensor(mol['atomic_numbers'][:], dtype=pt.long)
+                all_pos = pt.tensor(mol['coordinates'][:], dtype=pt.float32)
+                all_y = pt.tensor(mol['ccsd(t)_cbs.energy'][:] * self.HARTREE_TO_EV, dtype=pt.float64)
+
+                assert all_pos.shape[0] == all_y.shape[0]
+                assert all_pos.shape[1] == z.shape[0]
+                assert all_pos.shape[2] == 3
+
+                for pos, y in zip(all_pos, all_y):
+
+                    if y.isnan():
+                        continue
+
+                    data = Data(z=z, pos=pos, y=y.view(1, 1))
+                    if data := self.filter_and_pre_transform(data):
+                        yield data
 
     # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
     # TODO remove when fixed
