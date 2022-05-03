@@ -4,6 +4,7 @@ import os
 import torch as pt
 from torch_geometric.data import Data, Dataset, download_url, extract_tar
 from tqdm import tqdm
+import warnings
 
 
 class ANIBase(Dataset):
@@ -18,13 +19,8 @@ class ANIBase(Dataset):
     def raw_file_names(self):
         raise NotImplementedError
 
-    @property
-    def atomic_numbers(self):
-        raise NotImplementedError
-
-    @property
-    def atomic_energies(self):
-        raise NotImplementedError
+    def get_atomref(self, max_z=100):
+        raise NotImplementedError()
 
     def __init__(self, root, transform=None, pre_transform=None, pre_filter=None, dataset_arg=None):
         self.name = self.__class__.__name__
@@ -126,13 +122,6 @@ class ANIBase(Dataset):
         else:
             return Data(z=z, pos=pos, y=y)
 
-    def get_atomref(self, max_z=100):
-
-        out = pt.zeros(max_z)
-        out[list(self.atomic_numbers.values())] = pt.tensor(list(self.atomic_energies.values()))
-
-        return out.view(-1, 1)
-
 
 class ANI1(ANIBase):
 
@@ -149,31 +138,15 @@ class ANI1(ANIBase):
         extract_tar(archive, self.raw_dir)
         os.remove(archive)
 
-    @property
-    def atomic_numbers(self):
-        return {
-            b'H': 1,
-            b'C': 6,
-            b'N': 7,
-            b'O': 8
-        }
-
-    @property
-    def atomic_energies(self):
-        return {
-            'H': -0.500607632585 * self.HARTREE_TO_EV,
-            'C': -37.8302333826 * self.HARTREE_TO_EV,
-            'N': -54.5680045287 * self.HARTREE_TO_EV,
-            'O': -75.0362229210 * self.HARTREE_TO_EV
-        }
-
     def sample_iter(self):
+
+        atomic_numbers = {b'H': 1, b'C': 6, b'N': 7, b'O': 8}
 
         for path in tqdm(self.raw_paths, desc='Files'):
             molecules = list(h5py.File(path).values())[0].values()
 
             for mol in tqdm(molecules, desc='Molecules', leave=False):
-                z = pt.tensor([self.atomic_numbers[atom] for atom in mol['species']], dtype=pt.long)
+                z = pt.tensor([atomic_numbers[atom] for atom in mol['species']], dtype=pt.long)
                 all_pos = pt.tensor(mol['coordinates'][:], dtype=pt.float32)
                 all_y = pt.tensor(mol['energies'][:] * self.HARTREE_TO_EV, dtype=pt.float64)
 
@@ -185,6 +158,16 @@ class ANI1(ANIBase):
                     data = Data(z=z, pos=pos, y=y.view(1, 1))
                     if data := self.filter_and_pre_transform(data):
                         yield data
+
+    def get_atomref(self, max_z=100):
+
+        refs = pt.zeros(max_z)
+        refs[1] = -0.500607632585 * self.HARTREE_TO_EV # H
+        refs[6] = -37.8302333826 * self.HARTREE_TO_EV # C
+        refs[7] = -54.5680045287 * self.HARTREE_TO_EV # N
+        refs[8] = -75.0362229210 * self.HARTREE_TO_EV # O
+
+        return refs.view(-1, 1)
 
     # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
     # TODO remove when fixed
@@ -211,24 +194,6 @@ class ANI1X(ANIBase):
         file = download_url(self.raw_url, self.raw_dir)
         assert len(self.raw_paths) == 1
         os.rename(file, self.raw_paths[0])
-
-    @property
-    def atomic_numbers(self):
-        return {
-            b'H': 1,
-            b'C': 6,
-            b'N': 7,
-            b'O': 8
-        }
-
-    @property
-    def atomic_energies(self):
-        return {
-            'H': -0.500607632585 * self.HARTREE_TO_EV,
-            'C': -37.8302333826 * self.HARTREE_TO_EV,
-            'N': -54.5680045287 * self.HARTREE_TO_EV,
-            'O': -75.0362229210 * self.HARTREE_TO_EV
-        }
 
     def sample_iter(self):
 
@@ -259,6 +224,17 @@ class ANI1X(ANIBase):
                     if data := self.filter_and_pre_transform(data):
                         yield data
 
+    def get_atomref(self, max_z=100):
+
+        warnings.warn('Atomic references from the ANI-1 dataset are used!')
+
+        refs = pt.zeros(max_z)
+        refs[1] = -0.500607632585 * self.HARTREE_TO_EV # H
+        refs[6] = -37.8302333826 * self.HARTREE_TO_EV # C
+        refs[7] = -54.5680045287 * self.HARTREE_TO_EV # N
+        refs[8] = -75.0362229210 * self.HARTREE_TO_EV # O
+
+        return refs.view(-1, 1)
 
     # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
     # TODO remove when fixed
