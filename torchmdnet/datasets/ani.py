@@ -78,7 +78,8 @@ class ANIBase(Dataset):
         z_mm = np.memmap(z_name + '.tmp', mode='w+', dtype=np.int8, shape=(num_all_atoms,))
         pos_mm = np.memmap(pos_name + '.tmp', mode='w+', dtype=np.float32, shape=(num_all_atoms, 3))
         y_mm = np.memmap(y_name + '.tmp', mode='w+', dtype=np.float64, shape=(num_all_confs,))
-        dy_mm = np.memmap(dy_name + '.tmp', mode='w+', dtype=np.float32, shape=(num_all_atoms if has_dy else 0, 3))
+        dy_mm = np.memmap(dy_name + '.tmp', mode='w+', dtype=np.float32, shape=(num_all_atoms,3)) \
+                if has_dy else open(dy_name, 'w')
 
         print('Storing data...')
         i_atom = 0
@@ -119,11 +120,11 @@ class ANIBase(Dataset):
         pos = pt.tensor(self.pos_mm[atoms], dtype=pt.float32)
         y = pt.tensor(self.y_mm[idx], dtype=pt.float32).view(1, 1) # It would be better to use float64, but the trainer complaints
 
-        if self.dy_mm.size > 0:
+        if self.dy_mm is None:
+            return Data(z=z, pos=pos, y=y)
+        else:
             dy = pt.tensor(self.dy_mm[atoms], dtype=pt.float32)
             return Data(z=z, pos=pos, y=y, dy=dy)
-        else:
-            return Data(z=z, pos=pos, y=y)
 
 
 class ANI1(ANIBase):
@@ -211,7 +212,7 @@ class ANI1XBase(ANIBase):
         return refs.view(-1, 1)
 
 
-class ANI1X(ANIBase):
+class ANI1X(ANI1XBase):
 
     def sample_iter(self):
 
@@ -253,7 +254,7 @@ class ANI1X(ANIBase):
         super().process()
 
 
-class ANI1CCX(ANIBase):
+class ANI1CCX(ANI1XBase):
 
     def sample_iter(self):
 
