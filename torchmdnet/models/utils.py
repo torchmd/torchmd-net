@@ -1,4 +1,5 @@
 import math
+from typing import Optional
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -192,11 +193,7 @@ class CosineCutoff(nn.Module):
 
 class Distance(nn.Module):
     def __init__(
-        self,
-        cutoff_lower,
-        cutoff_upper,
-        return_vecs=False,
-        loop=False,
+        self, cutoff_lower, cutoff_upper, return_vecs=False, loop=False,
     ):
         super(Distance, self).__init__()
         self.cutoff_lower = cutoff_lower
@@ -210,10 +207,11 @@ class Distance(nn.Module):
             r=self.cutoff_upper,
             batch=batch,
             loop=self.loop,
-            max_num_neighbors=batch.unique(return_counts=True)[1].max(),
+            max_num_neighbors=torch.unique(batch, return_counts=True)[1].max(),
         )
         edge_vec = pos[edge_index[0]] - pos[edge_index[1]]
 
+        mask: Optional[torch.Tensor] = None
         if self.loop:
             # mask out self loops when computing distances because
             # the norm of 0 produces NaN gradients
@@ -225,7 +223,7 @@ class Distance(nn.Module):
             edge_weight = torch.norm(edge_vec, dim=-1)
 
         lower_mask = edge_weight >= self.cutoff_lower
-        if self.loop:
+        if self.loop and mask is not None:
             # keep self loops even though they might be below the lower cutoff
             lower_mask = lower_mask | ~mask
         edge_index = edge_index[:, lower_mask]
