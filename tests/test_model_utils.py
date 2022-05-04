@@ -10,6 +10,10 @@ from torchmdnet.models.utils import Distance
 @mark.parametrize("loop", [False, True])
 def test_make_splits_ratios(cutoff_lower, cutoff_upper, return_vecs, loop):
     dist = Distance(cutoff_lower, cutoff_upper, return_vecs, loop)
+    
+    # try without batch
+    dist(torch.rand(2, 3))
+
     batch = torch.tensor([0, 0])
 
     loop_extra = len(batch) if loop else 0
