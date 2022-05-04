@@ -8,7 +8,7 @@ from torchmdnet.models.utils import Distance
 @mark.parametrize("cutoff_upper", [5, 10])
 @mark.parametrize("return_vecs", [False, True])
 @mark.parametrize("loop", [False, True])
-def test_make_splits_ratios(cutoff_lower, cutoff_upper, return_vecs, loop):
+def test_distance_calculation(cutoff_lower, cutoff_upper, return_vecs, loop):
     dist = Distance(cutoff_lower, cutoff_upper, return_vecs, loop)
     
     # try without batch
