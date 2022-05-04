@@ -1,4 +1,4 @@
-from pytest import mark
+from pytest import mark, raises
 import torch
 from torch.autograd import grad
 from torchmdnet.models.model import create_model
@@ -62,6 +62,26 @@ def test_distance_calculation(cutoff_lower, cutoff_upper, return_vecs, loop):
         assert edge_index.size(1) == (
             len(batch) * (len(batch) - 1) + loop_extra
         ), "Expected all neighbors to match"
+
+
+def test_neighbor_count_error():
+    dist = Distance(0, 5, max_num_neighbors=32)
+
+    # single molecule that should produce an error due to exceeding
+    # the maximum number of neighbors
+    pos = torch.rand(100, 3)
+    batch = torch.zeros(pos.size(0), dtype=torch.long)
+
+    with raises(AssertionError):
+        dist(pos, batch)
+
+    # example data where the second molecule should produce an error
+    # due to exceeding the maximum number of neighbors
+    pos = torch.rand(100, 3)
+    batch = torch.tensor([0] * 20 + [1] * 80, dtype=torch.long)
+
+    with raises(AssertionError):
+        dist(pos, batch)
 
 
 def test_gated_eq_gradients():
