@@ -1,4 +1,5 @@
 import math
+from typing import Optional
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -217,6 +218,7 @@ class Distance(nn.Module):
         )
         edge_vec = pos[edge_index[0]] - pos[edge_index[1]]
 
+        mask : Optional[torch.Tensor]=None
         if self.loop:
             # mask out self loops when computing distances because
             # the norm of 0 produces NaN gradients
@@ -228,6 +230,9 @@ class Distance(nn.Module):
             edge_weight = torch.norm(edge_vec, dim=-1)
 
         lower_mask = edge_weight >= self.cutoff_lower
+        if self.loop and mask is not None:
+            # keep self loops even though they might be below the lower cutoff
+            lower_mask = lower_mask | ~mask
         edge_index = edge_index[:, lower_mask]
         edge_weight = edge_weight[lower_mask]
 
