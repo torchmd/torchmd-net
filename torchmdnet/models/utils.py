@@ -225,9 +225,6 @@ class Distance(nn.Module):
             edge_weight = torch.norm(edge_vec, dim=-1)
 
         lower_mask = edge_weight >= self.cutoff_lower
-        if self.loop and mask is not None:
-            # keep self loops even though they might be below the lower cutoff
-            lower_mask = lower_mask | ~mask
         edge_index = edge_index[:, lower_mask]
         edge_weight = edge_weight[lower_mask]
 

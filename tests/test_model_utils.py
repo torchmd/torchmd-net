@@ -16,7 +16,7 @@ def test_distance_calculation(cutoff_lower, cutoff_upper, return_vecs, loop):
 
     batch = torch.tensor([0, 0])
 
-    loop_extra = len(batch) if loop else 0
+    loop_extra = len(batch) if loop and not cutoff_lower > 0 else 0
 
     # two atoms, distance between lower and upper cutoff
     pos = torch.tensor(
@@ -49,7 +49,7 @@ def test_distance_calculation(cutoff_lower, cutoff_upper, return_vecs, loop):
     pos = torch.rand(100, 3)
     edge_index, edge_weight, edge_vec = dist(pos, batch)
 
-    loop_extra = len(batch) if loop else 0
+    loop_extra = len(batch) if loop and not cutoff_lower > 0 else 0
 
     if cutoff_lower > 1:
         assert edge_index.size(1) == loop_extra, "Expected only self loops"
