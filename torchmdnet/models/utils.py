@@ -4,6 +4,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch_cluster import radius_graph
+import warnings
 
 
 def visualize_basis(basis_type, num_rbf=50, cutoff_lower=0, cutoff_upper=5):
@@ -286,7 +287,7 @@ class GatedEquivariantBlock(nn.Module):
         )
         mask = (vec1_buffer != 0).view(vec1_buffer.size(0), -1).any(dim=1)
         if not mask.all():
-            rank_zero_warn(
+            warnings.warn(
                 (
                     f"Skipping gradients for {(~mask).sum()} atoms due to vector features being zero. "
                     "This is likely due to atoms being outside the cutoff radius of any other atom. "
