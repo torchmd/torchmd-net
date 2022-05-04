@@ -121,7 +121,10 @@ template <typename scalar_t> __global__ void forward_kernel_get_hashes(
     const int32_t coord_z = floor((positions[index][2] - boundary[2]) / radius) + 1;
 
     const int32_t last_size = atomicAdd(&geometric_hash_sizes[coord_x][coord_y][coord_z], 1);
-    if (last_size >= max_hash_size) return;
+    if (last_size >= max_hash_size) {
+        geometric_hash_sizes[coord_x][coord_y][coord_z] = max_hash_size;
+        return;
+    }
     geometric_hash[coord_x][coord_y][coord_z][last_size] = index;
 }
 
@@ -190,7 +193,10 @@ template <typename scalar_t> __global__ void forward_kernel_get_neighbors(
         const scalar_t distance_squared = (delta_x * delta_x) + (delta_y * delta_y) + (delta_z * delta_z);
         if (distance_squared < radius_squared) {
             int32_t last_size = atomicAdd(&neighbors_number[0], 1);
-            if (neighbors_number[0] >= max_num_neighbors) return;
+            if (last_size >= max_num_neighbors) {
+                neighbors_number[0] = max_num_neighbors;
+                return;
+            }
 
             columns[last_size] = index;
             rows[last_size] = geometric_hash[coord_x][coord_y][coord_z][iter];
