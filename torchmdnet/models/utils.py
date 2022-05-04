@@ -195,14 +195,12 @@ class Distance(nn.Module):
         self,
         cutoff_lower,
         cutoff_upper,
-        max_num_neighbors=32,
         return_vecs=False,
         loop=False,
     ):
         super(Distance, self).__init__()
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
-        self.max_num_neighbors = max_num_neighbors
         self.return_vecs = return_vecs
         self.loop = loop
 
@@ -212,7 +210,7 @@ class Distance(nn.Module):
             r=self.cutoff_upper,
             batch=batch,
             loop=self.loop,
-            max_num_neighbors=self.max_num_neighbors,
+            max_num_neighbors=batch.unique(return_counts=True)[1].max(),
         )
         edge_vec = pos[edge_index[0]] - pos[edge_index[1]]
 

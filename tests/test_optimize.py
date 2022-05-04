@@ -30,7 +30,6 @@ def test_gn(device, num_atoms):
         'cutoff_lower': 0.0,
         'cutoff_upper': 5.0,
         'max_z': 100,
-        'max_num_neighbors': num_atoms,
         'model': 'graph-network',
         'aggr': 'add',
         'derivative': True,

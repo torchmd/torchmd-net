@@ -40,13 +40,6 @@ class TorchMD_T(nn.Module):
             (default: :obj:`5.0`)
         max_z (int, optional): Maximum atomic number. Used for initializing embeddings.
             (default: :obj:`100`)
-        max_num_neighbors (int, optional): Maximum number of neighbors to return for a
-            given node/atom when constructing the molecular graph during forward passes.
-            This attribute is passed to the torch_cluster radius_graph routine keyword
-            max_num_neighbors, which normally defaults to 32. Users should set this to
-            higher values if they are using higher upper distance cutoffs and expect more
-            than 32 neighbors per node/atom.
-            (default: :obj:`32`)
     """
 
     def __init__(
@@ -64,7 +57,6 @@ class TorchMD_T(nn.Module):
         cutoff_lower=0.0,
         cutoff_upper=5.0,
         max_z=100,
-        max_num_neighbors=32,
     ):
         super(TorchMD_T, self).__init__()
 
@@ -97,9 +89,7 @@ class TorchMD_T(nn.Module):
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels)
 
-        self.distance = Distance(
-            cutoff_lower, cutoff_upper, max_num_neighbors=max_num_neighbors, loop=True
-        )
+        self.distance = Distance(cutoff_lower, cutoff_upper, loop=True)
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
         )
