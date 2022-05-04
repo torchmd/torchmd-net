@@ -201,7 +201,9 @@ class Distance(nn.Module):
         self.return_vecs = return_vecs
         self.loop = loop
 
-    def forward(self, pos, batch):
+    def forward(self, pos, batch: Optional[torch.Tensor] = None):
+        if batch is None:
+            batch = torch.zeros(len(pos), dtype=torch.long, device=pos.device)
         edge_index = radius_graph(
             pos,
             r=self.cutoff_upper,
