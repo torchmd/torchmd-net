@@ -29,7 +29,7 @@ lr_factor: 0.5
 lr_min: 1.0e-07
 lr_patience: 5
 lr_warmup_steps: 10000
-max_num_neighbors: 32
+max_num_neighbors: 64
 max_z: 100
 model: equivariant-transformer
 neighbor_embedding: true
