@@ -214,8 +214,17 @@ class Distance(nn.Module):
             r=self.cutoff_upper,
             batch=batch,
             loop=self.loop,
-            max_num_neighbors=self.max_num_neighbors,
+            max_num_neighbors=self.max_num_neighbors + 1,
         )
+
+        # make sure we didn't miss any neighbors due to max_num_neighbors
+        assert not (
+            torch.unique(edge_index[0], return_counts=True)[1] > self.max_num_neighbors
+        ).any(), (
+            "The neighbor search missed some atoms due to max_num_neighbors being too low. "
+            "Please increase this parameter to include the maximum number of atoms within the cutoff."
+        )
+
         edge_vec = pos[edge_index[0]] - pos[edge_index[1]]
 
         mask : Optional[torch.Tensor]=None
