@@ -222,7 +222,7 @@ class Distance(nn.Module):
             torch.unique(edge_index[0], return_counts=True)[1] > self.max_num_neighbors
         ).any(), (
             "The neighbor search missed some atoms due to max_num_neighbors being too low. "
-            "Please increase this parameter to fit your largest molecule."
+            "Please increase this parameter to include the maximum number of atoms within the cutoff."
         )
 
         edge_vec = pos[edge_index[0]] - pos[edge_index[1]]
