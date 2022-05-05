@@ -219,7 +219,7 @@ class Distance(nn.Module):
 
         # make sure we didn't miss any neighbors due to max_num_neighbors
         assert not (
-            edge_index[0].unique(return_counts=True)[1] > self.max_num_neighbors
+            torch.unique(edge_index[0], return_counts=True)[1] > self.max_num_neighbors
         ).any(), (
             "The neighbor search missed some atoms due to max_num_neighbors being too low. "
             "Please increase this parameter to fit your largest molecule."
