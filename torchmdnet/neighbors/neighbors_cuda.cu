@@ -134,6 +134,7 @@ template <typename scalar_t> __global__ void forward_kernel_get_neighbors(
     const Accessor<int32_t, 4> geometric_hash,
     const Accessor<int32_t, 3> geometric_hash_sizes,
     const double radius,
+    const int64_t max_num_neighbors,
     Accessor<int32_t, 1> rows,
     Accessor<int32_t, 1> columns,
     Accessor<scalar_t, 2> deltas,
@@ -149,8 +150,6 @@ template <typename scalar_t> __global__ void forward_kernel_get_neighbors(
     int32_t coord_x = floor((positions[index][0] - boundary[0]) / radius) + 1;
     int32_t coord_y = floor((positions[index][1] - boundary[1]) / radius) + 1;
     int32_t coord_z = floor((positions[index][2] - boundary[2]) / radius) + 1;
-
-    const int64_t max_num_neighbors = distances.size(0);
 
     const int32_t coord_offsets[14][3] = {
         { 1,  1,  1 },
@@ -238,16 +237,16 @@ template <typename scalar_t> __global__ void backward_kernel(
 
 class Autograd : public torch::autograd::Function<Autograd> {
 public:
-    static torch::autograd::tensor_list forward(torch::autograd::AutogradContext *ctx, const torch::Tensor positions, const double radius, const int64_t max_hash_size) {
+    static torch::autograd::tensor_list forward(torch::autograd::AutogradContext *ctx, const torch::Tensor positions, const double radius, const int64_t max_num_neighbors) {
 
         TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
         TORCH_CHECK(positions.size(1) == 3, "Expected the 2nd dimension size of \"positions\" to be 3");
         TORCH_CHECK(positions.is_contiguous(), "Expected \"positions\" to be contiguous");
 
         const int32_t num_atoms = positions.size(0);
-        const int32_t num_neighbors = num_atoms * num_atoms;
         const int32_t num_blocks = (num_atoms + num_threads + 1) / num_threads;
         const auto stream = c10::cuda::getCurrentCUDAStream(positions.get_device());
+        const int32_t max_hash_size = num_atoms;
 
         const torch::TensorOptions options = positions.options();
         const torch::Tensor indices = torch::arange(0, num_atoms, options.dtype(torch::kInt32));
@@ -278,11 +277,10 @@ public:
         torch::Tensor geometric_hash = torch::zeros({num_partitions_x, num_partitions_y, num_partitions_z, max_hash_size}, options.dtype(torch::kInt32));
         torch::Tensor geometric_hash_sizes = torch::zeros({num_partitions_x, num_partitions_y, num_partitions_z}, options.dtype(torch::kInt32));
 
-        const torch::Tensor rows = torch::full(num_neighbors, -1, options.dtype(torch::kInt32));
-        const torch::Tensor columns = torch::full(num_neighbors, -1, options.dtype(torch::kInt32));
-        const torch::Tensor deltas = torch::empty({num_neighbors, 3}, options);
-        const torch::Tensor distances = torch::empty(num_neighbors, options);
-        const torch::Tensor neighbors_number = torch::zeros(1, options.dtype(torch::kInt32));
+        const torch::Tensor rows = torch::full(max_num_neighbors, -1, options.dtype(torch::kInt32));
+        const torch::Tensor columns = torch::full(max_num_neighbors, -1, options.dtype(torch::kInt32));
+        const torch::Tensor deltas = torch::empty({max_num_neighbors, 3}, options);
+        const torch::Tensor distances = torch::empty(max_num_neighbors, options);
 
         AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "get_neighbor_list_step1", [&]() {
             const c10::cuda::CUDAStreamGuard guard(stream);
@@ -298,6 +296,9 @@ public:
         const size_t num_blocks_2 = num_blocks * 2;
         const size_t num_threads_2 = num_threads * 7;
 
+
+        const torch::Tensor neighbors_number = torch::zeros(1, options.dtype(torch::kInt32));
+
         AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "get_neighbor_list_step2", [&]() {
             const c10::cuda::CUDAStreamGuard guard(stream);
             forward_kernel_get_neighbors<<<num_blocks_2, num_threads_2, 0, stream>>>(
@@ -306,6 +307,7 @@ public:
                 get_accessor<int32_t, 4>(geometric_hash),
                 get_accessor<int32_t, 3>(geometric_hash_sizes),
                 radius,
+                max_num_neighbors,
                 get_accessor<int32_t, 1>(rows),
                 get_accessor<int32_t, 1>(columns),
                 get_accessor<scalar_t, 2>(deltas),
@@ -357,8 +359,8 @@ public:
 };
 
 TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
-    m.impl("get_neighbor_list", [](const torch::Tensor& positions, const double radius, const int64_t max_hash_size){
-        const torch::autograd::tensor_list neighbors = Autograd::apply(positions, radius, max_hash_size);
+    m.impl("get_neighbor_list", [](const torch::Tensor& positions, const double radius, const int64_t max_num_neighbors){
+        const torch::autograd::tensor_list neighbors = Autograd::apply(positions, radius, max_num_neighbors);
         return std::make_tuple(neighbors[0], neighbors[1], neighbors[2]);
     });
 }
