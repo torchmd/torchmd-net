@@ -179,6 +179,9 @@ template <typename scalar_t> __global__ void forward_kernel_get_neighbors(
     if (subindex == 13) {
         while(index != geometric_hash[coord_x][coord_y][coord_z][iter]) {
             iter++;
+            if(iter >= geometric_hash_sizes[coord_x][coord_y][coord_z]) {
+                break;
+            }
         }
         iter++;
     }
