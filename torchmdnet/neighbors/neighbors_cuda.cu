@@ -357,7 +357,7 @@ public:
                 get_accessor<scalar_t, 2>(grad_positions));
         });
 
-        return {grad_positions};
+        return {grad_positions, torch::Tensor(), torch::Tensor()};
     }
 };
 
