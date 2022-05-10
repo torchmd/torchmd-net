@@ -17,90 +17,56 @@ template <typename scalar_t> __device__ __forceinline__ scalar_t sqrt_(scalar_t 
 template<> __device__ __forceinline__ float sqrt_(float x) { return ::sqrtf(x); };
 template<> __device__ __forceinline__ double sqrt_(double x) { return ::sqrt(x); };
 
-template <typename scalar_t> __global__ void kernel_get_max_coords(
+template <typename scalar_t> __global__ void kernel_get_maxmin_coords(
     const Accessor<scalar_t, 2> positions,
     Accessor<scalar_t, 2> result
 ) {
     const int32_t index = blockIdx.x * blockDim.x + threadIdx.x;
     const int32_t num_atoms = positions.size(0);
 
-    scalar_t max_x = positions[0][0];
-    scalar_t max_y = positions[0][1];
-    scalar_t max_z = positions[0][2];
+    __shared__ scalar_t buffer[2][num_threads][3];
 
-    scalar_t min_x = positions[0][0];
-    scalar_t min_y = positions[0][1];
-    scalar_t min_z = positions[0][2];
+    if (index > num_atoms) return;
 
-    for (int32_t iter = index; iter < num_atoms; iter += blockDim.x * gridDim.x) {
-        if (positions[iter][0] > max_x) {
-            max_x = positions[iter][0];
-        }
-        if (positions[iter][1] > max_y) {
-            max_y = positions[iter][1];
-        }
-        if (positions[iter][2] > max_z) {
-            max_z = positions[iter][2];
-        }
+    const int16_t maxmin = blockIdx.z;
+    const int16_t coord = blockIdx.y;
 
-        if (positions[iter][0] < min_x) {
-            min_x = positions[iter][0];
-        }
-        if (positions[iter][1] < min_y) {
-            min_y = positions[iter][1];
-        }
-        if (positions[iter][2] < min_z) {
-            min_z = positions[iter][2];
-        }
-    }
+    if (maxmin == 0) {
+        buffer[maxmin][threadIdx.x][coord] = positions[index][coord];
 
-    __shared__ scalar_t buf_max[num_threads][3];
-    __shared__ scalar_t buf_min[num_threads][3];
+        __syncthreads();
 
-    buf_max[threadIdx.x][0] = max_x;
-    buf_max[threadIdx.x][1] = max_y;
-    buf_max[threadIdx.x][2] = max_z;
-
-    buf_min[threadIdx.x][0] = min_x;
-    buf_min[threadIdx.x][1] = min_y;
-    buf_min[threadIdx.x][2] = min_z;
-
-    __syncthreads();
-
-    for (int32_t stride = blockDim.x / 2; stride > 0; stride /= 2) {
-        if (threadIdx.x < stride) {
-            if (buf_max[threadIdx.x + stride][0] > buf_max[threadIdx.x][0]) {
-                buf_max[threadIdx.x][0] = buf_max[threadIdx.x + stride][0];
-            }
-            if (buf_max[threadIdx.x + stride][1] > buf_max[threadIdx.x][1]) {
-                buf_max[threadIdx.x][1] = buf_max[threadIdx.x + stride][1];
-            }
-            if (buf_max[threadIdx.x + stride][2] > buf_max[threadIdx.x][2]) {
-                buf_max[threadIdx.x][2] = buf_max[threadIdx.x + stride][2];
-            }
-
-            if (buf_min[threadIdx.x + stride][0] < buf_min[threadIdx.x][0]) {
-                buf_min[threadIdx.x][0] = buf_min[threadIdx.x + stride][0];
-            }
-            if (buf_min[threadIdx.x + stride][1] < buf_min[threadIdx.x][1]) {
-                buf_min[threadIdx.x][1] = buf_min[threadIdx.x + stride][1];
-            }
-            if (buf_min[threadIdx.x + stride][2] < buf_min[threadIdx.x][2]) {
-                buf_min[threadIdx.x][2] = buf_min[threadIdx.x + stride][2];
+        for (int16_t stride = blockDim.x/2; stride > 0; stride /= 2) {
+            if (threadIdx.x < stride) {
+                if (buffer[maxmin][threadIdx.x + stride][coord] > buffer[maxmin][threadIdx.x][coord]) {
+                    buffer[maxmin][threadIdx.x][coord] = buffer[maxmin][threadIdx.x + stride][coord];
+                }
             }
 
             __syncthreads();
         }
-    }
 
-    if (threadIdx.x == 0) {
-        result[blockIdx.x][0] = buf_max[0][0];
-        result[blockIdx.x][1] = buf_max[0][1];
-        result[blockIdx.x][2] = buf_max[0][2];
+        if (index == 0) {
+            result[maxmin][coord] = buffer[maxmin][0][coord];
+        }
+    } else {
+        buffer[maxmin][threadIdx.x][coord] = positions[index][coord];
 
-        result[blockIdx.x + ((gridDim.x - 1) / 2) + 1][0] = buf_min[0][0];
-        result[blockIdx.x + ((gridDim.x - 1) / 2) + 1][1] = buf_min[0][1];
-        result[blockIdx.x + ((gridDim.x - 1) / 2) + 1][2] = buf_min[0][2];
+        __syncthreads();
+
+        for (int16_t stride = blockDim.x/2; stride > 0; stride /= 2) {
+            if (threadIdx.x < stride) {
+                if (buffer[maxmin][threadIdx.x + stride][coord] < buffer[maxmin][threadIdx.x][coord]) {
+                    buffer[maxmin][threadIdx.x][coord] = buffer[maxmin][threadIdx.x + stride][coord];
+                }
+            }
+
+            __syncthreads();
+        }
+
+        if (index == 0) {
+            result[maxmin][coord] = buffer[maxmin][0][coord];
+        }
     }
 }
 
@@ -256,20 +222,14 @@ public:
 
         const torch::Tensor vectors = torch::index_select(positions, 0, indices);
 
-        const int32_t divisions = 2 * ceil(((double)num_atoms) / ((double)num_threads));
-        const torch::Tensor boundary = torch::zeros({divisions, 3}, options.dtype(torch::kFloat32));
+        const int32_t divisions = ceil(((double)num_atoms) / ((double)num_threads));
+        const torch::Tensor boundary = torch::zeros({2, 3}, options.dtype(torch::kFloat32));
 
-        AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "get_max_coords_step1", [&]() {
+        AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "get_maxmin_coords", [&]() {
             const c10::cuda::CUDAStreamGuard guard(stream);
-            kernel_get_max_coords<<<divisions, num_threads, 0, stream>>>(
+            const dim3 num_blocks(divisions, 3, 2);
+            kernel_get_maxmin_coords<<<num_blocks, num_threads, 0, stream>>>(
                 get_accessor<scalar_t, 2>(positions),
-                get_accessor<scalar_t, 2>(boundary));
-        });
-
-        AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "get_max_coords_step2", [&]() {
-            const c10::cuda::CUDAStreamGuard guard(stream);
-            kernel_get_max_coords<<<1, num_threads, 0, stream>>>(
-                get_accessor<scalar_t, 2>(boundary),
                 get_accessor<scalar_t, 2>(boundary));
         });
 
