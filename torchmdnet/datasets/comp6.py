@@ -251,3 +251,26 @@ class S66X8(COMP6Base):
     # TODO remove when fixed
     def process(self):
         super().process()
+
+class COMP6v1(Dataset):
+
+    def __init__(self, root, transform=None, pre_transform=None, pre_filter=None, dataset_arg=None):
+        super().__init__(root, transform, pre_transform, pre_filter)
+
+        self.subsets = [DS(root, transform, pre_transform, pre_filter) \
+            for DS in (ANIMD, DrugBank, GDB07to09, GDB10to13, Tripeptides, S66X8)]
+
+        self.num_samples = sum(len(subset) for subset in self.subsets)
+
+        self.subset_indices = []
+        for i_subset, subset in enumerate(self.subsets):
+            for i_sample in range(len(subset)):
+                self.subset_indices.append([i_subset, i_sample])
+        self.subset_indices = np.array(self.subset_indices)
+
+    def len(self):
+        return self.num_samples
+
+    def get(self, idx):
+        i_subset, i_sample = self.subset_indices[idx]
+        return self.subsets[i_subset][i_sample]
