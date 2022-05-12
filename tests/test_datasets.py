@@ -2,8 +2,7 @@ import pytest
 from pytest import mark, raises
 from os.path import join
 import numpy as np
-import torch
-from torch_geometric.data import DataLoader
+import torch.multiprocessing as mp
 from torchmdnet.datasets import Custom, HDF5
 import h5py
 
@@ -54,13 +53,11 @@ def test_custom(energy, forces, num_files, tmpdir, num_samples=100):
         assert hasattr(sample, "dy"), "Sample doesn't contain forces"
 
 
-def test_hdf5_multiprocessing(tmpdir, num_entries=10000, num_workers=8):
-    """THIS TEST IS UNDETERMINISTIC AS IT DEPENDS ON INTERFERENCE OF MULTIPLE PROCESSES"""
-
+def test_hdf5_multiprocessing(tmpdir, num_entries=100):
     # generate sample data
-    z = np.arange(num_entries)
-    pos = np.arange(num_entries * 3).reshape(-1, 3)
-    energy = np.arange(num_entries)
+    z = np.zeros(num_entries)
+    pos = np.zeros(num_entries * 3).reshape(-1, 3)
+    energy = np.zeros(num_entries)
 
     # write the dataset
     data = h5py.File(join(tmpdir, "test_hdf5_multiprocessing.h5"), mode="w")
@@ -73,16 +70,12 @@ def test_hdf5_multiprocessing(tmpdir, num_entries=10000, num_workers=8):
 
     # load the dataset using the HDF5 class and multiprocessing
     dset = HDF5(join(tmpdir, "test_hdf5_multiprocessing.h5"))
-    dl = DataLoader(dataset=dset, batch_size=8, num_workers=num_workers)
-    batches = list(dl)
+    with mp.Pool(2) as p:
+        result = p.map(get_hdf5_file_id, [dset, dset])
+    assert result[0] != result[1], "Both processes received the same h5py File instance"
 
-    # compare loaded data to generated data
-    loaded_z = torch.cat([b.z for b in batches]).sort().values.numpy()
-    loaded_pos = torch.cat([b.pos for b in batches]).sort().values.numpy()
-    loaded_energy = torch.cat([b.y for b in batches]).sort().values.numpy()
 
-    assert (loaded_z == z).all(), "atom types got corrupted during loading"
-    assert (loaded_pos == pos).all(), "atom positions got corrupted during loading"
-    assert (
-        loaded_energy == energy[:, None]
-    ).all(), "energies got corrupted during loading"
+def get_hdf5_file_id(dset):
+    # make sure the dataset index is initialized
+    dset.get(0)
+    return id(dset.index[0][0])
