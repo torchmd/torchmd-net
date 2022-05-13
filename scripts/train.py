@@ -29,6 +29,7 @@ def get_args():
     parser.add_argument('--lr-factor', type=float, default=0.8, help='Minimum learning rate before early stop')
     parser.add_argument('--lr-warmup-steps', type=int, default=0, help='How many steps to warm-up over. Defaults to 0 for no warm-up')
     parser.add_argument('--early-stopping-patience', type=int, default=30, help='Stop training after this many epochs without improvement')
+    parser.add_argument('--reset-trainer', type=bool, default=False, help='Reset training metrics (e.g. early stopping, lr) when loading a model checkpoint')
     parser.add_argument('--weight-decay', type=float, default=0.0, help='Weight decay strength')
     parser.add_argument('--ema-alpha-y', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of y')
     parser.add_argument('--ema-alpha-dy', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of dy')
@@ -155,7 +156,7 @@ def main():
         accelerator=args.distributed_backend,
         default_root_dir=args.log_dir,
         auto_lr_find=False,
-        resume_from_checkpoint=args.load_model,
+        resume_from_checkpoint=None if args.reset_trainer else args.load_model,
         callbacks=[early_stopping, checkpoint_callback],
         logger=[tb_logger, csv_logger],
         reload_dataloaders_every_epoch=False,
