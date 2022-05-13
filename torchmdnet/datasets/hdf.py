@@ -20,9 +20,20 @@ class HDF5(Dataset):
 
     def __init__(self, filename, **kwargs):
         super(HDF5, self).__init__()
-        files = [h5py.File(f, "r") for f in filename.split(";")]
-        self.index = []
+        self.filename = filename
+        self.index = None
+
+        self.num_molecules = 0
+        files = [h5py.File(f, "r") for f in self.filename.split(";")]
+        for file in files:
+            for group_name in file:
+                self.num_molecules += len(file[group_name]["energy"])
+            file.close()
+
+    def setup_index(self):
+        files = [h5py.File(f, "r") for f in self.filename.split(";")]
         self.has_forces = False
+        self.index = []
         for file in files:
             for group_name in file:
                 group = file[group_name]
@@ -38,7 +49,17 @@ class HDF5(Dataset):
                     for i in range(len(energy)):
                         self.index.append((types, pos, energy, i))
 
+        assert self.num_molecules == len(self.index), (
+            "Mismatch between previously calculated "
+            "molecule count and actual molecule count"
+        )
+
     def get(self, idx):
+        # only open files here to avoid copying objects of this class to another
+        # process with open file handles (potentially corrupts h5py loading)
+        if self.index is None:
+            self.setup_index()
+
         if self.has_forces:
             types, pos, energy, forces, i = self.index[idx]
             return Data(
@@ -56,4 +77,4 @@ class HDF5(Dataset):
             )
 
     def len(self):
-        return len(self.index)
+        return self.num_molecules
