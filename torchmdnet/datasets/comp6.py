@@ -5,6 +5,15 @@ import torch as pt
 from torch_geometric.data import Data, Dataset, download_url
 from tqdm import tqdm
 
+'''
+COmprehensive Machine-learning Potential (COMP6) Benchmark Suite
+
+For more details check:
+  - https://arxiv.org/pdf/1801.09319.pdf
+  - https://github.com/isayev/COMP6
+  - https://aip.scitation.org/doi/abs/10.1063/1.5023802
+
+'''
 
 class COMP6Base(Dataset):
 
@@ -139,6 +148,16 @@ class COMP6Base(Dataset):
 
 
 class ANIMD(COMP6Base):
+    '''
+    ANI Molecular Dynamics (ANI-MD) Benchmark. Forces from the ANI-1x potential are
+    applied to run 1ns of vacuum molecular dynamics with a 0.25 fs time step at 300 K using
+    the Langevin thermostat on 14 well-known drug molecules and two small proteins. System
+    sizes range from 20 to 312 atoms. A random subsample of 128 frames from each 1ns
+    trajectory is selected, and reference DFT single point calculations are performed to obtain
+    QM energies and forces.
+
+    The description copied from https://arxiv.org/pdf/1801.09319.pdf
+    '''
 
     @property
     def raw_url_name(self):
@@ -160,6 +179,15 @@ class ANIMD(COMP6Base):
 
 
 class DrugBank(COMP6Base):
+    '''
+    DrugBank Benchmark. This benchmark is developed through a subsampling of the
+    DrugBank database of real drug molecules. 837 SMILES strings containing C, N, and O
+    are randomly selected. Like the GDB7to9 benchmark, the molecules are embedded in 3D
+    space, structurally optimized, and normal modes are computed. DNMS is utilized to
+    generate random non-equilibrium conformations.
+
+    The description copied from https://arxiv.org/pdf/1801.09319.pdf
+    '''
 
     @property
     def raw_file_names(self):
@@ -177,6 +205,15 @@ class DrugBank(COMP6Base):
 
 
 class GDB07to09(COMP6Base):
+    '''
+    GDB7to9 Benchmark. The GDB-11 subsets containing 7 to 9 heavy atoms (C, N, and O)
+    are subsampled and randomly embedded in 3D space using RDKit [www.rdkit.org]. A total
+    of 1500 molecule SMILES [opensmiles.org] strings are selected: 500 per 7, 8, and 9 heavyatom set. The resulting structures are optimized with tight convergence criteria, and normal
+    modes/force constants are computed using the reference DFT model. Finally, diverse
+    normal mode sampling (DNMS) is carried out to generate non-equilibrium conformations.
+
+    The description copied from https://arxiv.org/pdf/1801.09319.pdf
+    '''
 
     @property
     def raw_file_names(self):
@@ -196,6 +233,13 @@ class GDB07to09(COMP6Base):
 
 
 class GDB10to13(COMP6Base):
+    '''
+    GDB10to13 Benchmark. Subsamples of 500 SMILES strings each from the 10 and 11
+    heavy-atom subsets of GDB-11 and 1000 SMILES strings from the 12 and 13 heavyatom subsets of the GDB-13 database are randomly selected. DNMS is utilized to
+    generate random non-equilibrium conformations.
+
+    The description copied from https://arxiv.org/pdf/1801.09319.pdf
+    '''
 
     @property
     def raw_file_names(self):
@@ -216,6 +260,14 @@ class GDB10to13(COMP6Base):
 
 
 class Tripeptides(COMP6Base):
+    '''
+    Tripeptide Benchmark. 248 random tripeptides containing H, C, N, and O are generated
+    using FASTA strings and randomly embedded in 3D space using RDKit. As with
+    GDB7to9, the molecules are optimized, and normal modes are computed. DNMS is utilized
+    to generate random non-equilibrium conformations.
+
+    The description copied from https://arxiv.org/pdf/1801.09319.pdf
+    '''
 
     @property
     def raw_file_names(self):
@@ -233,6 +285,18 @@ class Tripeptides(COMP6Base):
 
 
 class S66X8(COMP6Base):
+    '''
+    S66x8 Benchmark. This dataset is built from the original S66x850 benchmark for
+    comparing accuracy between different methods in describing noncovalent interactions
+    common in biological molecules. S66x8 is developed from 66 dimeric systems involving
+    hydrogen bonding, pi-pi stacking, London interactions, and mixed influence interactions.
+    While the keen reader might question the use of this benchmark without dispersion
+    corrections, since dispersion corrections such as the D3 correction by Grimme et al. are
+    a posteriori additions to the produced energy, then a comparison without the correction is
+    equivalent to a comparison with the same dispersion corrections applied to both models.
+
+    The description copied from https://arxiv.org/pdf/1801.09319.pdf
+    '''
 
     @property
     def raw_url_name(self):
@@ -253,6 +317,9 @@ class S66X8(COMP6Base):
         super().process()
 
 class COMP6v1(Dataset):
+    '''
+    Superset of all COMP6 subsets (ANI-MD, DrugBank, GDB7to9, GDB10to13, Tripeptides, S66x8)
+    '''
 
     def __init__(self, root, transform=None, pre_transform=None, pre_filter=None, dataset_arg=None):
         super().__init__(root, transform, pre_transform, pre_filter)
