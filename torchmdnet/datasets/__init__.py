@@ -8,11 +8,18 @@ from .qm9 import QM9
 
 __all__ = [
     "Ace",
+    "ANIMD",
     "ANI1",
-    "ANI1CCX"
+    "ANI1CCX",
     "ANI1X",
+    "COMP6v1",
     "Custom",
+    "DrugBank",
+    "GDB07to09",
+    "GDB10to13",
     "HDF5",
     "MD17",
     "QM9",
+    "S66X8",
+    "Tripeptides"
 ]
