@@ -1,26 +1,29 @@
 name: torchmd-net
 channels:
-  - raimis
-  - mmh
+  # - raimis
+  # - mmh
   - conda-forge
 dependencies:
   - ase
   - h5py
   - matplotlib
   # An official NNPOps packages still not available
-  - mmh::nnpops==0.2
+  # - mmh::nnpops==0.2
+  - nnpops
   - pip
   - python
-  - pytorch==1.10.0
+  # - pytorch==1.10.0
   # The official PyTorch Geometric package is not compatible with conda-forge,
   # while the package on conda-forge is broken
   # (https://github.com/pyg-team/pytorch_geometric/issues/3660).
   # Until a better solution is found a have custom package to plug the gap.
-  - raimis::pytorch-geometric==2.0.2
+  # - raimis::pytorch-geometric==2.0.2
+  - pytorch_geometric
   - pytorch-lightning==1.3.8
   - setuptools==59.5.0 # Pin due to https://github.com/pytorch/pytorch/pull/69904
   # Pin to the package before the rebuild for PyTorch 1.11 (https://github.com/conda-forge/torchani-feedstock/pull/10/files)
-  - torchani==2.2.2=*_3
+  # - torchani==2.2.2=*_3
+  - torchani
   - torchmetrics <0.8
   - tqdm
   # Dev tools
