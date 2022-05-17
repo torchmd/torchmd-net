@@ -46,7 +46,7 @@ class LNNP(LightningModule):
         )
         lr_scheduler = {
             "scheduler": scheduler,
-            "monitor": self.hparams.lr_metric,
+            "monitor": getattr(self.hparams, "lr_metric", "val_loss"),
             "interval": "epoch",
             "frequency": 1,
         }
