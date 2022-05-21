@@ -113,6 +113,7 @@ class LoadFromFile(argparse.Action):
                     f"({namespace.load_model}) and in the config file ({config['load_model']}). "
                     f"Ignoring 'load_model' from the config file and loading {namespace.load_model}."
                 )
+                del config["load_model"]
             namespace.__dict__.update(config)
         else:
             raise ValueError("Configuration file must end with yaml or yml")
