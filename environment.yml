@@ -19,3 +19,4 @@ dependencies:
   # Dev tools
   - flake8
   - pytest
+  - psutil
