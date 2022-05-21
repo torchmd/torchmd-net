@@ -2,7 +2,7 @@ import pytest
 from pytest import mark, raises
 from os.path import join
 import numpy as np
-import torch.multiprocessing as mp
+import psutil
 from torchmdnet.datasets import Custom, HDF5
 import h5py
 
@@ -68,14 +68,10 @@ def test_hdf5_multiprocessing(tmpdir, num_entries=100):
     data.flush()
     data.close()
 
-    # load the dataset using the HDF5 class and multiprocessing
+    # make sure creating the dataset doesn't open any files on the main process
+    proc = psutil.Process()
+    n_open = len(proc.open_files())
+
     dset = HDF5(join(tmpdir, "test_hdf5_multiprocessing.h5"))
-    with mp.Pool(2) as p:
-        result = p.map(get_hdf5_file_id, [dset, dset])
-    assert result[0] != result[1], "Both processes received the same h5py File instance"
 
-
-def get_hdf5_file_id(dset):
-    # make sure the dataset index is initialized
-    dset.get(0)
-    return id(dset.index[0][0])
+    assert len(proc.open_files()) == n_open, "creating the dataset object opened a file"
