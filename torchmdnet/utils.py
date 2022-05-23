@@ -103,6 +103,17 @@ class LoadFromFile(argparse.Action):
             for key in config.keys():
                 if key not in namespace:
                     raise ValueError(f"Unknown argument in config file: {key}")
+            if (
+                "load_model" in config
+                and namespace.load_model is not None
+                and config["load_model"] != namespace.load_model
+            ):
+                rank_zero_warn(
+                    f"The load model argument was specified as a command line argument "
+                    f"({namespace.load_model}) and in the config file ({config['load_model']}). "
+                    f"Ignoring 'load_model' from the config file and loading {namespace.load_model}."
+                )
+                del config["load_model"]
             namespace.__dict__.update(config)
         else:
             raise ValueError("Configuration file must end with yaml or yml")
