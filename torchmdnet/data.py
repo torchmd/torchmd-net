@@ -2,7 +2,7 @@ from os.path import join
 from tqdm import tqdm
 import torch
 from torch.utils.data import Subset
-from torch_geometric.data import DataLoader
+from torch_geometric.loader import DataLoader
 from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities import rank_zero_warn
 from torchmdnet import datasets
