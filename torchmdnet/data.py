@@ -13,34 +13,34 @@ from torch_scatter import scatter
 class DataModule(LightningDataModule):
     def __init__(self, hparams, dataset=None):
         super(DataModule, self).__init__()
-        self.hparams_ = hparams.__dict__ if hasattr(hparams, "__dict__") else hparams
+        self.save_hyperparameters(hparams)
         self._mean, self._std = None, None
         self._saved_dataloaders = dict()
         self.dataset = dataset
 
     def setup(self, stage):
         if self.dataset is None:
-            if self.hparams_["dataset"] == "Custom":
+            if self.hparams["dataset"] == "Custom":
                 self.dataset = datasets.Custom(
-                    self.hparams_["coord_files"],
-                    self.hparams_["embed_files"],
-                    self.hparams_["energy_files"],
-                    self.hparams_["force_files"],
+                    self.hparams["coord_files"],
+                    self.hparams["embed_files"],
+                    self.hparams["energy_files"],
+                    self.hparams["force_files"],
                 )
             else:
-                self.dataset = getattr(datasets, self.hparams_["dataset"])(
-                    self.hparams_["dataset_root"],
-                    dataset_arg=self.hparams_["dataset_arg"],
+                self.dataset = getattr(datasets, self.hparams["dataset"])(
+                    self.hparams["dataset_root"],
+                    dataset_arg=self.hparams["dataset_arg"],
                 )
 
         self.idx_train, self.idx_val, self.idx_test = make_splits(
             len(self.dataset),
-            self.hparams_["train_size"],
-            self.hparams_["val_size"],
-            self.hparams_["test_size"],
-            self.hparams_["seed"],
-            join(self.hparams_["log_dir"], "splits.npz"),
-            self.hparams_["splits"],
+            self.hparams["train_size"],
+            self.hparams["val_size"],
+            self.hparams["test_size"],
+            self.hparams["seed"],
+            join(self.hparams["log_dir"], "splits.npz"),
+            self.hparams["splits"],
         )
         print(
             f"train {len(self.idx_train)}, val {len(self.idx_val)}, test {len(self.idx_test)}"
@@ -50,7 +50,7 @@ class DataModule(LightningDataModule):
         self.val_dataset = Subset(self.dataset, self.idx_val)
         self.test_dataset = Subset(self.dataset, self.idx_test)
 
-        if self.hparams_["standardize"]:
+        if self.hparams["standardize"]:
             self._standardize()
 
     def train_dataloader(self):
@@ -60,7 +60,7 @@ class DataModule(LightningDataModule):
         loaders = [self._get_dataloader(self.val_dataset, "val")]
         if (
             len(self.test_dataset) > 0
-            and self.trainer.current_epoch % self.hparams_["test_interval"] == 0
+            and self.trainer.current_epoch % self.hparams["test_interval"] == 0
         ):
             loaders.append(self._get_dataloader(self.test_dataset, "test"))
         return loaders
@@ -92,27 +92,18 @@ class DataModule(LightningDataModule):
             return self._saved_dataloaders[stage]
 
         if stage == "train":
-            batch_size = self.hparams_["batch_size"]
+            batch_size = self.hparams["batch_size"]
             shuffle = True
         elif stage in ["val", "test"]:
-            batch_size = self.hparams_["inference_batch_size"]
+            batch_size = self.hparams["inference_batch_size"]
             shuffle = False
-
-        if self.hparams_["distributed_backend"] == "ddp":
-            dl_kwargs = dict(
-                sampler=torch.utils.data.DistributedSampler(
-                    dataset, num_replicas=self.trainer.num_processes, shuffle=shuffle
-                )
-            )
-        else:
-            dl_kwargs = dict(shuffle=shuffle)
 
         dl = DataLoader(
             dataset=dataset,
             batch_size=batch_size,
-            num_workers=self.hparams_["num_workers"],
+            num_workers=self.hparams["num_workers"],
             pin_memory=True,
-            **dl_kwargs,
+            shuffle=shuffle,
         )
 
         if store_dataloader:

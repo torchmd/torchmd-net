@@ -12,9 +12,9 @@ dependencies:
   - pytorch_geometric==2.0.3
   - pytorch_scatter==2.0.8
   - pytorch_sparse==0.6.10
-  - pytorch-lightning
+  - pytorch-lightning==1.6.3
   - torchani==2.2.2
-  - torchmetrics==0.7.3 # Cannot update to the latest version due to incompatible API
+  - torchmetrics==0.8.2
   - tqdm
   # Dev tools
   - flake8

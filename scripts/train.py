@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
-from pytorch_lightning.plugins import DDPPlugin
+from pytorch_lightning.strategies.ddp import DDPStrategy
 from torchmdnet.module import LNNP
 from torchmdnet import datasets, priors, models
 from torchmdnet.data import DataModule
@@ -45,7 +45,6 @@ def get_args():
     parser.add_argument('--test-interval', type=int, default=10, help='Test interval, one test per n epochs (default: 10)')
     parser.add_argument('--save-interval', type=int, default=10, help='Save interval, one save per n epochs (default: 10)')
     parser.add_argument('--seed', type=int, default=1, help='random seed (default: 1)')
-    parser.add_argument('--distributed-backend', default='ddp', help='Distributed backend: dp, ddp, ddp2')
     parser.add_argument('--num-workers', type=int, default=4, help='Number of workers for data prefetch')
     parser.add_argument('--redirect', type=bool, default=False, help='Redirect stdout and stderr to log_dir/log')
 
@@ -146,28 +145,25 @@ def main():
     )
     csv_logger = CSVLogger(args.log_dir, name="", version="")
 
-    plugins = []
-    if "ddp" in args.distributed_backend:
-        plugins.append(DDPPlugin(find_unused_parameters=False))
-
     trainer = pl.Trainer(
+        strategy=DDPStrategy(find_unused_parameters=False),
         max_epochs=args.num_epochs,
         gpus=args.ngpus,
         num_nodes=args.num_nodes,
-        accelerator=args.distributed_backend,
         default_root_dir=args.log_dir,
         auto_lr_find=False,
         resume_from_checkpoint=None if args.reset_trainer else args.load_model,
         callbacks=[early_stopping, checkpoint_callback],
         logger=[tb_logger, csv_logger],
         precision=args.precision,
-        plugins=plugins,
     )
 
     trainer.fit(model, data)
 
     # run test set after completing the fit
-    trainer.test()
+    model = LNNP.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
+    trainer = pl.Trainer(logger=[tb_logger, csv_logger])
+    trainer.test(model, data)
 
 
 if __name__ == "__main__":
