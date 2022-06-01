@@ -1,9 +1,11 @@
 import math
+from typing import Optional
 import torch
 from torch import nn
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch_cluster import radius_graph
+import warnings
 
 
 def visualize_basis(basis_type, num_rbf=50, cutoff_lower=0, cutoff_upper=5):
@@ -212,10 +214,20 @@ class Distance(nn.Module):
             r=self.cutoff_upper,
             batch=batch,
             loop=self.loop,
-            max_num_neighbors=self.max_num_neighbors,
+            max_num_neighbors=self.max_num_neighbors + 1,
         )
+
+        # make sure we didn't miss any neighbors due to max_num_neighbors
+        assert not (
+            torch.unique(edge_index[0], return_counts=True)[1] > self.max_num_neighbors
+        ).any(), (
+            "The neighbor search missed some atoms due to max_num_neighbors being too low. "
+            "Please increase this parameter to include the maximum number of atoms within the cutoff."
+        )
+
         edge_vec = pos[edge_index[0]] - pos[edge_index[1]]
 
+        mask : Optional[torch.Tensor]=None
         if self.loop:
             # mask out self loops when computing distances because
             # the norm of 0 produces NaN gradients
@@ -227,6 +239,9 @@ class Distance(nn.Module):
             edge_weight = torch.norm(edge_vec, dim=-1)
 
         lower_mask = edge_weight >= self.cutoff_lower
+        if self.loop and mask is not None:
+            # keep self loops even though they might be below the lower cutoff
+            lower_mask = lower_mask | ~mask
         edge_index = edge_index[:, lower_mask]
         edge_weight = edge_weight[lower_mask]
 
@@ -257,8 +272,8 @@ class GatedEquivariantBlock(nn.Module):
         if intermediate_channels is None:
             intermediate_channels = hidden_channels
 
-        self.vec1_proj = nn.Linear(hidden_channels, hidden_channels)
-        self.vec2_proj = nn.Linear(hidden_channels, out_channels)
+        self.vec1_proj = nn.Linear(hidden_channels, hidden_channels, bias=False)
+        self.vec2_proj = nn.Linear(hidden_channels, out_channels, bias=False)
 
         act_class = act_class_mapping[activation]
         self.update_net = nn.Sequential(
@@ -278,7 +293,23 @@ class GatedEquivariantBlock(nn.Module):
         self.update_net[2].bias.data.fill_(0)
 
     def forward(self, x, v):
-        vec1 = torch.norm(self.vec1_proj(v), dim=-2)
+        vec1_buffer = self.vec1_proj(v)
+
+        # detach zero-entries to avoid NaN gradients during force loss backpropagation
+        vec1 = torch.zeros(
+            vec1_buffer.size(0), vec1_buffer.size(2), device=vec1_buffer.device
+        )
+        mask = (vec1_buffer != 0).view(vec1_buffer.size(0), -1).any(dim=1)
+        if not mask.all():
+            warnings.warn(
+                (
+                    f"Skipping gradients for {(~mask).sum()} atoms due to vector features being zero. "
+                    "This is likely due to atoms being outside the cutoff radius of any other atom. "
+                    "These atoms will not interact with any other atom unless you change the cutoff."
+                )
+            )
+        vec1[mask] = torch.norm(vec1_buffer[mask], dim=-2)
+
         vec2 = self.vec2_proj(v)
 
         x = torch.cat([x, vec1], dim=-1)

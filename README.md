@@ -1,37 +1,46 @@
-# torchmd-net
+# TorchMD-NET
+
+TorchMD-NET provides state-of-the-art graph neural networks and equivariant transformer neural networks potentials for learning molecular potentials. It offers an efficient and fast implementation and it is integrated in GPU-accelerated molecular dynamics code like [ACEMD](https://www.acellera.com/products/molecular-dynamics-software-gpu-acemd/) and [OpenMM](https://www.openmm.org). See the full paper at https://arxiv.org/abs/2202.02541.
 
 ## Installation
-Create a new conda environment using Python 3.8 via
+
+Clone the repository:
 ```
-conda create --name torchmd python=3.8
-conda activate torchmd
+git clone https://github.com/torchmd/torchmd-net.git
+cd torchmd-net
 ```
 
-### Install PyTorch
-Then, install PyTorch according to your hardware specifications (more information [here](https://pytorch.org/get-started/locally/#start-locally)), e.g. for CUDA 11.1 and the most recent version of PyTorch use
+Create a Conda environment and activate it:
 ```
-conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c nvidia
+conda env create -f environment.yml
+conda activate torchmd-net
 ```
-### Install PyTorch Geometric
-Install `pytorch-geometric` with its dependencies through
-```
-conda install pytorch-geometric -c rusty1s -c conda-forge
-```
-To install PyTorch Geometric via pip or for PyTorch < 1.8, see https://github.com/rusty1s/pytorch_geometric#installation.
 
-### Install TorchMD-Net
-Download and install the `torchmd-net` repository via
+Install TorchMD-NET into the Conda environment:
 ```
-git clone https://github.com/compsciencelab/torchmd-net.git
-pip install -e torchmd-net/
+pip install -e .
 ```
+
+## Cite
+```
+@inproceedings{tholke2021equivariant,
+  title={Equivariant transformers for neural network based molecular potentials},
+  author={Th{\"o}lke, Philipp and De Fabritiis, Gianni},
+  booktitle={International Conference on Learning Representations},
+  year={2021}
+}
+```
+
 
 ## Usage
-Specifying training arguments can either be done via a configuration yaml file or through command line arguments directly. An example configuration file for a TorchMD Graph Network can be found at [examples/graph-network.yaml](https://github.com/compsciencelab/torchmd-net/blob/main/examples/graph-network.yaml). For an example on how to train the network on the QM9 dataset, see [examples/train_GN_QM9.sh](https://github.com/compsciencelab/torchmd-net/blob/main/examples/train_GN_QM9.sh). GPUs can be selected by their index by listing the device IDs (coming from `nvidia-smi`) in the `CUDA_VISIBLE_DEVICES` environment variable. Otherwise, the argument `--ngpus` can be used to select the number of GPUs to train on (-1 uses all available GPUs or the ones specified in `CUDA_VISIBLE_DEVICES`).
+Specifying training arguments can either be done via a configuration yaml file or through command line arguments directly. An example configuration file for a TorchMD Graph Network can be found in [examples/](https://github.com/compsciencelab/torchmd-net/blob/main/examples). For an example on how to train the network on the QM9 dataset, see [examples/](https://github.com/compsciencelab/torchmd-net/blob/main/examples). GPUs can be selected by their index by listing the device IDs (coming from `nvidia-smi`) in the `CUDA_VISIBLE_DEVICES` environment variable. Otherwise, the argument `--ngpus` can be used to select the number of GPUs to train on (-1 uses all available GPUs or the ones specified in `CUDA_VISIBLE_DEVICES`).
 ```
 mkdir output
 CUDA_VISIBLE_DEVICES=0 python torchmd-net/scripts/torchmd_train.py --conf torchmd-net/examples/graph-network.yaml --dataset QM9 --log-dir output/
 ```
+
+## Pretrained models
+Pretrained models are available at https://github.com/torchmd/torchmd-net/tree/main/examples.
 
 ## Creating a new dataset
 If you want to train on custom data, first have a look at `torchmdnet.datasets.Custom`, which provides functionalities for 

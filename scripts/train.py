@@ -1,13 +1,12 @@
 import sys
 import os
 import argparse
-
+import logging
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
 from pytorch_lightning.plugins import DDPPlugin
-
 from torchmdnet.module import LNNP
 from torchmdnet import datasets, priors, models
 from torchmdnet.data import DataModule
@@ -26,10 +25,12 @@ def get_args():
     parser.add_argument('--inference-batch-size', default=None, type=int, help='Batchsize for validation and tests.')
     parser.add_argument('--lr', default=1e-4, type=float, help='learning rate')
     parser.add_argument('--lr-patience', type=int, default=10, help='Patience for lr-schedule. Patience per eval-interval of validation')
+    parser.add_argument('--lr-metric', type=str, default='val_loss', choices=['train_loss', 'val_loss'], help='Metric to monitor when deciding whether to reduce learning rate')
     parser.add_argument('--lr-min', type=float, default=1e-6, help='Minimum learning rate before early stop')
-    parser.add_argument('--lr-factor', type=float, default=0.8, help='Minimum learning rate before early stop')
+    parser.add_argument('--lr-factor', type=float, default=0.8, help='Factor by which to multiply the learning rate when the metric stops improving')
     parser.add_argument('--lr-warmup-steps', type=int, default=0, help='How many steps to warm-up over. Defaults to 0 for no warm-up')
     parser.add_argument('--early-stopping-patience', type=int, default=30, help='Stop training after this many epochs without improvement')
+    parser.add_argument('--reset-trainer', type=bool, default=False, help='Reset training metrics (e.g. early stopping, lr) when loading a model checkpoint')
     parser.add_argument('--weight-decay', type=float, default=0.0, help='Weight decay strength')
     parser.add_argument('--ema-alpha-y', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of y')
     parser.add_argument('--ema-alpha-dy', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of dy')
@@ -65,6 +66,8 @@ def get_args():
     parser.add_argument('--prior-model', type=str, default=None, choices=priors.__all__, help='Which prior model to use')
 
     # architectural args
+    parser.add_argument('--charge', type=bool, default=False, help='Model needs a total charge')
+    parser.add_argument('--spin', type=bool, default=False, help='Model needs a spin state')
     parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
     parser.add_argument('--num-layers', type=int, default=6, help='Number of interaction layers in the model')
     parser.add_argument('--num-rbf', type=int, default=64, help='Number of radial basis functions in model')
@@ -72,6 +75,7 @@ def get_args():
     parser.add_argument('--rbf-type', type=str, default='expnorm', choices=list(rbf_class_mapping.keys()), help='Type of distance expansion')
     parser.add_argument('--trainable-rbf', type=bool, default=False, help='If distance expansion functions should be trainable')
     parser.add_argument('--neighbor-embedding', type=bool, default=False, help='If a neighbor embedding should be applied before interactions')
+    parser.add_argument('--aggr', type=str, default='add', help='Aggregation operation for CFConv filter output. Must be one of \'add\', \'mean\', or \'max\'')
 
     # Transformer specific
     parser.add_argument('--distance-influence', type=str, default='both', choices=['keys', 'values', 'both', 'none'], help='Where distance information is included inside the attention')
@@ -94,6 +98,9 @@ def get_args():
     if args.redirect:
         sys.stdout = open(os.path.join(args.log_dir, "log"), "w")
         sys.stderr = sys.stdout
+        logging.getLogger("pytorch_lightning").addHandler(
+            logging.StreamHandler(sys.stdout)
+        )
 
     if args.inference_batch_size is None:
         args.inference_batch_size = args.batch_size
@@ -115,8 +122,8 @@ def main():
     prior = None
     if args.prior_model:
         assert hasattr(priors, args.prior_model), (
-            f'Unknown prior model {args["prior_model"]}. '
-            f'Available models are {", ".join(priors.__all__)}'
+            f"Unknown prior model {args['prior_model']}. "
+            f"Available models are {', '.join(priors.__all__)}"
         )
         # initialize the prior model
         prior = getattr(priors, args.prior_model)(dataset=data.dataset)
@@ -149,7 +156,8 @@ def main():
         num_nodes=args.num_nodes,
         accelerator=args.distributed_backend,
         default_root_dir=args.log_dir,
-        resume_from_checkpoint=args.load_model,
+        auto_lr_find=False,
+        resume_from_checkpoint=None if args.reset_trainer else args.load_model,
         callbacks=[early_stopping, checkpoint_callback],
         logger=[tb_logger, csv_logger],
         precision=args.precision,

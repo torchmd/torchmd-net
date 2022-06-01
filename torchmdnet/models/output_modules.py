@@ -128,6 +128,8 @@ class ElectronicSpatialExtent(OutputModel):
             act_class(),
             nn.Linear(hidden_channels // 2, 1),
         )
+        atomic_mass = torch.from_numpy(ase.data.atomic_masses).float()
+        self.register_buffer("atomic_mass", atomic_mass)
 
         self.reset_parameters()
 
@@ -139,9 +141,26 @@ class ElectronicSpatialExtent(OutputModel):
 
     def pre_reduce(self, x, v: Optional[torch.Tensor], z, pos, batch):
         x = self.output_network(x)
-        x = torch.norm(pos, dim=1, keepdim=True) ** 2 * x
+
+        # Get center of mass.
+        mass = self.atomic_mass[z].view(-1, 1)
+        c = scatter(mass * pos, batch, dim=0) / scatter(mass, batch, dim=0)
+
+        x = torch.norm(pos - c[batch], dim=1, keepdim=True) ** 2 * x
         return x
 
 
 class EquivariantElectronicSpatialExtent(ElectronicSpatialExtent):
     pass
+
+
+class EquivariantVectorOutput(EquivariantScalar):
+    def __init__(self, hidden_channels, activation="silu"):
+        super(EquivariantVectorOutput, self).__init__(
+            hidden_channels, activation, allow_prior_model=False
+        )
+
+    def pre_reduce(self, x, v, z, pos, batch):
+        for layer in self.output_network:
+            x, v = layer(x, v)
+        return v.squeeze()

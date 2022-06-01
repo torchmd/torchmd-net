@@ -1,24 +1,17 @@
 import re
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import torch
 from torch.autograd import grad
-from torch import nn
+from torch import nn, Tensor
 from torch_scatter import scatter
 from pytorch_lightning.utilities import rank_zero_warn
-from torchmdnet.models.torchmd_gn import TorchMD_GN
-from torchmdnet.models.torchmd_t import TorchMD_T
-from torchmdnet.models.torchmd_et import TorchMD_ET
 from torchmdnet.models import output_modules
 from torchmdnet.models.wrappers import AtomFilter
 from torchmdnet import priors
+import warnings
 
 
 def create_model(args, prior_model=None, mean=None, std=None):
-    if prior_model is not None and (mean is not None or std is not None):
-        rank_zero_warn(
-            "Prior model and standardize are given, only using the prior model."
-        )
-
     shared_args = dict(
         hidden_channels=args["embedding_dimension"],
         num_layers=args["num_layers"],
@@ -35,11 +28,15 @@ def create_model(args, prior_model=None, mean=None, std=None):
 
     # representation network
     if args["model"] == "graph-network":
+        from torchmdnet.models.torchmd_gn import TorchMD_GN
+
         is_equivariant = False
         representation_model = TorchMD_GN(
-            num_filters=args["embedding_dimension"], **shared_args
+            num_filters=args["embedding_dimension"], aggr=args["aggr"], **shared_args
         )
     elif args["model"] == "transformer":
+        from torchmdnet.models.torchmd_t import TorchMD_T
+
         is_equivariant = False
         representation_model = TorchMD_T(
             attn_activation=args["attn_activation"],
@@ -48,6 +45,8 @@ def create_model(args, prior_model=None, mean=None, std=None):
             **shared_args,
         )
     elif args["model"] == "equivariant-transformer":
+        from torchmdnet.models.torchmd_et import TorchMD_ET
+
         is_equivariant = True
         representation_model = TorchMD_ET(
             attn_activation=args["attn_activation"],
@@ -102,7 +101,8 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
         args = ckpt["hyper_parameters"]
 
     for key, value in kwargs.items():
-        assert key in args, "Unknown hyperparameter '{key}'."
+        if not key in args:
+            warnings.warn(f"Unknown hyperparameter: {key}={value}")
         args[key] = value
 
     model = create_model(args)
@@ -153,7 +153,13 @@ class TorchMD_Net(nn.Module):
         if self.prior_model is not None:
             self.prior_model.reset_parameters()
 
-    def forward(self, z, pos, batch: Optional[torch.Tensor] = None):
+    def forward(self,
+                z: Tensor,
+                pos: Tensor,
+                batch: Optional[Tensor] = None,
+                q: Optional[Tensor] = None,
+                s: Optional[Tensor] = None) -> Tuple[Tensor, Optional[Tensor]]:
+
         assert z.dim() == 1 and z.dtype == torch.long
         batch = torch.zeros_like(z) if batch is None else batch
 
@@ -161,10 +167,14 @@ class TorchMD_Net(nn.Module):
             pos.requires_grad_(True)
 
         # run the potentially wrapped representation model
-        x, v, z, pos, batch = self.representation_model(z, pos, batch=batch)
+        x, v, z, pos, batch = self.representation_model(z, pos, batch, q=q, s=s)
 
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch)
+
+        # scale by data standard deviation
+        if self.std is not None:
+            x = x * self.std
 
         # apply prior model
         if self.prior_model is not None:
@@ -173,13 +183,11 @@ class TorchMD_Net(nn.Module):
         # aggregate atoms
         out = scatter(x, batch, dim=0, reduce=self.reduce_op)
 
-        # standardize if no prior model is given and the output model allows priors
-        if self.prior_model is None and self.output_model.allow_prior_model:
-            if self.std is not None:
-                out = out * self.std
-            if self.mean is not None:
-                out = out + self.mean
+        # shift by data mean
+        if self.mean is not None:
+            out = out + self.mean
 
+        # apply output model after reduction
         out = self.output_model.post_reduce(out)
 
         # compute gradients with respect to coordinates

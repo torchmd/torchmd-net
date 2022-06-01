@@ -1,6 +1,6 @@
 from typing import Optional, Tuple
 import torch
-from torch import nn
+from torch import Tensor, nn
 from torch_geometric.nn import MessagePassing
 from torch_scatter import scatter
 from torchmdnet.models.utils import (
@@ -79,6 +79,10 @@ class TorchMD_ET(nn.Module):
             f'Unknown activation function "{activation}". '
             f'Choose from {", ".join(act_class_mapping.keys())}.'
         )
+        assert attn_activation in act_class_mapping, (
+            f'Unknown attention activation function "{attn_activation}". '
+            f'Choose from {", ".join(act_class_mapping.keys())}.'
+        )
 
         self.hidden_channels = hidden_channels
         self.num_layers = num_layers
@@ -95,7 +99,6 @@ class TorchMD_ET(nn.Module):
         self.max_z = max_z
 
         act_class = act_class_mapping[activation]
-        attn_act_class = act_class_mapping[attn_activation]
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels)
 
@@ -125,7 +128,7 @@ class TorchMD_ET(nn.Module):
                 distance_influence,
                 num_heads,
                 act_class,
-                attn_act_class,
+                attn_activation,
                 cutoff_lower,
                 cutoff_upper,
             ).jittable()
@@ -144,7 +147,14 @@ class TorchMD_ET(nn.Module):
             attn.reset_parameters()
         self.out_norm.reset_parameters()
 
-    def forward(self, z, pos, batch):
+    def forward(self,
+                z: Tensor,
+                pos: Tensor,
+                batch: Tensor,
+                q: Optional[Tensor] = None,
+                s: Optional[Tensor] = None
+                ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+
         x = self.embedding(z)
 
         edge_index, edge_weight, edge_vec = self.distance(pos, batch)
@@ -213,7 +223,7 @@ class EquivariantMultiHeadAttention(MessagePassing):
 
         self.layernorm = nn.LayerNorm(hidden_channels)
         self.act = activation()
-        self.attn_activation = attn_activation()
+        self.attn_activation = act_class_mapping[attn_activation]()
         self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)
 
         self.q_proj = nn.Linear(hidden_channels, hidden_channels)
@@ -221,7 +231,7 @@ class EquivariantMultiHeadAttention(MessagePassing):
         self.v_proj = nn.Linear(hidden_channels, hidden_channels * 3)
         self.o_proj = nn.Linear(hidden_channels, hidden_channels * 3)
 
-        self.vec_proj = nn.Linear(hidden_channels, hidden_channels * 3)
+        self.vec_proj = nn.Linear(hidden_channels, hidden_channels * 3, bias=False)
 
         self.dk_proj = None
         if distance_influence in ["keys", "both"]:
@@ -244,7 +254,6 @@ class EquivariantMultiHeadAttention(MessagePassing):
         nn.init.xavier_uniform_(self.o_proj.weight)
         self.o_proj.bias.data.fill_(0)
         nn.init.xavier_uniform_(self.vec_proj.weight)
-        self.vec_proj.bias.data.fill_(0)
         if self.dk_proj:
             nn.init.xavier_uniform_(self.dk_proj.weight)
             self.dk_proj.bias.data.fill_(0)
@@ -300,8 +309,11 @@ class EquivariantMultiHeadAttention(MessagePassing):
             attn = (q_i * k_j).sum(dim=-1)
         else:
             attn = (q_i * k_j * dk).sum(dim=-1)
+
+        # attention activation function
         attn = self.attn_activation(attn) * self.cutoff(r_ij).unsqueeze(1)
 
+        # value pathway
         if dv is not None:
             v_j = v_j * dv
         x, vec1, vec2 = torch.split(v_j, self.head_dim, dim=2)

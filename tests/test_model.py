@@ -13,11 +13,15 @@ from utils import load_example_args, create_example_batch
 
 @mark.parametrize("model_name", models.__all__)
 @mark.parametrize("use_batch", [True, False])
-def test_forward(model_name, use_batch):
+@mark.parametrize("explicit_q_s", [True, False])
+def test_forward(model_name, use_batch, explicit_q_s):
     z, pos, batch = create_example_batch()
     model = create_model(load_example_args(model_name, prior_model=None))
     batch = batch if use_batch else None
-    model(z, pos, batch=batch)
+    if explicit_q_s:
+        model(z, pos, batch=batch, q=None, s=None)
+    else:
+        model(z, pos, batch=batch)
 
 
 @mark.parametrize("model_name", models.__all__)

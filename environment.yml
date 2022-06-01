@@ -1,15 +1,22 @@
 name: torchmd-net
 channels:
-  - pytorch
-  - rusty1s
   - conda-forge
 dependencies:
-  - matplotlib
-  - pip
-  - pytorch
-  - pytorch-geometric
-  - pytorch-lightning
   - ase
   - h5py
+  - matplotlib
+  - nnpops==0.2
+  - pip
+  - pytorch==1.11.0
+  - pytorch_cluster==1.5.9
+  - pytorch_geometric==2.0.3
+  - pytorch_scatter==2.0.8
+  - pytorch_sparse==0.6.10
+  - pytorch-lightning
+  - torchani==2.2.2
+  - torchmetrics==0.7.3 # Cannot update to the latest version due to incompatible API
   - tqdm
-  - scipy
+  # Dev tools
+  - flake8
+  - pytest
+  - psutil

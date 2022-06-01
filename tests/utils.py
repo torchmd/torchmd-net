@@ -5,9 +5,10 @@ from torch_geometric.data import Dataset, Data
 
 
 def load_example_args(model_name, remove_prior=False, **kwargs):
-    with open(join(dirname(dirname(__file__)), "examples", "example.yaml"), "r") as f:
+    with open(join(dirname(dirname(__file__)), "examples", "ET-QM9.yaml"), "r") as f:
         args = yaml.load(f, Loader=yaml.FullLoader)
     args["model"] = model_name
+    args["seed"] = 1234
     if remove_prior:
         args["prior_model"] = None
     for key, val in kwargs.items():
@@ -39,6 +40,7 @@ class DummyDataset(Dataset):
         atom_types=[1, 6, 7, 8, 9],
         min_atoms=3,
         max_atoms=10,
+        has_atomref=False,
     ):
         super(DummyDataset, self).__init__()
         assert (
@@ -60,6 +62,15 @@ class DummyDataset(Dataset):
                 self.energies.append(torch.randn(1, 1))
             if forces:
                 self.forces.append(torch.randn(num_atoms, 3))
+
+        self.atomref = None
+        if has_atomref:
+            self.atomref = torch.randn(100, 1)
+
+            def _get_atomref(self):
+                return self.atomref
+
+            DummyDataset.get_atomref = _get_atomref
 
     def get(self, idx):
         features = dict(z=self.z[idx].clone(), pos=self.pos[idx].clone())
