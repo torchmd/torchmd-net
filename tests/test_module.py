@@ -33,9 +33,10 @@ def test_train(model_name, use_atomref, tmpdir):
         test_size=None,
         log_dir=tmpdir,
         derivative=True,
-        embedding_dimension=32,
-        num_layers=3,
+        embedding_dimension=16,
+        num_layers=2,
         num_rbf=16,
+        batch_size=8,
     )
     datamodule = DataModule(args, DummyDataset(has_atomref=use_atomref))
 
@@ -48,4 +49,4 @@ def test_train(model_name, use_atomref, tmpdir):
 
     trainer = pl.Trainer(max_steps=10, default_root_dir=tmpdir)
     trainer.fit(module, datamodule)
-    trainer.test()
+    trainer.test(module, datamodule)

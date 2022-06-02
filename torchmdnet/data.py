@@ -2,7 +2,7 @@ from os.path import join
 from tqdm import tqdm
 import torch
 from torch.utils.data import Subset
-from torch_geometric.data import DataLoader
+from torch_geometric.loader import DataLoader
 from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities import rank_zero_warn
 from torchmdnet import datasets
@@ -13,7 +13,7 @@ from torch_scatter import scatter
 class DataModule(LightningDataModule):
     def __init__(self, hparams, dataset=None):
         super(DataModule, self).__init__()
-        self.hparams = hparams.__dict__ if hasattr(hparams, "__dict__") else hparams
+        self.save_hyperparameters(hparams)
         self._mean, self._std = None, None
         self._saved_dataloaders = dict()
         self.dataset = dataset
@@ -84,7 +84,7 @@ class DataModule(LightningDataModule):
 
     def _get_dataloader(self, dataset, stage, store_dataloader=True):
         store_dataloader = (
-            store_dataloader and not self.trainer.reload_dataloaders_every_epoch
+            store_dataloader and self.trainer.reload_dataloaders_every_n_epochs <= 0
         )
         if stage in self._saved_dataloaders and store_dataloader:
             # storing the dataloaders like this breaks calls to trainer.reload_train_val_dataloaders
@@ -101,9 +101,9 @@ class DataModule(LightningDataModule):
         dl = DataLoader(
             dataset=dataset,
             batch_size=batch_size,
-            shuffle=shuffle,
             num_workers=self.hparams["num_workers"],
             pin_memory=True,
+            shuffle=shuffle,
         )
 
         if store_dataloader:
