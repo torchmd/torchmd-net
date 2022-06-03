@@ -1,7 +1,7 @@
 from abc import abstractmethod, ABCMeta
 from typing import Optional
-import ase
 from torchmdnet.models.utils import act_class_mapping, GatedEquivariantBlock
+from torchmdnet.utils import atomic_masses
 from torch_scatter import scatter
 import torch
 from torch import nn
@@ -81,7 +81,7 @@ class DipoleMoment(Scalar):
         super(DipoleMoment, self).__init__(
             hidden_channels, activation, allow_prior_model=False
         )
-        atomic_mass = torch.from_numpy(ase.data.atomic_masses).float()
+        atomic_mass = torch.from_numpy(atomic_masses).float()
         self.register_buffer("atomic_mass", atomic_mass)
 
     def pre_reduce(self, x, v: Optional[torch.Tensor], z, pos, batch):
@@ -102,7 +102,7 @@ class EquivariantDipoleMoment(EquivariantScalar):
         super(EquivariantDipoleMoment, self).__init__(
             hidden_channels, activation, allow_prior_model=False
         )
-        atomic_mass = torch.from_numpy(ase.data.atomic_masses).float()
+        atomic_mass = torch.from_numpy(atomic_masses).float()
         self.register_buffer("atomic_mass", atomic_mass)
 
     def pre_reduce(self, x, v, z, pos, batch):
@@ -128,7 +128,7 @@ class ElectronicSpatialExtent(OutputModel):
             act_class(),
             nn.Linear(hidden_channels // 2, 1),
         )
-        atomic_mass = torch.from_numpy(ase.data.atomic_masses).float()
+        atomic_mass = torch.from_numpy(atomic_masses).float()
         self.register_buffer("atomic_mass", atomic_mass)
 
         self.reset_parameters()
