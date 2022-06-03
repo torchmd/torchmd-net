@@ -2,7 +2,6 @@ name: torchmd-net
 channels:
   - conda-forge
 dependencies:
-  - ase
   - h5py
   - matplotlib
   - nnpops==0.2
@@ -13,7 +12,6 @@ dependencies:
   - pytorch_scatter==2.0.8
   - pytorch_sparse==0.6.10
   - pytorch-lightning==1.6.3
-  - torchani==2.2.2
   - torchmetrics==0.8.2
   - tqdm
   # Dev tools
