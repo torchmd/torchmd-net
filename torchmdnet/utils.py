@@ -6,6 +6,22 @@ from os.path import dirname, join, exists
 from pytorch_lightning.utilities import rank_zero_warn
 
 # fmt: off
+# Atomic masses are based on:
+#
+#   Meija, J., Coplen, T., Berglund, M., et al. (2016). Atomic weights of
+#   the elements 2013 (IUPAC Technical Report). Pure and Applied Chemistry,
+#   88(3), pp. 265-291. Retrieved 30 Nov. 2016,
+#   from doi:10.1515/pac-2015-0305
+#
+# Standard atomic weights are taken from Table 1: "Standard atomic weights
+# 2013", with the uncertainties ignored.
+# For hydrogen, helium, boron, carbon, nitrogen, oxygen, magnesium, silicon,
+# sulfur, chlorine, bromine and thallium, where the weights are given as a
+# range the "conventional" weights are taken from Table 3 and the ranges are
+# given in the comments.
+# The mass of the most stable isotope (in Table 4) is used for elements
+# where there the element has no stable isotopes (to avoid NaNs): Tc, Pm,
+# Po, At, Rn, Fr, Ra, Ac, everything after N
 atomic_masses = np.array([
     1.0, 1.008, 4.002602, 6.94, 9.0121831,
     10.81, 12.011, 14.007, 15.999, 18.998403163,
