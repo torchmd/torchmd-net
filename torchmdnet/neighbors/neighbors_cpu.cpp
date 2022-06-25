@@ -10,7 +10,7 @@ static double get_distance(const torch::Tensor v1, const torch::Tensor v2) {
     return distance;
 }
 
-static std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> forward(const torch::Tensor& positions, const double radius, const int64_t max_hash_size) {
+static std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> forward(const torch::Tensor& positions, const torch::Tensor& batch, const double radius, const int64_t max_hash_size) {
 
     TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
     TORCH_CHECK(positions.size(1) == 3, "Expected the 2nd dimension size of \"positions\" to be 3");

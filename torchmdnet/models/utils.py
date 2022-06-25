@@ -4,8 +4,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
-from torch_cluster import radius_graph
 import warnings
+from torchmdnet.neighbors import get_neighbor_list
 
 
 def visualize_basis(basis_type, num_rbf=50, cutoff_lower=0, cutoff_upper=5):
@@ -209,13 +209,14 @@ class Distance(nn.Module):
         self.loop = loop
 
     def forward(self, pos, batch):
-        edge_index = radius_graph(
+        rows, columns, distances = get_neighbor_list(
             pos,
-            r=self.cutoff_upper,
+            radius=self.cutoff_upper,
             batch=batch,
-            loop=self.loop,
-            max_num_neighbors=self.max_num_neighbors + 1,
+            max_hash_size=self.max_num_neighbors + 1,
         )
+
+        edge_index = torch.stack([rows, columns]).to(dtype=torch.long)
 
         # make sure we didn't miss any neighbors due to max_num_neighbors
         assert not (
@@ -225,33 +226,11 @@ class Distance(nn.Module):
             "Please increase this parameter to include the maximum number of atoms within the cutoff."
         )
 
-        edge_vec = pos[edge_index[0]] - pos[edge_index[1]]
-
-        mask : Optional[torch.Tensor]=None
-        if self.loop:
-            # mask out self loops when computing distances because
-            # the norm of 0 produces NaN gradients
-            # NOTE: might influence force predictions as self loop gradients are ignored
-            mask = edge_index[0] != edge_index[1]
-            edge_weight = torch.zeros(edge_vec.size(0), device=edge_vec.device)
-            edge_weight[mask] = torch.norm(edge_vec[mask], dim=-1)
-        else:
-            edge_weight = torch.norm(edge_vec, dim=-1)
-
-        lower_mask = edge_weight >= self.cutoff_lower
-        if self.loop and mask is not None:
-            # keep self loops even though they might be below the lower cutoff
-            lower_mask = lower_mask | ~mask
-        edge_index = edge_index[:, lower_mask]
-        edge_weight = edge_weight[lower_mask]
-
         if self.return_vecs:
-            edge_vec = edge_vec[lower_mask]
-            return edge_index, edge_weight, edge_vec
-        # TODO: return only `edge_index` and `edge_weight` once
-        # Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
-        return edge_index, edge_weight, None
+            edge_vec = pos[rows] - pos[columns]
+            return edge_index, distances, edge_vec
 
+        return edge_index, distances, None
 
 class GatedEquivariantBlock(nn.Module):
     """Gated Equivariant Block as defined in Schütt et al. (2021):
