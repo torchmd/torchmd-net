@@ -106,7 +106,7 @@ class QM9q(Dataset):
         pos_mm = np.memmap(pos_name + '.tmp', mode='w+', dtype=np.float32, shape=(num_all_atoms, 3))
         y_mm = np.memmap(y_name + '.tmp', mode='w+', dtype=np.float64, shape=(num_all_confs,))
         dy_mm = np.memmap(dy_name + '.tmp', mode='w+', dtype=np.float32, shape=(num_all_atoms,3))
-        q_mm = np.memmap(q_name + '.tmp', mode='w+', dtype=np.float32, shape=(num_all_confs))
+        q_mm = np.memmap(q_name + '.tmp', mode='w+', dtype=np.int8, shape=(num_all_confs))
 
         print('Storing data...')
         i_atom = 0
