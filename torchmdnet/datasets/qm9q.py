@@ -16,12 +16,13 @@ class QM9q(Dataset):
         self.dataset_arg = str(dataset_arg)
         super().__init__(root, transform, pre_transform, pre_filter)
 
-        idx_name, z_name, pos_name, y_name, dy_name = self.processed_paths
+        idx_name, z_name, pos_name, y_name, dy_name, q_name = self.processed_paths
         self.idx_mm = np.memmap(idx_name, mode='r', dtype=np.int64)
         self.z_mm = np.memmap(z_name, mode='r', dtype=np.int8)
         self.pos_mm = np.memmap(pos_name, mode='r', dtype=np.float32, shape=(self.z_mm.shape[0], 3))
         self.y_mm = np.memmap(y_name, mode='r', dtype=np.float64)
         self.dy_mm = np.memmap(dy_name, mode='r', dtype=np.float32, shape=(self.z_mm.shape[0], 3))
+        self.q_mm = np.memmap(q_name, mode='r', dtype=np.int8)
 
         assert self.idx_mm[0] == 0
         assert self.idx_mm[-1] == len(self.z_mm)
@@ -65,7 +66,10 @@ class QM9q(Dataset):
                     # assert z.shape[0] == dy.shape[0]
                     assert dy.shape[1] == 3
 
-                    data = Data(z=z, pos=pos, y=y.view(1, 1), dy=dy)
+                    assert mol['electronic_charge'].attrs['units'] == 'n : fractional electrons'
+                    q = pt.tensor(mol['electronic_charge'][conf], dtype=pt.float64).sum().round().to(pt.long)
+
+                    data = Data(z=z, pos=pos, y=y.view(1, 1), dy=dy, q=q)
 
                     if self.pre_filter is not None and not self.pre_filter(data):
                         continue
@@ -81,7 +85,8 @@ class QM9q(Dataset):
                 f'{self.name}.z.mmap',
                 f'{self.name}.pos.mmap',
                 f'{self.name}.y.mmap',
-                f'{self.name}.dy.mmap']
+                f'{self.name}.dy.mmap',
+                f'{self.name}.q.mmap']
 
     def process(self):
 
@@ -95,12 +100,13 @@ class QM9q(Dataset):
         print(f'  Total number of conformers: {num_all_confs}')
         print(f'  Total number of atoms: {num_all_atoms}')
 
-        idx_name, z_name, pos_name, y_name, dy_name = self.processed_paths
+        idx_name, z_name, pos_name, y_name, dy_name, q_name = self.processed_paths
         idx_mm = np.memmap(idx_name + '.tmp', mode='w+', dtype=np.int64, shape=(num_all_confs + 1,))
         z_mm = np.memmap(z_name + '.tmp', mode='w+', dtype=np.int8, shape=(num_all_atoms,))
         pos_mm = np.memmap(pos_name + '.tmp', mode='w+', dtype=np.float32, shape=(num_all_atoms, 3))
         y_mm = np.memmap(y_name + '.tmp', mode='w+', dtype=np.float64, shape=(num_all_confs,))
         dy_mm = np.memmap(dy_name + '.tmp', mode='w+', dtype=np.float32, shape=(num_all_atoms,3))
+        q_mm = np.memmap(q_name + '.tmp', mode='w+', dtype=np.float32, shape=(num_all_confs))
 
         print('Storing data...')
         i_atom = 0
@@ -112,6 +118,7 @@ class QM9q(Dataset):
             pos_mm[i_atom:i_next_atom] = data.pos
             y_mm[i_conf] = data.y
             dy_mm[i_atom:i_next_atom] = data.dy
+            q_mm[i_conf] = data.q.to(pt.int8)
 
             i_atom = i_next_atom
 
@@ -123,12 +130,14 @@ class QM9q(Dataset):
         pos_mm.flush()
         y_mm.flush()
         dy_mm.flush()
+        q_mm.flush()
 
         os.rename(idx_mm.filename, idx_name)
         os.rename(z_mm.filename, z_name)
         os.rename(pos_mm.filename, pos_name)
         os.rename(y_mm.filename, y_name)
         os.rename(dy_mm.filename, dy_name)
+        os.rename(q_mm.filename, q_name)
 
     def len(self):
         return len(self.y_mm)
@@ -140,5 +149,6 @@ class QM9q(Dataset):
         pos = pt.tensor(self.pos_mm[atoms], dtype=pt.float32)
         y = pt.tensor(self.y_mm[idx], dtype=pt.float32).view(1, 1) # It would be better to use float64, but the trainer complaints
         dy = pt.tensor(self.dy_mm[atoms], dtype=pt.float32)
+        q = pt.tensor(self.q_mm[idx], dtype=pt.long)
 
-        return Data(z=z, pos=pos, y=y, dy=dy)
+        return Data(z=z, pos=pos, y=y, dy=dy, q=q)
