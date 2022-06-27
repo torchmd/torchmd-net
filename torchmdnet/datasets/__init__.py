@@ -5,6 +5,7 @@ from .custom import Custom
 from .hdf import HDF5
 from .md17 import MD17
 from .qm9 import QM9
+from .qm9q import QM9q
 
 __all__ = [
     "Ace",
@@ -20,6 +21,7 @@ __all__ = [
     "HDF5",
     "MD17",
     "QM9",
+    "QM9q",
     "S66X8",
     "Tripeptides"
 ]
