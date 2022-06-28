@@ -9,6 +9,7 @@ from tqdm import tqdm
 class QM9q(Dataset):
 
     HARTREE_TO_EV = 27.211386246
+    BORH_TO_ANGSTROM = 0.529177
 
     def __init__(self, root=None, transform=None, pre_transform=None, pre_filter=None, dataset_arg=None):
 
@@ -58,7 +59,7 @@ class QM9q(Dataset):
                     y = pt.tensor(mol['energy'][conf][()], dtype=pt.float64) * self.HARTREE_TO_EV
 
                     #assert mol['gradient_vector'].attrs['units'] == 'vector' # ???
-                    dy = -1 * pt.tensor(mol['gradient_vector'][conf], dtype=pt.float32) * self.HARTREE_TO_EV
+                    dy = -1 * pt.tensor(mol['gradient_vector'][conf], dtype=pt.float32) * self.HARTREE_TO_EV / self.BORH_TO_ANGSTROM
 
                     if z.shape[0] != dy.shape[0]: # Skip wrong forces
                         print(f'Skip: mol {mol}, conf {conf}')
