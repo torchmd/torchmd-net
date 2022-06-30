@@ -6,6 +6,7 @@ from .hdf import HDF5
 from .md17 import MD17
 from .qm9 import QM9
 from .qm9q import QM9q
+from .spice import SPICE
 
 __all__ = [
     "Ace",
@@ -23,5 +24,6 @@ __all__ = [
     "QM9",
     "QM9q",
     "S66X8",
+    "SPICE",
     "Tripeptides"
 ]
