@@ -61,6 +61,33 @@ class QM9q(Dataset):
 
         raise RuntimeError(f'Cannot load {paths}')
 
+    @staticmethod
+    def compute_reference_energy(atomic_numbers, charge):
+
+        atomic_numbers = np.array(atomic_numbers)
+        charge = int(charge)
+
+        charges = [QM9q.INITIAL_CHARGES[z] for z in atomic_numbers]
+        energy = sum(QM9q.ATOM_ENERGIES[z][q] for z, q in zip(atomic_numbers, charges))
+
+        while sum(charges) != charge:
+            dq = np.sign(charge - sum(charges))
+
+            new_energies = []
+            for i, (z, q) in enumerate(zip(atomic_numbers, charges)):
+                if (q + dq) in QM9q.ATOM_ENERGIES[z]:
+                    new_energy = energy - QM9q.ATOM_ENERGIES[z][q] + QM9q.ATOM_ENERGIES[z][q + dq]
+                    new_energies.append((new_energy, i, q + dq))
+
+            energy, i, q = sorted(new_energies)[0]
+            charges[i] = q
+
+        assert sum(charges) == charge
+
+        energy = sum(QM9q.ATOM_ENERGIES[z][q] for z, q in zip(atomic_numbers, charges))
+
+        return energy * QM9q.HARTREE_TO_EV
+
     def sample_iter(self):
 
         for path in tqdm(self.raw_paths, desc='Files'):
