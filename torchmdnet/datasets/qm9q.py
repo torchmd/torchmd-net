@@ -117,6 +117,8 @@ class QM9q(Dataset):
                     assert mol['electronic_charge'].attrs['units'] == 'n : fractional electrons'
                     q = pt.tensor(mol['electronic_charge'][conf], dtype=pt.float64).sum().round().to(pt.long)
 
+                    y -= self.compute_reference_energy(z, q)
+
                     data = Data(z=z, pos=pos, y=y.view(1, 1), dy=dy, q=q)
 
                     if self.pre_filter is not None and not self.pre_filter(data):
