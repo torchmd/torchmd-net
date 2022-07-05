@@ -11,6 +11,26 @@ class QM9q(Dataset):
     HARTREE_TO_EV = 27.211386246
     BORH_TO_ANGSTROM = 0.529177
 
+    # Atom and ion energies
+    ATOM_ENERGIES = {
+        1: { 0:  -0.5013312007,
+             1:   0.0000000000},
+        6: {-1: -37.8236383010,
+             0: -37.8038423252,
+             1: -37.3826165878},
+        7: {-1: -54.4626446440,
+             0: -54.5269367415,
+             1: -53.9895574739},
+        8: {-1: -74.9699154500,
+             0: -74.9812632126,
+             1: -74.4776884006},
+        9: {-1: -99.6695561536,
+             0: -99.6185158728},
+    }
+
+    INITIAL_CHARGES = {element: sorted([(energy, charge) for charge, energy in charges.items()])[0][1]
+                       for element, charges in ATOM_ENERGIES.items()}
+
     def __init__(self, root=None, transform=None, pre_transform=None, pre_filter=None, dataset_arg=None):
 
         self.name = self.__class__.__name__
