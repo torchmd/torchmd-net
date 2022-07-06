@@ -106,7 +106,7 @@ class QM9q(Dataset):
                     y = pt.tensor(mol['energy'][conf][()], dtype=pt.float64) * self.HARTREE_TO_EV
 
                     assert mol['gradient_vector'].attrs['units'] == 'vector : Hartree/Bohr '
-                    dy = -1 * pt.tensor(mol['gradient_vector'][conf], dtype=pt.float32) * self.HARTREE_TO_EV / self.BORH_TO_ANGSTROM
+                    dy = pt.tensor(mol['gradient_vector'][conf], dtype=pt.float32) * self.HARTREE_TO_EV / self.BORH_TO_ANGSTROM
 
                     if z.shape[0] != dy.shape[0]: # Skip wrong forces
                         print(f'Skip: mol {mol}, conf {conf}')
