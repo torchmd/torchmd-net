@@ -107,11 +107,7 @@ class QM9q(Dataset):
 
                     assert mol['gradient_vector'].attrs['units'] == 'vector : Hartree/Bohr '
                     dy = pt.tensor(mol['gradient_vector'][conf], dtype=pt.float32) * self.HARTREE_TO_EV / self.BORH_TO_ANGSTROM
-
-                    if z.shape[0] != dy.shape[0]: # Skip wrong forces
-                        print(f'Skip: mol {mol}, conf {conf}')
-                        continue
-                    # assert z.shape[0] == dy.shape[0]
+                    assert z.shape[0] == dy.shape[0]
                     assert dy.shape[1] == 3
 
                     assert mol['electronic_charge'].attrs['units'] == 'n : fractional electrons'
