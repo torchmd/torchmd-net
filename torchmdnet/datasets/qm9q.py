@@ -11,8 +11,8 @@ class QM9q(Dataset):
     HARTREE_TO_EV = 27.211386246
     BORH_TO_ANGSTROM = 0.529177
 
-    # Atom and ion energies
-    ATOM_ENERGIES = {
+    # Ion energies of elements
+    ELEMENT_ENERGIES = {
         1: { 0:  -0.5013312007,
              1:   0.0000000000},
         6: {-1: -37.8236383010,
@@ -28,8 +28,9 @@ class QM9q(Dataset):
              0: -99.6185158728},
     }
 
-    INITIAL_CHARGES = {element: sorted([(energy, charge) for charge, energy in charges.items()])[0][1]
-                       for element, charges in ATOM_ENERGIES.items()}
+    # Select an ion with the lowest energy for each element
+    INITIAL_CHARGES = {element: sorted(zip(charges.values(), charges.keys()))[0][1]
+                       for element, charges in ELEMENT_ENERGIES.items()}
 
     def __init__(self, root=None, transform=None, pre_transform=None, pre_filter=None, dataset_arg=None):
 
@@ -68,15 +69,15 @@ class QM9q(Dataset):
         charge = int(charge)
 
         charges = [QM9q.INITIAL_CHARGES[z] for z in atomic_numbers]
-        energy = sum(QM9q.ATOM_ENERGIES[z][q] for z, q in zip(atomic_numbers, charges))
+        energy = sum(QM9q.ELEMENT_ENERGIES[z][q] for z, q in zip(atomic_numbers, charges))
 
         while sum(charges) != charge:
             dq = np.sign(charge - sum(charges))
 
             new_energies = []
             for i, (z, q) in enumerate(zip(atomic_numbers, charges)):
-                if (q + dq) in QM9q.ATOM_ENERGIES[z]:
-                    new_energy = energy - QM9q.ATOM_ENERGIES[z][q] + QM9q.ATOM_ENERGIES[z][q + dq]
+                if (q + dq) in QM9q.ELEMENT_ENERGIES[z]:
+                    new_energy = energy - QM9q.ELEMENT_ENERGIES[z][q] + QM9q.ELEMENT_ENERGIES[z][q + dq]
                     new_energies.append((new_energy, i, q + dq))
 
             energy, i, q = sorted(new_energies)[0]
@@ -84,7 +85,7 @@ class QM9q(Dataset):
 
         assert sum(charges) == charge
 
-        energy = sum(QM9q.ATOM_ENERGIES[z][q] for z, q in zip(atomic_numbers, charges))
+        energy = sum(QM9q.ELEMENT_ENERGIES[z][q] for z, q in zip(atomic_numbers, charges))
 
         return energy * QM9q.HARTREE_TO_EV
 
