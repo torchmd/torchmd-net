@@ -55,7 +55,6 @@ done by implementing a new prior model class in `torchmdnet.priors` and adding t
 As an example, have a look at `torchmdnet.priors.Atomref`.
 
 ## Multi-Node Training
-__Currently does not work with the most recent PyTorch Lightning version. Tested up to pytorch-lightning==1.2.10__
 
 In order to train models on multiple nodes some environment variables have to be set, which provide all necessary information to PyTorch Lightning. In the following we provide an example bash script to start training on two machines with two GPUs each. The script has to be started once on each node. Once [`train.py`](https://github.com/compsciencelab/torchmd-net/blob/main/scripts/train.py) is started on all nodes, a network connection between the nodes will be established using NCCL.
 
