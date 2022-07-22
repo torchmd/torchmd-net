@@ -58,6 +58,11 @@ class SPICE(Dataset):
             assert all_dy.shape[2] == 3
 
             for pos, y, dy in zip(all_pos, all_y, all_dy):
+
+                # Skip samples with large forces
+                if dy.norm(dim=1).max() > 100: # eV/A
+                    continue
+
                 data = Data(z=z, pos=pos, y=y.view(1, 1), dy=dy)
 
                 if self.pre_filter is not None and not self.pre_filter(data):
