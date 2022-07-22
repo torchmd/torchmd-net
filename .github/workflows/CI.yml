@@ -28,7 +28,7 @@ jobs:
         key: ${{ runner.os }}-${{ env.CACHE_NUMBER }}-${{ hashFiles('environment.yml') }}
       env:
         # Increase this value to reset cache if environment.yml has not changed
-        CACHE_NUMBER: 1
+        CACHE_NUMBER: 2
 
     - name: Create a conda environment
       uses: conda-incubator/setup-miniconda@v2
