@@ -5,7 +5,6 @@ import os
 import torch as pt
 from torch_geometric.data import Data, Dataset
 from tqdm import tqdm
-from warnings import warn
 
 class SPICE(Dataset):
 
@@ -43,12 +42,7 @@ class SPICE(Dataset):
 
     def sample_iter(self):
 
-        for mol_id, mol in tqdm(h5py.File(self.raw_paths).items(), desc='Molecules'):
-
-            # TODO: remove when https://github.com/openmm/spice-dataset/issues/30 is fixed
-            if 'atomic_numbers' not in mol:
-                warn(f'Molecule {mol_id} skipped because "atomic_numbers" is missing')
-                continue
+        for mol in tqdm(h5py.File(self.raw_paths).values(), desc='Molecules'):
 
             z = pt.tensor(mol['atomic_numbers'], dtype=pt.long)
             all_pos = pt.tensor(mol['conformations'], dtype=pt.float32) * self.BORH_TO_ANGSTROM
