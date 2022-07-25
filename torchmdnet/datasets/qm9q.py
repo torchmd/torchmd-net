@@ -11,6 +11,27 @@ class QM9q(Dataset):
     HARTREE_TO_EV = 27.211386246
     BORH_TO_ANGSTROM = 0.529177
 
+    # Ion energies of elements
+    ELEMENT_ENERGIES = {
+        1: { 0:  -0.5013312007,
+             1:   0.0000000000},
+        6: {-1: -37.8236383010,
+             0: -37.8038423252,
+             1: -37.3826165878},
+        7: {-1: -54.4626446440,
+             0: -54.5269367415,
+             1: -53.9895574739},
+        8: {-1: -74.9699154500,
+             0: -74.9812632126,
+             1: -74.4776884006},
+        9: {-1: -99.6695561536,
+             0: -99.6185158728},
+    }
+
+    # Select an ion with the lowest energy for each element
+    INITIAL_CHARGES = {element: sorted(zip(charges.values(), charges.keys()))[0][1]
+                       for element, charges in ELEMENT_ENERGIES.items()}
+
     def __init__(self, root=None, transform=None, pre_transform=None, pre_filter=None, dataset_arg=None):
 
         self.name = self.__class__.__name__
@@ -41,6 +62,33 @@ class QM9q(Dataset):
 
         raise RuntimeError(f'Cannot load {paths}')
 
+    @staticmethod
+    def compute_reference_energy(atomic_numbers, charge):
+
+        atomic_numbers = np.array(atomic_numbers)
+        charge = int(charge)
+
+        charges = [QM9q.INITIAL_CHARGES[z] for z in atomic_numbers]
+        energy = sum(QM9q.ELEMENT_ENERGIES[z][q] for z, q in zip(atomic_numbers, charges))
+
+        while sum(charges) != charge:
+            dq = np.sign(charge - sum(charges))
+
+            new_energies = []
+            for i, (z, q) in enumerate(zip(atomic_numbers, charges)):
+                if (q + dq) in QM9q.ELEMENT_ENERGIES[z]:
+                    new_energy = energy - QM9q.ELEMENT_ENERGIES[z][q] + QM9q.ELEMENT_ENERGIES[z][q + dq]
+                    new_energies.append((new_energy, i, q + dq))
+
+            energy, i, q = sorted(new_energies)[0]
+            charges[i] = q
+
+        assert sum(charges) == charge
+
+        energy = sum(QM9q.ELEMENT_ENERGIES[z][q] for z, q in zip(atomic_numbers, charges))
+
+        return energy * QM9q.HARTREE_TO_EV
+
     def sample_iter(self):
 
         for path in tqdm(self.raw_paths, desc='Files'):
@@ -69,6 +117,8 @@ class QM9q(Dataset):
 
                     assert mol['electronic_charge'].attrs['units'] == 'n : fractional electrons'
                     q = pt.tensor(mol['electronic_charge'][conf], dtype=pt.float64).sum().round().to(pt.long)
+
+                    y -= self.compute_reference_energy(z, q)
 
                     data = Data(z=z, pos=pos, y=y.view(1, 1), dy=dy, q=q)
 
