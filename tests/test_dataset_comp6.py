@@ -27,7 +27,7 @@ def test_dataset_s66x8():
                                                   [ 1.4901e+00,  1.2167e+00,  8.5957e-01],
                                                   [ 2.9685e+00,  7.8712e-01, -4.9738e-03],
                                                   [ 1.4969e+00,  1.1917e+00, -8.9271e-01]]), atol=1e-4)
-        assert pt.allclose(sample.y, pt.tensor([[-5755.7290]]))
+        assert pt.allclose(sample.y, pt.tensor([[-47.5919]]))
         assert pt.allclose(sample.dy, pt.tensor([[ 0.2739, -0.2190, -0.0012],
                                                  [-0.2938,  0.0556, -0.0023],
                                                  [-0.1230,  0.4893,  0.0061],
