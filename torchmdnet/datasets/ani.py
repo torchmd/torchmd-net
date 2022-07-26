@@ -19,6 +19,11 @@ class ANIBase(Dataset):
     def raw_file_names(self):
         raise NotImplementedError
 
+    def compute_reference_energy(self, atomic_numbers):
+        atomic_numbers = np.array(atomic_numbers)
+        energy = sum(self.ELEMENT_ENERGIES[z] for z in atomic_numbers)
+        return energy * ANIBase.HARTREE_TO_EV
+
     def sample_iter(self):
         raise NotImplementedError()
 
@@ -121,6 +126,7 @@ class ANIBase(Dataset):
         z = pt.tensor(self.z_mm[atoms], dtype=pt.long)
         pos = pt.tensor(self.pos_mm[atoms], dtype=pt.float32)
         y = pt.tensor(self.y_mm[idx], dtype=pt.float32).view(1, 1) # It would be better to use float64, but the trainer complaints
+        y -= self.compute_reference_energy(z)
 
         if self.dy_mm is None:
             return Data(z=z, pos=pos, y=y)
@@ -130,6 +136,12 @@ class ANIBase(Dataset):
 
 
 class ANI1(ANIBase):
+    ELEMENT_ENERGIES = {
+        1: -0.500607632585,
+        6: -37.8302333826,
+        7: -54.5680045287,
+        8: -75.0362229210,
+    }
 
     @property
     def raw_url(self):
@@ -210,6 +222,12 @@ class ANI1XBase(ANIBase):
 
 
 class ANI1X(ANI1XBase):
+    ELEMENT_ENERGIES = {
+        1: -0.500607632585,
+        6: -37.8302333826,
+        7: -54.5680045287,
+        8: -75.0362229210,
+    }
 
     def sample_iter(self):
 
