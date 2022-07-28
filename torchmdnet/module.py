@@ -72,9 +72,13 @@ class LNNP(LightningModule):
         with torch.set_grad_enabled(stage == "train" or self.hparams.derivative):
             # TODO: the model doesn't necessarily need to return a derivative once
             # Union typing works under TorchScript (https://github.com/pytorch/pytorch/pull/53180)
-            pred, deriv = self(batch.z, batch.pos, batch=batch.batch,
-                               q=batch.q if self.hparams.charge else None,
-                               s=batch.s if self.hparams.spin else None)
+            pred, deriv = self(
+                batch.z,
+                batch.pos,
+                batch=batch.batch,
+                q=batch.q if self.hparams.charge else None,
+                s=batch.s if self.hparams.spin else None,
+            )
 
         loss_y, loss_dy = 0, 0
         if self.hparams.derivative:

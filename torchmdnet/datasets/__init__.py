@@ -25,5 +25,5 @@ __all__ = [
     "QM9q",
     "S66X8",
     "SPICE",
-    "Tripeptides"
+    "Tripeptides",
 ]

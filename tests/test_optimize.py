@@ -4,12 +4,13 @@ import torch as pt
 from torchmdnet.models.model import create_model
 from torchmdnet.optimize import optimize
 
-@mark.parametrize('device', ['cpu', 'cuda'])
-@mark.parametrize('num_atoms', [10, 100])
+
+@mark.parametrize("device", ["cpu", "cuda"])
+@mark.parametrize("num_atoms", [10, 100])
 def test_gn(device, num_atoms):
 
-    if not pt.cuda.is_available() and device == 'cuda':
-        pytest.skip('No GPU')
+    if not pt.cuda.is_available() and device == "cuda":
+        pytest.skip("No GPU")
 
     device = pt.device(device)
 
@@ -20,24 +21,24 @@ def test_gn(device, num_atoms):
     # Crate a non-optimized model
     #   SchNet: TorchMD_GN(rbf_type='gauss', trainable_rbf=False, activation='ssp', neighbor_embedding=False)
     args = {
-        'embedding_dimension': 128,
-        'num_layers': 6,
-        'num_rbf': 50,
-        'rbf_type': 'gauss',
-        'trainable_rbf': False,
-        'activation': 'ssp',
-        'neighbor_embedding': False,
-        'cutoff_lower': 0.0,
-        'cutoff_upper': 5.0,
-        'max_z': 100,
-        'max_num_neighbors': num_atoms,
-        'model': 'graph-network',
-        'aggr': 'add',
-        'derivative': True,
-        'atom_filter': -1,
-        'prior_model': None,
-        'output_model': 'Scalar',
-        'reduce_op': 'add'
+        "embedding_dimension": 128,
+        "num_layers": 6,
+        "num_rbf": 50,
+        "rbf_type": "gauss",
+        "trainable_rbf": False,
+        "activation": "ssp",
+        "neighbor_embedding": False,
+        "cutoff_lower": 0.0,
+        "cutoff_upper": 5.0,
+        "max_z": 100,
+        "max_num_neighbors": num_atoms,
+        "model": "graph-network",
+        "aggr": "add",
+        "derivative": True,
+        "atom_filter": -1,
+        "prior_model": None,
+        "output_model": "Scalar",
+        "reduce_op": "add",
     }
     ref_model = create_model(args).to(device)
 

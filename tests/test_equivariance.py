@@ -35,7 +35,9 @@ def test_vector_equivariance():
 
     model = create_model(
         load_example_args(
-            "equivariant-transformer", prior_model=None, output_model="VectorOutput",
+            "equivariant-transformer",
+            prior_model=None,
+            output_model="VectorOutput",
         )
     )
     z = torch.ones(100, dtype=torch.long)

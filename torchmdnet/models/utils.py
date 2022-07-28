@@ -227,7 +227,7 @@ class Distance(nn.Module):
 
         edge_vec = pos[edge_index[0]] - pos[edge_index[1]]
 
-        mask : Optional[torch.Tensor]=None
+        mask: Optional[torch.Tensor] = None
         if self.loop:
             # mask out self loops when computing distances because
             # the norm of 0 produces NaN gradients
