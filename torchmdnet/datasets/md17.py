@@ -98,4 +98,4 @@ class MD17(InMemoryDataset):
                 samples = [self.pre_transform(data) for data in samples]
 
             data, slices = self.collate(samples)
-            torch.save((data, slices), self.processed_path)
+            torch.save((data, slices), processed_path)
