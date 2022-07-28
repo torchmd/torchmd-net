@@ -56,7 +56,8 @@ def test_seed(model_name):
 
 @mark.parametrize("model_name", models.__all__)
 @mark.parametrize(
-    "output_model", output_modules.__all__,
+    "output_model",
+    output_modules.__all__,
 )
 def test_forward_output(model_name, output_model, overwrite_reference=False):
     pl.seed_everything(1234)
@@ -64,7 +65,10 @@ def test_forward_output(model_name, output_model, overwrite_reference=False):
     # create model and sample batch
     derivative = output_model in ["Scalar", "EquivariantScalar"]
     args = load_example_args(
-        model_name, remove_prior=True, output_model=output_model, derivative=derivative,
+        model_name,
+        remove_prior=True,
+        output_model=output_model,
+        derivative=derivative,
     )
     model = create_model(args)
     z, pos, batch = create_example_batch(n_atoms=5)

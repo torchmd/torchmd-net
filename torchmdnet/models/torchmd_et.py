@@ -147,13 +147,14 @@ class TorchMD_ET(nn.Module):
             attn.reset_parameters()
         self.out_norm.reset_parameters()
 
-    def forward(self,
-                z: Tensor,
-                pos: Tensor,
-                batch: Tensor,
-                q: Optional[Tensor] = None,
-                s: Optional[Tensor] = None
-                ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+    def forward(
+        self,
+        z: Tensor,
+        pos: Tensor,
+        batch: Tensor,
+        q: Optional[Tensor] = None,
+        s: Optional[Tensor] = None,
+    ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
 
         x = self.embedding(z)
 

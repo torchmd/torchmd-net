@@ -7,13 +7,17 @@ from torchmdnet.models.utils import Distance, GaussianSmearing, ShiftedSoftplus
 from NNPOps.CFConv import CFConv
 from NNPOps.CFConvNeighbors import CFConvNeighbors
 
-@mark.parametrize('device', ['cpu', 'cuda'])
-@mark.parametrize(['num_atoms', 'num_filters', 'num_rbfs'], [(3, 5, 7), (3, 7, 5), (5, 3, 7), (5, 7, 3), (7, 3, 5), (7, 5, 3)])
-@mark.parametrize('cutoff_upper', [5.0, 10.0])
+
+@mark.parametrize("device", ["cpu", "cuda"])
+@mark.parametrize(
+    ["num_atoms", "num_filters", "num_rbfs"],
+    [(3, 5, 7), (3, 7, 5), (5, 3, 7), (5, 7, 3), (7, 3, 5), (7, 5, 3)],
+)
+@mark.parametrize("cutoff_upper", [5.0, 10.0])
 def test_cfconv(device, num_atoms, num_filters, num_rbfs, cutoff_upper):
 
-    if not pt.cuda.is_available() and device == 'cuda':
-        pytest.skip('No GPU')
+    if not pt.cuda.is_available() and device == "cuda":
+        pytest.skip("No GPU")
 
     device = pt.device(device)
 
@@ -26,9 +30,10 @@ def test_cfconv(device, num_atoms, num_filters, num_rbfs, cutoff_upper):
     dist = Distance(0.0, cutoff_upper).to(device)
     rbf = GaussianSmearing(0.0, cutoff_upper, num_rbfs, trainable=False).to(device)
     net = pt.nn.Sequential(
-            pt.nn.Linear(num_rbfs, num_filters),
-            ShiftedSoftplus(),
-            pt.nn.Linear(num_filters, num_filters))
+        pt.nn.Linear(num_rbfs, num_filters),
+        ShiftedSoftplus(),
+        pt.nn.Linear(num_filters, num_filters),
+    )
 
     # Randomize linear layers
     net.requires_grad_(False)
@@ -37,7 +42,9 @@ def test_cfconv(device, num_atoms, num_filters, num_rbfs, cutoff_upper):
     pt.nn.init.normal_(net[2].weight)
     pt.nn.init.normal_(net[2].bias)
 
-    ref_conv = RefCFConv(num_filters, num_filters, num_filters, net, 0.0, cutoff_upper).to(device)
+    ref_conv = RefCFConv(
+        num_filters, num_filters, num_filters, net, 0.0, cutoff_upper
+    ).to(device)
 
     # Disable the additional linear layers
     ref_conv.requires_grad_(False)
@@ -59,7 +66,9 @@ def test_cfconv(device, num_atoms, num_filters, num_rbfs, cutoff_upper):
     # Construct an optimize CFConv object
     gaussianWidth = rbf.offset[1] - rbf.offset[0]
     neighbors = CFConvNeighbors(cutoff_upper)
-    conv = CFConv(gaussianWidth, 'ssp', net[0].weight.T, net[0].bias, net[2].weight.T, net[2].bias)
+    conv = CFConv(
+        gaussianWidth, "ssp", net[0].weight.T, net[0].bias, net[2].weight.T, net[2].bias
+    )
 
     # Compute with the optimized CFConv
     neighbors.build(pos)

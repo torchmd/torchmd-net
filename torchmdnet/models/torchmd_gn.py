@@ -142,13 +142,14 @@ class TorchMD_GN(nn.Module):
         for interaction in self.interactions:
             interaction.reset_parameters()
 
-    def forward(self,
-                z: Tensor,
-                pos: Tensor,
-                batch: Tensor,
-                s: Optional[Tensor] = None,
-                q: Optional[Tensor] = None
-                ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
+    def forward(
+        self,
+        z: Tensor,
+        pos: Tensor,
+        batch: Tensor,
+        s: Optional[Tensor] = None,
+        q: Optional[Tensor] = None,
+    ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
 
         x = self.embedding(z)
 
