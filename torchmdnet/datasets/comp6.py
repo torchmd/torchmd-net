@@ -17,6 +17,12 @@ For more details check:
 
 class COMP6Base(Dataset):
 
+    ELEMENT_ENERGIES = {
+        1: -0.500607632585,
+        6: -37.8302333826,
+        7: -54.5680045287,
+        8: -75.0362229210,
+    } # Copied from ANI-1x
     ATOMIC_NUMBERS = {b'H': 1, b'C': 6, b'N': 7, b'O': 8}
     HARTREE_TO_EV = 27.211386246
 
@@ -44,6 +50,12 @@ class COMP6Base(Dataset):
         url_prefix = 'https://raw.githubusercontent.com/isayev/COMP6/master/COMP6v1'
         return [f'{url_prefix}/{self.raw_url_name}/{name}' for name in self.raw_file_names]
 
+    @staticmethod
+    def compute_reference_energy(atomic_numbers):
+        atomic_numbers = np.array(atomic_numbers)
+        energy = sum(COMP6Base.ELEMENT_ENERGIES[z] for z in atomic_numbers)
+        return energy * COMP6Base.HARTREE_TO_EV
+
     def download(self):
         for url in self.raw_url:
             download_url(url, self.raw_dir)
@@ -66,6 +78,7 @@ class COMP6Base(Dataset):
                 all_pos = pt.tensor(mol['coordinates'][:], dtype=pt.float32)
                 all_y = pt.tensor(mol['energies'][:] * self.HARTREE_TO_EV, dtype=pt.float64)
                 all_dy = pt.tensor(mol['forces'][:] * self.HARTREE_TO_EV, dtype=pt.float32)
+                all_y -= self.compute_reference_energy(z)
 
                 assert all_pos.shape[0] == all_y.shape[0]
                 assert all_pos.shape[1] == z.shape[0]
