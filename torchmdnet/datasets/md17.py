@@ -80,8 +80,8 @@ class MD17(InMemoryDataset):
             download_url(MD17.raw_url + file_name, self.raw_dir)
 
     def process(self):
-        for path in self.raw_paths:
-            data_npz = np.load(path)
+        for raw_path, processed_path in zip(self.raw_paths,self.processed_paths):
+            data_npz = np.load(raw_path)
             z = torch.from_numpy(data_npz["z"]).long()
             positions = torch.from_numpy(data_npz["R"]).float()
             energies = torch.from_numpy(data_npz["E"]).float()
@@ -98,4 +98,4 @@ class MD17(InMemoryDataset):
                 samples = [self.pre_transform(data) for data in samples]
 
             data, slices = self.collate(samples)
-            torch.save((data, slices), self.processed_paths[0])
+            torch.save((data, slices), processed_path)
