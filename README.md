@@ -4,22 +4,24 @@ TorchMD-NET provides state-of-the-art graph neural networks and equivariant tran
 
 ## Installation
 
-Clone the repository:
-```
-git clone https://github.com/torchmd/torchmd-net.git
-cd torchmd-net
-```
+1. Clone the repository:
+    ```
+    git clone https://github.com/torchmd/torchmd-net.git
+    cd torchmd-net
+    ```
 
-Create a Conda environment and activate it:
-```
-conda env create -f environment.yml
-conda activate torchmd-net
-```
+2. Install Mambaforge (https://github.com/conda-forge/miniforge/#mambaforge). It is recommended to use `mamba` rather than `conda`. `conda` is known to produce broken enviroments with PyTorch.
 
-Install TorchMD-NET into the Conda environment:
-```
-pip install -e .
-```
+3. Create an environment and activate it:
+    ```
+    mamba env create -f environment.yml
+    mamba activate torchmd-net
+    ```
+
+4. Install TorchMD-NET into the environment:
+    ```
+    pip install -e .
+    ```
 
 ## Cite
 ```
