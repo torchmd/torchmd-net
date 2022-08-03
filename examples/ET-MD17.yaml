@@ -11,7 +11,6 @@ dataset_arg: aspirin
 dataset_root: ~/data
 derivative: true
 distance_influence: both
-distributed_backend: ddp
 early_stopping_patience: 300
 ema_alpha_dy: 1.0
 ema_alpha_y: 0.05
