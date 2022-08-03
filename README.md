@@ -26,7 +26,7 @@ TorchMD-NET provides state-of-the-art graph neural networks and equivariant tran
 ## Cite
 ```
 @inproceedings{
-th{\"o}lke2022equivariant,
+tholke2021equivariant,
 title={Equivariant Transformers for Neural Network based Molecular Potentials},
 author={Philipp Th{\"o}lke and Gianni De Fabritiis},
 booktitle={International Conference on Learning Representations},
