@@ -1,9 +1,9 @@
-import imp
+from base64 import b64encode
 import h5py
 import numpy as np
 import os
 import torch as pt
-from torch_geometric.data import Data, Dataset
+from torch_geometric.data import Data, Dataset, download_url
 from tqdm import tqdm
 
 
@@ -16,6 +16,24 @@ class SPICE(Dataset):
     HARTREE_TO_EV = 27.211386246
     BORH_TO_ANGSTROM = 0.529177
 
+    @property
+    def raw_file_names(self):
+        return "SPICE.hdf5"
+
+    @property
+    def raw_url(self):
+        return f"https://github.com/openmm/spice-dataset/releases/download/1.0/{self.raw_file_names}"
+
+    @property
+    def processed_file_names(self):
+        return [
+            f"{self.name}.idx.mmap",
+            f"{self.name}.z.mmap",
+            f"{self.name}.pos.mmap",
+            f"{self.name}.y.mmap",
+            f"{self.name}.dy.mmap",
+        ]
+
     def __init__(
         self,
         root=None,
@@ -24,13 +42,8 @@ class SPICE(Dataset):
         pre_filter=None,
         dataset_arg=None,
     ):
-
-        self.name = self.__class__.__name__
         self.dataset_arg = str(dataset_arg)
-        super().__init__(root, transform, pre_transform, pre_filter)
-
-        self.name = self.__class__.__name__
-        self.dataset_arg = str(dataset_arg)
+        self.name = f"{self.__class__.__name__}-{b64encode(self.dataset_arg.encode()).decode()}"
         super().__init__(root, transform, pre_transform, pre_filter)
 
         idx_name, z_name, pos_name, y_name, dy_name = self.processed_paths
@@ -48,13 +61,13 @@ class SPICE(Dataset):
         assert self.idx_mm[-1] == len(self.z_mm)
         assert len(self.idx_mm) == len(self.y_mm) + 1
 
-    @property
-    def raw_paths(self):
-        return self.dataset_arg
-
     def sample_iter(self):
 
-        for mol in tqdm(h5py.File(self.raw_paths).values(), desc="Molecules"):
+        assert len(self.raw_paths) == 1
+
+        print(self.dataset_arg)
+
+        for mol in tqdm(h5py.File(self.raw_paths[0]).values(), desc="Molecules"):
 
             z = pt.tensor(mol["atomic_numbers"], dtype=pt.long)
             all_pos = (
@@ -95,15 +108,8 @@ class SPICE(Dataset):
 
                 yield data
 
-    @property
-    def processed_file_names(self):
-        return [
-            f"{self.name}.idx.mmap",
-            f"{self.name}.z.mmap",
-            f"{self.name}.pos.mmap",
-            f"{self.name}.y.mmap",
-            f"{self.name}.dy.mmap",
-        ]
+    def download(self):
+        download_url(self.raw_url, self.raw_dir)
 
     def process(self):
 
