@@ -1,4 +1,4 @@
-from base64 import b64encode
+import hashlib
 import h5py
 import numpy as np
 import os
@@ -42,8 +42,8 @@ class SPICE(Dataset):
         pre_filter=None,
         dataset_arg=None,
     ):
-        self.dataset_arg = str(dataset_arg)
-        dataset_arg_hash = b64encode(self.dataset_arg.encode()).decode()
+        self.dataset_arg = "{}" if dataset_arg is None else str(dataset_arg)
+        dataset_arg_hash = hashlib.md5(self.dataset_arg.encode()).hexdigest()
         self.name = f"{self.__class__.__name__}-{dataset_arg_hash}"
         super().__init__(root, transform, pre_transform, pre_filter)
 
@@ -65,8 +65,6 @@ class SPICE(Dataset):
     def sample_iter(self):
 
         assert len(self.raw_paths) == 1
-
-        print(self.dataset_arg)
 
         for mol in tqdm(h5py.File(self.raw_paths[0]).values(), desc="Molecules"):
 
