@@ -43,7 +43,8 @@ class SPICE(Dataset):
         dataset_arg=None,
     ):
         self.dataset_arg = str(dataset_arg)
-        self.name = f"{self.__class__.__name__}-{b64encode(self.dataset_arg.encode()).decode()}"
+        dataset_arg_hash = b64encode(self.dataset_arg.encode()).decode()
+        self.name = f"{self.__class__.__name__}-{dataset_arg_hash}"
         super().__init__(root, transform, pre_transform, pre_filter)
 
         idx_name, z_name, pos_name, y_name, dy_name = self.processed_paths
