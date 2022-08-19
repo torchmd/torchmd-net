@@ -16,8 +16,6 @@ class SPICE(Dataset):
     The dataset consist of several subsets (https://github.com/openmm/spice-dataset/blob/main/downloader/config.yaml). By default all the subsets are loaded or they can be selected with `dataset_arg`. For example, this loads just two subsets:
 
     >>> ds = SPICE('.', dataset_arg='{"subsets": ["SPICE PubChem Set 1 Single Points Dataset v1.2", 'SPICE PubChem Set 2 Single Points Dataset v1.2']}')
-
-
     """
 
     HARTREE_TO_EV = 27.211386246
@@ -76,7 +74,7 @@ class SPICE(Dataset):
         for mol in tqdm(h5py.File(self.raw_paths[0]).values(), desc="Molecules"):
 
             if self.subsets:
-                if mol["subset"][0].decode() not in self.subsets:
+                if mol["subset"][0].decode() not in list(self.subsets):
                     continue
 
             z = pt.tensor(mol["atomic_numbers"], dtype=pt.long)
@@ -127,14 +125,13 @@ class SPICE(Dataset):
         dataset_arg = json.loads(self.dataset_arg)
         print(f"  Arguments: {dataset_arg}")
 
-        if "subsets" in dataset_arg:
-            self.subsets = list(dataset_arg["subsets"])
-            print("  Subsets:")
+        self.subsets = dataset_arg.get("subsets")
+        print("  Subsets:")
+        if self.subsets is None:
+            print("    - ALL")
+        else:
             for subset in self.subsets:
                 print(f"    - {subset}")
-        else:
-            self.subsets = None
-            print("  Subsets: ALL")
 
         print("Gathering statistics...")
         num_all_confs = 0
