@@ -47,6 +47,7 @@ class QM9q(Dataset):
             y_name,
             dy_name,
             q_name,
+            pq_name,
             dp_name,
         ) = self.processed_paths
         self.idx_mm = np.memmap(idx_name, mode="r", dtype=np.int64)
@@ -59,6 +60,7 @@ class QM9q(Dataset):
             dy_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
         )
         self.q_mm = np.memmap(q_name, mode="r", dtype=np.int8)
+        self.pq_mm = np.memmap(pq_name, mode="r", dtype=np.float32)
         self.dp_mm = np.memmap(
             dp_name, mode="r", dtype=np.float32, shape=(self.y_mm.shape[0], 3)
         )
@@ -154,12 +156,8 @@ class QM9q(Dataset):
                         mol["electronic_charge"].attrs["units"]
                         == "n : fractional electrons"
                     )
-                    q = (
-                        pt.tensor(mol["electronic_charge"][conf], dtype=pt.float64)
-                        .sum()
-                        .round()
-                        .to(pt.long)
-                    )
+                    pq = pt.tensor(mol["electronic_charge"][conf], dtype=pt.float32)
+                    q = pq.sum().round().to(pt.long)
 
                     assert mol["dipole_moment"].attrs["units"] == "\\mu : Debye "
                     dp = (
@@ -173,7 +171,7 @@ class QM9q(Dataset):
                     if dy.norm(dim=1).max() > 100:  # eV/A
                         continue
 
-                    data = Data(z=z, pos=pos, y=y.view(1, 1), dy=dy, q=q, dp=dp)
+                    data = Data(z=z, pos=pos, y=y.view(1, 1), dy=dy, q=q, pq=pq, dp=dp)
 
                     if self.pre_filter is not None and not self.pre_filter(data):
                         continue
@@ -192,6 +190,7 @@ class QM9q(Dataset):
             f"{self.name}.y.mmap",
             f"{self.name}.dy.mmap",
             f"{self.name}.q.mmap",
+            f"{self.name}.pq.mmap",
             f"{self.name}.dp.mmap",
         ]
 
@@ -214,25 +213,25 @@ class QM9q(Dataset):
             y_name,
             dy_name,
             q_name,
+            pq_name,
             dp_name,
         ) = self.processed_paths
         idx_mm = np.memmap(
-            idx_name + ".tmp", mode="w+", dtype=np.int64, shape=(num_all_confs + 1,)
+            idx_name + ".tmp", mode="w+", dtype=np.int64, shape=num_all_confs + 1
         )
-        z_mm = np.memmap(
-            z_name + ".tmp", mode="w+", dtype=np.int8, shape=(num_all_atoms,)
-        )
+        z_mm = np.memmap(z_name + ".tmp", mode="w+", dtype=np.int8, shape=num_all_atoms)
         pos_mm = np.memmap(
             pos_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
         )
         y_mm = np.memmap(
-            y_name + ".tmp", mode="w+", dtype=np.float64, shape=(num_all_confs,)
+            y_name + ".tmp", mode="w+", dtype=np.float64, shape=num_all_confs
         )
         dy_mm = np.memmap(
             dy_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
         )
-        q_mm = np.memmap(
-            q_name + ".tmp", mode="w+", dtype=np.int8, shape=(num_all_confs)
+        q_mm = np.memmap(q_name + ".tmp", mode="w+", dtype=np.int8, shape=num_all_confs)
+        pq_mm = np.memmap(
+            pq_name + ".tmp", mode="w+", dtype=np.float32, shape=num_all_atoms
         )
         dp_mm = np.memmap(
             dp_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_confs, 3)
@@ -249,6 +248,7 @@ class QM9q(Dataset):
             y_mm[i_conf] = data.y
             dy_mm[i_atom:i_next_atom] = data.dy
             q_mm[i_conf] = data.q.to(pt.int8)
+            pq_mm[i_atom:i_next_atom] = data.pq
             dp_mm[i_conf] = data.dp
 
             i_atom = i_next_atom
@@ -262,6 +262,7 @@ class QM9q(Dataset):
         y_mm.flush()
         dy_mm.flush()
         q_mm.flush()
+        pq_mm.flush()
         dp_mm.flush()
 
         os.rename(idx_mm.filename, idx_name)
@@ -270,6 +271,7 @@ class QM9q(Dataset):
         os.rename(y_mm.filename, y_name)
         os.rename(dy_mm.filename, dy_name)
         os.rename(q_mm.filename, q_name)
+        os.rename(pq_mm.filename, pq_name)
         os.rename(dp_mm.filename, dp_name)
 
     def len(self):
@@ -285,6 +287,7 @@ class QM9q(Dataset):
         )  # It would be better to use float64, but the trainer complaints
         dy = pt.tensor(self.dy_mm[atoms], dtype=pt.float32)
         q = pt.tensor(self.q_mm[idx], dtype=pt.long)
+        pq = pt.tensor(self.pq_mm[atoms], dtype=pt.float32)
         dp = pt.tensor(self.dp_mm[idx], dtype=pt.float32)
 
-        return Data(z=z, pos=pos, y=y, dy=dy, q=q, dp=dp)
+        return Data(z=z, pos=pos, y=y, dy=dy, q=q, pq=pq, dp=dp)
