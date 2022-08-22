@@ -10,6 +10,7 @@ class QM9q(Dataset):
 
     HARTREE_TO_EV = 27.211386246
     BORH_TO_ANGSTROM = 0.529177
+    DEBYE_TO_EANG = 0.2081943  # Debey -> e*A
 
     # Ion energies of elements
     ELEMENT_ENERGIES = {
@@ -39,7 +40,15 @@ class QM9q(Dataset):
         self.dataset_arg = str(dataset_arg)
         super().__init__(root, transform, pre_transform, pre_filter)
 
-        idx_name, z_name, pos_name, y_name, dy_name, q_name = self.processed_paths
+        (
+            idx_name,
+            z_name,
+            pos_name,
+            y_name,
+            dy_name,
+            q_name,
+            dp_name,
+        ) = self.processed_paths
         self.idx_mm = np.memmap(idx_name, mode="r", dtype=np.int64)
         self.z_mm = np.memmap(z_name, mode="r", dtype=np.int8)
         self.pos_mm = np.memmap(
@@ -50,6 +59,9 @@ class QM9q(Dataset):
             dy_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
         )
         self.q_mm = np.memmap(q_name, mode="r", dtype=np.int8)
+        self.dp_mm = np.memmap(
+            dp_name, mode="r", dtype=np.float32, shape=(self.y_mm.shape[0], 3)
+        )
 
         assert self.idx_mm[0] == 0
         assert self.idx_mm[-1] == len(self.z_mm)
@@ -149,13 +161,19 @@ class QM9q(Dataset):
                         .to(pt.long)
                     )
 
+                    assert mol["dipole_moment"].attrs["units"] == "\\mu : Debye "
+                    dp = (
+                        pt.tensor(mol["dipole_moment"][conf], dtype=pt.float32)
+                        * self.DEBYE_TO_EANG
+                    )
+
                     y -= self.compute_reference_energy(z, q)
 
                     # Skip samples with large forces
                     if dy.norm(dim=1).max() > 100:  # eV/A
                         continue
 
-                    data = Data(z=z, pos=pos, y=y.view(1, 1), dy=dy, q=q)
+                    data = Data(z=z, pos=pos, y=y.view(1, 1), dy=dy, q=q, dp=dp)
 
                     if self.pre_filter is not None and not self.pre_filter(data):
                         continue
@@ -174,6 +192,7 @@ class QM9q(Dataset):
             f"{self.name}.y.mmap",
             f"{self.name}.dy.mmap",
             f"{self.name}.q.mmap",
+            f"{self.name}.dp.mmap",
         ]
 
     def process(self):
@@ -188,7 +207,15 @@ class QM9q(Dataset):
         print(f"  Total number of conformers: {num_all_confs}")
         print(f"  Total number of atoms: {num_all_atoms}")
 
-        idx_name, z_name, pos_name, y_name, dy_name, q_name = self.processed_paths
+        (
+            idx_name,
+            z_name,
+            pos_name,
+            y_name,
+            dy_name,
+            q_name,
+            dp_name,
+        ) = self.processed_paths
         idx_mm = np.memmap(
             idx_name + ".tmp", mode="w+", dtype=np.int64, shape=(num_all_confs + 1,)
         )
@@ -207,6 +234,9 @@ class QM9q(Dataset):
         q_mm = np.memmap(
             q_name + ".tmp", mode="w+", dtype=np.int8, shape=(num_all_confs)
         )
+        dp_mm = np.memmap(
+            dp_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_confs, 3)
+        )
 
         print("Storing data...")
         i_atom = 0
@@ -219,6 +249,7 @@ class QM9q(Dataset):
             y_mm[i_conf] = data.y
             dy_mm[i_atom:i_next_atom] = data.dy
             q_mm[i_conf] = data.q.to(pt.int8)
+            dp_mm[i_conf] = data.dp
 
             i_atom = i_next_atom
 
@@ -231,6 +262,7 @@ class QM9q(Dataset):
         y_mm.flush()
         dy_mm.flush()
         q_mm.flush()
+        dp_mm.flush()
 
         os.rename(idx_mm.filename, idx_name)
         os.rename(z_mm.filename, z_name)
@@ -238,6 +270,7 @@ class QM9q(Dataset):
         os.rename(y_mm.filename, y_name)
         os.rename(dy_mm.filename, dy_name)
         os.rename(q_mm.filename, q_name)
+        os.rename(dp_mm.filename, dp_name)
 
     def len(self):
         return len(self.y_mm)
@@ -252,5 +285,6 @@ class QM9q(Dataset):
         )  # It would be better to use float64, but the trainer complaints
         dy = pt.tensor(self.dy_mm[atoms], dtype=pt.float32)
         q = pt.tensor(self.q_mm[idx], dtype=pt.long)
+        dp = pt.tensor(self.dp_mm[idx], dtype=pt.float32)
 
-        return Data(z=z, pos=pos, y=y, dy=dy, q=q)
+        return Data(z=z, pos=pos, y=y, dy=dy, q=q, dp=dp)
