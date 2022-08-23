@@ -36,6 +36,10 @@ class MD17(InMemoryDataset):
             molecules = ",".join(MD17.available_molecules)
         self.molecules = molecules.split(",")
 
+        for mol in molecules:
+            if mol not in MD17.available_molecules:
+                raise RuntimeError(f"Molecule '{mol}' does not exist in MD17")
+
         if len(self.molecules) > 1:
             rank_zero_warn(
                 "MD17 molecules have different reference energies, "
