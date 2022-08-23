@@ -191,8 +191,10 @@ def save_argparse(args, filename, exclude=None):
         args = args.__dict__.copy()
         for exl in exclude:
             del args[exl]
-        if args["dataset-args"] is not None:
-            args["dataset-args"] = json.loads(args["dataset-args"])
+
+        ds_arg = args.get("dataset_arg")
+        if ds_arg is not None and isinstance(ds_arg, str):
+            args["dataset_arg"] = json.loads(args["dataset_arg"])
         yaml.dump(args, open(filename, "w"))
     else:
         raise ValueError("Configuration file should end with yaml or yml")
