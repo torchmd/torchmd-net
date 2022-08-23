@@ -51,7 +51,7 @@ def get_args():
     # dataset specific
     parser.add_argument('--dataset', default=None, type=str, choices=datasets.__all__, help='Name of the torch_geometric dataset')
     parser.add_argument('--dataset-root', default='~/data', type=str, help='Data storage directory (not used if dataset is "CG")')
-    parser.add_argument('--dataset-arg', default=None, type=str, help='Additional dataset argument, e.g. target property for QM9 or molecule for MD17')
+    parser.add_argument('--dataset-arg', default=None, type=str, help='Additional dataset arguments, e.g. target property for QM9 or molecule for MD17. Need to be specified in JSON format i.e. "{\'molecules\': \'aspirin,benzene\'"')
     parser.add_argument('--coord-files', default=None, type=str, help='Custom coordinate files glob')
     parser.add_argument('--embed-files', default=None, type=str, help='Custom embedding files glob')
     parser.add_argument('--energy-files', default=None, type=str, help='Custom energy files glob')

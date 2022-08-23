@@ -32,8 +32,6 @@ def create_example_batch(n_atoms=6, multiple_batches=True):
 class DummyDataset(Dataset):
     def __init__(
         self,
-        dataset_root=None,
-        dataset_arg=None,
         num_samples=1000,
         energy=True,
         forces=True,
