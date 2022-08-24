@@ -12,15 +12,17 @@ class SPICE(Dataset):
     """
     SPICE dataset (https://github.com/openmm/spice-dataset)
 
-    The dataset consist of several subsets (https://github.com/openmm/spice-dataset/blob/main/downloader/config.yaml). By default all the subsets are loaded or they can be selected with `dataset_arg`. For example, this loads just two subsets:
+    The dataset consists of several subsets (https://github.com/openmm/spice-dataset/blob/main/downloader/config.yaml).
+    The subsets can be selected with `subsets`. By default, all the subsets are loaded.
 
-    >>> ds = SPICE('.', dataset_arg='{"subsets": ["SPICE PubChem Set 1 Single Points Dataset v1.2", 'SPICE PubChem Set 2 Single Points Dataset v1.2']}')
+    For example, this loads just two subsets:
+    >>> ds = ds = SPICE(".", subsets=["SPICE PubChem Set 1 Single Points Dataset v1.2", "SPICE PubChem Set 2 Single Points Dataset v1.2"])
 
     The loader can filter conformations with large gradients. The maximum gradient norm threshold
-    can be set with `dataset_arg`. By default, the filter is not applied. For examples, the filter
-    the threshold is set to 100 eV/A:
+    can be set with `max_gradient`. By default, the filter is not applied.
 
-    >>> ds = SPICE('.', dataset_arg='{"max_gradient": 100}')
+    For examples, the filter the threshold is set to 100 eV/A:
+    >>> ds = SPICE(".", max_gradient=100)
     """
 
     HARTREE_TO_EV = 27.211386246
