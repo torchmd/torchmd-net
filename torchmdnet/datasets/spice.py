@@ -16,7 +16,7 @@ class SPICE(Dataset):
     The subsets can be selected with `subsets`. By default, all the subsets are loaded.
 
     For example, this loads just two subsets:
-    >>> ds = ds = SPICE(".", subsets=["SPICE PubChem Set 1 Single Points Dataset v1.2", "SPICE PubChem Set 2 Single Points Dataset v1.2"])
+    >>> ds = SPICE(".", subsets=["SPICE PubChem Set 1 Single Points Dataset v1.2", "SPICE PubChem Set 2 Single Points Dataset v1.2"])
 
     The loader can filter conformations with large gradients. The maximum gradient norm threshold
     can be set with `max_gradient`. By default, the filter is not applied.
