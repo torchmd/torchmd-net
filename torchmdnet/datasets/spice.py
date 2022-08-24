@@ -1,6 +1,5 @@
 import hashlib
 import h5py
-import json
 import numpy as np
 import os
 import torch as pt
@@ -51,11 +50,14 @@ class SPICE(Dataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
-        dataset_arg=None,
+        subsets=None,
+        max_gradient=None,
     ):
-        self.dataset_arg = "{}" if dataset_arg is None else str(dataset_arg)
-        dataset_arg_hash = hashlib.md5(self.dataset_arg.encode()).hexdigest()
-        self.name = f"{self.__class__.__name__}-{dataset_arg_hash}"
+        arg_hash = f"{subsets}{max_gradient}"
+        arg_hash = hashlib.md5(arg_hash.encode()).hexdigest()
+        self.name = f"{self.__class__.__name__}-{arg_hash}"
+        self.subsets = subsets
+        self.max_gradient = max_gradient
         super().__init__(root, transform, pre_transform, pre_filter)
 
         idx_name, z_name, pos_name, y_name, dy_name = self.processed_paths
@@ -128,20 +130,9 @@ class SPICE(Dataset):
 
     def process(self):
 
-        print("Parsing arguments...")
-        dataset_arg = json.loads(self.dataset_arg)
-        print(f"  Arguments: {dataset_arg}")
-
-        self.subsets = dataset_arg.get("subsets")
-        print("  Subsets:")
-        if self.subsets is None:
-            print("    - ALL")
-        else:
-            for subset in self.subsets:
-                print(f"    - {subset}")
-
-        self.max_gradient = dataset_arg.get("max_gradient")
-        print(f"  Max gradient: {self.max_gradient} eV/A")
+        print("Arguments")
+        print(f"  subsets: {self.subsets}")
+        print(f"  max_gradient: {self.max_gradient} eV/A\n")
 
         print("Gathering statistics...")
         num_all_confs = 0
