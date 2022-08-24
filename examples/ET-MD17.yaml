@@ -7,7 +7,8 @@ coord_files: null
 cutoff_lower: 0.0
 cutoff_upper: 5.0
 dataset: MD17
-dataset_arg: aspirin
+dataset_arg:
+  molecules: aspirin
 dataset_root: ~/data
 derivative: true
 distance_influence: both

@@ -5,15 +5,15 @@ from torch_geometric.nn.models.schnet import qm9_target_dict
 
 
 class QM9(QM9_geometric):
-    def __init__(self, root, transform=None, dataset_arg=None):
-        assert dataset_arg is not None, (
+    def __init__(self, root, transform=None, label=None):
+        label2idx = dict(zip(qm9_target_dict.values(), qm9_target_dict.keys()))
+        assert label in label2idx, (
             "Please pass the desired property to "
-            'train on via "dataset_arg". Available '
-            f'properties are {", ".join(qm9_target_dict.values())}.'
+            'train on via "label". Available '
+            f'properties are {", ".join(label2idx)}.'
         )
 
-        self.label = dataset_arg
-        label2idx = dict(zip(qm9_target_dict.values(), qm9_target_dict.keys()))
+        self.label = label
         self.label_idx = label2idx[self.label]
 
         if transform is None:

@@ -25,16 +25,20 @@ class MD17(InMemoryDataset):
 
     available_molecules = list(molecule_files.keys())
 
-    def __init__(self, root, transform=None, pre_transform=None, dataset_arg=None):
-        assert dataset_arg is not None, (
+    def __init__(self, root, transform=None, pre_transform=None, molecules=None):
+        assert molecules is not None, (
             "Please provide the desired comma separated molecule(s) through"
-            f"'dataset_arg'. Available molecules are {', '.join(MD17.available_molecules)} "
+            f"'molecules'. Available molecules are {', '.join(MD17.available_molecules)} "
             "or 'all' to train on the combined dataset."
         )
 
-        if dataset_arg == "all":
-            dataset_arg = ",".join(MD17.available_molecules)
-        self.molecules = dataset_arg.split(",")
+        if molecules == "all":
+            molecules = ",".join(MD17.available_molecules)
+        self.molecules = molecules.split(",")
+
+        for mol in molecules:
+            if mol not in MD17.available_molecules:
+                raise RuntimeError(f"Molecule '{mol}' does not exist in MD17")
 
         if len(self.molecules) > 1:
             rank_zero_warn(
@@ -80,7 +84,7 @@ class MD17(InMemoryDataset):
             download_url(MD17.raw_url + file_name, self.raw_dir)
 
     def process(self):
-        for raw_path, processed_path in zip(self.raw_paths,self.processed_paths):
+        for raw_path, processed_path in zip(self.raw_paths, self.processed_paths):
             data_npz = np.load(raw_path)
             z = torch.from_numpy(data_npz["z"]).long()
             positions = torch.from_numpy(data_npz["R"]).float()
