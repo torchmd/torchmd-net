@@ -1,4 +1,3 @@
-import imp
 import h5py
 import numpy as np
 import os
@@ -22,15 +21,11 @@ class SPICE(Dataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
-        dataset_arg=None,
+        paths=None,
     ):
 
         self.name = self.__class__.__name__
-        self.dataset_arg = str(dataset_arg)
-        super().__init__(root, transform, pre_transform, pre_filter)
-
-        self.name = self.__class__.__name__
-        self.dataset_arg = str(dataset_arg)
+        self.paths = str(paths)
         super().__init__(root, transform, pre_transform, pre_filter)
 
         idx_name, z_name, pos_name, y_name, dy_name = self.processed_paths
@@ -50,7 +45,7 @@ class SPICE(Dataset):
 
     @property
     def raw_paths(self):
-        return self.dataset_arg
+        return self.paths
 
     def sample_iter(self):
 

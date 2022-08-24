@@ -33,7 +33,6 @@ class COMP6Base(Dataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
-        dataset_arg=None,
     ):
         self.name = self.__class__.__name__
         super().__init__(root, transform, pre_transform, pre_filter)
@@ -376,7 +375,6 @@ class COMP6v1(Dataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
-        dataset_arg=None,
     ):
         super().__init__(root, transform, pre_transform, pre_filter)
 

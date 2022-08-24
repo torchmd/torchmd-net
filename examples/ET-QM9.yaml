@@ -7,7 +7,8 @@ coord_files: null
 cutoff_lower: 0.0
 cutoff_upper: 5.0
 dataset: QM9
-dataset_arg: energy_U0
+dataset_arg:
+  label: energy_U0
 dataset_root: ~/data
 derivative: false
 distance_influence: both

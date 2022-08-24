@@ -29,8 +29,7 @@ class DataModule(LightningDataModule):
                 )
             else:
                 self.dataset = getattr(datasets, self.hparams["dataset"])(
-                    self.hparams["dataset_root"],
-                    dataset_arg=self.hparams["dataset_arg"],
+                    self.hparams["dataset_root"], **self.hparams["dataset_arg"]
                 )
 
         self.idx_train, self.idx_val, self.idx_test = make_splits(

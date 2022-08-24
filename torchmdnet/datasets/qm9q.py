@@ -33,11 +33,11 @@ class QM9q(Dataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
-        dataset_arg=None,
+        paths=None,
     ):
 
         self.name = self.__class__.__name__
-        self.dataset_arg = str(dataset_arg)
+        self.paths = str(paths)
         super().__init__(root, transform, pre_transform, pre_filter)
 
         (
@@ -72,7 +72,7 @@ class QM9q(Dataset):
     @property
     def raw_paths(self):
 
-        paths = self.dataset_arg
+        paths = self.paths
 
         if os.path.isfile(paths):
             return [paths]
