@@ -72,7 +72,7 @@ class LNNP(LightningModule):
         with torch.set_grad_enabled(stage == "train" or self.hparams.derivative):
             # TODO: the model doesn't necessarily need to return a derivative once
             # Union typing works under TorchScript (https://github.com/pytorch/pytorch/pull/53180)
-            pred, deriv = self(
+            energy, gradient = self(
                 batch.z,
                 batch.pos,
                 batch=batch.batch,
@@ -80,53 +80,53 @@ class LNNP(LightningModule):
                 s=batch.s if self.hparams.spin else None,
             )
 
-        loss_y, loss_dy = 0, 0
+        loss_energy, loss_gradient = 0, 0
         if self.hparams.derivative:
-            if "y" not in batch:
+            if "gradient" not in batch:
                 # "use" both outputs of the model's forward function but discard the first
                 # to only use the derivative and avoid 'Expected to have finished reduction
                 # in the prior iteration before starting a new one.', which otherwise get's
                 # thrown because of setting 'find_unused_parameters=False' in the DDPPlugin
-                deriv = deriv + pred.sum() * 0
+                gradient = gradient + energy.sum() * 0
 
             # force/derivative loss
-            loss_dy = loss_fn(deriv, batch.dy)
+            loss_gradient = loss_fn(gradient, batch.gradient)
 
             if stage in ["train", "val"] and self.hparams.ema_alpha_dy < 1:
                 if self.ema[stage + "_dy"] is None:
-                    self.ema[stage + "_dy"] = loss_dy.detach()
+                    self.ema[stage + "_dy"] = loss_gradient.detach()
                 # apply exponential smoothing over batches to dy
-                loss_dy = (
-                    self.hparams.ema_alpha_dy * loss_dy
+                loss_gradient = (
+                    self.hparams.ema_alpha_dy * loss_gradient
                     + (1 - self.hparams.ema_alpha_dy) * self.ema[stage + "_dy"]
                 )
-                self.ema[stage + "_dy"] = loss_dy.detach()
+                self.ema[stage + "_dy"] = loss_gradient.detach()
 
             if self.hparams.force_weight > 0:
-                self.losses[stage + "_dy"].append(loss_dy.detach())
+                self.losses[stage + "_dy"].append(loss_gradient.detach())
 
-        if "y" in batch:
-            if batch.y.ndim == 1:
-                batch.y = batch.y.unsqueeze(1)
+        if "energy" in batch:
+            if batch.energy.ndim == 1:
+                batch.energy = batch.energy.unsqueeze(1)
 
             # energy/prediction loss
-            loss_y = loss_fn(pred, batch.y)
+            loss_energy = loss_fn(energy, batch.energy)
 
             if stage in ["train", "val"] and self.hparams.ema_alpha_y < 1:
                 if self.ema[stage + "_y"] is None:
-                    self.ema[stage + "_y"] = loss_y.detach()
+                    self.ema[stage + "_y"] = loss_energy.detach()
                 # apply exponential smoothing over batches to y
-                loss_y = (
-                    self.hparams.ema_alpha_y * loss_y
+                loss_energy = (
+                    self.hparams.ema_alpha_y * loss_energy
                     + (1 - self.hparams.ema_alpha_y) * self.ema[stage + "_y"]
                 )
-                self.ema[stage + "_y"] = loss_y.detach()
+                self.ema[stage + "_y"] = loss_energy.detach()
 
             if self.hparams.energy_weight > 0:
-                self.losses[stage + "_y"].append(loss_y.detach())
+                self.losses[stage + "_y"].append(loss_energy.detach())
 
         # total loss
-        loss = loss_y * self.hparams.energy_weight + loss_dy * self.hparams.force_weight
+        loss = loss_energy * self.hparams.energy_weight + loss_gradient * self.hparams.force_weight
 
         self.losses[stage].append(loss.detach())
         return loss

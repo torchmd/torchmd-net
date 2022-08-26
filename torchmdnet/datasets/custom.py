@@ -91,13 +91,13 @@ class Custom(Dataset):
             energy_data = np.array(
                 np.load(self.energyfiles[fileid], mmap_mode="r")[index]
             )
-            features["y"] = torch.from_numpy(energy_data)
+            features["energy"] = torch.from_numpy(energy_data)
 
         if self.has_forces:
             force_data = np.array(
                 np.load(self.forcefiles[fileid], mmap_mode="r")[index]
             )
-            features["dy"] = torch.from_numpy(force_data)
+            features["gradient"] = -torch.from_numpy(force_data)
 
         return Data(**features)
 

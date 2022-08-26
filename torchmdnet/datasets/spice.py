@@ -42,8 +42,8 @@ class SPICE(Dataset):
             f"{self.name}.idx.mmap",
             f"{self.name}.z.mmap",
             f"{self.name}.pos.mmap",
-            f"{self.name}.y.mmap",
-            f"{self.name}.dy.mmap",
+            f"{self.name}.energy.mmap",
+            f"{self.name}.gradient.mmap",
         ]
 
     def __init__(
@@ -62,20 +62,20 @@ class SPICE(Dataset):
         self.max_gradient = max_gradient
         super().__init__(root, transform, pre_transform, pre_filter)
 
-        idx_name, z_name, pos_name, y_name, dy_name = self.processed_paths
+        idx_name, z_name, pos_name, energy_name, gradient_name = self.processed_paths
         self.idx_mm = np.memmap(idx_name, mode="r", dtype=np.int64)
         self.z_mm = np.memmap(z_name, mode="r", dtype=np.int8)
         self.pos_mm = np.memmap(
             pos_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
         )
-        self.y_mm = np.memmap(y_name, mode="r", dtype=np.float64)
-        self.dy_mm = np.memmap(
-            dy_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
+        self.energy_mm = np.memmap(energy_name, mode="r", dtype=np.float64)
+        self.gradient_mm = np.memmap(
+            gradient_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
         )
 
         assert self.idx_mm[0] == 0
         assert self.idx_mm[-1] == len(self.z_mm)
-        assert len(self.idx_mm) == len(self.y_mm) + 1
+        assert len(self.idx_mm) == len(self.energy_mm) + 1
 
     def sample_iter(self):
 
@@ -92,32 +92,32 @@ class SPICE(Dataset):
                 pt.tensor(mol["conformations"], dtype=pt.float32)
                 * self.BORH_TO_ANGSTROM
             )
-            all_y = (
+            all_energies = (
                 pt.tensor(mol["formation_energy"], dtype=pt.float64)
                 * self.HARTREE_TO_EV
             )
-            all_dy = (
+            all_gradients = (
                 pt.tensor(mol["dft_total_gradient"], dtype=pt.float32)
                 * self.HARTREE_TO_EV
                 / self.BORH_TO_ANGSTROM
             )
 
-            assert all_pos.shape[0] == all_y.shape[0]
+            assert all_pos.shape[0] == all_energies.shape[0]
             assert all_pos.shape[1] == z.shape[0]
             assert all_pos.shape[2] == 3
 
-            assert all_dy.shape[0] == all_y.shape[0]
-            assert all_dy.shape[1] == z.shape[0]
-            assert all_dy.shape[2] == 3
+            assert all_gradients.shape[0] == all_energies.shape[0]
+            assert all_gradients.shape[1] == z.shape[0]
+            assert all_gradients.shape[2] == 3
 
-            for pos, y, dy in zip(all_pos, all_y, all_dy):
+            for pos, energy, gradient in zip(all_pos, all_energies, all_gradients):
 
                 # Skip samples with large forces
                 if self.max_gradient:
-                    if dy.norm(dim=1).max() > float(self.max_gradient):
+                    if gradient.norm(dim=1).max() > float(self.max_gradient):
                         continue
 
-                data = Data(z=z, pos=pos, y=y.view(1, 1), dy=dy)
+                data = Data(z=z, pos=pos, energy=energy.view(1, 1), gradient=gradient)
 
                 if self.pre_filter is not None and not self.pre_filter(data):
                     continue
@@ -146,7 +146,7 @@ class SPICE(Dataset):
         print(f"  Total number of conformers: {num_all_confs}")
         print(f"  Total number of atoms: {num_all_atoms}")
 
-        idx_name, z_name, pos_name, y_name, dy_name = self.processed_paths
+        idx_name, z_name, pos_name, energy_name, gradient_name = self.processed_paths
         idx_mm = np.memmap(
             idx_name + ".tmp", mode="w+", dtype=np.int64, shape=(num_all_confs + 1,)
         )
@@ -156,11 +156,11 @@ class SPICE(Dataset):
         pos_mm = np.memmap(
             pos_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
         )
-        y_mm = np.memmap(
-            y_name + ".tmp", mode="w+", dtype=np.float64, shape=(num_all_confs,)
+        energy_mm = np.memmap(
+            energy_name + ".tmp", mode="w+", dtype=np.float64, shape=(num_all_confs,)
         )
-        dy_mm = np.memmap(
-            dy_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
+        gradient_mm = np.memmap(
+            gradient_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
         )
 
         print("Storing data...")
@@ -171,8 +171,8 @@ class SPICE(Dataset):
             idx_mm[i_conf] = i_atom
             z_mm[i_atom:i_next_atom] = data.z.to(pt.int8)
             pos_mm[i_atom:i_next_atom] = data.pos
-            y_mm[i_conf] = data.y
-            dy_mm[i_atom:i_next_atom] = data.dy
+            energy_mm[i_conf] = data.energy
+            gradient_mm[i_atom:i_next_atom] = data.gradient
 
             i_atom = i_next_atom
 
@@ -182,26 +182,27 @@ class SPICE(Dataset):
         idx_mm.flush()
         z_mm.flush()
         pos_mm.flush()
-        y_mm.flush()
-        dy_mm.flush()
+        energy_mm.flush()
+        gradient_mm.flush()
 
         os.rename(idx_mm.filename, idx_name)
         os.rename(z_mm.filename, z_name)
         os.rename(pos_mm.filename, pos_name)
-        os.rename(y_mm.filename, y_name)
-        os.rename(dy_mm.filename, dy_name)
+        os.rename(energy_mm.filename, energy_name)
+        os.rename(gradient_mm.filename, gradient_name)
 
     def len(self):
-        return len(self.y_mm)
+        return len(self.energy_mm)
 
     def get(self, idx):
 
         atoms = slice(self.idx_mm[idx], self.idx_mm[idx + 1])
         z = pt.tensor(self.z_mm[atoms], dtype=pt.long)
         pos = pt.tensor(self.pos_mm[atoms], dtype=pt.float32)
-        y = pt.tensor(self.y_mm[idx], dtype=pt.float32).view(
+        energy = pt.tensor(self.energy_mm[idx], dtype=pt.float32).view(
             1, 1
         )  # It would be better to use float64, but the trainer complaints
-        dy = pt.tensor(self.dy_mm[atoms], dtype=pt.float32)
+        gradient = pt.tensor(self.gradient_mm[atoms], dtype=pt.float32)
 
-        return Data(z=z, pos=pos, y=y, dy=dy)
+        return Data(z=z, pos=pos, energy=energy, gradiet=gradient)
+

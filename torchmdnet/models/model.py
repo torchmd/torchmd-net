@@ -183,27 +183,27 @@ class TorchMD_Net(nn.Module):
             x = self.prior_model(x, z, pos, batch)
 
         # aggregate atoms
-        out = scatter(x, batch, dim=0, reduce=self.reduce_op)
+        energy = scatter(x, batch, dim=0, reduce=self.reduce_op)
 
         # shift by data mean
         if self.mean is not None:
-            out = out + self.mean
+            energy = energy + self.mean
 
         # apply output model after reduction
-        out = self.output_model.post_reduce(out)
+        energy = self.output_model.post_reduce(energy)
 
         # compute gradients with respect to coordinates
         if self.derivative:
-            grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(out)]
-            dy = grad(
-                [out],
+            grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(energy)]
+            gradient = grad(
+                [energy],
                 [pos],
                 grad_outputs=grad_outputs,
                 create_graph=True,
                 retain_graph=True,
             )[0]
-            if dy is None:
+            if gradient is None:
                 raise RuntimeError("Autograd returned None for the force prediction.")
-            return out, -dy
+            return energy, gradient
         # TODO: return only `out` once Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
-        return out, None
+        return energy, None

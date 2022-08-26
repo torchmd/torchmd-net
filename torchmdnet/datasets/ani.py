@@ -40,24 +40,24 @@ class ANIBase(Dataset):
         self.name = self.__class__.__name__
         super().__init__(root, transform, pre_transform, pre_filter)
 
-        idx_name, z_name, pos_name, y_name, dy_name = self.processed_paths
+        idx_name, z_name, pos_name, energy_name, gradient_name = self.processed_paths
         self.idx_mm = np.memmap(idx_name, mode="r", dtype=np.int64)
         self.z_mm = np.memmap(z_name, mode="r", dtype=np.int8)
         self.pos_mm = np.memmap(
             pos_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
         )
-        self.y_mm = np.memmap(y_name, mode="r", dtype=np.float64)
-        self.dy_mm = (
+        self.energy_mm = np.memmap(energy_name, mode="r", dtype=np.float64)
+        self.gradient_mm = (
             np.memmap(
-                dy_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
+                gradient_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
             )
-            if os.path.getsize(dy_name) > 0
+            if os.path.getsize(gradient_name) > 0
             else None
         )
 
         assert self.idx_mm[0] == 0
         assert self.idx_mm[-1] == len(self.z_mm)
-        assert len(self.idx_mm) == len(self.y_mm) + 1
+        assert len(self.idx_mm) == len(self.energy_mm) + 1
 
     @property
     def processed_file_names(self):
@@ -65,8 +65,8 @@ class ANIBase(Dataset):
             f"{self.name}.idx.mmap",
             f"{self.name}.z.mmap",
             f"{self.name}.pos.mmap",
-            f"{self.name}.y.mmap",
-            f"{self.name}.dy.mmap",
+            f"{self.name}.energy.mmap",
+            f"{self.name}.gradient.mmap",
         ]
 
     def filter_and_pre_transform(self, data):
@@ -87,13 +87,13 @@ class ANIBase(Dataset):
         for data in self.sample_iter():
             num_all_confs += 1
             num_all_atoms += data.z.shape[0]
-        has_dy = "dy" in data
+        has_gradient = "gradient" in data
 
         print(f"  Total number of conformers: {num_all_confs}")
         print(f"  Total number of atoms: {num_all_atoms}")
-        print(f"  Forces available: {has_dy}")
+        print(f"  Forces available: {has_gradient}")
 
-        idx_name, z_name, pos_name, y_name, dy_name = self.processed_paths
+        idx_name, z_name, pos_name, energy_name, gradient_name = self.processed_paths
         idx_mm = np.memmap(
             idx_name + ".tmp", mode="w+", dtype=np.int64, shape=(num_all_confs + 1,)
         )
@@ -103,15 +103,15 @@ class ANIBase(Dataset):
         pos_mm = np.memmap(
             pos_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
         )
-        y_mm = np.memmap(
-            y_name + ".tmp", mode="w+", dtype=np.float64, shape=(num_all_confs,)
+        energy_mm = np.memmap(
+            energy_name + ".tmp", mode="w+", dtype=np.float64, shape=(num_all_confs,)
         )
-        dy_mm = (
+        gradient_mm = (
             np.memmap(
-                dy_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
+                gradient_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
             )
-            if has_dy
-            else open(dy_name, "w")
+            if has_gradient
+            else open(gradient_name, "w")
         )
 
         print("Storing data...")
@@ -122,9 +122,9 @@ class ANIBase(Dataset):
             idx_mm[i_conf] = i_atom
             z_mm[i_atom:i_next_atom] = data.z.to(pt.int8)
             pos_mm[i_atom:i_next_atom] = data.pos
-            y_mm[i_conf] = data.y
-            if has_dy:
-                dy_mm[i_atom:i_next_atom] = data.dy
+            energy_mm[i_conf] = data.energy
+            if has_gradient:
+                gradient_mm[i_atom:i_next_atom] = data.gradient
 
             i_atom = i_next_atom
 
@@ -134,35 +134,35 @@ class ANIBase(Dataset):
         idx_mm.flush()
         z_mm.flush()
         pos_mm.flush()
-        y_mm.flush()
-        if has_dy:
-            dy_mm.flush()
+        energy_mm.flush()
+        if has_gradient:
+            gradient_mm.flush()
 
         os.rename(idx_mm.filename, idx_name)
         os.rename(z_mm.filename, z_name)
         os.rename(pos_mm.filename, pos_name)
-        os.rename(y_mm.filename, y_name)
-        if has_dy:
-            os.rename(dy_mm.filename, dy_name)
+        os.rename(energy_mm.filename, energy_name)
+        if has_gradient:
+            os.rename(gradient_mm.filename, gradient_name)
 
     def len(self):
-        return len(self.y_mm)
+        return len(self.energy_mm)
 
     def get(self, idx):
 
         atoms = slice(self.idx_mm[idx], self.idx_mm[idx + 1])
         z = pt.tensor(self.z_mm[atoms], dtype=pt.long)
         pos = pt.tensor(self.pos_mm[atoms], dtype=pt.float32)
-        y = pt.tensor(self.y_mm[idx], dtype=pt.float32).view(
+        energy = pt.tensor(self.energy_mm[idx], dtype=pt.float32).view(
             1, 1
         )  # It would be better to use float64, but the trainer complaints
-        y -= self.compute_reference_energy(z)
+        energy -= self.compute_reference_energy(z)
 
-        if self.dy_mm is None:
-            return Data(z=z, pos=pos, y=y)
+        if self.gradient_mm is None:
+            return Data(z=z, pos=pos, energy=energy)
         else:
-            dy = pt.tensor(self.dy_mm[atoms], dtype=pt.float32)
-            return Data(z=z, pos=pos, y=y, dy=dy)
+            gradient = pt.tensor(self.gradient_mm[atoms], dtype=pt.float32)
+            return Data(z=z, pos=pos, y=energy, gradient=gradient)
 
 
 class ANI1(ANIBase):
@@ -200,16 +200,16 @@ class ANI1(ANIBase):
                     [atomic_numbers[atom] for atom in mol["species"]], dtype=pt.long
                 )
                 all_pos = pt.tensor(mol["coordinates"][:], dtype=pt.float32)
-                all_y = pt.tensor(
+                all_energies = pt.tensor(
                     mol["energies"][:] * self.HARTREE_TO_EV, dtype=pt.float64
                 )
 
-                assert all_pos.shape[0] == all_y.shape[0]
+                assert all_pos.shape[0] == all_energies.shape[0]
                 assert all_pos.shape[1] == z.shape[0]
                 assert all_pos.shape[2] == 3
 
-                for pos, y in zip(all_pos, all_y):
-                    data = Data(z=z, pos=pos, y=y.view(1, 1))
+                for pos, energy in zip(all_pos, all_energies):
+                    data = Data(z=z, pos=pos, y=energy.view(1, 1))
                     if data := self.filter_and_pre_transform(data):
                         yield data
 
@@ -273,27 +273,27 @@ class ANI1X(ANI1XBase):
 
                 z = pt.tensor(mol["atomic_numbers"][:], dtype=pt.long)
                 all_pos = pt.tensor(mol["coordinates"][:], dtype=pt.float32)
-                all_y = pt.tensor(
+                all_energies = pt.tensor(
                     mol["wb97x_dz.energy"][:] * self.HARTREE_TO_EV, dtype=pt.float64
                 )
-                all_dy = pt.tensor(
+                all_gradiens = -pt.tensor(
                     mol["wb97x_dz.forces"][:] * self.HARTREE_TO_EV, dtype=pt.float32
                 )
 
-                assert all_pos.shape[0] == all_y.shape[0]
+                assert all_pos.shape[0] == all_energies.shape[0]
                 assert all_pos.shape[1] == z.shape[0]
                 assert all_pos.shape[2] == 3
 
-                assert all_dy.shape[0] == all_y.shape[0]
-                assert all_dy.shape[1] == z.shape[0]
-                assert all_dy.shape[2] == 3
+                assert all_gradiens.shape[0] == all_energies.shape[0]
+                assert all_gradiens.shape[1] == z.shape[0]
+                assert all_gradiens.shape[2] == 3
 
-                for pos, y, dy in zip(all_pos, all_y, all_dy):
+                for pos, energy, gradient in zip(all_pos, all_energies, all_gradiens):
 
-                    if y.isnan() or dy.isnan().any():
+                    if energy.isnan() or gradient.isnan().any():
                         continue
 
-                    data = Data(z=z, pos=pos, y=y.view(1, 1), dy=dy)
+                    data = Data(z=z, pos=pos, energy=energy.view(1, 1), gradient=gradient)
                     if data := self.filter_and_pre_transform(data):
                         yield data
 
@@ -318,20 +318,20 @@ class ANI1CCX(ANI1XBase):
 
                 z = pt.tensor(mol["atomic_numbers"][:], dtype=pt.long)
                 all_pos = pt.tensor(mol["coordinates"][:], dtype=pt.float32)
-                all_y = pt.tensor(
+                all_energies = pt.tensor(
                     mol["ccsd(t)_cbs.energy"][:] * self.HARTREE_TO_EV, dtype=pt.float64
                 )
 
-                assert all_pos.shape[0] == all_y.shape[0]
+                assert all_pos.shape[0] == all_energies.shape[0]
                 assert all_pos.shape[1] == z.shape[0]
                 assert all_pos.shape[2] == 3
 
-                for pos, y in zip(all_pos, all_y):
+                for pos, energy in zip(all_pos, all_energies):
 
-                    if y.isnan():
+                    if energy.isnan():
                         continue
 
-                    data = Data(z=z, pos=pos, y=y.view(1, 1))
+                    data = Data(z=z, pos=pos, energy=energy.view(1, 1))
                     if data := self.filter_and_pre_transform(data):
                         yield data
 
