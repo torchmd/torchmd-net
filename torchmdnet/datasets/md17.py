@@ -89,10 +89,10 @@ class MD17(InMemoryDataset):
             z = torch.from_numpy(data_npz["z"]).long()
             positions = torch.from_numpy(data_npz["R"]).float()
             energies = torch.from_numpy(data_npz["E"]).float()
-            forces = torch.from_numpy(data_npz["F"]).float()
+            gradients = -torch.from_numpy(data_npz["F"]).float()
 
             samples = []
-            for pos, y, dy in zip(positions, energies, forces):
+            for pos, y, dy in zip(positions, energies, gradients):
                 samples.append(Data(z=z, pos=pos, y=y.unsqueeze(1), dy=dy))
 
             if self.pre_filter is not None:

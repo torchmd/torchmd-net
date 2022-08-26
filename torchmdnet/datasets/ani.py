@@ -276,7 +276,7 @@ class ANI1X(ANI1XBase):
                 all_y = pt.tensor(
                     mol["wb97x_dz.energy"][:] * self.HARTREE_TO_EV, dtype=pt.float64
                 )
-                all_dy = pt.tensor(
+                all_dy = -pt.tensor(
                     mol["wb97x_dz.forces"][:] * self.HARTREE_TO_EV, dtype=pt.float32
                 )
 

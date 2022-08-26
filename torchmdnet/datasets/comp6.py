@@ -97,7 +97,7 @@ class COMP6Base(Dataset):
                 all_y = pt.tensor(
                     mol["energies"][:] * self.HARTREE_TO_EV, dtype=pt.float64
                 )
-                all_dy = pt.tensor(
+                all_dy = -pt.tensor(
                     mol["forces"][:] * self.HARTREE_TO_EV, dtype=pt.float32
                 )
                 all_y -= self.compute_reference_energy(z)
