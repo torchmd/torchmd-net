@@ -97,7 +97,7 @@ class SPICE(Dataset):
                 * self.HARTREE_TO_EV
             )
             all_dy = (
-                pt.tensor(mol["dft_total_gradient"], dtype=pt.float32)
+                -pt.tensor(mol["dft_total_gradient"], dtype=pt.float32)
                 * self.HARTREE_TO_EV
                 / self.BORH_TO_ANGSTROM
             )
