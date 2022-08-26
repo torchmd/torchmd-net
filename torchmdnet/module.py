@@ -72,7 +72,7 @@ class LNNP(LightningModule):
         with torch.set_grad_enabled(stage == "train" or self.hparams.derivative):
             # TODO: the model doesn't necessarily need to return a derivative once
             # Union typing works under TorchScript (https://github.com/pytorch/pytorch/pull/53180)
-            pred, deriv = self(
+            y, dy = self(
                 batch.z,
                 batch.pos,
                 batch=batch.batch,
@@ -87,10 +87,10 @@ class LNNP(LightningModule):
                 # to only use the derivative and avoid 'Expected to have finished reduction
                 # in the prior iteration before starting a new one.', which otherwise get's
                 # thrown because of setting 'find_unused_parameters=False' in the DDPPlugin
-                deriv = deriv + pred.sum() * 0
+                dy = dy + y.sum() * 0
 
             # force/derivative loss
-            loss_dy = loss_fn(deriv, batch.dy)
+            loss_dy = loss_fn(dy, batch.dy)
 
             if stage in ["train", "val"] and self.hparams.ema_alpha_dy < 1:
                 if self.ema[stage + "_dy"] is None:
@@ -110,7 +110,7 @@ class LNNP(LightningModule):
                 batch.y = batch.y.unsqueeze(1)
 
             # energy/prediction loss
-            loss_y = loss_fn(pred, batch.y)
+            loss_y = loss_fn(y, batch.y)
 
             if stage in ["train", "val"] and self.hparams.ema_alpha_y < 1:
                 if self.ema[stage + "_y"] is None:
