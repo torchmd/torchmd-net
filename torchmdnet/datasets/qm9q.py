@@ -145,7 +145,7 @@ class QM9q(Dataset):
                         == "vector : Hartree/Bohr "
                     )
                     dy = (
-                        pt.tensor(mol["gradient_vector"][conf], dtype=pt.float32)
+                        -pt.tensor(mol["gradient_vector"][conf], dtype=pt.float32)
                         * self.HARTREE_TO_EV
                         / self.BORH_TO_ANGSTROM
                     )
