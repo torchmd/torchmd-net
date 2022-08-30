@@ -97,7 +97,7 @@ class Custom(Dataset):
             force_data = np.array(
                 np.load(self.forcefiles[fileid], mmap_mode="r")[index]
             )
-            features["dy"] = torch.from_numpy(force_data)
+            features["forces"] = torch.from_numpy(force_data)
 
         return Data(**features)
 

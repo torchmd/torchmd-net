@@ -13,7 +13,7 @@ dataset_root: ~/data
 derivative: false
 distance_influence: both
 early_stopping_patience: 150
-ema_alpha_dy: 1.0
+ema_alpha_forces: 1.0
 ema_alpha_y: 1.0
 embed_files: null
 embedding_dimension: 256

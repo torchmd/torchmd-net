@@ -92,8 +92,8 @@ class MD17(InMemoryDataset):
             forces = torch.from_numpy(data_npz["F"]).float()
 
             samples = []
-            for pos, y, dy in zip(positions, energies, forces):
-                samples.append(Data(z=z, pos=pos, y=y.unsqueeze(1), dy=dy))
+            for pos, y, forces in zip(positions, energies, forces):
+                samples.append(Data(z=z, pos=pos, y=y.unsqueeze(1), forces=forces))
 
             if self.pre_filter is not None:
                 samples = [data for data in samples if self.pre_filter(data)]
