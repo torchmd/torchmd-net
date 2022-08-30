@@ -35,7 +35,7 @@ def test_dataset_s66x8():
             ),
             atol=1e-4,
         )
-        assert pt.allclose(sample.y, pt.tensor([[-47.5919]]))
+        assert pt.allclose(sample.energy, pt.tensor([[-47.5919]]))
         assert pt.allclose(
             sample.forces,
             pt.tensor(

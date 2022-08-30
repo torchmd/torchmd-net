@@ -65,7 +65,7 @@ class HDF5(Dataset):
             return Data(
                 pos=torch.from_numpy(pos[i]),
                 z=torch.from_numpy(types[i]).to(torch.long),
-                y=torch.tensor([[energy[i]]]),
+                energy=torch.tensor([[energy[i]]]),
                 forces=torch.from_numpy(forces[i]),
             )
         else:
@@ -73,7 +73,7 @@ class HDF5(Dataset):
             return Data(
                 pos=torch.from_numpy(pos[i]),
                 z=torch.from_numpy(types[i]).to(torch.long),
-                y=torch.tensor([[energy[i]]]),
+                energy=torch.tensor([[energy[i]]]),
             )
 
     def len(self):

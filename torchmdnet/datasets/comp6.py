@@ -33,20 +33,20 @@ class COMP6Base(Dataset):
         self.name = self.__class__.__name__
         super().__init__(root, transform, pre_transform, pre_filter)
 
-        idx_name, z_name, pos_name, y_name, forces_name = self.processed_paths
+        idx_name, z_name, pos_name, energy_name, forces_name = self.processed_paths
         self.idx_mm = np.memmap(idx_name, mode="r", dtype=np.int64)
         self.z_mm = np.memmap(z_name, mode="r", dtype=np.int8)
         self.pos_mm = np.memmap(
             pos_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
         )
-        self.y_mm = np.memmap(y_name, mode="r", dtype=np.float64)
+        self.energy_mm = np.memmap(energy_name, mode="r", dtype=np.float64)
         self.forces_mm = np.memmap(
             forces_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
         )
 
         assert self.idx_mm[0] == 0
         assert self.idx_mm[-1] == len(self.z_mm)
-        assert len(self.idx_mm) == len(self.y_mm) + 1
+        assert len(self.idx_mm) == len(self.energy_mm) + 1
 
     @property
     def raw_url_name(self):
@@ -75,7 +75,7 @@ class COMP6Base(Dataset):
             f"{self.name}.idx.mmap",
             f"{self.name}.z.mmap",
             f"{self.name}.pos.mmap",
-            f"{self.name}.y.mmap",
+            f"{self.name}.energy.mmap",
             f"{self.name}.forces.mmap",
         ]
 
@@ -90,24 +90,24 @@ class COMP6Base(Dataset):
                     dtype=pt.long,
                 )
                 all_pos = pt.tensor(mol["coordinates"][:], dtype=pt.float32)
-                all_y = pt.tensor(
+                all_energy = pt.tensor(
                     mol["energies"][:] * self.HARTREE_TO_EV, dtype=pt.float64
                 )
                 all_forces = pt.tensor(
                     mol["forces"][:] * self.HARTREE_TO_EV, dtype=pt.float32
                 )
-                all_y -= self.compute_reference_energy(z)
+                all_energy -= self.compute_reference_energy(z)
 
-                assert all_pos.shape[0] == all_y.shape[0]
+                assert all_pos.shape[0] == all_energy.shape[0]
                 assert all_pos.shape[1] == z.shape[0]
                 assert all_pos.shape[2] == 3
 
-                assert all_forces.shape[0] == all_y.shape[0]
+                assert all_forces.shape[0] == all_energy.shape[0]
                 assert all_forces.shape[1] == z.shape[0]
                 assert all_forces.shape[2] == 3
 
-                for pos, y, forces in zip(all_pos, all_y, all_forces):
-                    data = Data(z=z, pos=pos, y=y.view(1, 1), forces=forces)
+                for pos, energy, forces in zip(all_pos, all_energy, all_forces):
+                    data = Data(z=z, pos=pos, energy=energy.view(1, 1), forces=forces)
 
                     if self.pre_filter is not None and not self.pre_filter(data):
                         continue
@@ -129,7 +129,7 @@ class COMP6Base(Dataset):
         print(f"  Total number of conformers: {num_all_confs}")
         print(f"  Total number of atoms: {num_all_atoms}")
 
-        idx_name, z_name, pos_name, y_name, forces_name = self.processed_paths
+        idx_name, z_name, pos_name, energy_name, forces_name = self.processed_paths
         idx_mm = np.memmap(
             idx_name + ".tmp", mode="w+", dtype=np.int64, shape=(num_all_confs + 1,)
         )
@@ -139,8 +139,8 @@ class COMP6Base(Dataset):
         pos_mm = np.memmap(
             pos_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
         )
-        y_mm = np.memmap(
-            y_name + ".tmp", mode="w+", dtype=np.float64, shape=(num_all_confs,)
+        energy_mm = np.memmap(
+            energy_name + ".tmp", mode="w+", dtype=np.float64, shape=(num_all_confs,)
         )
         forces_mm = np.memmap(
             forces_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
@@ -154,7 +154,7 @@ class COMP6Base(Dataset):
             idx_mm[i_conf] = i_atom
             z_mm[i_atom:i_next_atom] = data.z.to(pt.int8)
             pos_mm[i_atom:i_next_atom] = data.pos
-            y_mm[i_conf] = data.y
+            energy_mm[i_conf] = data.energy
             forces_mm[i_atom:i_next_atom] = data.forces
 
             i_atom = i_next_atom
@@ -165,29 +165,29 @@ class COMP6Base(Dataset):
         idx_mm.flush()
         z_mm.flush()
         pos_mm.flush()
-        y_mm.flush()
+        energy_mm.flush()
         forces_mm.flush()
 
         os.rename(idx_mm.filename, idx_name)
         os.rename(z_mm.filename, z_name)
         os.rename(pos_mm.filename, pos_name)
-        os.rename(y_mm.filename, y_name)
+        os.rename(energy_mm.filename, energy_name)
         os.rename(forces_mm.filename, forces_name)
 
     def len(self):
-        return len(self.y_mm)
+        return len(self.energy_mm)
 
     def get(self, idx):
 
         atoms = slice(self.idx_mm[idx], self.idx_mm[idx + 1])
         z = pt.tensor(self.z_mm[atoms], dtype=pt.long)
         pos = pt.tensor(self.pos_mm[atoms], dtype=pt.float32)
-        y = pt.tensor(self.y_mm[idx], dtype=pt.float32).view(
+        energy = pt.tensor(self.energy_mm[idx], dtype=pt.float32).view(
             1, 1
         )  # It would be better to use float64, but the trainer complaints
         forces = pt.tensor(self.forces_mm[atoms], dtype=pt.float32)
 
-        return Data(z=z, pos=pos, y=y, forces=forces)
+        return Data(z=z, pos=pos, energy=energy, forces=forces)
 
 
 class ANIMD(COMP6Base):

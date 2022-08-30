@@ -33,7 +33,7 @@ class Ace(Dataset):
             s=pt.tensor(mol.attrs["spin"], dtype=pt.long),
             z=pt.tensor(mol["atomic_numbers"], dtype=pt.long),
             pos=pt.tensor(mol["positions"][iconf], dtype=pt.float32),
-            y=pt.tensor(mol["energy"][iconf], dtype=pt.float32),
+            energy=pt.tensor(mol["energy"][iconf], dtype=pt.float32),
             forces=pt.tensor(mol["forces"][iconf], dtype=pt.float32),
             d=pt.tensor(mol["dipole_moment"][iconf], dtype=pt.float32),
         )

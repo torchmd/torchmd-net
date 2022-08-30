@@ -80,9 +80,9 @@ class LNNP(LightningModule):
                 s=batch.s if self.hparams.spin else None,
             )
 
-        loss_y, loss_forces = 0, 0
+        loss_energy, loss_forces = 0, 0
         if self.hparams.derivative:
-            if "y" not in batch:
+            if "energy" not in batch:
                 # "use" both outputs of the model's forward function but discard the first
                 # to only use the forces and avoid 'Expected to have finished reduction
                 # in the prior iteration before starting a new one.', which otherwise get's
@@ -105,29 +105,29 @@ class LNNP(LightningModule):
             if self.hparams.force_weight > 0:
                 self.losses[stage + "_forces"].append(loss_forces.detach())
 
-        if "y" in batch:
-            if batch.y.ndim == 1:
-                batch.y = batch.y.unsqueeze(1)
+        if "energy" in batch:
+            if batch.energy.ndim == 1:
+                batch.energy = batch.energy.unsqueeze(1)
 
             # energy/prediction loss
-            loss_y = loss_fn(energy, batch.y)
+            loss_energy = loss_fn(energy, batch.energy)
 
-            if stage in ["train", "val"] and self.hparams.ema_alpha_y < 1:
-                if self.ema[stage + "_y"] is None:
-                    self.ema[stage + "_y"] = loss_y.detach()
-                # apply exponential smoothing over batches to y
-                loss_y = (
-                    self.hparams.ema_alpha_y * loss_y
-                    + (1 - self.hparams.ema_alpha_y) * self.ema[stage + "_y"]
+            if stage in ["train", "val"] and self.hparams.ema_alpha_energy < 1:
+                if self.ema[stage + "_energy"] is None:
+                    self.ema[stage + "_energy"] = loss_energy.detach()
+                # apply exponential smoothing over batches to energy
+                loss_energy = (
+                    self.hparams.ema_alpha_energy * loss_energy
+                    + (1 - self.hparams.ema_alpha_energy) * self.ema[stage + "_energy"]
                 )
-                self.ema[stage + "_y"] = loss_y.detach()
+                self.ema[stage + "_energy"] = loss_energy.detach()
 
             if self.hparams.energy_weight > 0:
-                self.losses[stage + "_y"].append(loss_y.detach())
+                self.losses[stage + "_energy"].append(loss_energy.detach())
 
         # total loss
         loss = (
-            loss_y * self.hparams.energy_weight
+            loss_energy * self.hparams.energy_weight
             + loss_forces * self.hparams.force_weight
         )
 
@@ -175,19 +175,26 @@ class LNNP(LightningModule):
                 result_dict["test_loss"] = torch.stack(self.losses["test"]).mean()
 
             # if prediction and derivative are present, also log them separately
-            if len(self.losses["train_y"]) > 0 and len(self.losses["train_forces"]) > 0:
-                result_dict["train_loss_y"] = torch.stack(self.losses["train_y"]).mean()
+            if (
+                len(self.losses["train_energy"]) > 0
+                and len(self.losses["train_forces"]) > 0
+            ):
+                result_dict["train_loss_energy"] = torch.stack(
+                    self.losses["train_energy"]
+                ).mean()
                 result_dict["train_loss_forces"] = torch.stack(
                     self.losses["train_forces"]
                 ).mean()
-                result_dict["val_loss_y"] = torch.stack(self.losses["val_y"]).mean()
+                result_dict["val_loss_energy"] = torch.stack(
+                    self.losses["val_energy"]
+                ).mean()
                 result_dict["val_loss_forces"] = torch.stack(
                     self.losses["val_forces"]
                 ).mean()
 
                 if len(self.losses["test"]) > 0:
-                    result_dict["test_loss_y"] = torch.stack(
-                        self.losses["test_y"]
+                    result_dict["test_loss_energy"] = torch.stack(
+                        self.losses["test_energy"]
                     ).mean()
                     result_dict["test_loss_forces"] = torch.stack(
                         self.losses["test_forces"]
@@ -201,9 +208,9 @@ class LNNP(LightningModule):
             "train": [],
             "val": [],
             "test": [],
-            "train_y": [],
-            "val_y": [],
-            "test_y": [],
+            "train_energy": [],
+            "val_energy": [],
+            "test_energy": [],
             "train_forces": [],
             "val_forces": [],
             "test_forces": [],
@@ -211,8 +218,8 @@ class LNNP(LightningModule):
 
     def _reset_ema_dict(self):
         self.ema = {
-            "train_y": None,
-            "val_y": None,
+            "train_energy": None,
+            "val_energy": None,
             "train_forces": None,
             "val_forces": None,
         }

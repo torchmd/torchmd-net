@@ -14,7 +14,7 @@ derivative: true
 distance_influence: both
 early_stopping_patience: 300
 ema_alpha_forces: 1.0
-ema_alpha_y: 0.05
+ema_alpha_energy: 0.05
 embed_files: null
 embedding_dimension: 128
 energy_files: null

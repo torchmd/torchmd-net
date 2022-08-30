@@ -32,7 +32,7 @@ def get_args():
     parser.add_argument('--early-stopping-patience', type=int, default=30, help='Stop training after this many epochs without improvement')
     parser.add_argument('--reset-trainer', type=bool, default=False, help='Reset training metrics (e.g. early stopping, lr) when loading a model checkpoint')
     parser.add_argument('--weight-decay', type=float, default=0.0, help='Weight decay strength')
-    parser.add_argument('--ema-alpha-y', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of y')
+    parser.add_argument('--ema-alpha-energy', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of energy')
     parser.add_argument('--ema-alpha-forces', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of forces')
     parser.add_argument('--ngpus', type=int, default=-1, help='Number of GPUs, -1 use all available. Use CUDA_VISIBLE_DEVICES=1, to decide gpus')
     parser.add_argument('--num-nodes', type=int, default=1, help='Number of nodes')
