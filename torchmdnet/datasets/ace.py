@@ -22,8 +22,8 @@ class Ace(Dataset):
         arg_hash = f"{paths}{max_gradient}"
         arg_hash = hashlib.md5(arg_hash.encode()).hexdigest()
         self.name = f"{self.__class__.__name__}-{arg_hash}"
-        self.paths = str(paths)
-        self.max_gradients = float(max_gradient)
+        self.paths = paths
+        self.max_gradient = max_gradient
         super().__init__(root, transform, pre_transform, pre_filter)
 
         (
@@ -81,16 +81,20 @@ class Ace(Dataset):
 
                 for conf in mol["conformations"].values():
 
+                    # Skip failed calculations
+                    if "formation_energy" not in conf:
+                        continue
+
                     assert conf["positions"].attrs["units"] == "Å"
                     pos = pt.tensor(conf["positions"], dtype=pt.float32)
                     assert pos.shape == (z.shape[0], 3)
 
                     assert conf["formation_energy"].attrs["units"] == "eV"
                     y = pt.tensor(conf["formation_energy"][()], dtype=pt.float64)
-                    assert y.shape == (1,)
+                    assert y.shape == ()
 
                     assert conf["forces"].attrs["units"] == "eV/Å"
-                    dy = -pt.tensor(conf["forces"][conf], dtype=pt.float32)
+                    dy = -pt.tensor(conf["forces"], dtype=pt.float32)
                     assert dy.shape == pos.shape
 
                     assert conf["partial_charges"].attrs["units"] == "e"
