@@ -12,6 +12,11 @@ class SPICE(Dataset):
     """
     SPICE dataset (https://github.com/openmm/spice-dataset)
 
+    The dataset has several versions (https://github.com/openmm/spice-dataset/releases).
+    The version can be selected with `version`. By default, verions 1.0 is loaded.
+
+    >>> ds = SPICE(".", version="1.1")
+
     The dataset consists of several subsets (https://github.com/openmm/spice-dataset/blob/main/downloader/config.yaml).
     The subsets can be selected with `subsets`. By default, all the subsets are loaded.
 
@@ -139,6 +144,7 @@ class SPICE(Dataset):
     def process(self):
 
         print("Arguments")
+        print(f"  version: {self.version}")
         print(f"  subsets: {self.subsets}")
         print(f"  max_gradient: {self.max_gradient} eV/A\n")
 
