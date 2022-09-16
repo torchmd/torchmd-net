@@ -29,12 +29,16 @@ class SPICE(Dataset):
     BORH_TO_ANGSTROM = 0.529177
 
     @property
+    def raw_dir(self):
+        return os.path.join(super().raw_dir, self.version)
+
+    @property
     def raw_file_names(self):
         return "SPICE.hdf5"
 
     @property
     def raw_url(self):
-        return f"https://github.com/openmm/spice-dataset/releases/download/1.0/{self.raw_file_names}"
+        return f"https://github.com/openmm/spice-dataset/releases/download/{self.version}/{self.raw_file_names}"
 
     @property
     def processed_file_names(self):
@@ -52,12 +56,14 @@ class SPICE(Dataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
+        version="1.0",
         subsets=None,
         max_gradient=None,
     ):
-        arg_hash = f"{subsets}{max_gradient}"
+        arg_hash = f"{version}{subsets}{max_gradient}"
         arg_hash = hashlib.md5(arg_hash.encode()).hexdigest()
         self.name = f"{self.__class__.__name__}-{arg_hash}"
+        self.version = version
         self.subsets = subsets
         self.max_gradient = max_gradient
         super().__init__(root, transform, pre_transform, pre_filter)
