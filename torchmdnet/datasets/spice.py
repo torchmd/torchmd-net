@@ -12,6 +12,11 @@ class SPICE(Dataset):
     """
     SPICE dataset (https://github.com/openmm/spice-dataset)
 
+    The dataset has several versions (https://github.com/openmm/spice-dataset/releases).
+    The version can be selected with `version`. By default, verions 1.0 is loaded.
+
+    >>> ds = SPICE(".", version="1.1")
+
     The dataset consists of several subsets (https://github.com/openmm/spice-dataset/blob/main/downloader/config.yaml).
     The subsets can be selected with `subsets`. By default, all the subsets are loaded.
 
@@ -29,12 +34,16 @@ class SPICE(Dataset):
     BORH_TO_ANGSTROM = 0.529177
 
     @property
+    def raw_dir(self):
+        return os.path.join(super().raw_dir, self.version)
+
+    @property
     def raw_file_names(self):
         return "SPICE.hdf5"
 
     @property
     def raw_url(self):
-        return f"https://github.com/openmm/spice-dataset/releases/download/1.0/{self.raw_file_names}"
+        return f"https://github.com/openmm/spice-dataset/releases/download/{self.version}/{self.raw_file_names}"
 
     @property
     def processed_file_names(self):
@@ -52,12 +61,14 @@ class SPICE(Dataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
+        version="1.0",
         subsets=None,
         max_gradient=None,
     ):
-        arg_hash = f"{subsets}{max_gradient}"
+        arg_hash = f"{version}{subsets}{max_gradient}"
         arg_hash = hashlib.md5(arg_hash.encode()).hexdigest()
         self.name = f"{self.__class__.__name__}-{arg_hash}"
+        self.version = version
         self.subsets = subsets
         self.max_gradient = max_gradient
         super().__init__(root, transform, pre_transform, pre_filter)
@@ -133,6 +144,7 @@ class SPICE(Dataset):
     def process(self):
 
         print("Arguments")
+        print(f"  version: {self.version}")
         print(f"  subsets: {self.subsets}")
         print(f"  max_gradient: {self.max_gradient} eV/A\n")
 
