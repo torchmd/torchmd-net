@@ -19,4 +19,5 @@ setup(
     version=version,
     packages=find_packages(),
     install_requires=requirements,
+    entry_points={"console_scripts": ["tmn-train = torchmdnet.scripts.train:main"]},
 )
