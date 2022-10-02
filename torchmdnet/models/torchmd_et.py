@@ -7,7 +7,6 @@ from torchmdnet.models.utils import (
     NeighborEmbedding,
     CosineCutoff,
     Distance,
-    GaussianSmearing,
     rbf_class_mapping,
     act_class_mapping,
 )
@@ -101,8 +100,11 @@ class TorchMD_ET(nn.Module):
 
         act_class = act_class_mapping[activation]
 
-        self.register_parameter("embedding", nn.Parameter(torch.randn(hidden_channels)))
-        self.proton_expansion = GaussianSmearing(cutoff_lower=1, cutoff_upper=max_z, num_rbf=hidden_channels)
+        self.register_parameter("group_embedding", nn.Parameter(torch.empty(1, hidden_channels).uniform_(-1, 1)))
+        self.register_parameter("period_embedding", nn.Parameter(torch.empty(1, hidden_channels).uniform_(-1, 1)))
+
+        self.register_buffer("z2group", torch.tensor([-1, 1, -1, -1, -1, -1, 14, 15, 16, 17]))
+        self.register_buffer("z2period", torch.tensor([-1, 1, -1, -1, -1, -1, 2, 2, 2, 2]))
 
         self.distance = Distance(
             cutoff_lower,
@@ -141,8 +143,8 @@ class TorchMD_ET(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.embedding[:] = torch.randn(self.hidden_channels)
-        self.proton_expansion.reset_parameters()
+        self.group_embedding.data.uniform_(-1, 1)
+        self.period_embedding.data.uniform_(-1, 1)
         self.distance_expansion.reset_parameters()
         if self.neighbor_embedding is not None:
             self.neighbor_embedding.reset_parameters()
@@ -158,9 +160,12 @@ class TorchMD_ET(nn.Module):
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+        group = self.z2group[z].reshape(-1, 1)
+        period = self.z2period[z].reshape(-1, 1)
 
-        x = self.embedding.reshape(1, -1).repeat(len(z), 1)
-        x = x * self.proton_expansion(z.float())
+        x_group = self.group_embedding.repeat(len(z), 1)
+        x_period = self.group_embedding.repeat(len(z), 1)
+        x = x_group * group + x_period * period
 
         edge_index, edge_weight, edge_vec = self.distance(pos, batch)
         assert (
