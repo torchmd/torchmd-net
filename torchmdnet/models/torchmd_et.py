@@ -101,7 +101,7 @@ class TorchMD_ET(nn.Module):
 
         act_class = act_class_mapping[activation]
 
-        self.register_parameter("embedding", torch.randn(hidden_channels))
+        self.register_parameter("embedding", nn.Parameter(torch.randn(hidden_channels)))
         self.proton_expansion = GaussianSmearing(cutoff_lower=1, cutoff_upper=max_z, num_rbf=hidden_channels)
 
         self.distance = Distance(
