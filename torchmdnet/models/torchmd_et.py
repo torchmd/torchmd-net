@@ -7,6 +7,7 @@ from torchmdnet.models.utils import (
     NeighborEmbedding,
     CosineCutoff,
     Distance,
+    GaussianSmearing,
     rbf_class_mapping,
     act_class_mapping,
 )
@@ -100,7 +101,8 @@ class TorchMD_ET(nn.Module):
 
         act_class = act_class_mapping[activation]
 
-        self.embedding = nn.Embedding(self.max_z, hidden_channels)
+        self.register_parameter("embedding", torch.randn(hidden_channels))
+        self.proton_expansion = GaussianSmearing(cutoff_lower=1, cutoff_upper=max_z, num_rbf=hidden_channels)
 
         self.distance = Distance(
             cutoff_lower,
@@ -139,7 +141,8 @@ class TorchMD_ET(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.embedding.reset_parameters()
+        self.embedding = torch.randn(self.hidden_channels)
+        self.proton_expansion.reset_parameters()
         self.distance_expansion.reset_parameters()
         if self.neighbor_embedding is not None:
             self.neighbor_embedding.reset_parameters()
@@ -156,7 +159,8 @@ class TorchMD_ET(nn.Module):
         s: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
 
-        x = self.embedding(z)
+        x = self.embedding.reshape(1, -1).repeat(len(z), 1)
+        x = x * self.proton_expansion(z.float())
 
         edge_index, edge_weight, edge_vec = self.distance(pos, batch)
         assert (
