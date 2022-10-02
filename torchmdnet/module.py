@@ -150,7 +150,7 @@ class LNNP(LightningModule):
         if hasattr(dm, "test_dataset") and len(dm.test_dataset) > 0:
             should_reset = (
                 self.current_epoch % self.hparams.test_interval == 0
-                or (self.current_epoch - 1) % self.hparams.test_interval == 0
+                or (self.current_epoch + 1) % self.hparams.test_interval == 0
             )
             if should_reset:
                 # reset validation dataloaders before and after testing epoch, which is faster
