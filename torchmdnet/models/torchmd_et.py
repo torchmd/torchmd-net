@@ -141,7 +141,7 @@ class TorchMD_ET(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.embedding = torch.randn(self.hidden_channels)
+        self.embedding[:] = torch.randn(self.hidden_channels)
         self.proton_expansion.reset_parameters()
         self.distance_expansion.reset_parameters()
         if self.neighbor_embedding is not None:
