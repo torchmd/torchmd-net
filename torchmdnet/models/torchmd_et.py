@@ -164,7 +164,7 @@ class TorchMD_ET(nn.Module):
         period = self.z2period[z].reshape(-1, 1)
 
         x_group = self.group_embedding.repeat(len(z), 1)
-        x_period = self.group_embedding.repeat(len(z), 1)
+        x_period = self.period_embedding.repeat(len(z), 1)
         x = x_group * group + x_period * period
 
         edge_index, edge_weight, edge_vec = self.distance(pos, batch)
