@@ -15,5 +15,5 @@ setup(
     name="torchmd-net",
     version=version,
     packages=find_packages(),
-    entry_points={"console_scripts": ["tmn-train = torchmdnet.scripts.train:main"]},
+    entry_points={"console_scripts": ["torchmd-train = torchmdnet.scripts.train:main"]},
 )
