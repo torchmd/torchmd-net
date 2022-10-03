@@ -11,12 +11,9 @@ except:
     print("Failed to retrieve the current version, defaulting to 0")
     version = "0"
 
-with open("requirements.txt") as f:
-    requirements = f.read().splitlines()
-
 setup(
     name="torchmd-net",
     version=version,
     packages=find_packages(),
-    install_requires=requirements,
+    entry_points={"console_scripts": ["tmn-train = torchmdnet.scripts.train:main"]},
 )
