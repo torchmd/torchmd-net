@@ -160,7 +160,7 @@ class SPICE(Dataset):
         print("Arguments")
         print(f"  version: {self.version}")
         print(f"  subsets: {self.subsets}")
-        print(f"  max_gradient: {self.max_gradient} eV/A\n")
+        print(f"  max_gradient: {self.max_gradient} eV/A")
         print(f"  subsample_molecules: {self.subsample_molecules}\n")
 
         print("Gathering statistics...")
