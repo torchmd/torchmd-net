@@ -67,7 +67,7 @@ class SPICE(Dataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
-        version="1.0",
+        version="1.1.1",
         subsets=None,
         max_gradient=None,
         subsample_molecules=1,
