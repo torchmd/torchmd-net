@@ -26,8 +26,14 @@ class SPICE(Dataset):
     The loader can filter conformations with large gradients. The maximum gradient norm threshold
     can be set with `max_gradient`. By default, the filter is not applied.
 
-    For examples, the filter the threshold is set to 100 eV/A:
+    For example, the filter the threshold is set to 100 eV/A:
     >>> ds = SPICE(".", max_gradient=100)
+
+    The molecules can be subsampled by loading only every `subsample_molecules`-th molecule.
+    By default is `subsample_molecules` is set to 1 (load all the molecules).
+
+    For example, only every 10th molecule is loaded:
+    >>> ds = SPICE(".", subsample_molecules=10)
     """
 
     HARTREE_TO_EV = 27.211386246
@@ -64,13 +70,15 @@ class SPICE(Dataset):
         version="1.0",
         subsets=None,
         max_gradient=None,
+        subsample_molecules=1,
     ):
-        arg_hash = f"{version}{subsets}{max_gradient}"
+        arg_hash = f"{version}{subsets}{max_gradient}{subsample_molecules}"
         arg_hash = hashlib.md5(arg_hash.encode()).hexdigest()
         self.name = f"{self.__class__.__name__}-{arg_hash}"
         self.version = version
         self.subsets = subsets
         self.max_gradient = max_gradient
+        self.subsample_molecules = int(subsample_molecules)
         super().__init__(root, transform, pre_transform, pre_filter)
 
         idx_name, z_name, pos_name, y_name, dy_name = self.processed_paths
@@ -91,12 +99,18 @@ class SPICE(Dataset):
     def sample_iter(self):
 
         assert len(self.raw_paths) == 1
+        assert self.subsample_molecules > 0
 
-        for mol in tqdm(h5py.File(self.raw_paths[0]).values(), desc="Molecules"):
+        molecules = h5py.File(self.raw_paths[0]).values()
+        for i_mol, mol in tqdm(enumerate(molecules), desc="Molecules"):
 
             if self.subsets:
                 if mol["subset"][0].decode() not in list(self.subsets):
                     continue
+
+            # Subsample molecules
+            if i_mol % self.subsample_molecules != 0:
+                continue
 
             z = pt.tensor(mol["atomic_numbers"], dtype=pt.long)
             all_pos = (
@@ -146,7 +160,8 @@ class SPICE(Dataset):
         print("Arguments")
         print(f"  version: {self.version}")
         print(f"  subsets: {self.subsets}")
-        print(f"  max_gradient: {self.max_gradient} eV/A\n")
+        print(f"  max_gradient: {self.max_gradient} eV/A")
+        print(f"  subsample_molecules: {self.subsample_molecules}\n")
 
         print("Gathering statistics...")
         num_all_confs = 0

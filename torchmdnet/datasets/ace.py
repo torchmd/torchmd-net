@@ -17,13 +17,15 @@ class Ace(Dataset):
         pre_filter=None,
         paths=None,
         max_gradient=None,
+        subsample_molecules=1,
     ):
 
-        arg_hash = f"{paths}{max_gradient}"
+        arg_hash = f"{paths}{max_gradient}{subsample_molecules}"
         arg_hash = hashlib.md5(arg_hash.encode()).hexdigest()
         self.name = f"{self.__class__.__name__}-{arg_hash}"
         self.paths = paths
         self.max_gradient = max_gradient
+        self.subsample_molecules = int(subsample_molecules)
         super().__init__(root, transform, pre_transform, pre_filter)
 
         (
@@ -71,10 +73,17 @@ class Ace(Dataset):
 
     def sample_iter(self):
 
+        assert self.subsample_molecules > 0
+
         for path in tqdm(self.raw_paths, desc="Files"):
             molecules = list(h5py.File(path).values())
 
-            for mol in tqdm(molecules, desc="Molecules", leave=False):
+            for i_mol, mol in tqdm(enumerate(molecules), desc="Molecules", leave=False):
+
+                # Subsample molecules
+                if i_mol % self.subsample_molecules != 0:
+                    continue
+
                 z = pt.tensor(mol["atomic_numbers"], dtype=pt.long)
                 fq = pt.tensor(mol["formal_charges"], dtype=pt.long)
                 q = fq.sum()
@@ -134,6 +143,10 @@ class Ace(Dataset):
         ]
 
     def process(self):
+
+        print("Arguments")
+        print(f"  max_gradient: {self.max_gradient} eV/A")
+        print(f"  subsample_molecules: {self.subsample_molecules}\n")
 
         print("Gathering statistics...")
         num_all_confs = 0
