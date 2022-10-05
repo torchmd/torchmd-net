@@ -2,7 +2,7 @@ from abc import abstractmethod, ABCMeta
 import torch
 from torch import nn
 from pytorch_lightning.utilities import rank_zero_warn
-from torchmdnet.models.utils import Distance
+from torchmdnet.models.utils import Distance, CosineCutoff
 
 __all__ = ["Atomref", "ZBL"]
 
@@ -95,8 +95,10 @@ class ZBL(BasePrior):
     """
     def __init__(self, dataset=None):
         super(ZBL, self).__init__(atomwise=False)
+        cutoff_distance = 10.0
         self.register_buffer("atomic_number", dataset.atomic_number)
-        self.distance = Distance(0, 10.0, max_num_neighbors=100)
+        self.distance = Distance(0, cutoff_distance, max_num_neighbors=100)
+        self.cutoff = CosineCutoff(cutoff_upper=cutoff_distance)
         self.distance_scale = dataset.distance_scale*1.88973e10  # convert to Bohr units
         self.energy_scale = dataset.energy_scale  # convert to Joules
 
@@ -112,4 +114,5 @@ class ZBL(BasePrior):
         a = 0.8854/(atomic_number[0]**0.23 + atomic_number[0]**0.23)
         d = distance/a
         f = 0.1818*torch.exp(-3.2*d) + 0.5099*torch.exp(-0.9423*d) + 0.2802*torch.exp(-0.4029*d) + 0.02817*torch.exp(-0.2016*d)
+        f *= self.cutoff(distance)
         return (2.30707755e-19/self.energy_scale)*torch.sum(f/distance, dim=-1)
