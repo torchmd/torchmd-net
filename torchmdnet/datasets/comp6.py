@@ -111,10 +111,12 @@ class COMP6Base(Dataset):
                 assert all_dy.shape[2] == 3
 
                 for pos, y, dy in zip(all_pos, all_y, all_dy):
+
+                    # Create a sample
+                    args = dict(z=z, pos=pos, y=y.view(1, 1), dy=dy)
                     if mol_ids:
-                        data = Data(mol_id=mol_id, z=z, pos=pos, y=y.view(1, 1), dy=dy)
-                    else:
-                        data = Data(z=z, pos=pos, y=y.view(1, 1), dy=dy)
+                        args["mol_id"] = mol_id
+                    data = Data(**args)
 
                     if self.pre_filter is not None and not self.pre_filter(data):
                         continue

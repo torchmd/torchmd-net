@@ -96,13 +96,13 @@ class SPICE(Dataset):
         assert self.idx_mm[-1] == len(self.z_mm)
         assert len(self.idx_mm) == len(self.y_mm) + 1
 
-    def sample_iter(self):
+    def sample_iter(self, mol_ids=False):
 
         assert len(self.raw_paths) == 1
         assert self.subsample_molecules > 0
 
-        molecules = h5py.File(self.raw_paths[0]).values()
-        for i_mol, mol in tqdm(enumerate(molecules), desc="Molecules"):
+        molecules = h5py.File(self.raw_paths[0]).items()
+        for i_mol, (mol_id, mol) in tqdm(enumerate(molecules), desc="Molecules"):
 
             if self.subsets:
                 if mol["subset"][0].decode() not in list(self.subsets):
@@ -142,7 +142,11 @@ class SPICE(Dataset):
                     if dy.norm(dim=1).max() > float(self.max_gradient):
                         continue
 
-                data = Data(z=z, pos=pos, y=y.view(1, 1), dy=dy)
+                # Create a sample
+                args = dict(z=z, pos=pos, y=y.view(1, 1), dy=dy)
+                if mol_ids:
+                    args["mol_id"] = mol_id
+                data = Data(**args)
 
                 if self.pre_filter is not None and not self.pre_filter(data):
                     continue
