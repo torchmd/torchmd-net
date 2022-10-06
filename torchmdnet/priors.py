@@ -93,23 +93,35 @@ class ZBL(BasePrior):
     distance_scale: multiply by this factor to convert coordinates stored in the dataset to meters
     energy_scale: multiply by this factor to convert energies stored in the dataset to Joules
     """
-    def __init__(self, dataset=None):
+    def __init__(self, cutoff_distance, max_num_neighbors, atomic_number=None, distance_scale=None, energy_scale=None, dataset=None):
         super(ZBL, self).__init__(atomwise=False)
-        cutoff_distance = 10.0
-        self.register_buffer("atomic_number", dataset.atomic_number)
-        self.distance = Distance(0, cutoff_distance, max_num_neighbors=100)
+        if atomic_number is None:
+            atomic_number = dataset.atomic_number
+        if distance_scale is None:
+            distance_scale = dataset.distance_scale
+        if energy_scale is None:
+            energy_scale = dataset.energy_scale
+        atomic_number = torch.as_tensor(atomic_number, dtype=torch.int8)
+        self.register_buffer("atomic_number", atomic_number)
+        self.distance = Distance(0, cutoff_distance, max_num_neighbors=max_num_neighbors)
         self.cutoff = CosineCutoff(cutoff_upper=cutoff_distance)
-        self.distance_scale = dataset.distance_scale*1.88973e10  # convert to Bohr units
-        self.energy_scale = dataset.energy_scale  # convert to Joules
+        self.cutoff_distance = cutoff_distance
+        self.max_num_neighbors = max_num_neighbors
+        self.distance_scale = distance_scale
+        self.energy_scale = energy_scale
 
     def get_init_args(self):
-        return {}
+        return {'cutoff_distance': self.cutoff_distance,
+                'max_num_neighbors': self.max_num_neighbors,
+                'atomic_number': self.atomic_number,
+                'distance_scale': self.distance_scale,
+                'energy_scale': self.energy_scale}
 
     def reset_parameters(self):
         pass
 
     def forward(self, x, z, pos, batch):
-        edge_index, distance, _ = self.distance(pos*self.distance_scale, batch)
+        edge_index, distance, _ = self.distance(pos*self.distance_scale*1.88973e10, batch)
         atomic_number = self.atomic_number[z[edge_index]]
         a = 0.8854/(atomic_number[0]**0.23 + atomic_number[0]**0.23)
         d = distance/a

@@ -176,7 +176,7 @@ class LoadFromCheckpoint(argparse.Action):
         with open(hparams_path, "r") as f:
             config = yaml.load(f, Loader=yaml.FullLoader)
         for key in config.keys():
-            if key not in namespace and key != "prior_args":
+            if key not in namespace and key != "prior_init_args":
                 raise ValueError(f"Unknown argument in the model checkpoint: {key}")
         namespace.__dict__.update(config)
         namespace.__dict__.update(load_model=values)

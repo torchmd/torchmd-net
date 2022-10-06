@@ -65,16 +65,16 @@ def create_model(args, prior_model=None, mean=None, std=None):
 
     # prior model
     if args["prior_model"] and prior_model is None:
-        assert "prior_args" in args, (
+        assert "prior_init_args" in args, (
             f"Requested prior model {args['prior_model']} but the "
-            f'arguments are lacking the key "prior_args".'
+            f'arguments are lacking the key "prior_init_args".'
         )
         assert hasattr(priors, args["prior_model"]), (
             f'Unknown prior model {args["prior_model"]}. '
             f'Available models are {", ".join(priors.__all__)}'
         )
         # instantiate prior model if it was not passed to create_model (i.e. when loading a model)
-        prior_model = getattr(priors, args["prior_model"])(**args["prior_args"])
+        prior_model = getattr(priors, args["prior_model"])(**args["prior_init_args"])
 
     # create output network
     output_prefix = "Equivariant" if is_equivariant else ""

@@ -43,7 +43,7 @@ def test_train(model_name, use_atomref, tmpdir):
     prior = None
     if use_atomref:
         prior = getattr(priors, args["prior_model"])(dataset=datamodule.dataset)
-        args["prior_args"] = prior.get_init_args()
+        args["prior_init_args"] = prior.get_init_args()
 
     module = LNNP(args, prior_model=prior)
 

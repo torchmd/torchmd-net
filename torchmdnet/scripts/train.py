@@ -63,6 +63,7 @@ def get_args():
     parser.add_argument('--model', type=str, default='graph-network', choices=models.__all__, help='Which model to train')
     parser.add_argument('--output-model', type=str, default='Scalar', choices=output_modules.__all__, help='The type of output model')
     parser.add_argument('--prior-model', type=str, default=None, choices=priors.__all__, help='Which prior model to use')
+    parser.add_argument('--prior-args', default=None, type=str, help='Additional arguments for the prior model. Need to be specified in JSON format i.e. \'{"cutoff_distance": 10.0, "max_num_neighbors": 100}\'')
 
     # architectural args
     parser.add_argument('--charge', type=bool, default=False, help='Model needs a total charge')
@@ -125,8 +126,11 @@ def main():
             f"Available models are {', '.join(priors.__all__)}"
         )
         # initialize the prior model
-        prior = getattr(priors, args.prior_model)(dataset=data.dataset)
-        args.prior_args = prior.get_init_args()
+        prior_args = args.prior_args
+        if prior_args is None:
+            prior_args = {}
+        prior = getattr(priors, args.prior_model)(dataset=data.dataset, **prior_args)
+        args.prior_init_args = prior.get_init_args()
 
     # initialize lightning module
     model = LNNP(args, prior_model=prior, mean=data.mean, std=data.std)
