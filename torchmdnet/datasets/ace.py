@@ -71,14 +71,14 @@ class Ace(Dataset):
 
         raise RuntimeError(f"Cannot load {self.paths}")
 
-    def sample_iter(self):
+    def sample_iter(self, mol_ids=False):
 
         assert self.subsample_molecules > 0
 
         for path in tqdm(self.raw_paths, desc="Files"):
-            molecules = list(h5py.File(path).values())
+            molecules = list(h5py.File(path).items())
 
-            for i_mol, mol in tqdm(enumerate(molecules), desc="Molecules", leave=False):
+            for i_mol, (mol_id, mol) in tqdm(enumerate(molecules), desc="Molecules", leave=False):
 
                 # Subsample molecules
                 if i_mol % self.subsample_molecules != 0:
@@ -119,7 +119,11 @@ class Ace(Dataset):
                         if dy.norm(dim=1).max() > float(self.max_gradient):
                             continue
 
-                    data = Data(z=z, pos=pos, y=y.view(1, 1), dy=dy, q=q, pq=pq, dp=dp)
+                    # Create a sample
+                    args = dict(z=z, pos=pos, y=y.view(1, 1), dy=dy, q=q, pq=pq, dp=dp)
+                    if mol_ids:
+                        args["mol_id"] = mol_id
+                    data = Data(**args)
 
                     if self.pre_filter is not None and not self.pre_filter(data):
                         continue

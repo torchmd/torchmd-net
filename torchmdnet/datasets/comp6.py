@@ -83,12 +83,12 @@ class COMP6Base(Dataset):
             f"{self.name}.dy.mmap",
         ]
 
-    def sample_iter(self):
+    def sample_iter(self, mol_ids=False):
 
         for path in tqdm(self.raw_paths, desc="Files"):
-            molecules = list(h5py.File(path).values())[0].values()
+            molecules = list(h5py.File(path).values())[0].items()
 
-            for mol in tqdm(molecules, desc="Molecules", leave=False):
+            for mol_id, mol in tqdm(molecules, desc="Molecules", leave=False):
                 z = pt.tensor(
                     [self.ATOMIC_NUMBERS[atom] for atom in mol["species"]],
                     dtype=pt.long,
@@ -111,7 +111,12 @@ class COMP6Base(Dataset):
                 assert all_dy.shape[2] == 3
 
                 for pos, y, dy in zip(all_pos, all_y, all_dy):
-                    data = Data(z=z, pos=pos, y=y.view(1, 1), dy=dy)
+
+                    # Create a sample
+                    args = dict(z=z, pos=pos, y=y.view(1, 1), dy=dy)
+                    if mol_ids:
+                        args["mol_id"] = mol_id
+                    data = Data(**args)
 
                     if self.pre_filter is not None and not self.pre_filter(data):
                         continue
