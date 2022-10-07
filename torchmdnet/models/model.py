@@ -79,7 +79,9 @@ def create_model(args, prior_model=None, mean=None, std=None):
     # create output network
     output_prefix = "Equivariant" if is_equivariant else ""
     output_model = getattr(output_modules, output_prefix + args["output_model"])(
-        args["embedding_dimension"], args["activation"]
+        args["embedding_dimension"],
+        activation=args["activation"],
+        reduce_op=args["reduce_op"],
     )
 
     # combine representation and output network
@@ -87,7 +89,6 @@ def create_model(args, prior_model=None, mean=None, std=None):
         representation_model,
         output_model,
         prior_model=prior_model,
-        reduce_op=args["reduce_op"],
         mean=mean,
         std=std,
         derivative=args["derivative"],
@@ -118,7 +119,6 @@ class TorchMD_Net(nn.Module):
         representation_model,
         output_model,
         prior_model=None,
-        reduce_op="add",
         mean=None,
         std=None,
         derivative=False,
@@ -137,7 +137,6 @@ class TorchMD_Net(nn.Module):
                 )
             )
 
-        self.reduce_op = reduce_op
         self.derivative = derivative
 
         mean = torch.scalar_tensor(0) if mean is None else mean
@@ -183,20 +182,20 @@ class TorchMD_Net(nn.Module):
             x = self.prior_model(x, z, pos, batch)
 
         # aggregate atoms
-        out = scatter(x, batch, dim=0, reduce=self.reduce_op)
+        x = self.output_model.reduce(x, batch)
 
         # shift by data mean
         if self.mean is not None:
-            out = out + self.mean
+            x = x + self.mean
 
         # apply output model after reduction
-        out = self.output_model.post_reduce(out)
+        y = self.output_model.post_reduce(x)
 
         # compute gradients with respect to coordinates
         if self.derivative:
-            grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(out)]
+            grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(y)]
             dy = grad(
-                [out],
+                [y],
                 [pos],
                 grad_outputs=grad_outputs,
                 create_graph=True,
@@ -204,6 +203,6 @@ class TorchMD_Net(nn.Module):
             )[0]
             if dy is None:
                 raise RuntimeError("Autograd returned None for the force prediction.")
-            return out, -dy
+            return y, -dy
         # TODO: return only `out` once Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
-        return out, None
+        return y, None
