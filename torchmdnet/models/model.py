@@ -179,15 +179,17 @@ class TorchMD_Net(nn.Module):
             x = x * self.std
 
         # apply atomwise prior model
-        if self.prior_model is not None and self.prior_model.atomwise:
-            x = self.prior_model(x, z, pos, batch)
+        if self.prior_model is not None:
+            if self.prior_model.atomwise:
+                x = self.prior_model(x, z, pos, batch)
 
         # aggregate atoms
         out = scatter(x, batch, dim=0, reduce=self.reduce_op)
 
         # apply non-atomwise prior model
-        if self.prior_model is not None and not self.prior_model.atomwise:
-            out += self.prior_model(x, z, pos, batch)
+        if self.prior_model is not None:
+            if not self.prior_model.atomwise:
+                out += self.prior_model(x, z, pos, batch)
 
         # shift by data mean
         if self.mean is not None:
