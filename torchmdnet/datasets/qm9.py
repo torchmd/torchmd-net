@@ -35,7 +35,7 @@ class QM9(QM9_geometric):
         return atomref
 
     def _filter_label(self, batch):
-        batch["energy"] = batch.y[:, self.label_idx].unsqueeze(1)
+        batch.y = batch.y[:, self.label_idx].unsqueeze(1)
         return batch
 
     def download(self):

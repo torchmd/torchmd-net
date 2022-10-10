@@ -49,9 +49,9 @@ def test_custom(energy, forces, num_files, tmpdir, num_samples=100):
     assert hasattr(sample, "pos"), "Sample doesn't contain coords"
     assert hasattr(sample, "z"), "Sample doesn't contain atom numbers"
     if energy:
-        assert hasattr(sample, "energy"), "Sample doesn't contain energy"
+        assert hasattr(sample, "y"), "Sample doesn't contain energy"
     if forces:
-        assert hasattr(sample, "forces"), "Sample doesn't contain forces"
+        assert hasattr(sample, "neg_dy"), "Sample doesn't contain forces"
 
 
 def test_hdf5_multiprocessing(tmpdir, num_entries=100):

@@ -31,29 +31,33 @@ class ANIBase(Dataset):
         raise NotImplementedError()
 
     def __init__(
-        self, root, transform=None, pre_transform=None, pre_filter=None,
+        self,
+        root,
+        transform=None,
+        pre_transform=None,
+        pre_filter=None,
     ):
         self.name = self.__class__.__name__
         super().__init__(root, transform, pre_transform, pre_filter)
 
-        idx_name, z_name, pos_name, energy_name, forces_name = self.processed_paths
+        idx_name, z_name, pos_name, y_name, neg_dy_name = self.processed_paths
         self.idx_mm = np.memmap(idx_name, mode="r", dtype=np.int64)
         self.z_mm = np.memmap(z_name, mode="r", dtype=np.int8)
         self.pos_mm = np.memmap(
             pos_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
         )
-        self.energy_mm = np.memmap(energy_name, mode="r", dtype=np.float64)
-        self.forces_mm = (
+        self.y_mm = np.memmap(y_name, mode="r", dtype=np.float64)
+        self.neg_dy_mm = (
             np.memmap(
-                forces_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
+                neg_dy_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
             )
-            if os.path.getsize(forces_name) > 0
+            if os.path.getsize(neg_dy_name) > 0
             else None
         )
 
         assert self.idx_mm[0] == 0
         assert self.idx_mm[-1] == len(self.z_mm)
-        assert len(self.idx_mm) == len(self.energy_mm) + 1
+        assert len(self.idx_mm) == len(self.y_mm) + 1
 
     @property
     def processed_file_names(self):
@@ -61,8 +65,8 @@ class ANIBase(Dataset):
             f"{self.name}.idx.mmap",
             f"{self.name}.z.mmap",
             f"{self.name}.pos.mmap",
-            f"{self.name}.energy.mmap",
-            f"{self.name}.forces.mmap",
+            f"{self.name}.y.mmap",
+            f"{self.name}.neg_dy.mmap",
         ]
 
     def filter_and_pre_transform(self, data):
@@ -76,20 +80,19 @@ class ANIBase(Dataset):
         return data
 
     def process(self):
-
         print("Gathering statistics...")
         num_all_confs = 0
         num_all_atoms = 0
         for data in self.sample_iter():
             num_all_confs += 1
             num_all_atoms += data.z.shape[0]
-        has_forces = "forces" in data
+        has_neg_dy = "neg_dy" in data
 
         print(f"  Total number of conformers: {num_all_confs}")
         print(f"  Total number of atoms: {num_all_atoms}")
-        print(f"  Forces available: {has_forces}")
+        print(f"  Forces available: {has_neg_dy}")
 
-        idx_name, z_name, pos_name, energy_name, forces_name = self.processed_paths
+        idx_name, z_name, pos_name, y_name, neg_dy_name = self.processed_paths
         idx_mm = np.memmap(
             idx_name + ".tmp", mode="w+", dtype=np.int64, shape=(num_all_confs + 1,)
         )
@@ -99,18 +102,15 @@ class ANIBase(Dataset):
         pos_mm = np.memmap(
             pos_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
         )
-        energy_mm = np.memmap(
-            energy_name + ".tmp", mode="w+", dtype=np.float64, shape=(num_all_confs,)
+        y_mm = np.memmap(
+            y_name + ".tmp", mode="w+", dtype=np.float64, shape=(num_all_confs,)
         )
-        forces_mm = (
+        neg_dy_mm = (
             np.memmap(
-                forces_name + ".tmp",
-                mode="w+",
-                dtype=np.float32,
-                shape=(num_all_atoms, 3),
+                neg_dy_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
             )
-            if has_forces
-            else open(forces_name, "w")
+            if has_neg_dy
+            else open(neg_dy_name, "w")
         )
 
         print("Storing data...")
@@ -121,9 +121,9 @@ class ANIBase(Dataset):
             idx_mm[i_conf] = i_atom
             z_mm[i_atom:i_next_atom] = data.z.to(pt.int8)
             pos_mm[i_atom:i_next_atom] = data.pos
-            energy_mm[i_conf] = data.energy
-            if has_forces:
-                forces_mm[i_atom:i_next_atom] = data.forces
+            y_mm[i_conf] = data.y
+            if has_neg_dy:
+                neg_dy_mm[i_atom:i_next_atom] = data.neg_dy
 
             i_atom = i_next_atom
 
@@ -133,35 +133,35 @@ class ANIBase(Dataset):
         idx_mm.flush()
         z_mm.flush()
         pos_mm.flush()
-        energy_mm.flush()
-        if has_forces:
-            forces_mm.flush()
+        y_mm.flush()
+        if has_neg_dy:
+            neg_dy_mm.flush()
 
         os.rename(idx_mm.filename, idx_name)
         os.rename(z_mm.filename, z_name)
         os.rename(pos_mm.filename, pos_name)
-        os.rename(energy_mm.filename, energy_name)
-        if has_forces:
-            os.rename(forces_mm.filename, forces_name)
+        os.rename(y_mm.filename, y_name)
+        if has_neg_dy:
+            os.rename(neg_dy_mm.filename, neg_dy_name)
 
     def len(self):
-        return len(self.energy_mm)
+        return len(self.y_mm)
 
     def get(self, idx):
 
         atoms = slice(self.idx_mm[idx], self.idx_mm[idx + 1])
         z = pt.tensor(self.z_mm[atoms], dtype=pt.long)
         pos = pt.tensor(self.pos_mm[atoms], dtype=pt.float32)
-        energy = pt.tensor(self.energy_mm[idx], dtype=pt.float32).view(
+        y = pt.tensor(self.y_mm[idx], dtype=pt.float32).view(
             1, 1
         )  # It would be better to use float64, but the trainer complaints
-        energy -= self.compute_reference_energy(z)
+        y -= self.compute_reference_energy(z)
 
-        if self.forces_mm is None:
-            return Data(z=z, pos=pos, energy=energy)
+        if self.neg_dy_mm is None:
+            return Data(z=z, pos=pos, y=y)
         else:
-            forces = pt.tensor(self.forces_mm[atoms], dtype=pt.float32)
-            return Data(z=z, pos=pos, energy=energy, forces=forces)
+            neg_dy = pt.tensor(self.neg_dy_mm[atoms], dtype=pt.float32)
+            return Data(z=z, pos=pos, y=y, neg_dy=neg_dy)
 
 
 class ANI1(ANIBase):
@@ -199,16 +199,16 @@ class ANI1(ANIBase):
                     [atomic_numbers[atom] for atom in mol["species"]], dtype=pt.long
                 )
                 all_pos = pt.tensor(mol["coordinates"][:], dtype=pt.float32)
-                all_energy = pt.tensor(
+                all_y = pt.tensor(
                     mol["energies"][:] * self.HARTREE_TO_EV, dtype=pt.float64
                 )
 
-                assert all_pos.shape[0] == all_energy.shape[0]
+                assert all_pos.shape[0] == all_y.shape[0]
                 assert all_pos.shape[1] == z.shape[0]
                 assert all_pos.shape[2] == 3
 
-                for pos, energy in zip(all_pos, all_energy):
-                    data = Data(z=z, pos=pos, energy=energy.view(1, 1))
+                for pos, y in zip(all_pos, all_y):
+                    data = Data(z=z, pos=pos, y=y.view(1, 1))
                     if data := self.filter_and_pre_transform(data):
                         yield data
 
@@ -272,27 +272,27 @@ class ANI1X(ANI1XBase):
 
                 z = pt.tensor(mol["atomic_numbers"][:], dtype=pt.long)
                 all_pos = pt.tensor(mol["coordinates"][:], dtype=pt.float32)
-                all_energy = pt.tensor(
+                all_y = pt.tensor(
                     mol["wb97x_dz.energy"][:] * self.HARTREE_TO_EV, dtype=pt.float64
                 )
-                all_forces = pt.tensor(
+                all_neg_dy = pt.tensor(
                     mol["wb97x_dz.forces"][:] * self.HARTREE_TO_EV, dtype=pt.float32
                 )
 
-                assert all_pos.shape[0] == all_energy.shape[0]
+                assert all_pos.shape[0] == all_y.shape[0]
                 assert all_pos.shape[1] == z.shape[0]
                 assert all_pos.shape[2] == 3
 
-                assert all_forces.shape[0] == all_energy.shape[0]
-                assert all_forces.shape[1] == z.shape[0]
-                assert all_forces.shape[2] == 3
+                assert all_neg_dy.shape[0] == all_y.shape[0]
+                assert all_neg_dy.shape[1] == z.shape[0]
+                assert all_neg_dy.shape[2] == 3
 
-                for pos, energy, forces in zip(all_pos, all_energy, all_forces):
+                for pos, y, neg_dy in zip(all_pos, all_y, all_neg_dy):
 
-                    if energy.isnan() or forces.isnan().any():
+                    if y.isnan() or neg_dy.isnan().any():
                         continue
 
-                    data = Data(z=z, pos=pos, energy=energy.view(1, 1), forces=forces)
+                    data = Data(z=z, pos=pos, y=y.view(1, 1), neg_dy=neg_dy)
                     if data := self.filter_and_pre_transform(data):
                         yield data
 
@@ -317,20 +317,20 @@ class ANI1CCX(ANI1XBase):
 
                 z = pt.tensor(mol["atomic_numbers"][:], dtype=pt.long)
                 all_pos = pt.tensor(mol["coordinates"][:], dtype=pt.float32)
-                all_energy = pt.tensor(
+                all_y = pt.tensor(
                     mol["ccsd(t)_cbs.energy"][:] * self.HARTREE_TO_EV, dtype=pt.float64
                 )
 
-                assert all_pos.shape[0] == all_energy.shape[0]
+                assert all_pos.shape[0] == all_y.shape[0]
                 assert all_pos.shape[1] == z.shape[0]
                 assert all_pos.shape[2] == 3
 
-                for pos, energy in zip(all_pos, all_energy):
+                for pos, y in zip(all_pos, all_y):
 
-                    if energy.isnan():
+                    if y.isnan():
                         continue
 
-                    data = Data(z=z, pos=pos, energy=energy.view(1, 1))
+                    data = Data(z=z, pos=pos, y=y.view(1, 1))
                     if data := self.filter_and_pre_transform(data):
                         yield data
 

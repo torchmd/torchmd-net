@@ -73,9 +73,9 @@ class DummyDataset(Dataset):
     def get(self, idx):
         features = dict(z=self.z[idx].clone(), pos=self.pos[idx].clone())
         if self.energies is not None:
-            features["energy"] = self.energies[idx].clone()
+            features["y"] = self.energies[idx].clone()
         if self.forces is not None:
-            features["forces"] = self.forces[idx].clone()
+            features["neg_dy"] = self.forces[idx].clone()
         return Data(**features)
 
     def len(self):

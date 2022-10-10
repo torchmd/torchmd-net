@@ -111,15 +111,15 @@ class DataModule(LightningDataModule):
 
     def _standardize(self):
         def get_energy(batch, atomref):
-            if "energy" not in batch or batch.energy is None:
+            if "y" not in batch or batch.y is None:
                 raise MissingEnergyException()
 
             if atomref is None:
-                return batch.energy.clone()
+                return batch.y.clone()
 
             # remove atomref energies from the target energy
             atomref_energy = scatter(atomref[batch.z], batch.batch, dim=0)
-            return (batch.energy.squeeze() - atomref_energy.squeeze()).clone()
+            return (batch.y.squeeze() - atomref_energy.squeeze()).clone()
 
         data = tqdm(
             self._get_dataloader(self.train_dataset, "val", store_dataloader=False),
