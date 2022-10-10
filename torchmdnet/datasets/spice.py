@@ -12,6 +12,11 @@ class SPICE(Dataset):
     """
     SPICE dataset (https://github.com/openmm/spice-dataset)
 
+    The dataset has several versions (https://github.com/openmm/spice-dataset/releases).
+    The version can be selected with `version`. By default, verions 1.0 is loaded.
+
+    >>> ds = SPICE(".", version="1.1")
+
     The dataset consists of several subsets (https://github.com/openmm/spice-dataset/blob/main/downloader/config.yaml).
     The subsets can be selected with `subsets`. By default, all the subsets are loaded.
 
@@ -21,12 +26,22 @@ class SPICE(Dataset):
     The loader can filter conformations with large gradients. The maximum gradient norm threshold
     can be set with `max_gradient`. By default, the filter is not applied.
 
-    For examples, the filter the threshold is set to 100 eV/A:
+    For example, the filter the threshold is set to 100 eV/A:
     >>> ds = SPICE(".", max_gradient=100)
+
+    The molecules can be subsampled by loading only every `subsample_molecules`-th molecule.
+    By default is `subsample_molecules` is set to 1 (load all the molecules).
+
+    For example, only every 10th molecule is loaded:
+    >>> ds = SPICE(".", subsample_molecules=10)
     """
 
     HARTREE_TO_EV = 27.211386246
     BORH_TO_ANGSTROM = 0.529177
+
+    @property
+    def raw_dir(self):
+        return os.path.join(super().raw_dir, self.version)
 
     @property
     def raw_file_names(self):
@@ -34,7 +49,7 @@ class SPICE(Dataset):
 
     @property
     def raw_url(self):
-        return f"https://github.com/openmm/spice-dataset/releases/download/1.0/{self.raw_file_names}"
+        return f"https://github.com/openmm/spice-dataset/releases/download/{self.version}/{self.raw_file_names}"
 
     @property
     def processed_file_names(self):
@@ -52,14 +67,18 @@ class SPICE(Dataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
+        version="1.1.1",
         subsets=None,
         max_gradient=None,
+        subsample_molecules=1,
     ):
-        arg_hash = f"{subsets}{max_gradient}"
+        arg_hash = f"{version}{subsets}{max_gradient}{subsample_molecules}"
         arg_hash = hashlib.md5(arg_hash.encode()).hexdigest()
         self.name = f"{self.__class__.__name__}-{arg_hash}"
+        self.version = version
         self.subsets = subsets
         self.max_gradient = max_gradient
+        self.subsample_molecules = int(subsample_molecules)
         super().__init__(root, transform, pre_transform, pre_filter)
 
         idx_name, z_name, pos_name, y_name, neg_dy_name = self.processed_paths
@@ -77,14 +96,20 @@ class SPICE(Dataset):
         assert self.idx_mm[-1] == len(self.z_mm)
         assert len(self.idx_mm) == len(self.y_mm) + 1
 
-    def sample_iter(self):
+    def sample_iter(self, mol_ids=False):
         assert len(self.raw_paths) == 1
+        assert self.subsample_molecules > 0
 
-        for mol in tqdm(h5py.File(self.raw_paths[0]).values(), desc="Molecules"):
+        molecules = h5py.File(self.raw_paths[0]).items()
+        for i_mol, (mol_id, mol) in tqdm(enumerate(molecules), desc="Molecules"):
 
             if self.subsets:
                 if mol["subset"][0].decode() not in list(self.subsets):
                     continue
+
+            # Subsample molecules
+            if i_mol % self.subsample_molecules != 0:
+                continue
 
             z = pt.tensor(mol["atomic_numbers"], dtype=pt.long)
             all_pos = (
@@ -116,7 +141,11 @@ class SPICE(Dataset):
                     if neg_dy.norm(dim=1).max() > float(self.max_gradient):
                         continue
 
-                data = Data(z=z, pos=pos, y=y.view(1, 1), neg_dy=neg_dy)
+                # Create a sample
+                args = dict(z=z, pos=pos, y=y.view(1, 1), neg_dy=neg_dy)
+                if mol_ids:
+                    args["mol_id"] = mol_id
+                data = Data(**args)
 
                 if self.pre_filter is not None and not self.pre_filter(data):
                     continue
@@ -132,8 +161,10 @@ class SPICE(Dataset):
     def process(self):
 
         print("Arguments")
+        print(f"  version: {self.version}")
         print(f"  subsets: {self.subsets}")
-        print(f"  max_gradient: {self.max_gradient} eV/A\n")
+        print(f"  max_gradient: {self.max_gradient} eV/A")
+        print(f"  subsample_molecules: {self.subsample_molecules}\n")
 
         print("Gathering statistics...")
         num_all_confs = 0

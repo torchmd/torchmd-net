@@ -24,7 +24,7 @@ class ANIBase(Dataset):
         energy = sum(self.ELEMENT_ENERGIES[z] for z in atomic_numbers)
         return energy * ANIBase.HARTREE_TO_EV
 
-    def sample_iter(self):
+    def sample_iter(self, mol_ids=False):
         raise NotImplementedError()
 
     def get_atomref(self, max_z=100):
@@ -187,14 +187,14 @@ class ANI1(ANIBase):
         extract_tar(archive, self.raw_dir)
         os.remove(archive)
 
-    def sample_iter(self):
+    def sample_iter(self, mol_ids=False):
 
         atomic_numbers = {b"H": 1, b"C": 6, b"N": 7, b"O": 8}
 
         for path in tqdm(self.raw_paths, desc="Files"):
-            molecules = list(h5py.File(path).values())[0].values()
+            molecules = list(h5py.File(path).values())[0].items()
 
-            for mol in tqdm(molecules, desc="Molecules", leave=False):
+            for mol_id, mol in tqdm(molecules, desc="Molecules", leave=False):
                 z = pt.tensor(
                     [atomic_numbers[atom] for atom in mol["species"]], dtype=pt.long
                 )
@@ -208,7 +208,13 @@ class ANI1(ANIBase):
                 assert all_pos.shape[2] == 3
 
                 for pos, y in zip(all_pos, all_y):
-                    data = Data(z=z, pos=pos, y=y.view(1, 1))
+
+                    # Create a sample
+                    args = dict(z=z, pos=pos, y=y.view(1, 1))
+                    if mol_ids:
+                        args["mol_id"] = mol_id
+                    data = Data(**args)
+
                     if data := self.filter_and_pre_transform(data):
                         yield data
 
@@ -263,12 +269,12 @@ class ANI1X(ANI1XBase):
         8: -75.0362229210,
     }
 
-    def sample_iter(self):
+    def sample_iter(self, mol_ids=False):
 
         assert len(self.raw_paths) == 1
 
         with h5py.File(self.raw_paths[0]) as h5:
-            for mol in tqdm(h5.values(), desc="Molecules"):
+            for mol_id, mol in tqdm(h5.items(), desc="Molecules"):
 
                 z = pt.tensor(mol["atomic_numbers"][:], dtype=pt.long)
                 all_pos = pt.tensor(mol["coordinates"][:], dtype=pt.float32)
@@ -292,7 +298,12 @@ class ANI1X(ANI1XBase):
                     if y.isnan() or neg_dy.isnan().any():
                         continue
 
-                    data = Data(z=z, pos=pos, y=y.view(1, 1), neg_dy=neg_dy)
+                    # Create a sample
+                    args = dict(z=z, pos=pos, y=y.view(1, 1), neg_dy=neg_dy)
+                    if mol_ids:
+                        args["mol_id"] = mol_id
+                    data = Data(**args)
+
                     if data := self.filter_and_pre_transform(data):
                         yield data
 
@@ -308,12 +319,13 @@ class ANI1X(ANI1XBase):
 
 
 class ANI1CCX(ANI1XBase):
-    def sample_iter(self):
+
+    def sample_iter(self, mol_ids=False):
 
         assert len(self.raw_paths) == 1
 
         with h5py.File(self.raw_paths[0]) as h5:
-            for mol in tqdm(h5.values(), desc="Molecules"):
+            for mol_id, mol in tqdm(h5.items(), desc="Molecules"):
 
                 z = pt.tensor(mol["atomic_numbers"][:], dtype=pt.long)
                 all_pos = pt.tensor(mol["coordinates"][:], dtype=pt.float32)
@@ -330,7 +342,12 @@ class ANI1CCX(ANI1XBase):
                     if y.isnan():
                         continue
 
-                    data = Data(z=z, pos=pos, y=y.view(1, 1))
+                    # Create a sample
+                    args = dict(z=z, pos=pos, y=y.view(1, 1))
+                    if mol_ids:
+                        args["mol_id"] = mol_id
+                    data = Data(**args)
+
                     if data := self.filter_and_pre_transform(data):
                         yield data
 
