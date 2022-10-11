@@ -36,7 +36,7 @@ class MD17(InMemoryDataset):
             molecules = ",".join(MD17.available_molecules)
         self.molecules = molecules.split(",")
 
-        for mol in molecules:
+        for mol in self.molecules:
             if mol not in MD17.available_molecules:
                 raise RuntimeError(f"Molecule '{mol}' does not exist in MD17")
 
