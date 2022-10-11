@@ -111,7 +111,7 @@ class DataModule(LightningDataModule):
 
     def _standardize(self):
         def get_energy(batch, atomref):
-            if batch.y is None:
+            if "y" not in batch or batch.y is None:
                 raise MissingEnergyException()
 
             if atomref is None:

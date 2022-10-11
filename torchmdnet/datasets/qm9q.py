@@ -45,7 +45,7 @@ class QM9q(Dataset):
             z_name,
             pos_name,
             y_name,
-            dy_name,
+            neg_dy_name,
             q_name,
             pq_name,
             dp_name,
@@ -56,8 +56,8 @@ class QM9q(Dataset):
             pos_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
         )
         self.y_mm = np.memmap(y_name, mode="r", dtype=np.float64)
-        self.dy_mm = np.memmap(
-            dy_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
+        self.neg_dy_mm = np.memmap(
+            neg_dy_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
         )
         self.q_mm = np.memmap(q_name, mode="r", dtype=np.int8)
         self.pq_mm = np.memmap(pq_name, mode="r", dtype=np.float32)
@@ -144,13 +144,13 @@ class QM9q(Dataset):
                         mol["gradient_vector"].attrs["units"]
                         == "vector : Hartree/Bohr "
                     )
-                    dy = (
+                    neg_dy = (
                         -pt.tensor(mol["gradient_vector"][conf], dtype=pt.float32)
                         * self.HARTREE_TO_EV
                         / self.BORH_TO_ANGSTROM
                     )
-                    assert z.shape[0] == dy.shape[0]
-                    assert dy.shape[1] == 3
+                    assert z.shape[0] == neg_dy.shape[0]
+                    assert neg_dy.shape[1] == 3
 
                     assert (
                         mol["electronic_charge"].attrs["units"]
@@ -168,11 +168,11 @@ class QM9q(Dataset):
                     y -= self.compute_reference_energy(z, q)
 
                     # Skip samples with large forces
-                    if dy.norm(dim=1).max() > 100:  # eV/A
+                    if neg_dy.norm(dim=1).max() > 100:  # eV/A
                         continue
 
                     # Create a sample
-                    args = dict(z=z, pos=pos, y=y.view(1, 1), dy=dy, q=q, pq=pq, dp=dp)
+                    args = dict(z=z, pos=pos, y=y.view(1, 1), neg_dy=neg_dy, q=q, pq=pq, dp=dp)
                     if mol_ids:
                         args["mol_id"] = mol_id
                     data = Data(**args)
@@ -192,7 +192,7 @@ class QM9q(Dataset):
             f"{self.name}.z.mmap",
             f"{self.name}.pos.mmap",
             f"{self.name}.y.mmap",
-            f"{self.name}.dy.mmap",
+            f"{self.name}.neg_dy.mmap",
             f"{self.name}.q.mmap",
             f"{self.name}.pq.mmap",
             f"{self.name}.dp.mmap",
@@ -215,7 +215,7 @@ class QM9q(Dataset):
             z_name,
             pos_name,
             y_name,
-            dy_name,
+            neg_dy_name,
             q_name,
             pq_name,
             dp_name,
@@ -230,8 +230,8 @@ class QM9q(Dataset):
         y_mm = np.memmap(
             y_name + ".tmp", mode="w+", dtype=np.float64, shape=num_all_confs
         )
-        dy_mm = np.memmap(
-            dy_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
+        neg_dy_mm = np.memmap(
+            neg_dy_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
         )
         q_mm = np.memmap(q_name + ".tmp", mode="w+", dtype=np.int8, shape=num_all_confs)
         pq_mm = np.memmap(
@@ -250,7 +250,7 @@ class QM9q(Dataset):
             z_mm[i_atom:i_next_atom] = data.z.to(pt.int8)
             pos_mm[i_atom:i_next_atom] = data.pos
             y_mm[i_conf] = data.y
-            dy_mm[i_atom:i_next_atom] = data.dy
+            neg_dy_mm[i_atom:i_next_atom] = data.neg_dy
             q_mm[i_conf] = data.q.to(pt.int8)
             pq_mm[i_atom:i_next_atom] = data.pq
             dp_mm[i_conf] = data.dp
@@ -264,7 +264,7 @@ class QM9q(Dataset):
         z_mm.flush()
         pos_mm.flush()
         y_mm.flush()
-        dy_mm.flush()
+        neg_dy_mm.flush()
         q_mm.flush()
         pq_mm.flush()
         dp_mm.flush()
@@ -273,7 +273,7 @@ class QM9q(Dataset):
         os.rename(z_mm.filename, z_name)
         os.rename(pos_mm.filename, pos_name)
         os.rename(y_mm.filename, y_name)
-        os.rename(dy_mm.filename, dy_name)
+        os.rename(neg_dy_mm.filename, neg_dy_name)
         os.rename(q_mm.filename, q_name)
         os.rename(pq_mm.filename, pq_name)
         os.rename(dp_mm.filename, dp_name)
@@ -282,16 +282,15 @@ class QM9q(Dataset):
         return len(self.y_mm)
 
     def get(self, idx):
-
         atoms = slice(self.idx_mm[idx], self.idx_mm[idx + 1])
         z = pt.tensor(self.z_mm[atoms], dtype=pt.long)
         pos = pt.tensor(self.pos_mm[atoms], dtype=pt.float32)
         y = pt.tensor(self.y_mm[idx], dtype=pt.float32).view(
             1, 1
         )  # It would be better to use float64, but the trainer complaints
-        dy = pt.tensor(self.dy_mm[atoms], dtype=pt.float32)
+        neg_dy = pt.tensor(self.neg_dy_mm[atoms], dtype=pt.float32)
         q = pt.tensor(self.q_mm[idx], dtype=pt.long)
         pq = pt.tensor(self.pq_mm[atoms], dtype=pt.float32)
         dp = pt.tensor(self.dp_mm[idx], dtype=pt.float32)
 
-        return Data(z=z, pos=pos, y=y, dy=dy, q=q, pq=pq, dp=dp)
+        return Data(z=z, pos=pos, y=y, neg_dy=neg_dy, q=q, pq=pq, dp=dp)

@@ -8,7 +8,6 @@ from tqdm import tqdm
 
 
 class Ace(Dataset):
-
     def __init__(
         self,
         root=None,
@@ -33,7 +32,7 @@ class Ace(Dataset):
             z_name,
             pos_name,
             y_name,
-            dy_name,
+            neg_dy_name,
             q_name,
             pq_name,
             dp_name,
@@ -44,8 +43,8 @@ class Ace(Dataset):
             pos_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
         )
         self.y_mm = np.memmap(y_name, mode="r", dtype=np.float64)
-        self.dy_mm = np.memmap(
-            dy_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
+        self.neg_dy_mm = np.memmap(
+            neg_dy_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
         )
         self.q_mm = np.memmap(q_name, mode="r", dtype=np.int8)
         self.pq_mm = np.memmap(pq_name, mode="r", dtype=np.float32)
@@ -78,7 +77,9 @@ class Ace(Dataset):
         for path in tqdm(self.raw_paths, desc="Files"):
             molecules = list(h5py.File(path).items())
 
-            for i_mol, (mol_id, mol) in tqdm(enumerate(molecules), desc="Molecules", leave=False):
+            for i_mol, (mol_id, mol) in tqdm(
+                enumerate(molecules), desc="Molecules", leave=False
+            ):
 
                 # Subsample molecules
                 if i_mol % self.subsample_molecules != 0:
@@ -103,8 +104,8 @@ class Ace(Dataset):
                     assert y.shape == ()
 
                     assert conf["forces"].attrs["units"] == "eV/Å"
-                    dy = -pt.tensor(conf["forces"], dtype=pt.float32)
-                    assert dy.shape == pos.shape
+                    neg_dy = -pt.tensor(conf["forces"], dtype=pt.float32)
+                    assert neg_dy.shape == pos.shape
 
                     assert conf["partial_charges"].attrs["units"] == "e"
                     pq = pt.tensor(conf["partial_charges"], dtype=pt.float32)
@@ -116,11 +117,13 @@ class Ace(Dataset):
 
                     # Skip samples with large forces
                     if self.max_gradient:
-                        if dy.norm(dim=1).max() > float(self.max_gradient):
+                        if neg_dy.norm(dim=1).max() > float(self.max_gradient):
                             continue
 
                     # Create a sample
-                    args = dict(z=z, pos=pos, y=y.view(1, 1), dy=dy, q=q, pq=pq, dp=dp)
+                    args = dict(
+                        z=z, pos=pos, y=y.view(1, 1), neg_dy=neg_dy, q=q, pq=pq, dp=dp
+                    )
                     if mol_ids:
                         args["mol_id"] = mol_id
                     data = Data(**args)
@@ -140,7 +143,7 @@ class Ace(Dataset):
             f"{self.name}.z.mmap",
             f"{self.name}.pos.mmap",
             f"{self.name}.y.mmap",
-            f"{self.name}.dy.mmap",
+            f"{self.name}.neg_dy.mmap",
             f"{self.name}.q.mmap",
             f"{self.name}.pq.mmap",
             f"{self.name}.dp.mmap",
@@ -167,7 +170,7 @@ class Ace(Dataset):
             z_name,
             pos_name,
             y_name,
-            dy_name,
+            neg_dy_name,
             q_name,
             pq_name,
             dp_name,
@@ -182,8 +185,8 @@ class Ace(Dataset):
         y_mm = np.memmap(
             y_name + ".tmp", mode="w+", dtype=np.float64, shape=num_all_confs
         )
-        dy_mm = np.memmap(
-            dy_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
+        neg_dy_mm = np.memmap(
+            neg_dy_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
         )
         q_mm = np.memmap(q_name + ".tmp", mode="w+", dtype=np.int8, shape=num_all_confs)
         pq_mm = np.memmap(
@@ -202,7 +205,7 @@ class Ace(Dataset):
             z_mm[i_atom:i_next_atom] = data.z.to(pt.int8)
             pos_mm[i_atom:i_next_atom] = data.pos
             y_mm[i_conf] = data.y
-            dy_mm[i_atom:i_next_atom] = data.dy
+            neg_dy_mm[i_atom:i_next_atom] = data.neg_dy
             q_mm[i_conf] = data.q.to(pt.int8)
             pq_mm[i_atom:i_next_atom] = data.pq
             dp_mm[i_conf] = data.dp
@@ -216,7 +219,7 @@ class Ace(Dataset):
         z_mm.flush()
         pos_mm.flush()
         y_mm.flush()
-        dy_mm.flush()
+        neg_dy_mm.flush()
         q_mm.flush()
         pq_mm.flush()
         dp_mm.flush()
@@ -225,7 +228,7 @@ class Ace(Dataset):
         os.rename(z_mm.filename, z_name)
         os.rename(pos_mm.filename, pos_name)
         os.rename(y_mm.filename, y_name)
-        os.rename(dy_mm.filename, dy_name)
+        os.rename(neg_dy_mm.filename, neg_dy_name)
         os.rename(q_mm.filename, q_name)
         os.rename(pq_mm.filename, pq_name)
         os.rename(dp_mm.filename, dp_name)
@@ -241,9 +244,9 @@ class Ace(Dataset):
         y = pt.tensor(self.y_mm[idx], dtype=pt.float32).view(
             1, 1
         )  # It would be better to use float64, but the trainer complaints
-        dy = pt.tensor(self.dy_mm[atoms], dtype=pt.float32)
+        neg_dy = pt.tensor(self.neg_dy_mm[atoms], dtype=pt.float32)
         q = pt.tensor(self.q_mm[idx], dtype=pt.long)
         pq = pt.tensor(self.pq_mm[atoms], dtype=pt.float32)
         dp = pt.tensor(self.dp_mm[idx], dtype=pt.float32)
 
-        return Data(z=z, pos=pos, y=y, dy=dy, q=q, pq=pq, dp=dp)
+        return Data(z=z, pos=pos, y=y, neg_dy=neg_dy, q=q, pq=pq, dp=dp)
