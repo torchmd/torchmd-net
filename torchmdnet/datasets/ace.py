@@ -104,7 +104,7 @@ class Ace(Dataset):
                     assert y.shape == ()
 
                     assert conf["forces"].attrs["units"] == "eV/Å"
-                    neg_dy = -pt.tensor(conf["forces"], dtype=pt.float32)
+                    neg_dy = pt.tensor(conf["forces"], dtype=pt.float32)
                     assert neg_dy.shape == pos.shape
 
                     assert conf["partial_charges"].attrs["units"] == "e"
