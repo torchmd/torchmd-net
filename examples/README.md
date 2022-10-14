@@ -3,7 +3,7 @@
 ## Training
 We provide three example config files for the ET for training on QM9, MD17 and ANI1 respectively. To train on a QM9 target other than `energy_U0`, change the parameter `dataset_arg` in the QM9 config file. Changing the MD17 molecule to train on works analogously. To train an ET from scratch you can use the following code from the torchmd-net directory:
 ```bash
-CUDA_VISIBLE_DEVICES=0,1 python scripts/train.py --conf examples/ET-{QM9,MD17,ANI1}.yaml
+CUDA_VISIBLE_DEVICES=0,1 torchmd-train --conf examples/ET-{QM9,MD17,ANI1}.yaml
 ```
 Use the `CUDA_VISIBLE_DEVICES` environment variable to select which and how many GPUs you want to train on. The example above selects GPUs with indices 0 and 1. The training code will want to save checkpoints and config files in a directory called `logs/`, which you can change either in the config .yaml file or as an additional command line argument: `--log-dir path/to/log-dir`.
 

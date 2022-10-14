@@ -13,14 +13,14 @@ dataset_root: ~/data
 derivative: true
 distance_influence: both
 early_stopping_patience: 300
-ema_alpha_dy: 1.0
+ema_alpha_neg_dy: 1.0
 ema_alpha_y: 0.05
 embed_files: null
 embedding_dimension: 128
 energy_files: null
-energy_weight: 0.2
+y_weight: 0.2
 force_files: null
-force_weight: 0.8
+neg_dy_weight: 0.8
 inference_batch_size: 64
 load_model: null
 log_dir: logs/

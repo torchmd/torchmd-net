@@ -1,4 +1,5 @@
 from abc import abstractmethod, ABCMeta
+from torch_scatter import scatter
 from typing import Optional
 from torchmdnet.models.utils import act_class_mapping, GatedEquivariantBlock
 from torchmdnet.utils import atomic_masses
@@ -11,9 +12,10 @@ __all__ = ["Scalar", "DipoleMoment", "ElectronicSpatialExtent"]
 
 
 class OutputModel(nn.Module, metaclass=ABCMeta):
-    def __init__(self, allow_prior_model):
+    def __init__(self, allow_prior_model, reduce_op):
         super(OutputModel, self).__init__()
         self.allow_prior_model = allow_prior_model
+        self.reduce_op = reduce_op
 
     def reset_parameters(self):
         pass
@@ -22,13 +24,24 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
     def pre_reduce(self, x, v, z, pos, batch):
         return
 
+    def reduce(self, x, batch):
+        return scatter(x, batch, dim=0, reduce=self.reduce_op)
+
     def post_reduce(self, x):
         return x
 
 
 class Scalar(OutputModel):
-    def __init__(self, hidden_channels, activation="silu", allow_prior_model=True):
-        super(Scalar, self).__init__(allow_prior_model=allow_prior_model)
+    def __init__(
+        self,
+        hidden_channels,
+        activation="silu",
+        allow_prior_model=True,
+        reduce_op="sum",
+    ):
+        super(Scalar, self).__init__(
+            allow_prior_model=allow_prior_model, reduce_op=reduce_op
+        )
         act_class = act_class_mapping[activation]
         self.output_network = nn.Sequential(
             nn.Linear(hidden_channels, hidden_channels // 2),
@@ -49,8 +62,16 @@ class Scalar(OutputModel):
 
 
 class EquivariantScalar(OutputModel):
-    def __init__(self, hidden_channels, activation="silu", allow_prior_model=True):
-        super(EquivariantScalar, self).__init__(allow_prior_model=allow_prior_model)
+    def __init__(
+        self,
+        hidden_channels,
+        activation="silu",
+        allow_prior_model=True,
+        reduce_op="sum",
+    ):
+        super(EquivariantScalar, self).__init__(
+            allow_prior_model=allow_prior_model, reduce_op=reduce_op
+        )
         self.output_network = nn.ModuleList(
             [
                 GatedEquivariantBlock(
@@ -77,9 +98,9 @@ class EquivariantScalar(OutputModel):
 
 
 class DipoleMoment(Scalar):
-    def __init__(self, hidden_channels, activation="silu"):
+    def __init__(self, hidden_channels, activation="silu", reduce_op="sum"):
         super(DipoleMoment, self).__init__(
-            hidden_channels, activation, allow_prior_model=False
+            hidden_channels, activation, allow_prior_model=False, reduce_op=reduce_op
         )
         atomic_mass = torch.from_numpy(atomic_masses).float()
         self.register_buffer("atomic_mass", atomic_mass)
@@ -98,9 +119,9 @@ class DipoleMoment(Scalar):
 
 
 class EquivariantDipoleMoment(EquivariantScalar):
-    def __init__(self, hidden_channels, activation="silu"):
+    def __init__(self, hidden_channels, activation="silu", reduce_op="sum"):
         super(EquivariantDipoleMoment, self).__init__(
-            hidden_channels, activation, allow_prior_model=False
+            hidden_channels, activation, allow_prior_model=False, reduce_op=reduce_op
         )
         atomic_mass = torch.from_numpy(atomic_masses).float()
         self.register_buffer("atomic_mass", atomic_mass)
@@ -120,8 +141,10 @@ class EquivariantDipoleMoment(EquivariantScalar):
 
 
 class ElectronicSpatialExtent(OutputModel):
-    def __init__(self, hidden_channels, activation="silu"):
-        super(ElectronicSpatialExtent, self).__init__(allow_prior_model=False)
+    def __init__(self, hidden_channels, activation="silu", reduce_op="sum"):
+        super(ElectronicSpatialExtent, self).__init__(
+            allow_prior_model=False, reduce_op=reduce_op
+        )
         act_class = act_class_mapping[activation]
         self.output_network = nn.Sequential(
             nn.Linear(hidden_channels, hidden_channels // 2),
@@ -155,9 +178,9 @@ class EquivariantElectronicSpatialExtent(ElectronicSpatialExtent):
 
 
 class EquivariantVectorOutput(EquivariantScalar):
-    def __init__(self, hidden_channels, activation="silu"):
+    def __init__(self, hidden_channels, activation="silu", reduce_op="sum"):
         super(EquivariantVectorOutput, self).__init__(
-            hidden_channels, activation, allow_prior_model=False
+            hidden_channels, activation, allow_prior_model=False, reduce_op="sum"
         )
 
     def pre_reduce(self, x, v, z, pos, batch):

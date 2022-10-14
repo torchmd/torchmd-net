@@ -51,7 +51,7 @@ def test_custom(energy, forces, num_files, tmpdir, num_samples=100):
     if energy:
         assert hasattr(sample, "y"), "Sample doesn't contain energy"
     if forces:
-        assert hasattr(sample, "dy"), "Sample doesn't contain forces"
+        assert hasattr(sample, "neg_dy"), "Sample doesn't contain forces"
 
 
 def test_hdf5_multiprocessing(tmpdir, num_entries=100):
