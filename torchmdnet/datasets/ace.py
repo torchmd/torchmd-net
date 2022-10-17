@@ -74,11 +74,15 @@ class Ace(Dataset):
 
         assert self.subsample_molecules > 0
 
-        for path in tqdm(self.raw_paths, desc="Files"):
-            molecules = list(h5py.File(path).items())
+        # for path in tqdm(self.raw_paths, desc="Files"):
+        for path in self.raw_paths:
+            mols = h5py.File(path).items()
 
             for i_mol, (mol_id, mol) in tqdm(
-                enumerate(molecules), desc="Molecules", leave=False
+                enumerate(mols),
+                desc="Molecules",
+                total=len(mols),
+                leave=False,
             ):
 
                 # Subsample molecules
@@ -96,7 +100,7 @@ class Ace(Dataset):
                         continue
 
                     assert conf["positions"].attrs["units"] == "Å"
-                    pos = pt.tensor(conf["positions"], dtype=pt.float32)
+                    pos = pt.tensor(conf["positions"][...], dtype=pt.float32)
                     assert pos.shape == (z.shape[0], 3)
 
                     assert conf["formation_energy"].attrs["units"] == "eV"
@@ -104,15 +108,15 @@ class Ace(Dataset):
                     assert y.shape == ()
 
                     assert conf["forces"].attrs["units"] == "eV/Å"
-                    neg_dy = pt.tensor(conf["forces"], dtype=pt.float32)
+                    neg_dy = pt.tensor(conf["forces"][...], dtype=pt.float32)
                     assert neg_dy.shape == pos.shape
 
                     assert conf["partial_charges"].attrs["units"] == "e"
-                    pq = pt.tensor(conf["partial_charges"], dtype=pt.float32)
+                    pq = pt.tensor(conf["partial_charges"][:], dtype=pt.float32)
                     assert pq.shape == z.shape
 
                     assert conf["dipole_moment"].attrs["units"] == "e*Å"
-                    dp = pt.tensor(conf["dipole_moment"], dtype=pt.float32)
+                    dp = pt.tensor(conf["dipole_moment"][:], dtype=pt.float32)
                     assert dp.shape == (3,)
 
                     # Skip samples with large forces
