@@ -101,6 +101,38 @@ class Ace(Dataset):
 
             yield pos, y, neg_dy, pq, dp
 
+    @staticmethod
+    def _load_confs_2_0(mol, n_atoms):
+
+        assert mol["positions"].attrs["units"] == "Å"
+        all_pos = pt.tensor(mol["positions"][...], dtype=pt.float32)
+        n_confs = all_pos.shape[0]
+        assert all_pos.shape == (n_confs, n_atoms, 3)
+
+        assert mol["formation_energies"].attrs["units"] == "eV"
+        all_y = pt.tensor(mol["formation_energes"][:], dtype=pt.float64)
+        assert all_y.shape == (n_confs,)
+
+        assert mol["forces"].attrs["units"] == "eV/Å"
+        all_neg_dy = pt.tensor(mol["forces"][...], dtype=pt.float32)
+        assert all_neg_dy.shape == all_pos.shape
+
+        assert mol["partial_charges"].attrs["units"] == "e"
+        all_pq = pt.tensor(mol["partial_charges"][...], dtype=pt.float32)
+        assert all_pq.shape == (n_confs, n_atoms)
+
+        assert mol["dipole_moments"].attrs["units"] == "e*Å"
+        all_dp = pt.tensor(mol["dipole_moments"][...], dtype=pt.float32)
+        assert all_dp.shape == (n_confs, 3)
+
+        for pos, y, neg_dy, pq, dp in zip(all_pos, all_y, all_neg_dy, all_pq, all_dp):
+
+            # Skip failed calculations
+            if y.is_nan():
+                continue
+
+            yield pos, y, neg_dy, pq, dp
+
     def sample_iter(self, mol_ids=False):
 
         assert self.subsample_molecules > 0
@@ -120,6 +152,7 @@ class Ace(Dataset):
             elif version == "2.0":
                 assert len(h5.keys()) == 0
                 mols = list(h5.values())[0].items()
+                load_confs = self._load_confs_2_0
             else:
                 raise RuntimeError(f"Unsuported layout verions: {version}")
 
