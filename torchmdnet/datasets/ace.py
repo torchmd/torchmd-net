@@ -71,7 +71,7 @@ class Ace(Dataset):
         raise RuntimeError(f"Cannot load {self.paths}")
 
     @staticmethod
-    def _load_confs_1_0(mol):
+    def _load_confs_1_0(mol, n_atoms):
 
         for conf in mol["conformations"].values():
 
@@ -81,7 +81,7 @@ class Ace(Dataset):
 
             assert conf["positions"].attrs["units"] == "Å"
             pos = pt.tensor(conf["positions"][...], dtype=pt.float32)
-            assert pos.shape == (z.shape[0], 3)
+            assert pos.shape == (n_atoms, 3)
 
             assert conf["formation_energy"].attrs["units"] == "eV"
             y = pt.tensor(conf["formation_energy"][()], dtype=pt.float64)
@@ -93,7 +93,7 @@ class Ace(Dataset):
 
             assert conf["partial_charges"].attrs["units"] == "e"
             pq = pt.tensor(conf["partial_charges"][:], dtype=pt.float32)
-            assert pq.shape == z.shape
+            assert pq.shape == (n_atoms,)
 
             assert conf["dipole_moment"].attrs["units"] == "e*Å"
             dp = pt.tensor(conf["dipole_moment"][:], dtype=pt.float32)
@@ -112,9 +112,11 @@ class Ace(Dataset):
             version = h5.attrs["layout_version"]
 
             mols = None
+            load_confs = None
             if version == "1.0":
                 assert "name" in h5.attrs
                 mols = h5.items()
+                load_confs = self._load_confs_1_0
             elif version == "2.0":
                 assert len(h5.keys()) == 0
                 mols = list(h5.values())[0].items()
@@ -137,7 +139,7 @@ class Ace(Dataset):
                 fq = pt.tensor(mol["formal_charges"], dtype=pt.long)
                 q = fq.sum()
 
-                for pos, y, neg_dy, pq, dp in self._load_confs_1_0(mol):
+                for pos, y, neg_dy, pq, dp in load_confs(mol, n_atoms=len(z)):
 
                     # Skip samples with large forces
                     if self.max_gradient:
