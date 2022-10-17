@@ -110,7 +110,7 @@ class Ace(Dataset):
         assert all_pos.shape == (n_confs, n_atoms, 3)
 
         assert mol["formation_energies"].attrs["units"] == "eV"
-        all_y = pt.tensor(mol["formation_energes"][:], dtype=pt.float64)
+        all_y = pt.tensor(mol["formation_energies"][:], dtype=pt.float64)
         assert all_y.shape == (n_confs,)
 
         assert mol["forces"].attrs["units"] == "eV/Å"
@@ -128,7 +128,7 @@ class Ace(Dataset):
         for pos, y, neg_dy, pq, dp in zip(all_pos, all_y, all_neg_dy, all_pq, all_dp):
 
             # Skip failed calculations
-            if y.is_nan():
+            if y.isnan():
                 continue
 
             yield pos, y, neg_dy, pq, dp
@@ -150,7 +150,7 @@ class Ace(Dataset):
                 mols = h5.items()
                 load_confs = self._load_confs_1_0
             elif version == "2.0":
-                assert len(h5.keys()) == 0
+                assert len(h5.keys()) == 1
                 mols = list(h5.values())[0].items()
                 load_confs = self._load_confs_2_0
             else:
