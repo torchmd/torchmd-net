@@ -74,10 +74,15 @@ class Ace(Dataset):
 
         assert self.subsample_molecules > 0
 
-        # for path in tqdm(self.raw_paths, desc="Files"):
-        for path in self.raw_paths:
-            mols = h5py.File(path).items()
+        for path in tqdm(self.raw_paths, desc="Files"):
 
+            h5 = h5py.File(path)
+            assert h5.attrs["layout"] == "Ace"
+            assert h5.attrs["layout_version"] == "1.0"
+            assert "name" in h5.attrs
+
+            # Iterate over the molecules
+            mols = h5.items()
             for i_mol, (mol_id, mol) in tqdm(
                 enumerate(mols),
                 desc="Molecules",
