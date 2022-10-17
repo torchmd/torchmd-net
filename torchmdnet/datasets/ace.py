@@ -70,6 +70,37 @@ class Ace(Dataset):
 
         raise RuntimeError(f"Cannot load {self.paths}")
 
+    @staticmethod
+    def _load_confs_1_0(mol):
+
+        for conf in mol["conformations"].values():
+
+            # Skip failed calculations
+            if "formation_energy" not in conf:
+                continue
+
+            assert conf["positions"].attrs["units"] == "Å"
+            pos = pt.tensor(conf["positions"][...], dtype=pt.float32)
+            assert pos.shape == (z.shape[0], 3)
+
+            assert conf["formation_energy"].attrs["units"] == "eV"
+            y = pt.tensor(conf["formation_energy"][()], dtype=pt.float64)
+            assert y.shape == ()
+
+            assert conf["forces"].attrs["units"] == "eV/Å"
+            neg_dy = pt.tensor(conf["forces"][...], dtype=pt.float32)
+            assert neg_dy.shape == pos.shape
+
+            assert conf["partial_charges"].attrs["units"] == "e"
+            pq = pt.tensor(conf["partial_charges"][:], dtype=pt.float32)
+            assert pq.shape == z.shape
+
+            assert conf["dipole_moment"].attrs["units"] == "e*Å"
+            dp = pt.tensor(conf["dipole_moment"][:], dtype=pt.float32)
+            assert dp.shape == (3,)
+
+            yield pos, y, neg_dy, pq, dp
+
     def sample_iter(self, mol_ids=False):
 
         assert self.subsample_molecules > 0
@@ -78,11 +109,19 @@ class Ace(Dataset):
 
             h5 = h5py.File(path)
             assert h5.attrs["layout"] == "Ace"
-            assert h5.attrs["layout_version"] == "1.0"
-            assert "name" in h5.attrs
+            version = h5.attrs["layout_version"]
+
+            mols = None
+            if version == "1.0":
+                assert "name" in h5.attrs
+                mols = h5.items()
+            elif version == "2.0":
+                assert len(h5.keys()) == 0
+                mols = list(h5.values())[0].items()
+            else:
+                raise RuntimeError(f"Unsuported layout verions: {version}")
 
             # Iterate over the molecules
-            mols = h5.items()
             for i_mol, (mol_id, mol) in tqdm(
                 enumerate(mols),
                 desc="Molecules",
@@ -98,31 +137,7 @@ class Ace(Dataset):
                 fq = pt.tensor(mol["formal_charges"], dtype=pt.long)
                 q = fq.sum()
 
-                for conf in mol["conformations"].values():
-
-                    # Skip failed calculations
-                    if "formation_energy" not in conf:
-                        continue
-
-                    assert conf["positions"].attrs["units"] == "Å"
-                    pos = pt.tensor(conf["positions"][...], dtype=pt.float32)
-                    assert pos.shape == (z.shape[0], 3)
-
-                    assert conf["formation_energy"].attrs["units"] == "eV"
-                    y = pt.tensor(conf["formation_energy"][()], dtype=pt.float64)
-                    assert y.shape == ()
-
-                    assert conf["forces"].attrs["units"] == "eV/Å"
-                    neg_dy = pt.tensor(conf["forces"][...], dtype=pt.float32)
-                    assert neg_dy.shape == pos.shape
-
-                    assert conf["partial_charges"].attrs["units"] == "e"
-                    pq = pt.tensor(conf["partial_charges"][:], dtype=pt.float32)
-                    assert pq.shape == z.shape
-
-                    assert conf["dipole_moment"].attrs["units"] == "e*Å"
-                    dp = pt.tensor(conf["dipole_moment"][:], dtype=pt.float32)
-                    assert dp.shape == (3,)
+                for pos, y, neg_dy, pq, dp in self._load_confs_1_0(mol):
 
                     # Skip samples with large forces
                     if self.max_gradient:
