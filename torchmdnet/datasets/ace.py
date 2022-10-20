@@ -308,4 +308,6 @@ class Ace(Dataset):
         pq = pt.tensor(self.pq_mm[atoms], dtype=pt.float32)
         dp = pt.tensor(self.dp_mm[idx], dtype=pt.float32)
 
+        y = pq.view(-1, 1)
+
         return Data(z=z, pos=pos, y=y, neg_dy=neg_dy, q=q, pq=pq, dp=dp)
