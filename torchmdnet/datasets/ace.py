@@ -18,6 +18,7 @@ class Ace(Dataset):
         max_gradient=None,
         subsample_molecules=1,
     ):
+        assert isinstance(paths, (str, list))
 
         arg_hash = f"{paths}{max_gradient}{subsample_molecules}"
         arg_hash = hashlib.md5(arg_hash.encode()).hexdigest()
@@ -59,16 +60,23 @@ class Ace(Dataset):
     @property
     def raw_paths(self):
 
-        if os.path.isfile(self.paths):
-            return [self.paths]
-        if os.path.isdir(self.paths):
-            return [
-                os.path.join(self.paths, file_)
-                for file_ in os.listdir(self.paths)
-                if file_.endswith(".h5")
-            ]
+        paths_init = self.paths if isinstance(self.paths, list) else [self.paths]
+        paths = []
+        for path in paths_init:
 
-        raise RuntimeError(f"Cannot load {self.paths}")
+            if os.path.isfile(path):
+                paths.append(path)
+                continue
+
+            if os.path.isdir(path):
+                for file_ in os.listdir(path):
+                    if file_.endswith(".h5"):
+                        paths.append(os.path.join(path, file_))
+                continue
+
+            raise RuntimeError(f"{path} is neither a directory nor a file")
+
+        return paths
 
     @staticmethod
     def _load_confs_1_0(mol, n_atoms):
