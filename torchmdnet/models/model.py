@@ -177,9 +177,9 @@ class TorchMD_Net(nn.Module):
         if self.std is not None:
             x = x * self.std
 
-        # apply prior model
+        # apply atom-wise prior model
         if self.prior_model is not None:
-            x = self.prior_model(x, z, pos, batch)
+            x = self.prior_model.pre_reduce(x, z, pos, batch)
 
         # aggregate atoms
         x = self.output_model.reduce(x, batch)
@@ -190,6 +190,10 @@ class TorchMD_Net(nn.Module):
 
         # apply output model after reduction
         y = self.output_model.post_reduce(x)
+
+        # apply molecular-wise prior model
+        if self.prior_model is not None:
+            y = self.prior_model.post_reduce(y, z, pos)
 
         # compute gradients with respect to coordinates
         if self.derivative:
