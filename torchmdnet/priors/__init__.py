@@ -1,1 +1,1 @@
-from .priors import Atomref
+from .atomref import Atomref

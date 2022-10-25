@@ -1,45 +1,7 @@
-from abc import abstractmethod, ABCMeta
+from .base import BasePrior
 import torch
 from torch import nn
 from pytorch_lightning.utilities import rank_zero_warn
-
-
-__all__ = ["Atomref"]
-
-
-class BasePrior(nn.Module, metaclass=ABCMeta):
-    r"""Base class for prior models.
-    Derive this class to make custom prior models, which take some arguments and a dataset as input.
-    As an example, have a look at the `torchmdnet.priors.Atomref` prior.
-    """
-
-    def __init__(self, dataset=None):
-        super(BasePrior, self).__init__()
-
-    @abstractmethod
-    def get_init_args(self):
-        r"""A function that returns all required arguments to construct a prior object.
-        The values should be returned inside a dict with the keys being the arguments' names.
-        All values should also be saveable in a .yaml file as this is used to reconstruct the
-        prior model from a checkpoint file.
-        """
-        return
-
-    @abstractmethod
-    def forward(self, x, z, pos, batch):
-        r"""Forward method of the prior model.
-
-        Args:
-            x (torch.Tensor): scalar atomwise predictions from the model.
-            z (torch.Tensor): atom types of all atoms.
-            pos (torch.Tensor): 3D atomic coordinates.
-            batch (torch.Tensor): tensor containing the sample index for each atom.
-
-        Returns:
-            torch.Tensor: updated scalar atomwise predictions
-        """
-        return
-
 
 class Atomref(BasePrior):
     r"""Atomref prior model.
@@ -48,7 +10,7 @@ class Atomref(BasePrior):
     """
 
     def __init__(self, max_z=None, dataset=None):
-        super(Atomref, self).__init__()
+        super().__init__()
         if max_z is None and dataset is None:
             raise ValueError("Can't instantiate Atomref prior, all arguments are None.")
         if dataset is None:
