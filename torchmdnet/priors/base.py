@@ -1,5 +1,6 @@
 from torch import nn
 
+
 class BasePrior(nn.Module):
     r"""Base class for prior models.
     Derive this class to make custom prior models, which take some arguments and a dataset as input.
@@ -43,4 +44,3 @@ class BasePrior(nn.Module):
             torch.Tensor: updated scalar molecular-wise predictions
         """
         return y
-

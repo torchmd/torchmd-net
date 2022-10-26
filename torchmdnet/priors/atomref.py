@@ -3,6 +3,7 @@ import torch
 from torch import nn
 from pytorch_lightning.utilities import rank_zero_warn
 
+
 class Atomref(BasePrior):
     r"""Atomref prior model.
     When using this in combination with some dataset, the dataset class must implement
