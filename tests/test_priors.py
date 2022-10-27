@@ -4,7 +4,7 @@ import torch
 import pytorch_lightning as pl
 from torchmdnet import models
 from torchmdnet.models.model import create_model
-from torchmdnet.priors import Atomref
+from torchmdnet.priors import Atomref, D2
 from torch_scatter import scatter
 from utils import load_example_args, create_example_batch, DummyDataset
 
@@ -31,3 +31,26 @@ def test_atomref(model_name):
     # check if the output of both models differs by the expected atomref contribution
     expected_offset = scatter(dataset.get_atomref().squeeze()[z], batch).unsqueeze(1)
     torch.testing.assert_allclose(x_atomref, x_no_atomref + expected_offset)
+
+
+def test_d2():
+
+    prior = D2()
+
+    y1 = torch.tensor([0.0, 0.0, 0.0])
+    z = torch.tensor([1, 8, 8, 1, 1, 8, 1])
+    pos = torch.tensor(
+        [
+            [0.0, 0.0, 0.0],
+            [4.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 4.0, 0.0],
+            [2.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0],
+            [0.0, 0.0, 2.0],
+        ]
+    )
+    batch = torch.tensor([0, 0, 1, 1, 2, 2, 2])
+
+    y2 = prior.post_reduce(y1, z, pos, batch)
+    assert torch.isclose(y2[0], y[1])
