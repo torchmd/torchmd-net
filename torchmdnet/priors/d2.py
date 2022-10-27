@@ -1,5 +1,5 @@
-from .base import BasePrior
-from ..models.utils import Distance
+from torchmdnet.priors.base import BasePrior
+from torchmdnet.models.utils import Distance
 import torch as pt
 from torch_scatter import scatter
 
