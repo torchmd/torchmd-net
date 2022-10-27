@@ -121,10 +121,13 @@ class ZBL(BasePrior):
         pass
 
     def forward(self, x, z, pos, batch):
-        edge_index, distance, _ = self.distance(pos*self.distance_scale*1.88973e10, batch)
+        edge_index, distance, _ = self.distance(pos, batch)
         atomic_number = self.atomic_number[z[edge_index]]
-        a = 0.8854/(atomic_number[0]**0.23 + atomic_number[0]**0.23)
-        d = distance/a
+        # 5.29e-11 is the Bohr radius in meters.  All other numbers are magic constants from the ZBL potential.
+        a = 0.8854*5.29177210903e-11/(atomic_number[0]**0.23 + atomic_number[1]**0.23)
+        d = distance*self.distance_scale/a
         f = 0.1818*torch.exp(-3.2*d) + 0.5099*torch.exp(-0.9423*d) + 0.2802*torch.exp(-0.4029*d) + 0.02817*torch.exp(-0.2016*d)
         f *= self.cutoff(distance)
-        return (2.30707755e-19/self.energy_scale)*torch.sum(f/distance, dim=-1)
+        # Compute the energy, converting to the dataset's units.  Multiply by 0.5 because every atom pair
+        # appears twice.
+        return 0.5*(2.30707755e-28/self.energy_scale/self.distance_scale)*torch.sum(f*atomic_number[0]*atomic_number[1]/distance, dim=-1)
