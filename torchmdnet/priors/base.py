@@ -32,13 +32,14 @@ class BasePrior(nn.Module):
         """
         return x
 
-    def post_reduce(self, y, z, pos):
+    def post_reduce(self, y, z, pos, batch):
         r"""Post-reduce method of the prior model.
 
         Args:
             y (torch.Tensor): scalar molecule-wise predictions from the model.
             z (torch.Tensor): atom types of all atoms.
             pos (torch.Tensor): 3D atomic coordinates.
+            batch (torch.Tensor): tensor containing the sample index for each atom.
 
         Returns:
             torch.Tensor: updated scalar molecular-wise predictions

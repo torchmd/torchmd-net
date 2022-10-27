@@ -1,4 +1,4 @@
-from .base import BasePrior
+from torchmdnet.priors.base import BasePrior
 import torch
 from torch import nn
 from pytorch_lightning.utilities import rank_zero_warn
