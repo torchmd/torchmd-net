@@ -1,1 +1,1 @@
-from .atomref import Atomref
+from torchmdnet.priors.atomref import Atomref
