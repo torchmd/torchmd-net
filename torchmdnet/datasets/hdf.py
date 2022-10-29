@@ -73,7 +73,7 @@ class HDF5(Dataset):
                 pos=torch.from_numpy(pos[i]),
                 z=torch.from_numpy(types[i]).to(torch.long),
                 y=torch.tensor([[energy[i]]]),
-                dy=torch.from_numpy(forces[i]),
+                neg_dy=torch.from_numpy(forces[i]),
             )
         else:
             types, pos, energy, i = self.index[idx]

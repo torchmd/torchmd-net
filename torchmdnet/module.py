@@ -72,7 +72,7 @@ class LNNP(LightningModule):
         with torch.set_grad_enabled(stage == "train" or self.hparams.derivative):
             # TODO: the model doesn't necessarily need to return a derivative once
             # Union typing works under TorchScript (https://github.com/pytorch/pytorch/pull/53180)
-            pred, deriv = self(
+            y, neg_dy = self(
                 batch.z,
                 batch.pos,
                 batch=batch.batch,
@@ -80,37 +80,37 @@ class LNNP(LightningModule):
                 s=batch.s if self.hparams.spin else None,
             )
 
-        loss_y, loss_dy = 0, 0
+        loss_y, loss_neg_dy = 0, 0
         if self.hparams.derivative:
             if "y" not in batch:
                 # "use" both outputs of the model's forward function but discard the first
-                # to only use the derivative and avoid 'Expected to have finished reduction
+                # to only use the negative derivative and avoid 'Expected to have finished reduction
                 # in the prior iteration before starting a new one.', which otherwise get's
                 # thrown because of setting 'find_unused_parameters=False' in the DDPPlugin
-                deriv = deriv + pred.sum() * 0
+                neg_dy = neg_dy + y.sum() * 0
 
-            # force/derivative loss
-            loss_dy = loss_fn(deriv, batch.dy)
+            # negative derivative loss
+            loss_neg_dy = loss_fn(neg_dy, batch.neg_dy)
 
-            if stage in ["train", "val"] and self.hparams.ema_alpha_dy < 1:
-                if self.ema[stage + "_dy"] is None:
-                    self.ema[stage + "_dy"] = loss_dy.detach()
-                # apply exponential smoothing over batches to dy
-                loss_dy = (
-                    self.hparams.ema_alpha_dy * loss_dy
-                    + (1 - self.hparams.ema_alpha_dy) * self.ema[stage + "_dy"]
+            if stage in ["train", "val"] and self.hparams.ema_alpha_neg_dy < 1:
+                if self.ema[stage + "_neg_dy"] is None:
+                    self.ema[stage + "_neg_dy"] = loss_neg_dy.detach()
+                # apply exponential smoothing over batches to neg_dy
+                loss_neg_dy = (
+                    self.hparams.ema_alpha_neg_dy * loss_neg_dy
+                    + (1 - self.hparams.ema_alpha_neg_dy) * self.ema[stage + "_neg_dy"]
                 )
-                self.ema[stage + "_dy"] = loss_dy.detach()
+                self.ema[stage + "_neg_dy"] = loss_neg_dy.detach()
 
-            if self.hparams.force_weight > 0:
-                self.losses[stage + "_dy"].append(loss_dy.detach())
+            if self.hparams.neg_dy_weight > 0:
+                self.losses[stage + "_neg_dy"].append(loss_neg_dy.detach())
 
         if "y" in batch:
             if batch.y.ndim == 1:
                 batch.y = batch.y.unsqueeze(1)
 
-            # energy/prediction loss
-            loss_y = loss_fn(pred, batch.y)
+            # y loss
+            loss_y = loss_fn(y, batch.y)
 
             if stage in ["train", "val"] and self.hparams.ema_alpha_y < 1:
                 if self.ema[stage + "_y"] is None:
@@ -122,11 +122,11 @@ class LNNP(LightningModule):
                 )
                 self.ema[stage + "_y"] = loss_y.detach()
 
-            if self.hparams.energy_weight > 0:
+            if self.hparams.y_weight > 0:
                 self.losses[stage + "_y"].append(loss_y.detach())
 
         # total loss
-        loss = loss_y * self.hparams.energy_weight + loss_dy * self.hparams.force_weight
+        loss = loss_y * self.hparams.y_weight + loss_neg_dy * self.hparams.neg_dy_weight
 
         self.losses[stage].append(loss.detach())
         return loss
@@ -172,20 +172,20 @@ class LNNP(LightningModule):
                 result_dict["test_loss"] = torch.stack(self.losses["test"]).mean()
 
             # if prediction and derivative are present, also log them separately
-            if len(self.losses["train_y"]) > 0 and len(self.losses["train_dy"]) > 0:
+            if len(self.losses["train_y"]) > 0 and len(self.losses["train_neg_dy"]) > 0:
                 result_dict["train_loss_y"] = torch.stack(self.losses["train_y"]).mean()
-                result_dict["train_loss_dy"] = torch.stack(
-                    self.losses["train_dy"]
+                result_dict["train_loss_neg_dy"] = torch.stack(
+                    self.losses["train_neg_dy"]
                 ).mean()
                 result_dict["val_loss_y"] = torch.stack(self.losses["val_y"]).mean()
-                result_dict["val_loss_dy"] = torch.stack(self.losses["val_dy"]).mean()
+                result_dict["val_loss_neg_dy"] = torch.stack(self.losses["val_neg_dy"]).mean()
 
                 if len(self.losses["test"]) > 0:
                     result_dict["test_loss_y"] = torch.stack(
                         self.losses["test_y"]
                     ).mean()
-                    result_dict["test_loss_dy"] = torch.stack(
-                        self.losses["test_dy"]
+                    result_dict["test_loss_neg_dy"] = torch.stack(
+                        self.losses["test_neg_dy"]
                     ).mean()
 
             self.log_dict(result_dict, sync_dist=True)
@@ -199,10 +199,10 @@ class LNNP(LightningModule):
             "train_y": [],
             "val_y": [],
             "test_y": [],
-            "train_dy": [],
-            "val_dy": [],
-            "test_dy": [],
+            "train_neg_dy": [],
+            "val_neg_dy": [],
+            "test_neg_dy": [],
         }
 
     def _reset_ema_dict(self):
-        self.ema = {"train_y": None, "val_y": None, "train_dy": None, "val_dy": None}
+        self.ema = {"train_y": None, "val_y": None, "train_neg_dy": None, "val_neg_dy": None}

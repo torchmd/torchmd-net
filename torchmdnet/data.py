@@ -28,11 +28,11 @@ class DataModule(LightningDataModule):
                     self.hparams["force_files"],
                 )
             else:
-                args = self.hparams["dataset_arg"]
-                if args is None:
-                    args = {}
+                dataset_arg = {}
+                if self.hparams["dataset_arg"] is not None:
+                    dataset_arg = self.hparams["dataset_arg"]
                 self.dataset = getattr(datasets, self.hparams["dataset"])(
-                    self.hparams["dataset_root"], **args
+                    self.hparams["dataset_root"], **dataset_arg
                 )
 
         self.idx_train, self.idx_val, self.idx_test = make_splits(
@@ -114,7 +114,7 @@ class DataModule(LightningDataModule):
 
     def _standardize(self):
         def get_energy(batch, atomref):
-            if batch.y is None:
+            if "y" not in batch or batch.y is None:
                 raise MissingEnergyException()
 
             if atomref is None:
