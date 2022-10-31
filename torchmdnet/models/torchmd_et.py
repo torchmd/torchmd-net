@@ -102,9 +102,9 @@ class TorchMD_ET(nn.Module):
 
         self.register_parameter("group_embedding", nn.Parameter(torch.empty(1, hidden_channels).uniform_(-1, 1)))
         self.register_parameter("period_embedding", nn.Parameter(torch.empty(1, hidden_channels).uniform_(-1, 1)))
-
-        self.register_buffer("z2group", torch.tensor([-1, 1, -1, -1, -1, -1, 14, 15, 16, 17]))
-        self.register_buffer("z2period", torch.tensor([-1, 1, -1, -1, -1, -1, 2, 2, 2, 2]))
+        # current mapping covers atomic numbers 1 (H) up to 20 (Ca) and 35 (Br) and 53 (I)
+        self.register_buffer("z2group", torch.tensor([float("nan"), 1, 18, 1, 2, 13, 14, 15, 16, 17, 18, 1, 2, 13, 14, 15, 16, 17, 18, 1, 2] + [float("nan")] * 14 + [17] + [float("nan")] * 17 + [17]))
+        self.register_buffer("z2period", torch.tensor([float("nan"), 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4] + [float("nan")] * 14 + [4] + [float("nan")] * 17 + [5]))
 
         self.distance = Distance(
             cutoff_lower,
