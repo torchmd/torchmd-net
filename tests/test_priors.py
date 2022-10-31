@@ -42,7 +42,7 @@ def test_zbl():
     # Use the ZBL class to compute the energy.
 
     zbl = ZBL(10.0, 5, atomic_number, distance_scale=distance_scale, energy_scale=energy_scale)
-    energy = zbl.post_reduce(torch.zeros((1,)), types, pos, torch.zeros(types.shape))[0]
+    energy = zbl.post_reduce(torch.zeros((1,)), types, pos, torch.zeros_like(types))[0]
 
     # Compare to the expected value.
 
