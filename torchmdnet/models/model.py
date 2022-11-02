@@ -65,16 +65,8 @@ def create_model(args, prior_model=None, mean=None, std=None):
 
     # prior model
     if args["prior_model"] and prior_model is None:
-        assert "prior_init_args" in args, (
-            f"Requested prior model {args['prior_model']} but the "
-            f'arguments are lacking the key "prior_init_args".'
-        )
-        assert hasattr(priors, args["prior_model"]), (
-            f'Unknown prior model {args["prior_model"]}. '
-            f'Available models are {", ".join(priors.__all__)}'
-        )
         # instantiate prior model if it was not passed to create_model (i.e. when loading a model)
-        prior_model = getattr(priors, args["prior_model"])(**args["prior_init_args"])
+        prior_model = create_prior_models(args)
 
     # create output network
     output_prefix = "Equivariant" if is_equivariant else ""
@@ -113,6 +105,36 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
     return model.to(device)
 
 
+def create_prior_models(args, dataset=None):
+    """Parse the prior_model configuration option and create the prior models."""
+    prior_models = []
+    if args.prior_model:
+        prior_model = args.prior_model
+        prior_names = []
+        prior_args = []
+        if not isinstance(prior_model, list):
+            prior_model = [prior_model]
+        for prior in prior_model:
+            if isinstance(prior, dict):
+                for key, value in prior.items():
+                    prior_names.append(key)
+                    if value is None:
+                        prior_args.append({})
+                    else:
+                        prior_args.append(value)
+            else:
+                prior_names.append(prior)
+                prior_args.append({})
+        for name, arg in zip(prior_names, prior_args):
+            assert hasattr(priors, name), (
+                f"Unknown prior model {name}. "
+                f"Available models are {', '.join(priors.__all__)}"
+            )
+            # initialize the prior model
+            prior_models.append(getattr(priors, name)(dataset=dataset, **arg))
+    return prior_models
+
+
 class TorchMD_Net(nn.Module):
     def __init__(
         self,
@@ -127,15 +149,17 @@ class TorchMD_Net(nn.Module):
         self.representation_model = representation_model
         self.output_model = output_model
 
-        self.prior_model = prior_model
         if not output_model.allow_prior_model and prior_model is not None:
-            self.prior_model = None
+            prior_model = None
             rank_zero_warn(
                 (
                     "Prior model was given but the output model does "
                     "not allow prior models. Dropping the prior model."
                 )
             )
+        if isinstance(prior_model, priors.base.BasePrior):
+            prior_model = [prior_model]
+        self.prior_model = None if prior_model is None else torch.nn.ModuleList(prior_model)
 
         self.derivative = derivative
 
@@ -150,7 +174,8 @@ class TorchMD_Net(nn.Module):
         self.representation_model.reset_parameters()
         self.output_model.reset_parameters()
         if self.prior_model is not None:
-            self.prior_model.reset_parameters()
+            for prior in self.prior_model:
+                prior.reset_parameters()
 
     def forward(
         self,
@@ -179,7 +204,8 @@ class TorchMD_Net(nn.Module):
 
         # apply atom-wise prior model
         if self.prior_model is not None:
-            x = self.prior_model.pre_reduce(x, z, pos, batch)
+            for prior in self.prior_model:
+                x = prior.pre_reduce(x, z, pos, batch)
 
         # aggregate atoms
         x = self.output_model.reduce(x, batch)
@@ -193,7 +219,8 @@ class TorchMD_Net(nn.Module):
 
         # apply molecular-wise prior model
         if self.prior_model is not None:
-            y = self.prior_model.post_reduce(y, z, pos, batch)
+            for prior in self.prior_model:
+                y = prior.post_reduce(y, z, pos, batch)
 
         # compute gradients with respect to coordinates
         if self.derivative:
