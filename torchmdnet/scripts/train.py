@@ -119,7 +119,7 @@ def main():
     data.prepare_data()
     data.setup("fit")
 
-    prior_models = create_prior_models(args, data.dataset)
+    prior_models = create_prior_models(vars(args), data.dataset)
     args.prior_args = [p.get_init_args() for p in prior_models]
 
     # initialize lightning module
