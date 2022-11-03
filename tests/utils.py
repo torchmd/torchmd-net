@@ -4,8 +4,10 @@ import torch
 from torch_geometric.data import Dataset, Data
 
 
-def load_example_args(model_name, remove_prior=False, **kwargs):
-    with open(join(dirname(dirname(__file__)), "examples", "ET-QM9.yaml"), "r") as f:
+def load_example_args(model_name, remove_prior=False, config_file=None, **kwargs):
+    if config_file is None:
+        config_file = join(dirname(dirname(__file__)), "examples", "ET-QM9.yaml")
+    with open(config_file, "r") as f:
         args = yaml.load(f, Loader=yaml.FullLoader)
     args["model"] = model_name
     args["seed"] = 1234
@@ -69,6 +71,9 @@ class DummyDataset(Dataset):
                 return self.atomref
 
             DummyDataset.get_atomref = _get_atomref
+        self.atomic_number = torch.arange(max(atom_types)+1)
+        self.distance_scale = 1.0
+        self.energy_scale = 1.0
 
     def get(self, idx):
         features = dict(z=self.z[idx].clone(), pos=self.pos[idx].clone())

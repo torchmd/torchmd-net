@@ -108,8 +108,8 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
 def create_prior_models(args, dataset=None):
     """Parse the prior_model configuration option and create the prior models."""
     prior_models = []
-    if args.prior_model:
-        prior_model = args.prior_model
+    if args['prior_model']:
+        prior_model = args['prior_model']
         prior_names = []
         prior_args = []
         if not isinstance(prior_model, list):
@@ -125,6 +125,10 @@ def create_prior_models(args, dataset=None):
             else:
                 prior_names.append(prior)
                 prior_args.append({})
+        if 'prior_args' in args:
+            prior_args = args['prior_args']
+            if not isinstance(prior_args):
+                prior_args = [prior_args]
         for name, arg in zip(prior_names, prior_args):
             assert hasattr(priors, name), (
                 f"Unknown prior model {name}. "

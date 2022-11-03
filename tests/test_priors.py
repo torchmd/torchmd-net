@@ -3,10 +3,13 @@ from pytest import mark
 import torch
 import pytorch_lightning as pl
 from torchmdnet import models
-from torchmdnet.models.model import create_model
+from torchmdnet.models.model import create_model, create_prior_models
+from torchmdnet.module import LNNP
 from torchmdnet.priors import Atomref, ZBL
 from torch_scatter import scatter
 from utils import load_example_args, create_example_batch, DummyDataset
+from os.path import dirname, join
+import tempfile
 
 
 @mark.parametrize("model_name", models.__all__)
@@ -59,3 +62,35 @@ def test_zbl():
         for j in range(i):
             expected += compute_interaction(pos[i], pos[j], atomic_number[types[i]], atomic_number[types[j]])
     torch.testing.assert_allclose(expected, energy)
+
+def test_multiple_priors():
+    # Create a model from a config file.
+
+    dataset = DummyDataset(has_atomref=True)
+    config_file = join(dirname(__file__), 'priors.yaml')
+    args = load_example_args('equivariant-transformer', config_file=config_file)
+    prior_models = create_prior_models(args, dataset)
+    args['prior_args'] = [p.get_init_args() for p in prior_models]
+    model = LNNP(args, prior_model=prior_models)
+    priors = model.model.prior_model
+
+    # Make sure the priors were created correctly.
+
+    assert len(priors) == 2
+    assert isinstance(priors[0], ZBL)
+    assert isinstance(priors[1], Atomref)
+    assert priors[0].cutoff_distance == 4.0
+    assert priors[0].max_num_neighbors == 50
+
+    # Save and load a checkpoint, and make sure the priors are correct.
+
+    with tempfile.NamedTemporaryFile() as f:
+        torch.save(model, f)
+        f.seek(0)
+        model2 = torch.load(f)
+        priors2 = model2.model.prior_model
+        assert len(priors2) == 2
+        assert isinstance(priors2[0], ZBL)
+        assert isinstance(priors2[1], Atomref)
+        assert priors2[0].cutoff_distance == priors[0].cutoff_distance
+        assert priors2[0].max_num_neighbors == priors[0].max_num_neighbors
