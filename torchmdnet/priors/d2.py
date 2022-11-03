@@ -182,5 +182,6 @@ class D2(BasePrior):
         batch = batch[ij[0]]
         E_disp = -self.s_6 * scatter(E_ij, batch, dim=0, reduce="sum")
         E_disp /= 2  # The pairs appear twice
+        E_disp = E_disp.reshape(y.shape)
 
         return y + E_disp / self.energy_scale
