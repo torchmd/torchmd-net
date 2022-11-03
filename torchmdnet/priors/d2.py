@@ -31,10 +31,21 @@ class D2(BasePrior):
     dataset: Dataset or None
         Dataset object.
         If `dataset=None`; `atomic_numbers`, `position_scale`, and `energy_scale` have to be set.
+
+    Example
+    -------
+    >>> from torchmdnet.priors import D2
+    >>> prior = D2(
+            cutoff=10.0,  # Å
+            max_num_neighbors=128,
+            atomic_numbers=list(range(100)),
+            position_scale=1e-10,  # Å --> m
+            energy_scale=4.35974e-18,  # Hartree --> J
+        )
     """
 
+    # C_6 parameters (J/mol*nm^6) and and van der Waals radii (Å) for elements.
     # Taken from Table 1
-    # C_6 parameters (J/mol*nm^6) and and van der Waals radii (Å) for elements
     C_6_R_r = pt.tensor(
         [
             [pt.nan, pt.nan],  # 0
@@ -65,7 +76,6 @@ class D2(BasePrior):
         super().__init__()
         self.cutoff = float(cutoff)
         self.max_num_neighbors = int(max_num_neighbors)
-
         self.atomic_numbers = list(
             dataset.atomic_numbers if atomic_numbers is None else atomic_numbers
         )
@@ -76,23 +86,22 @@ class D2(BasePrior):
             dataset.energy_scale if energy_scale is None else energy_scale
         )
 
+        # Convert to interal units: nm and J/mol
+        # NOTE: float32 is overflowed, if m and J are used
         self.position_scale *= 1e9  # m --> nm
         self.energy_scale *= 6.02214076e23  # J --> J/mol
 
+        # Distance calculator
         self.distances = Distance(
             cutoff_lower=0,
             cutoff_upper=self.cutoff / self.position_scale,
             max_num_neighbors=self.max_num_neighbors,
         )
 
-        # Atomic number mapping
+        # Parameters (default values from the reference)
         self.register_buffer("Z_map", pt.tensor(self.atomic_numbers, dtype=pt.long))
-
-        # Atomic parameters
         self.register_buffer("C_6", self.C_6_R_r[:, 0])
         self.register_buffer("R_r", self.C_6_R_r[:, 1])
-
-        # Default values from the reference
         self.d = 20
         self.s_6 = 1
 
@@ -107,17 +116,21 @@ class D2(BasePrior):
 
     def post_reduce(self, y, z, pos, batch):
 
+        # Get atom pairs and their distancence
         ij, R_ij, _ = self.distances(pos * self.position_scale, batch)
 
+        # Compute the pair parameters
         Z = self.Z_map[z[ij]]
         C_6 = self.C_6[Z].prod(dim=0).sqrt()
         R_r = self.R_r[Z].sum(dim=0)
 
+        # Compute pair contributions
         f_dump = 1 / (1 + pt.exp(-self.d * (R_ij / R_r - 1)))
         E_ij = C_6 / R_ij**6 * f_dump
 
+        # Acculate the contributions
         batch = batch[ij[0]]
         E_disp = -self.s_6 * scatter(E_ij, batch, dim=0, reduce="sum")
-        E_disp /= 2
+        E_disp /= 2 # The pairs appear twice
 
         return y + E_disp / self.energy_scale
