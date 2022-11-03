@@ -148,6 +148,9 @@ class D2(BasePrior):
         self.d = 20
         self.s_6 = 1
 
+    def reset_parameters(self):
+        pass
+
     def get_init_args(self):
         return {
             "cutoff": self.cutoff,
