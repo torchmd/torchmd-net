@@ -35,7 +35,13 @@ def test_atomref(model_name):
 
 def test_d2():
 
-    prior = D2()
+    prior = D2(
+        cutoff=10.0,  # Å
+        max_num_neighbors=128,
+        atomic_numbers=list(range(100)),
+        position_scale=1e-10,  # Å --> m
+        energy_scale=4.35974e-18,  # Hartree --> J
+    )
 
     y1 = torch.tensor([0.0, 0.0, 0.0])
     z = torch.tensor([1, 8, 8, 1, 1, 8, 1])
@@ -53,4 +59,7 @@ def test_d2():
     batch = torch.tensor([0, 0, 1, 1, 2, 2, 2])
 
     y2 = prior.post_reduce(y1, z, pos, batch)
-    assert torch.isclose(y2[0], y[1])
+    assert torch.isclose(y2[0], y2[1])
+
+    # print(y2)
+    # assert False
