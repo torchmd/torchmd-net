@@ -119,6 +119,10 @@ class D2(BasePrior):
         # Get atom pairs and their distancence
         ij, R_ij, _ = self.distances(pos * self.position_scale, batch)
 
+        # No interactions
+        if ij.shape[1] == 0:
+            return y
+
         # Compute the pair parameters
         Z = self.Z_map[z[ij]]
         C_6 = self.C_6[Z].prod(dim=0).sqrt()
@@ -131,6 +135,6 @@ class D2(BasePrior):
         # Acculate the contributions
         batch = batch[ij[0]]
         E_disp = -self.s_6 * scatter(E_ij, batch, dim=0, reduce="sum")
-        E_disp /= 2 # The pairs appear twice
+        E_disp /= 2  # The pairs appear twice
 
         return y + E_disp / self.energy_scale
