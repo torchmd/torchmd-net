@@ -12,7 +12,7 @@ class ZBL(BasePrior):
 
     atomic_number: 1D tensor of length max_z.  atomic_number[z] is the atomic number of atoms with atom type z.
     distance_scale: multiply by this factor to convert coordinates stored in the dataset to meters
-    energy_scale: multiply by this factor to convert energies stored in the dataset to Joules
+    energy_scale: multiply by this factor to convert energies stored in the dataset to Joules (*not* J/mol)
     """
     def __init__(self, cutoff_distance, max_num_neighbors, atomic_number=None, distance_scale=None, energy_scale=None, dataset=None):
         super(ZBL, self).__init__()
