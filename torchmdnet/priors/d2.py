@@ -112,7 +112,7 @@ class D2(BasePrior):
         cutoff,
         max_num_neighbors,
         atomic_numbers=None,
-        position_scale=None,
+        distance_scale=None,
         energy_scale=None,
         dataset=None,
     ):
@@ -122,8 +122,8 @@ class D2(BasePrior):
         self.atomic_numbers = list(
             dataset.atomic_numbers if atomic_numbers is None else atomic_numbers
         )
-        self.position_scale = float(
-            dataset.position_scale if position_scale is None else position_scale
+        self.distance_scale = float(
+            dataset.distance_scale if distance_scale is None else distance_scale
         )
         self.energy_scale = float(
             dataset.energy_scale if energy_scale is None else energy_scale
@@ -131,13 +131,13 @@ class D2(BasePrior):
 
         # Convert to interal units: nm and J/mol
         # NOTE: float32 is overflowed, if m and J are used
-        self.position_scale *= 1e9  # m --> nm
+        self.distance_scale *= 1e9  # m --> nm
         self.energy_scale *= 6.02214076e23  # J --> J/mol
 
         # Distance calculator
         self.distances = Distance(
             cutoff_lower=0,
-            cutoff_upper=self.cutoff / self.position_scale,
+            cutoff_upper=self.cutoff / self.distance_scale,
             max_num_neighbors=self.max_num_neighbors,
         )
 
@@ -156,14 +156,14 @@ class D2(BasePrior):
             "cutoff": self.cutoff,
             "max_num_neighbors": self.max_num_neighbors,
             "atomic_numbers": self.atomic_numbers,
-            "position_scale": self.position_scale,
+            "distance_scale": self.distance_scale,
             "energy_scale": self.energy_scale,
         }
 
     def post_reduce(self, y, z, pos, batch):
 
         # Get atom pairs and their distancence
-        ij, R_ij, _ = self.distances(pos * self.position_scale, batch)
+        ij, R_ij, _ = self.distances(pos * self.distance_scale, batch)
 
         # No interactions
         if ij.shape[1] == 0:
