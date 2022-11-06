@@ -4,6 +4,7 @@ import torch
 import pytorch_lightning as pl
 from torchmdnet import models
 from torchmdnet.models.model import create_model
+from torchmdnet import priors
 from torchmdnet.priors import Atomref
 from torch_scatter import scatter
 from utils import load_example_args, create_example_batch, DummyDataset
@@ -31,3 +32,10 @@ def test_atomref(model_name):
     # check if the output of both models differs by the expected atomref contribution
     expected_offset = scatter(dataset.get_atomref().squeeze()[z], batch).unsqueeze(1)
     torch.testing.assert_allclose(x_atomref, x_no_atomref + expected_offset)
+
+
+def test_prior_list():
+    # make sure the priors submodule defines the __all__ attribute
+    assert hasattr(priors, "__all__")
+    # make sure it's not empty
+    assert len(priors.__all__) > 0
