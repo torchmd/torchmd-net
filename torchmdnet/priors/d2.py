@@ -109,11 +109,11 @@ class D2(BasePrior):
 
     def __init__(
         self,
-        cutoff,
-        max_num_neighbors,
-        atomic_numbers=None,
-        distance_scale=None,
-        energy_scale=None,
+        cutoff=100.0,
+        max_num_neighbors=128,
+        atomic_numbers=list(range(100)),
+        distance_scale=1e-10,  # A --> m
+        energy_scale=1.60218e-19,  # eV --> J
         dataset=None,
     ):
         super().__init__()
