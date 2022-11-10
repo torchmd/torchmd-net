@@ -11,6 +11,7 @@ from torchmdnet.module import LNNP
 from torchmdnet import datasets, priors, models
 from torchmdnet.data import DataModule
 from torchmdnet.models import output_modules
+from torchmdnet.models.model import create_prior_models
 from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping
 from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, number
 
@@ -118,18 +119,11 @@ def main():
     data.prepare_data()
     data.setup("fit")
 
-    prior = None
-    if args.prior_model:
-        assert hasattr(priors, args.prior_model), (
-            f"Unknown prior model {args['prior_model']}. "
-            f"Available models are {', '.join(priors.__all__)}"
-        )
-        # initialize the prior model
-        prior = getattr(priors, args.prior_model)(dataset=data.dataset)
-        args.prior_args = prior.get_init_args()
+    prior_models = create_prior_models(vars(args), data.dataset)
+    args.prior_args = [p.get_init_args() for p in prior_models]
 
     # initialize lightning module
-    model = LNNP(args, prior_model=prior, mean=data.mean, std=data.std)
+    model = LNNP(args, prior_model=prior_models, mean=data.mean, std=data.std)
 
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.log_dir,

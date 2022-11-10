@@ -1,6 +1,7 @@
 import torch
 from torch_geometric.data import Dataset, Data
 import h5py
+import numpy as np
 
 
 class HDF5(Dataset):
@@ -27,7 +28,12 @@ class HDF5(Dataset):
         files = [h5py.File(f, "r") for f in self.filename.split(";")]
         for file in files:
             for group_name in file:
-                self.num_molecules += len(file[group_name]["energy"])
+                if group_name == '_metadata':
+                    group = file[group_name]
+                    for name in group:
+                        setattr(self, name, torch.tensor(np.array(group[name])))
+                else:
+                    self.num_molecules += len(file[group_name]["energy"])
             file.close()
 
     def setup_index(self):
@@ -36,18 +42,19 @@ class HDF5(Dataset):
         self.index = []
         for file in files:
             for group_name in file:
-                group = file[group_name]
-                types = group["types"]
-                pos = group["pos"]
-                energy = group["energy"]
-                if "forces" in group:
-                    self.has_forces = True
-                    forces = group["forces"]
-                    for i in range(len(energy)):
-                        self.index.append((types, pos, energy, forces, i))
-                else:
-                    for i in range(len(energy)):
-                        self.index.append((types, pos, energy, i))
+                if group_name != '_metadata':
+                    group = file[group_name]
+                    types = group["types"]
+                    pos = group["pos"]
+                    energy = group["energy"]
+                    if "forces" in group:
+                        self.has_forces = True
+                        forces = group["forces"]
+                        for i in range(len(energy)):
+                            self.index.append((types, pos, energy, forces, i))
+                    else:
+                        for i in range(len(energy)):
+                            self.index.append((types, pos, energy, i))
 
         assert self.num_molecules == len(self.index), (
             "Mismatch between previously calculated "
