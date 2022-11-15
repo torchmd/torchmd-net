@@ -3,6 +3,8 @@ import torch as pt
 from pytest import mark
 
 
+# This functions is intentionally not used.
+# It is here just to document how the reference values were computed.
 def compute_with_psi4(z, pos):
     """
     Compute the D2 term with Psi4

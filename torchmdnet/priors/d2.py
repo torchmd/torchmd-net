@@ -175,8 +175,8 @@ class D2(BasePrior):
         R_r = self.R_r[Z].sum(dim=0)
 
         # Compute pair contributions
-        f_dump = 1 / (1 + pt.exp(-self.d * (R_ij / R_r - 1)))
-        E_ij = C_6 / R_ij**6 * f_dump
+        f_damp = 1 / (1 + pt.exp(-self.d * (R_ij / R_r - 1)))
+        E_ij = C_6 / R_ij**6 * f_damp
 
         # Acculate the contributions
         batch = batch[ij[0]]
