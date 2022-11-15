@@ -127,7 +127,7 @@ def create_prior_models(args, dataset=None):
                 prior_args.append({})
         if 'prior_args' in args:
             prior_args = args['prior_args']
-            if not isinstance(prior_args):
+            if not isinstance(prior_args, list):
                 prior_args = [prior_args]
         for name, arg in zip(prior_names, prior_args):
             assert hasattr(priors, name), (
