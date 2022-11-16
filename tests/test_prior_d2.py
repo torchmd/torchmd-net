@@ -69,7 +69,7 @@ def test_d2(test_case):
     prior = D2(
         cutoff=10.0,  # Å
         max_num_neighbors=128,
-        atomic_numbers=list(range(100)),
+        atomic_number=list(range(100)),
         distance_scale=1e-10,  # Å --> m
         energy_scale=4.35974e-18,  # Hartree --> J
     )

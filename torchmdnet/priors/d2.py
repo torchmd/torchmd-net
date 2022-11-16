@@ -111,7 +111,7 @@ class D2(BasePrior):
         self,
         cutoff,
         max_num_neighbors,
-        atomic_numbers=None,
+        atomic_number=None,
         distance_scale=None,
         energy_scale=None,
         dataset=None,
@@ -119,8 +119,8 @@ class D2(BasePrior):
         super().__init__()
         self.cutoff = float(cutoff)
         self.max_num_neighbors = int(max_num_neighbors)
-        self.atomic_numbers = list(
-            dataset.atomic_numbers if atomic_numbers is None else atomic_numbers
+        self.atomic_number = list(
+            dataset.atomic_number if atomic_number is None else atomic_number
         )
         self.distance_scale = float(
             dataset.distance_scale if distance_scale is None else distance_scale
@@ -142,7 +142,7 @@ class D2(BasePrior):
         )
 
         # Parameters (default values from the reference)
-        self.register_buffer("Z_map", pt.tensor(self.atomic_numbers, dtype=pt.long))
+        self.register_buffer("Z_map", pt.tensor(self.atomic_number, dtype=pt.long))
         self.register_buffer("C_6", self.C_6_R_r[:, 0])
         self.register_buffer("R_r", self.C_6_R_r[:, 1])
         self.d = 20
@@ -155,7 +155,7 @@ class D2(BasePrior):
         return {
             "cutoff": self.cutoff,
             "max_num_neighbors": self.max_num_neighbors,
-            "atomic_numbers": self.atomic_numbers,
+            "atomic_number": self.atomic_number,
             "distance_scale": self.distance_scale,
             "energy_scale": self.energy_scale,
         }
