@@ -67,7 +67,7 @@ def test_d2(test_case):
     name, data = test_case
 
     prior = D2(
-        cutoff=10.0,  # Å
+        cutoff_distance=10.0,  # Å
         max_num_neighbors=128,
         atomic_number=list(range(100)),
         distance_scale=1e-10,  # Å --> m

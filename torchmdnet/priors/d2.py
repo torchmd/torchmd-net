@@ -109,7 +109,7 @@ class D2(BasePrior):
 
     def __init__(
         self,
-        cutoff,
+        cutoff_distance,
         max_num_neighbors,
         atomic_number=None,
         distance_scale=None,
@@ -117,7 +117,7 @@ class D2(BasePrior):
         dataset=None,
     ):
         super().__init__()
-        self.cutoff = float(cutoff)
+        self.cutoff_distance = float(cutoff_distance)
         self.max_num_neighbors = int(max_num_neighbors)
         self.atomic_number = list(
             dataset.atomic_number if atomic_number is None else atomic_number
@@ -137,7 +137,7 @@ class D2(BasePrior):
         # Distance calculator
         self.distances = Distance(
             cutoff_lower=0,
-            cutoff_upper=self.cutoff / self.distance_scale,
+            cutoff_upper=self.cutoff_distance / self.distance_scale,
             max_num_neighbors=self.max_num_neighbors,
         )
 
@@ -153,7 +153,7 @@ class D2(BasePrior):
 
     def get_init_args(self):
         return {
-            "cutoff": self.cutoff,
+            "cutoff_distance": self.cutoff_distance,
             "max_num_neighbors": self.max_num_neighbors,
             "atomic_number": self.atomic_number,
             "distance_scale": self.distance_scale,
