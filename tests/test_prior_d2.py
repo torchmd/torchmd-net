@@ -32,7 +32,7 @@ def compute_with_psi4(z, pos):
 # NOTE: Psi4 is not compatible with conda-forge
 TEST_CASES = {
     "he": {
-        "z": [1],
+        "z": [2],
         "pos": [[0.0, 0.0, 0.0]],
         "batch": [0],
         "y": [0.0],
