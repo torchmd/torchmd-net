@@ -14,11 +14,11 @@ class D2(BasePrior):
 
     Arguments
     ---------
-    cutoff: float
+    cutoff_distance: float
         Distance cutoff for the correction term
     max_num_neighbors: int
         Maximum number of neighbors
-    atomic_numbers: list of ints or None
+    atomic_number: list of ints or None
         Map of atom types to atomic numbers.
         If `atomic_numbers=None`, use `dataset.atomic_numbers`
     position_scale: float or None
@@ -30,15 +30,15 @@ class D2(BasePrior):
         If `energy_scale=None` (default), use `dataset.energy_scale`
     dataset: Dataset or None
         Dataset object.
-        If `dataset=None`; `atomic_numbers`, `position_scale`, and `energy_scale` have to be set.
+        If `dataset=None`; `atomic_number`, `position_scale`, and `energy_scale` have to be set.
 
     Example
     -------
     >>> from torchmdnet.priors import D2
     >>> prior = D2(
-            cutoff=10.0,  # Å
+            cutoff_distance=10.0,  # Å
             max_num_neighbors=128,
-            atomic_numbers=list(range(100)),
+            atomic_number=list(range(100)),
             position_scale=1e-10,  # Å --> m
             energy_scale=4.35974e-18,  # Hartree --> J
         )
