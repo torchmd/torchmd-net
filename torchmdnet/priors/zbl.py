@@ -1,6 +1,5 @@
 import torch
 from torchmdnet.priors.base import BasePrior
-from torchmdnet.priors.d2 import D2
 from torchmdnet.models.utils import Distance, CosineCutoff
 
 class ZBL(BasePrior):
