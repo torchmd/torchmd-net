@@ -1,5 +1,6 @@
 import torch
 from torchmdnet.priors.base import BasePrior
+from torchmdnet.priors.d2 import D2
 from torchmdnet.models.utils import Distance, CosineCutoff
 
 class ZBL(BasePrior):
@@ -22,7 +23,7 @@ class ZBL(BasePrior):
             distance_scale = dataset.distance_scale
         if energy_scale is None:
             energy_scale = dataset.energy_scale
-        atomic_number = torch.as_tensor(atomic_number, dtype=torch.int8)
+        atomic_number = torch.as_tensor(atomic_number, dtype=torch.long)
         self.register_buffer("atomic_number", atomic_number)
         self.distance = Distance(0, cutoff_distance, max_num_neighbors=max_num_neighbors)
         self.cutoff = CosineCutoff(cutoff_upper=cutoff_distance)
@@ -34,9 +35,9 @@ class ZBL(BasePrior):
     def get_init_args(self):
         return {'cutoff_distance': self.cutoff_distance,
                 'max_num_neighbors': self.max_num_neighbors,
-                'atomic_number': self.atomic_number,
-                'distance_scale': self.distance_scale,
-                'energy_scale': self.energy_scale}
+                'atomic_number': [int(i) for i in self.atomic_number.numpy()],
+                'distance_scale': float(self.distance_scale),
+                'energy_scale': float(self.energy_scale)}
 
     def reset_parameters(self):
         pass
