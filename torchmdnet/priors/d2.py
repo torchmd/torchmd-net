@@ -155,9 +155,9 @@ class D2(BasePrior):
         return {
             "cutoff_distance": self.cutoff_distance,
             "max_num_neighbors": self.max_num_neighbors,
-            "atomic_number": [int(i) for i in self.atomic_number.numpy()],
-            "distance_scale": float(self.distance_scale),
-            "energy_scale": float(self.energy_scale)
+            "atomic_number": self.atomic_number.tolist(),
+            "distance_scale": self.distance_scale.item(),
+            "energy_scale": self.energy_scale.item()
         }
 
     def post_reduce(self, y, z, pos, batch):
