@@ -37,5 +37,5 @@ class Atomref(BasePrior):
     def get_init_args(self):
         return dict(max_z=self.initial_atomref.size(0))
 
-    def pre_reduce(self, x, z, pos, batch):
+    def pre_reduce(self, x, z, pos, batch, extra_args):
         return x + self.atomref(z)

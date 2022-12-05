@@ -41,7 +41,7 @@ class ZBL(BasePrior):
     def reset_parameters(self):
         pass
 
-    def post_reduce(self, y, z, pos, batch):
+    def post_reduce(self, y, z, pos, batch, extra_args):
         edge_index, distance, _ = self.distance(pos, batch)
         atomic_number = self.atomic_number[z[edge_index]]
         # 5.29e-11 is the Bohr radius in meters.  All other numbers are magic constants from the ZBL potential.

@@ -23,17 +23,28 @@ class HDF5(Dataset):
         super(HDF5, self).__init__()
         self.filename = filename
         self.index = None
-
+        self.fields = None
         self.num_molecules = 0
         files = [h5py.File(f, "r") for f in self.filename.split(";")]
         for file in files:
             for group_name in file:
+                group = file[group_name]
                 if group_name == '_metadata':
-                    group = file[group_name]
                     for name in group:
                         setattr(self, name, torch.tensor(np.array(group[name])))
                 else:
-                    self.num_molecules += len(file[group_name]["energy"])
+                    self.num_molecules += len(group["energy"])
+                    if self.fields is None:
+                        # Record which data fields are present in this file.
+                        self.fields = [
+                            ('pos', 'pos', torch.float32),
+                            ('z', 'types', torch.long),
+                            ('y', 'energy', torch.float32)
+                        ]
+                        if 'forces' in group:
+                            self.fields.append(('neg_dy', 'forces', torch.float32))
+                        if 'partial_charges' in group:
+                            self.fields.append(('partial_charges', 'partial_charges', torch.float32))
             file.close()
 
     def setup_index(self):
@@ -44,17 +55,10 @@ class HDF5(Dataset):
             for group_name in file:
                 if group_name != '_metadata':
                     group = file[group_name]
-                    types = group["types"]
-                    pos = group["pos"]
-                    energy = group["energy"]
-                    if "forces" in group:
-                        self.has_forces = True
-                        forces = group["forces"]
-                        for i in range(len(energy)):
-                            self.index.append((types, pos, energy, forces, i))
-                    else:
-                        for i in range(len(energy)):
-                            self.index.append((types, pos, energy, i))
+                    data = tuple(group[field[1]] for field in self.fields)
+                    energy = group['energy']
+                    for i in range(len(energy)):
+                        self.index.append(data+(i,))
 
         assert self.num_molecules == len(self.index), (
             "Mismatch between previously calculated "
@@ -67,21 +71,16 @@ class HDF5(Dataset):
         if self.index is None:
             self.setup_index()
 
-        if self.has_forces:
-            types, pos, energy, forces, i = self.index[idx]
-            return Data(
-                pos=torch.from_numpy(pos[i]),
-                z=torch.from_numpy(types[i]).to(torch.long),
-                y=torch.tensor([[energy[i]]]),
-                neg_dy=torch.from_numpy(forces[i]),
-            )
-        else:
-            types, pos, energy, i = self.index[idx]
-            return Data(
-                pos=torch.from_numpy(pos[i]),
-                z=torch.from_numpy(types[i]).to(torch.long),
-                y=torch.tensor([[energy[i]]]),
-            )
+        entry = self.index[idx]
+        i = entry[-1]
+        data = Data()
+        for j, field in enumerate(self.fields):
+            d = entry[j]
+            if d.ndim == 1:
+                data[field[0]] = torch.tensor([[d[i]]], dtype=field[2])
+            else:
+                data[field[0]] = torch.from_numpy(d[i]).to(field[2])
+        return data
 
     def len(self):
         return self.num_molecules

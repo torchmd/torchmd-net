@@ -1,5 +1,5 @@
 import re
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 import torch
 from torch.autograd import grad
 from torch import nn, Tensor
@@ -196,6 +196,7 @@ class TorchMD_Net(nn.Module):
         batch: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
+        extra_args: Optional[Dict[str, Tensor]] = None
     ) -> Tuple[Tensor, Optional[Tensor]]:
 
         assert z.dim() == 1 and z.dtype == torch.long
@@ -217,7 +218,7 @@ class TorchMD_Net(nn.Module):
         # apply atom-wise prior model
         if self.prior_model is not None:
             for prior in self.prior_model:
-                x = prior.pre_reduce(x, z, pos, batch)
+                x = prior.pre_reduce(x, z, pos, batch, extra_args)
 
         # aggregate atoms
         x = self.output_model.reduce(x, batch)
@@ -232,7 +233,7 @@ class TorchMD_Net(nn.Module):
         # apply molecular-wise prior model
         if self.prior_model is not None:
             for prior in self.prior_model:
-                y = prior.post_reduce(y, z, pos, batch)
+                y = prior.post_reduce(y, z, pos, batch, extra_args)
 
         # compute gradients with respect to coordinates
         if self.derivative:

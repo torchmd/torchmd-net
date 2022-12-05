@@ -52,8 +52,8 @@ class LNNP(LightningModule):
         }
         return [optimizer], [lr_scheduler]
 
-    def forward(self, z, pos, batch=None, q=None, s=None):
-        return self.model(z, pos, batch=batch, q=q, s=s)
+    def forward(self, z, pos, batch=None, q=None, s=None, extra_args=None):
+        return self.model(z, pos, batch=batch, q=q, s=s, extra_args=extra_args)
 
     def training_step(self, batch, batch_idx):
         return self.step(batch, mse_loss, "train")
@@ -70,6 +70,10 @@ class LNNP(LightningModule):
 
     def step(self, batch, loss_fn, stage):
         with torch.set_grad_enabled(stage == "train" or self.hparams.derivative):
+            extra_args = batch.to_dict()
+            for a in ('y', 'neg_dy', 'z', 'pos', 'batch', 'q', 's'):
+                if a in extra_args:
+                    del extra_args[a]
             # TODO: the model doesn't necessarily need to return a derivative once
             # Union typing works under TorchScript (https://github.com/pytorch/pytorch/pull/53180)
             y, neg_dy = self(
@@ -78,6 +82,7 @@ class LNNP(LightningModule):
                 batch=batch.batch,
                 q=batch.q if self.hparams.charge else None,
                 s=batch.s if self.hparams.spin else None,
+                extra_args=extra_args
             )
 
         loss_y, loss_neg_dy = 0, 0
