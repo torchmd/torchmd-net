@@ -1,5 +1,5 @@
 import re
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 import torch
 from torch.autograd import grad
 from torch import nn, Tensor
@@ -101,6 +101,14 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
     model = create_model(args)
 
     state_dict = {re.sub(r"^model\.", "", k): v for k, v in ckpt["state_dict"].items()}
+    # The following are for backward compatibility with models created when atomref was
+    # the only supported prior.
+    if 'prior_model.initial_atomref' in state_dict:
+        state_dict['prior_model.0.initial_atomref'] = state_dict['prior_model.initial_atomref']
+        del state_dict['prior_model.initial_atomref']
+    if 'prior_model.atomref.weight' in state_dict:
+        state_dict['prior_model.0.atomref.weight'] = state_dict['prior_model.atomref.weight']
+        del state_dict['prior_model.atomref.weight']
     model.load_state_dict(state_dict)
     return model.to(device)
 
@@ -188,6 +196,7 @@ class TorchMD_Net(nn.Module):
         batch: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
+        extra_args: Optional[Dict[str, Tensor]] = None
     ) -> Tuple[Tensor, Optional[Tensor]]:
 
         assert z.dim() == 1 and z.dtype == torch.long
@@ -209,7 +218,7 @@ class TorchMD_Net(nn.Module):
         # apply atom-wise prior model
         if self.prior_model is not None:
             for prior in self.prior_model:
-                x = prior.pre_reduce(x, z, pos, batch)
+                x = prior.pre_reduce(x, z, pos, batch, extra_args)
 
         # aggregate atoms
         x = self.output_model.reduce(x, batch)
@@ -224,7 +233,7 @@ class TorchMD_Net(nn.Module):
         # apply molecular-wise prior model
         if self.prior_model is not None:
             for prior in self.prior_model:
-                y = prior.post_reduce(y, z, pos, batch)
+                y = prior.post_reduce(y, z, pos, batch, extra_args)
 
         # compute gradients with respect to coordinates
         if self.derivative:

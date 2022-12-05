@@ -160,7 +160,7 @@ class D2(BasePrior):
             "energy_scale": self.energy_scale.item()
         }
 
-    def post_reduce(self, y, z, pos, batch):
+    def post_reduce(self, y, z, pos, batch, extra_args):
 
         # Get atom pairs and their distancence
         ij, R_ij, _ = self.distances(pos * self.distance_scale, batch)
