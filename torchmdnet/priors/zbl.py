@@ -35,8 +35,8 @@ class ZBL(BasePrior):
         return {'cutoff_distance': self.cutoff_distance,
                 'max_num_neighbors': self.max_num_neighbors,
                 'atomic_number': self.atomic_number.tolist(),
-                'distance_scale': self.distance_scale.item(),
-                'energy_scale': self.energy_scale.item()}
+                'distance_scale': self.distance_scale,
+                'energy_scale': self.energy_scale}
 
     def reset_parameters(self):
         pass
