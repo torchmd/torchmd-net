@@ -1,6 +1,7 @@
 import torch
 from torchmdnet.priors.base import BasePrior
 from torchmdnet.models.utils import Distance, CosineCutoff
+from torch_scatter import scatter
 
 class ZBL(BasePrior):
     """This class implements the Ziegler-Biersack-Littmark (ZBL) potential for screened nuclear repulsion.
@@ -43,6 +44,8 @@ class ZBL(BasePrior):
 
     def post_reduce(self, y, z, pos, batch, extra_args):
         edge_index, distance, _ = self.distance(pos, batch)
+        if edge_index.shape[1] == 0:
+            return y
         atomic_number = self.atomic_number[z[edge_index]]
         # 5.29e-11 is the Bohr radius in meters.  All other numbers are magic constants from the ZBL potential.
         a = 0.8854*5.29177210903e-11/(atomic_number[0]**0.23 + atomic_number[1]**0.23)
@@ -51,4 +54,5 @@ class ZBL(BasePrior):
         f *= self.cutoff(distance)
         # Compute the energy, converting to the dataset's units.  Multiply by 0.5 because every atom pair
         # appears twice.
-        return y + 0.5*(2.30707755e-28/self.energy_scale/self.distance_scale)*torch.sum(f*atomic_number[0]*atomic_number[1]/distance, dim=-1)
+        energy = f*atomic_number[0]*atomic_number[1]/distance
+        return y + 0.5*(2.30707755e-28/self.energy_scale/self.distance_scale)*scatter(energy, batch[edge_index[0]], dim=0, reduce="sum")

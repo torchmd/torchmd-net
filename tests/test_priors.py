@@ -5,7 +5,7 @@ import pytorch_lightning as pl
 from torchmdnet import models
 from torchmdnet.models.model import create_model, create_prior_models
 from torchmdnet.module import LNNP
-from torchmdnet.priors import Atomref, ZBL
+from torchmdnet.priors import Atomref, D2, ZBL, Coulomb
 from torch_scatter import scatter
 from utils import load_example_args, create_example_batch, DummyDataset
 from os.path import dirname, join
@@ -61,6 +61,32 @@ def test_zbl():
     for i in range(len(pos)):
         for j in range(i):
             expected += compute_interaction(pos[i], pos[j], atomic_number[types[i]], atomic_number[types[j]])
+    torch.testing.assert_allclose(expected, energy)
+
+def test_coulomb():
+    pos = torch.tensor([[0.5, 0.0, 0.0], [1.5, 0.0, 0.0], [0.8, 0.8, 0.0], [0.0, 0.0, -0.4]], dtype=torch.float32)  # Atom positions in nm
+    charge = torch.tensor([0.2, -0.1, 0.8, -0.9], dtype=torch.float32)  # Partial charges
+    types = torch.tensor([0, 1, 2, 1], dtype=torch.long)  # Atom types
+    distance_scale = 1e-9  # Convert nm to meters
+    energy_scale = 1000.0/6.02214076e23  # Convert kJ/mol to Joules
+    alpha = 1.8
+
+    # Use the Coulomb class to compute the energy.
+
+    coulomb = Coulomb(alpha, 5, distance_scale=distance_scale, energy_scale=energy_scale)
+    energy = coulomb.post_reduce(torch.zeros((1,)), types, pos, torch.zeros_like(types), {'partial_charges':charge})[0]
+
+    # Compare to the expected value.
+
+    def compute_interaction(pos1, pos2, z1, z2):
+        delta = pos1-pos2
+        r = torch.sqrt(torch.dot(delta, delta))
+        return torch.erf(alpha*r)*138.935*z1*z2/r
+
+    expected = 0
+    for i in range(len(pos)):
+        for j in range(i):
+            expected += compute_interaction(pos[i], pos[j], charge[i], charge[j])
     torch.testing.assert_allclose(expected, energy)
 
 def test_multiple_priors():
