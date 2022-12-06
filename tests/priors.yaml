@@ -41,6 +41,9 @@ prior_model:
   - ZBL:
       cutoff_distance: 4.0
       max_num_neighbors: 50
+  - D2:
+      cutoff_distance: 10.0
+      max_num_neighbors: 100
   - Atomref
 rbf_type: expnorm
 redirect: false
