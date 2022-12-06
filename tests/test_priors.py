@@ -102,11 +102,14 @@ def test_multiple_priors():
 
     # Make sure the priors were created correctly.
 
-    assert len(priors) == 2
+    assert len(priors) == 3
     assert isinstance(priors[0], ZBL)
-    assert isinstance(priors[1], Atomref)
+    assert isinstance(priors[1], D2)
+    assert isinstance(priors[2], Atomref)
     assert priors[0].cutoff_distance == 4.0
     assert priors[0].max_num_neighbors == 50
+    assert priors[1].cutoff_distance == 10.0
+    assert priors[1].max_num_neighbors == 100
 
     # Save and load a checkpoint, and make sure the priors are correct.
 
@@ -115,8 +118,11 @@ def test_multiple_priors():
         f.seek(0)
         model2 = torch.load(f)
         priors2 = model2.model.prior_model
-        assert len(priors2) == 2
+        assert len(priors2) == 3
         assert isinstance(priors2[0], ZBL)
-        assert isinstance(priors2[1], Atomref)
+        assert isinstance(priors2[1], D2)
+        assert isinstance(priors2[2], Atomref)
         assert priors2[0].cutoff_distance == priors[0].cutoff_distance
         assert priors2[0].max_num_neighbors == priors[0].max_num_neighbors
+        assert priors2[1].cutoff_distance == priors[1].cutoff_distance
+        assert priors2[1].max_num_neighbors == priors[1].max_num_neighbors
