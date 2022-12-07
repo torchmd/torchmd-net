@@ -55,4 +55,6 @@ class ZBL(BasePrior):
         # Compute the energy, converting to the dataset's units.  Multiply by 0.5 because every atom pair
         # appears twice.
         energy = f*atomic_number[0]*atomic_number[1]/distance
-        return y + 0.5*(2.30707755e-28/self.energy_scale/self.distance_scale)*scatter(energy, batch[edge_index[0]], dim=0, reduce="sum")
+        energy = 0.5*(2.30707755e-28/self.energy_scale/self.distance_scale)*scatter(energy, batch[edge_index[0]], dim=0, reduce="sum")
+        energy = energy.reshape(y.shape)
+        return y + energy

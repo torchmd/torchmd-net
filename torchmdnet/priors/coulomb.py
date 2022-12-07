@@ -44,4 +44,6 @@ class Coulomb(BasePrior):
         # appears twice.
         q = extra_args['partial_charges'][edge_index]
         energy = torch.erf(alpha*distance)*q[0]*q[1]/distance
-        return y + 0.5*(2.30707e-28/self.energy_scale/self.distance_scale)*scatter(energy, batch[edge_index[0]], dim=0, reduce="sum")
+        energy = 0.5*(2.30707e-28/self.energy_scale/self.distance_scale)*scatter(energy, batch[edge_index[0]], dim=0, reduce="sum")
+        energy = energy.reshape(y.shape)
+        return y + energy
