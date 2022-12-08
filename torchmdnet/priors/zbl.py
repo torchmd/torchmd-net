@@ -29,8 +29,8 @@ class ZBL(BasePrior):
         self.cutoff = CosineCutoff(cutoff_upper=cutoff_distance)
         self.cutoff_distance = cutoff_distance
         self.max_num_neighbors = max_num_neighbors
-        self.distance_scale = distance_scale
-        self.energy_scale = energy_scale
+        self.distance_scale = float(distance_scale)
+        self.energy_scale = float(energy_scale)
 
     def get_init_args(self):
         return {'cutoff_distance': self.cutoff_distance,

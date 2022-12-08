@@ -22,8 +22,8 @@ class Coulomb(BasePrior):
         self.distance = Distance(0, torch.inf, max_num_neighbors=100)
         self.alpha = alpha
         self.max_num_neighbors = max_num_neighbors
-        self.distance_scale = distance_scale
-        self.energy_scale = energy_scale
+        self.distance_scale = float(distance_scale)
+        self.energy_scale = float(energy_scale)
 
     def get_init_args(self):
         return {'alpha': self.alpha,
