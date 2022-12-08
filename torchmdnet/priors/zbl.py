@@ -56,5 +56,7 @@ class ZBL(BasePrior):
         # appears twice.
         energy = f*atomic_number[0]*atomic_number[1]/distance
         energy = 0.5*(2.30707755e-28/self.energy_scale/self.distance_scale)*scatter(energy, batch[edge_index[0]], dim=0, reduce="sum")
+        if energy.shape[0] < y.shape[0]:
+            energy = torch.nn.functional.pad(energy, (0, y.shape[0]-energy.shape[0]))
         energy = energy.reshape(y.shape)
         return y + energy
