@@ -2,6 +2,7 @@ import torch
 from torchmdnet.priors.base import BasePrior
 from torchmdnet.models.utils import Distance
 from torch_scatter import scatter
+from typing import Optional, Dict
 
 class Coulomb(BasePrior):
     """This class implements a Coulomb potential, scaled by erf(alpha*r) to reduce its
@@ -34,7 +35,7 @@ class Coulomb(BasePrior):
     def reset_parameters(self):
         pass
 
-    def post_reduce(self, y, z, pos, batch, extra_args):
+    def post_reduce(self, y, z, pos, batch, extra_args: Optional[Dict[str, torch.Tensor]]):
         # Convert to nm and calculate distance.
         x = 1e9*self.distance_scale*pos
         alpha = self.alpha/(1e9*self.distance_scale)

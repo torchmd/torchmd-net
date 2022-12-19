@@ -2,6 +2,7 @@ import torch
 from torchmdnet.priors.base import BasePrior
 from torchmdnet.models.utils import Distance, CosineCutoff
 from torch_scatter import scatter
+from typing import Optional, Dict
 
 class ZBL(BasePrior):
     """This class implements the Ziegler-Biersack-Littmark (ZBL) potential for screened nuclear repulsion.
@@ -42,7 +43,7 @@ class ZBL(BasePrior):
     def reset_parameters(self):
         pass
 
-    def post_reduce(self, y, z, pos, batch, extra_args):
+    def post_reduce(self, y, z, pos, batch, extra_args: Optional[Dict[str, torch.Tensor]]):
         edge_index, distance, _ = self.distance(pos, batch)
         if edge_index.shape[1] == 0:
             return y
