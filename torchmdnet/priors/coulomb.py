@@ -20,7 +20,7 @@ class Coulomb(BasePrior):
             distance_scale = dataset.distance_scale
         if energy_scale is None:
             energy_scale = dataset.energy_scale
-        self.distance = Distance(0, torch.inf, max_num_neighbors=100)
+        self.distance = Distance(0, torch.inf, max_num_neighbors=max_num_neighbors)
         self.alpha = alpha
         self.max_num_neighbors = max_num_neighbors
         self.distance_scale = float(distance_scale)
