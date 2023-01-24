@@ -93,7 +93,7 @@ def train_val_test_split(dset_len, train_size, val_size, test_size, seed, order=
     if total < dset_len:
         rank_zero_warn(f"{dset_len - total} samples were excluded from the dataset")
 
-    idxs = np.arange(dset_len, dtype=np.int)
+    idxs = np.arange(dset_len, dtype=int)
     if order is None:
         idxs = np.random.default_rng(seed).permutation(idxs)
 
