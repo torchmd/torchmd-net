@@ -18,39 +18,40 @@ jobs:
         shell: bash -l {0}
 
     steps:
-    - name: Check out
-      uses: actions/checkout@v2
+      - name: Check out
+        uses: actions/checkout@v2
 
-    - name: Cache conda packages
-      uses: actions/cache@v1
-      with:
-        path: ~/conda_pkgs_dir
-        key: ${{ runner.os }}-${{ env.CACHE_NUMBER }}-${{ hashFiles('environment.yml') }}
-      env:
-        # Increase this value to reset cache if environment.yml has not changed
-        CACHE_NUMBER: 2
+      - name: Cache conda packages
+        uses: actions/cache@v1
+        with:
+          path: ~/conda_pkgs_dir
+          key: ${{ runner.os }}-${{ env.CACHE_NUMBER }}-${{ hashFiles('environment.yml') }}
+        env:
+          # Increase this value to reset cache if environment.yml has not changed
+          CACHE_NUMBER: 2
 
-    - name: Create a conda environment
-      uses: conda-incubator/setup-miniconda@v2
-      with:
-        activate-environment: torchmd-net
-        channels: conda-forge,defaults # Need for Mamba
-        environment-file: environment.yml
-        mamba-version: "*"
-        use-only-tar-bz2: true # IMPORTANT: This needs to be set for caching to work properly!
+      - name: Create a conda environment
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          activate-environment: torchmd-net
+          channels: conda-forge,defaults # Need for Mamba
+          environment-file: environment.yml
+          uses-mamba: true
+          miniforge-variant: Mambaforge
+          use-only-tar-bz2: true # IMPORTANT: This needs to be set for caching to work properly!
 
-    - name: Install the package
-      run: pip install .
+      - name: Install the package
+        run: pip install .
 
-    - name: List the conda environment
-      run: conda list
+      - name: List the conda environment
+        run: conda list
 
-    - name: Lint with flake8
-      run: |
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      - name: Lint with flake8
+        run: |
+          # stop the build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
-    - name: Run tests
-      run: pytest -v
+      - name: Run tests
+        run: pytest -v
