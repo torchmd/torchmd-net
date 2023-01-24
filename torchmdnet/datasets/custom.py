@@ -54,7 +54,7 @@ class Custom(Dataset):
         nfiles = len(self.coordfiles)
         for i in range(nfiles):
             coord_data = np.load(self.coordfiles[i])
-            embed_data = np.load(self.embedfiles[i]).astype(np.int)
+            embed_data = np.load(self.embedfiles[i]).astype(int)
             size = coord_data.shape[0]
             self.index.extend(list(zip([i] * size, range(size))))
 
@@ -81,7 +81,7 @@ class Custom(Dataset):
         fileid, index = self.index[idx]
 
         coord_data = np.array(np.load(self.coordfiles[fileid], mmap_mode="r")[index])
-        embed_data = np.load(self.embedfiles[fileid]).astype(np.int)
+        embed_data = np.load(self.embedfiles[fileid]).astype(int)
 
         features = dict(
             pos=torch.from_numpy(coord_data), z=torch.from_numpy(embed_data)
