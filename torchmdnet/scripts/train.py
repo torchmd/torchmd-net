@@ -138,13 +138,14 @@ def main():
     )
     early_stopping = EarlyStopping("val_loss", patience=args.early_stopping_patience)
 
+    csv_logger = CSVLogger(args.log_dir, name="", version="")
     if args.wandb_use:
-        _logger=WandbLogger(project=args.wandb_project,name=args.wandb_name,save_dir=args.log_dir)
+        wandb_logger=WandbLogger(project=args.wandb_project,name=args.wandb_name,save_dir=args.log_dir)
+        _logger=[wandb_logger, csv_logger]
     else:
         tb_logger = pl.loggers.TensorBoardLogger(
             args.log_dir, name="tensorbord", version="", default_hp_metric=False
         )
-        csv_logger = CSVLogger(args.log_dir, name="", version="")
         _logger=[tb_logger, csv_logger]
 
     trainer = pl.Trainer(
