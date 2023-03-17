@@ -39,17 +39,25 @@ class SPICE(Dataset):
     HARTREE_TO_EV = 27.211386246
     BORH_TO_ANGSTROM = 0.529177
 
+    VERSIONS = {
+        "1.0": {"url": "https://github.com/openmm/spice-dataset/releases/download/1.0", "file": "SPICE.hdf5"},
+        "1.1": {"url": "https://github.com/openmm/spice-dataset/releases/download/1.1", "file": "SPICE.hdf5"},
+        "1.1.1": {"url": "https://zenodo.org/record/7258940/files", "file": "SPICE-1.1.1.hdf5"},
+        "1.1.2": {"url": "https://zenodo.org/record/7338495/files", "file": "SPICE-1.1.2.hdf5"},
+        "1.1.3": {"url": "https://zenodo.org/record/7606550/files", "file": "SPICE-1.1.3.hdf5"},
+    }
+
     @property
     def raw_dir(self):
         return os.path.join(super().raw_dir, self.version)
 
     @property
     def raw_file_names(self):
-        return "SPICE.hdf5"
+        return self.VERSIONS[self.version]["file"]
 
     @property
     def raw_url(self):
-        return f"https://github.com/openmm/spice-dataset/releases/download/{self.version}/{self.raw_file_names}"
+        return f"{self.VERSIONS[self.version]['url']}/{self.VERSIONS[self.version]['file']}"
 
     @property
     def processed_file_names(self):
@@ -75,7 +83,8 @@ class SPICE(Dataset):
         arg_hash = f"{version}{subsets}{max_gradient}{subsample_molecules}"
         arg_hash = hashlib.md5(arg_hash.encode()).hexdigest()
         self.name = f"{self.__class__.__name__}-{arg_hash}"
-        self.version = version
+        self.version = str(version)
+        assert self.version in self.VERSIONS
         self.subsets = subsets
         self.max_gradient = max_gradient
         self.subsample_molecules = int(subsample_molecules)
