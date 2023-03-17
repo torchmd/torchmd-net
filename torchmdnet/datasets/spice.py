@@ -13,9 +13,9 @@ class SPICE(Dataset):
     SPICE dataset (https://github.com/openmm/spice-dataset)
 
     The dataset has several versions (https://github.com/openmm/spice-dataset/releases).
-    The version can be selected with `version`. By default, verions 1.0 is loaded.
+    The version can be selected with `version`. By default, version 1.1.3 is loaded.
 
-    >>> ds = SPICE(".", version="1.1")
+    >>> ds = SPICE(".", version="1.1.3")
 
     The dataset consists of several subsets (https://github.com/openmm/spice-dataset/blob/main/downloader/config.yaml).
     The subsets can be selected with `subsets`. By default, all the subsets are loaded.
@@ -75,7 +75,7 @@ class SPICE(Dataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
-        version="1.1.1",
+        version="1.1.3",
         subsets=None,
         max_gradient=None,
         subsample_molecules=1,
