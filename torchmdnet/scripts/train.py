@@ -94,6 +94,7 @@ def get_args():
     parser.add_argument('--wandb-use', default=False, type=bool, help='Defines if wandb is used or not')
     parser.add_argument('--wandb-name', default='training', type=str, help='Give a name to your wandb run')
     parser.add_argument('--wandb-project', default='training_', type=str, help='Define what wandb Project to log to')
+    parser.add_argument('--tensorboard-use', default=False, type=bool, help='Defines if tensor board is used or not')
 
     # fmt: on
 
@@ -139,14 +140,16 @@ def main():
     early_stopping = EarlyStopping("val_loss", patience=args.early_stopping_patience)
 
     csv_logger = CSVLogger(args.log_dir, name="", version="")
+    _logger=[csv_logger]
     if args.wandb_use:
         wandb_logger=WandbLogger(project=args.wandb_project,name=args.wandb_name,save_dir=args.log_dir)
-        _logger=[wandb_logger, csv_logger]
-    else:
+        _logger.append(wandb_logger)
+
+    if args.tensorboard_use:
         tb_logger = pl.loggers.TensorBoardLogger(
             args.log_dir, name="tensorbord", version="", default_hp_metric=False
         )
-        _logger=[tb_logger, csv_logger]
+        _logger.append(tb_logger)
 
     trainer = pl.Trainer(
         strategy=DDPStrategy(find_unused_parameters=False),
