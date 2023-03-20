@@ -23,6 +23,21 @@ TorchMD-NET provides state-of-the-art graph neural networks and equivariant tran
     pip install -e .
     ```
 
+
+### Installation for pytorch 2.0
+Partial support for pytorch 2.0 is available.  
+After installing mambaforge create a new environment, activate it and run:  
+```bash
+mamba install -c pytorch -c nvidia  python pip pytest 'pytorch>=2' torchvision torchaudio pytorch-cuda=11.8 pytorch-lightning  cudatoolkit=11.8
+pip install torch-sparse torch-scatter torch_geometric torch_cluster -f https://data.pyg.org/whl/torch-2.0.0+cu118.html
+```
+Then you can install TorchMD-Net by running:
+```bash
+pip install -e
+```
+Some of the dependencies have are yet to catch-up to torch 2.0, so expect missing functionality.  
+
+
 ## Cite
 ```
 @inproceedings{
