@@ -4,9 +4,10 @@ from torchmdnet.models.model import load_model
 class External:
     '''
     The External class is used to calculate the energy and forces of an external potential, such as a neural network. The class is initialized with the path to the neural network
-    (.ckpt), the embeddings, and the device on which the neural network should be run. The output_transform argument is used to give a function that transform the energy and the
-    forces. This is could be useful to convert the energy and the forces from the units of the neural network to the units of the simulation. The output_transform argument should
-    be a string that can be evaluated to a function. The function should take two arguments, the energy and the forces, and return the transformed energy and the transformed forces.
+    ckpt, the embeddings, the device on which the neural network should be run and the output_transform argument.  
+    The output_transform is used to give a function that transform the energy and the forces. This is could be useful to convert the energy and the forces from the units of the 
+    neural network (the ones used to trained it) to the units of the simulation. The output_transform argument should be a string that can be evaluated to a function. 
+    The function should take two arguments, the energy and the forces, and return the transformed energy and the transformed forces.
     '''
     
     def __init__(self, netfile, embeddings, device="cpu", output_transform=None):
