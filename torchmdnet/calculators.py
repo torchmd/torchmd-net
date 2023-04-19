@@ -3,15 +3,15 @@ from torchmdnet.models.model import load_model
 
 # dict of preset transforms
 tranforms = {
-    "eV/A": lambda energy, forces: (
+    "eV/A -> kcal/mol/A": lambda energy, forces: (
         energy * 23.0609,
         forces * 23.0609,
     ),  # eV->kcal/mol, eV/A -> kcal/mol/A
-    "Hartree/Bohr": lambda energy, forces: (
+    "Hartree/Bohr -> kcal/mol/A": lambda energy, forces: (
         energy * 627.509,
         forces * 627.509 / 0.529177,
     ),  # Hartree -> kcal/mol, Hartree/Bohr -> kcal/mol/A
-    "Haetree/A": lambda energy, forces: (
+    "Haetree/A -> kcal/mol/A": lambda energy, forces: (
         energy * 627.509,
         forces * 627.509,
     ),  # Hartree -> kcal/mol, Hartree/A -> kcal/mol/A
