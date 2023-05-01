@@ -76,6 +76,61 @@ class NeighborEmbedding(MessagePassing):
     def message(self, x_j, W):
         return x_j * W
 
+from torchmdnet.neighbors import get_neighbor_pairs, get_neighbor_pairs_cell
+class DistanceCellList(torch.nn.Module):
+    def __init__(
+        self,
+        cutoff_upper,
+        max_num_pairs=32,
+        loop=False,
+        strategy="cell",
+    ):
+        super(DistanceCellList, self).__init__()
+        """ Compute the neighbor list for a given cutoff.
+        Parameters
+        ----------
+        cutoff_upper : float
+            Upper cutoff for the neighbor list.
+        max_num_pairs : int
+            Maximum number of pairs to store.
+        loop : bool
+            Whether to include self interactions (pair (i,i)).
+        """
+        self.cutoff_upper = cutoff_upper
+        self.max_num_pairs = max_num_pairs
+        self.loop = loop
+        self.strategy = strategy
+
+    def forward(self, pos, batch):
+        """
+        Parameters
+        ----------
+        pos : torch.Tensor
+            shape (N, 3)
+        batch : torch.Tensor
+            shape (N,)
+        Returns
+        -------
+        neighbors : torch.Tensor
+          List of neighbors for each atom in the batch.
+        shape (2, max_num_pairs)
+        distances : torch.Tensor
+            List of distances for each atom in the batch.
+        shape (max_num_pairs,)
+        distance_vecs : torch.Tensor
+            List of distance vectors for each atom in the batch.
+        shape (max_num_pairs, 3)
+
+        """
+        function = get_neighbor_pairs if self.strategy == "brute" else get_neighbor_pairs_cell
+        neighbors, distance_vecs, distances = function(
+            pos,
+            cutoff=self.cutoff_upper,
+            batch=batch,
+            max_num_pairs=self.max_num_pairs,
+            check_errors=True
+        )
+        return neighbors, distances, distance_vecs
 
 class GaussianSmearing(nn.Module):
     def __init__(self, cutoff_lower=0.0, cutoff_upper=5.0, num_rbf=50, trainable=True):
@@ -251,7 +306,6 @@ class Distance(nn.Module):
         # TODO: return only `edge_index` and `edge_weight` once
         # Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
         return edge_index, edge_weight, None
-
 
 class GatedEquivariantBlock(nn.Module):
     """Gated Equivariant Block as defined in Schütt et al. (2021):
