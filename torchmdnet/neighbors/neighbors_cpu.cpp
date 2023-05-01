@@ -44,8 +44,7 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions, const Tens
         TORCH_CHECK(v[0][0] >= 2 * v[2][0], "Invalid box vectors: box_vectors[0][0] < 2*box_vectors[1][0]");
         TORCH_CHECK(v[1][1] >= 2 * v[2][1], "Invalid box vectors: box_vectors[1][1] < 2*box_vectors[2][1]");
     }
-    const int max_num_pairs_ = max_num_pairs.to<int>();
-    TORCH_CHECK(max_num_pairs_ > 0,
+    TORCH_CHECK(max_num_pairs.toLong() > 0,
                 "Expected \"max_num_neighbors\" to be positive");
     const int n_atoms = positions.size(0);
     const int n_batches = batch[n_atoms - 1].item<int>() + 1;
@@ -92,4 +91,5 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions, const Tens
 
 TORCH_LIBRARY_IMPL(neighbors, CPU, m) {
     m.impl("get_neighbor_pairs", &forward);
+    m.impl("get_neighbor_pairs_cell", &forward);
 }

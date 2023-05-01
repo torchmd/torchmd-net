@@ -73,7 +73,6 @@ __global__ void forward_kernel(const int32_t num_all_pairs, const Accessor<scala
     }
 }
 
-
 template <typename scalar_t>
 __global__ void backward_kernel(const Accessor<int32_t, 2> neighbors, const Accessor<scalar_t, 2> deltas,
                                 const Accessor<scalar_t, 1> distances, const Accessor<scalar_t, 1> grad_distances,
@@ -127,7 +126,7 @@ public:
         const int num_pairs = max_num_pairs_;
         const TensorOptions options = positions.options();
         const auto stream = getCurrentCUDAStream(positions.get_device());
-        const Tensor num_atoms_per_batch = torch::bincount(batch).to(torch::kCPU);
+        const Tensor num_atoms_per_batch = torch::bincount(batch);
         const int n_batches = num_atoms_per_batch.size(0);
         const Tensor batch_offsets = torch::cumsum(num_atoms_per_batch, 0, torch::kInt32).to(positions.device());
         const Tensor neighbors = full({2, num_pairs}, -1, options.dtype(kInt32));
@@ -194,7 +193,7 @@ public:
 };
 
 TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
-    m.impl("get_neighbor_pairs", [](const Tensor& positions, const Tensor& batch, const Scalar& cutoff,
+    m.impl("get_neighbor_pairs_cell", [](const Tensor& positions, const Tensor& batch, const Scalar& cutoff,
                                     const Scalar& max_num_pairs, bool checkErrors) {
         const tensor_list results = Autograd::apply(positions, batch, cutoff, max_num_pairs, checkErrors);
         return std::make_tuple(results[0], results[1], results[2]);
