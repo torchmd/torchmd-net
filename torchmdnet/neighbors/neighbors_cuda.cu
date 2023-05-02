@@ -113,7 +113,7 @@ static void checkInput(const Tensor& positions, const Tensor& batch) {
         batch.size(0) == positions.size(0),
         "Expected the 1st dimension size of \"batch\" to be the same as the 1st dimension size of \"positions\"");
     TORCH_CHECK(batch.is_contiguous(), "Expected \"batch\" to be contiguous");
-    TORCH_CHECK(batch.dtype() == torch::kLong, "Expected \"batch\" to have torch::kLong dtype");
+    TORCH_CHECK(batch.dtype() == torch::kInt32, "Expected \"batch\" to have torch::kInt32 dtype");
 }
 
 class Autograd : public Function<Autograd> {
@@ -194,7 +194,7 @@ public:
 };
 
 TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
-    m.impl("get_neighbor_pairs", [](const Tensor& positions, const Tensor& batch, const Scalar& cutoff,
+  m.impl("get_neighbor_pairs", [](const Tensor& positions, const Tensor& batch, const Tensor& box_size, const Scalar& cutoff,
                                     const Scalar& max_num_pairs, bool checkErrors) {
         const tensor_list results = Autograd::apply(positions, batch, cutoff, max_num_pairs, checkErrors);
         return std::make_tuple(results[0], results[1], results[2]);

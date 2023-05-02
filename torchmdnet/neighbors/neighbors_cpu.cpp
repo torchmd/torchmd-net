@@ -16,7 +16,7 @@ using torch::Tensor;
 using torch::outer;
 using torch::round;
 
-static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions, const Tensor& batch, const Scalar& cutoff,
+static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions, const Tensor& batch, const Tensor &box_size, const Scalar& cutoff,
                                              const Scalar& max_num_pairs, bool checkErrors) {
     TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
     TORCH_CHECK(positions.size(0) > 0, "Expected the 1nd dimension size of \"positions\" to be more than 0");

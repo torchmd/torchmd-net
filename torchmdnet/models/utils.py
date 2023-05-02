@@ -82,8 +82,8 @@ class DistanceCellList(torch.nn.Module):
         self,
         cutoff_upper,
         max_num_pairs=32,
-        loop=False,
         strategy="cell",
+            box=None
     ):
         super(DistanceCellList, self).__init__()
         """ Compute the neighbor list for a given cutoff.
@@ -93,13 +93,17 @@ class DistanceCellList(torch.nn.Module):
             Upper cutoff for the neighbor list.
         max_num_pairs : int
             Maximum number of pairs to store.
-        loop : bool
-            Whether to include self interactions (pair (i,i)).
+        strategy : str
+            Strategy to use for computing the neighbor list. Can be one of
+            ["brute", "cell"].
+        box : torch.Tensor
+            Size of the box shape (3,) or None
+
         """
         self.cutoff_upper = cutoff_upper
         self.max_num_pairs = max_num_pairs
-        self.loop = loop
         self.strategy = strategy
+        self.box = box
 
     def forward(self, pos, batch):
         """
@@ -128,7 +132,8 @@ class DistanceCellList(torch.nn.Module):
             cutoff=self.cutoff_upper,
             batch=batch,
             max_num_pairs=self.max_num_pairs,
-            check_errors=True
+            check_errors=True,
+            box_size=self.box
         )
         return neighbors, distances, distance_vecs
 
