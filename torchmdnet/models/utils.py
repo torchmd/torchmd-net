@@ -133,13 +133,13 @@ class DistanceCellList(torch.nn.Module):
         -------
         neighbors : torch.Tensor
           List of neighbors for each atom in the batch.
-        shape (2, max_num_pairs)
+        shape (2, num_found_pairs)
         distances : torch.Tensor
             List of distances for each atom in the batch.
-        shape (max_num_pairs,)
+        shape (num_found_pairs,)
         distance_vecs : torch.Tensor
             List of distance vectors for each atom in the batch.
-        shape (max_num_pairs, 3)
+        shape (num_found_pairs, 3)
 
         """
         function = get_neighbor_pairs if self.strategy == "brute" else get_neighbor_pairs_cell
@@ -153,6 +153,12 @@ class DistanceCellList(torch.nn.Module):
             check_errors=True,
             box_size=self.box
         )
+        #Remove (-1,-1)  pairs
+        mask = neighbors[0] != -1
+        neighbors = neighbors[:, mask]
+        distances = distances[mask]
+        distance_vecs = distance_vecs[mask,:]
+
         if self.return_vecs:
             return neighbors, distances, distance_vecs
         else:

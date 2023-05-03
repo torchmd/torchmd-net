@@ -204,9 +204,6 @@ public:
                             std::to_string(max_num_pairs_),
                         " but found " + std::to_string(num_found_pairs));
         }
-        neighbors.resize_({2, i_curr_pair[0].item<int>()});
-        deltas.resize_({i_curr_pair[0].item<int>(), 3});
-        distances.resize_(i_curr_pair[0].item<int>());
         ctx->save_for_backward({neighbors, deltas, distances});
         ctx->saved_data["num_atoms"] = num_atoms;
         return {neighbors, deltas, distances};
