@@ -390,7 +390,8 @@ forward_kernel(const Accessor<scalar_t, 2> sorted_positions,
                const Accessor<int32_t, 1> cell_start, const Accessor<int32_t, 1> cell_end,
                Accessor<int32_t, 2> neighbors, Accessor<scalar_t, 2> deltas,
                Accessor<scalar_t, 1> distances, Accessor<int32_t, 1> i_curr_pair, int num_atoms,
-               int num_pairs, scalar3<scalar_t> box_size, scalar_t cutoff) {
+               int num_pairs, scalar3<scalar_t> box_size, scalar_t cutoff_lower,
+               scalar_t cutoff_upper, bool loop) {
     // Each atom traverses the cells around it and finds the neighbors
     // Atoms for all batches are placed in the same cell list, but other batches are ignored while
     // traversing
@@ -401,8 +402,8 @@ forward_kernel(const Accessor<scalar_t, 2> sorted_positions,
     const int i_batch = batch[ori];
     const scalar3<scalar_t> pi = {sorted_positions[i_atom][0], sorted_positions[i_atom][1],
                                   sorted_positions[i_atom][2]};
-    const int3 cell_i = getCell(pi, box_size, cutoff);
-    const int3 cell_dim = getCellDimensions(box_size, cutoff);
+    const int3 cell_i = getCell(pi, box_size, cutoff_upper);
+    const int3 cell_dim = getCellDimensions(box_size, cutoff_upper);
     // Loop over the 27 cells around the current cell
     for (int i = 0; i < 27; i++) {
         int icellj = getNeighborCellIndex(cell_i, i, cell_dim);
@@ -418,7 +419,7 @@ forward_kernel(const Accessor<scalar_t, 2> sorted_positions,
                 if (j_batch >
                     i_batch) // Particles are sorted by batch after cell, so we can break early here
                     break;
-                if (orj < ori and j_batch == i_batch) {
+                if ((orj < ori and j_batch == i_batch) or (loop and orj == ori)) {
                     const scalar3<scalar_t> pj = {sorted_positions[cur_j][0],
                                                   sorted_positions[cur_j][1],
                                                   sorted_positions[cur_j][2]};
@@ -426,7 +427,10 @@ forward_kernel(const Accessor<scalar_t, 2> sorted_positions,
                     const scalar_t dy = pi.y - pj.y;
                     const scalar_t dz = pi.z - pj.z;
                     const scalar_t distance2 = dx * dx + dy * dy + dz * dz;
-                    if (distance2 < cutoff * cutoff) {
+                    const scalar_t cutoff_upper2 = cutoff_upper * cutoff_upper;
+                    const scalar_t cutoff_lower2 = cutoff_lower * cutoff_lower;
+                    if ((distance2 <= cutoff_upper2 and distance2 >= cutoff_lower2) or
+                        (loop and orj == ori)) {
                         const int32_t i_pair = atomicAdd(&i_curr_pair[0], 1);
                         // We handle too many neighbors outside of the kernel
                         if (i_pair < neighbors.size(1)) {
@@ -447,8 +451,9 @@ forward_kernel(const Accessor<scalar_t, 2> sorted_positions,
 class Autograd : public Function<Autograd> {
 public:
     static tensor_list forward(AutogradContext* ctx, const Tensor& positions, const Tensor& batch,
-                               const Tensor& box_size, const Scalar& cutoff,
-                               const Scalar& max_num_pairs, bool checkErrors) {
+                               const Tensor& box_size, const Scalar& cutoff_lower,
+                               const Scalar& cutoff_upper, const Scalar& max_num_pairs, bool loop,
+                               bool checkErrors) {
         // The algorithm for the cell list construction can be summarized in three separate steps:
         //         1. Hash (label) the particles according to the cell (bin) they lie in.
         //         2. Sort the particles and hashes using the hashes as the ordering label
@@ -466,10 +471,10 @@ public:
         // Steps 1 and 2
         Tensor sorted_positions, hash_values;
         std::tie(sorted_positions, hash_values) =
-            sortPositionsByHash(positions, batch, box_size, cutoff);
+            sortPositionsByHash(positions, batch, box_size, cutoff_upper);
         Tensor cell_start, cell_end;
         std::tie(cell_start, cell_end) =
-            fillCellOffsets(sorted_positions, hash_values, batch, box_size, cutoff);
+            fillCellOffsets(sorted_positions, hash_values, batch, box_size, cutoff_upper);
         const Tensor neighbors = full({2, num_pairs}, -1, options.dtype(kInt32));
         const Tensor deltas = empty({num_pairs, 3}, options);
         const Tensor distances = full(num_pairs, 0, options);
@@ -478,7 +483,9 @@ public:
         { // Use the cell list for each batch to find the neighbors
             const CUDAStreamGuard guard(stream);
             AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "forward", [&] {
-                const scalar_t cutoff_ = cutoff.to<scalar_t>();
+                const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
+                TORCH_CHECK(cutoff_upper_ > 0, "Expected cutoff_upper to be positive");
+                const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();
                 const scalar3<scalar_t> box_size_ = {box_size[0].item<scalar_t>(),
                                                      box_size[1].item<scalar_t>(),
                                                      box_size[2].item<scalar_t>()};
@@ -490,7 +497,7 @@ public:
                     get_accessor<int32_t, 1>(cell_start), get_accessor<int32_t, 1>(cell_end),
                     get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
                     get_accessor<scalar_t, 1>(distances), get_accessor<int32_t, 1>(i_curr_pair),
-                    num_atoms, num_pairs, box_size_, cutoff_);
+                    num_atoms, num_pairs, box_size_, cutoff_lower_, cutoff_upper_, loop);
             });
         }
         // Synchronize and check the number of pairs found. Note that this is incompatible with CUDA
@@ -539,11 +546,12 @@ public:
 };
 
 TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
-    m.impl("get_neighbor_pairs_cell",
-           [](const Tensor& positions, const Tensor& batch, const Tensor& box_size,
-              const Scalar& cutoff, const Scalar& max_num_pairs, bool checkErrors) {
-               const tensor_list results =
-                   Autograd::apply(positions, batch, box_size, cutoff, max_num_pairs, checkErrors);
-               return std::make_tuple(results[0], results[1], results[2]);
-           });
+    m.impl("get_neighbor_pairs_cell", [](const Tensor& positions, const Tensor& batch,
+                                         const Tensor& box_size, const Scalar& cutoff_lower,
+                                         const Scalar& cutoff_upper, const Scalar& max_num_pairs,
+                                         bool loop, bool checkErrors) {
+        const tensor_list results = Autograd::apply(positions, batch, box_size, cutoff_lower,
+                                                    cutoff_upper, max_num_pairs, loop, checkErrors);
+        return std::make_tuple(results[0], results[1], results[2]);
+    });
 }

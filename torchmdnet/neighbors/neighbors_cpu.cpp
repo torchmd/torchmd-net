@@ -16,14 +16,15 @@ using torch::Tensor;
 using torch::outer;
 using torch::round;
 
-static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions, const Tensor& batch, const Tensor &box_size, const Scalar& cutoff,
-                                             const Scalar& max_num_pairs, bool checkErrors) {
+static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions, const Tensor& batch, const Tensor &box_size,
+					     const Scalar& cutoff_lower, const Scalar& cutoff_upper,
+                                             const Scalar& max_num_pairs, bool loop, bool checkErrors) {
     TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
     TORCH_CHECK(positions.size(0) > 0, "Expected the 1nd dimension size of \"positions\" to be more than 0");
     TORCH_CHECK(positions.size(1) == 3, "Expected the 2nd dimension size of \"positions\" to be 3");
     TORCH_CHECK(positions.is_contiguous(), "Expected \"positions\" to be contiguous");
 
-    TORCH_CHECK(cutoff.to<double>() > 0, "Expected \"cutoff\" to be positive");
+    TORCH_CHECK(cutoff_upper.to<double>() > 0, "Expected \"cutoff\" to be positive");
     auto box_vectors = torch::empty(0);
     if (box_vectors.size(0) != 0) {
         TORCH_CHECK(box_vectors.dim() == 2, "Expected \"box_vectors\" to have two dimensions");
@@ -33,7 +34,7 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions, const Tens
         for (int i = 0; i < 3; i++)
             for (int j = 0; j < 3; j++)
                 v[i][j] = box_vectors[i][j].item<double>();
-        double c = cutoff.to<double>();
+        double c = cutoff_upper.to<double>();
         TORCH_CHECK(v[0][1] == 0, "Invalid box vectors: box_vectors[0][1] != 0");
         TORCH_CHECK(v[0][2] == 0, "Invalid box vectors: box_vectors[0][2] != 0");
         TORCH_CHECK(v[1][2] == 0, "Invalid box vectors: box_vectors[1][2] != 0");
@@ -73,9 +74,16 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions, const Tens
       Tensor neighbors_i = vstack({rows_i, columns_i});
       Tensor deltas_i = index_select(positions_i, 0, rows_i) - index_select(positions_i, 0, columns_i);
       Tensor distances_i = frobenius_norm(deltas_i, 1);
-      const Tensor mask = distances_i <= cutoff;
+      const Tensor mask_upper = distances_i <= cutoff_upper;
+      const Tensor mask_lower = distances_i >= cutoff_lower;
+      const Tensor mask = mask_upper*mask_lower;
       neighbors_i = neighbors_i.index({Slice(), mask}) + current_offset;
-      n_pairs += distances_i.size(0);
+      //Add self interaction using batch_i
+      if(loop){
+	const Tensor batch_i_tensor = torch::tensor(batch_i, kInt32);
+	neighbors_i = torch::hstack({neighbors_i, torch::stack({batch_i_tensor, batch_i_tensor})});
+      }
+      n_pairs += neighbors_i.size(1);
       TORCH_CHECK(n_pairs >= 0, "The maximum number of pairs has been exceed! Increase \"max_num_neighbors\"");
       neighbors = torch::hstack({neighbors, neighbors_i});
       current_offset += n_atoms_i;

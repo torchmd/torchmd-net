@@ -79,16 +79,20 @@ class NeighborEmbedding(MessagePassing):
 from torchmdnet.neighbors import get_neighbor_pairs, get_neighbor_pairs_cell
 class DistanceCellList(torch.nn.Module):
     def __init__(
-        self,
-        cutoff_upper,
-        max_num_pairs=32,
-        strategy="cell",
+            self,
+            cutoff_upper,
+            cutoff_lower=0.0,
+            max_num_pairs=32,
+            loop=False,
+            strategy="cell",
             box=None
     ):
         super(DistanceCellList, self).__init__()
         """ Compute the neighbor list for a given cutoff.
         Parameters
         ----------
+        cutoff_lower : float
+            Lower cutoff for the neighbor list.
         cutoff_upper : float
             Upper cutoff for the neighbor list.
         max_num_pairs : int
@@ -98,12 +102,20 @@ class DistanceCellList(torch.nn.Module):
             ["brute", "cell"].
         box : torch.Tensor
             Size of the box shape (3,) or None
+        loop : bool
+            Whether to include self-interactions.
 
         """
         self.cutoff_upper = cutoff_upper
+        self.cutoff_lower = cutoff_lower
         self.max_num_pairs = max_num_pairs
         self.strategy = strategy
         self.box = box
+        self.loop = loop
+        #Default the box to 3 times the cutoff
+        if self.box is None and self.strategy == "cell":
+            self.box = torch.tensor([cutoff_upper * 3] * 3)
+
 
     def forward(self, pos, batch):
         """
@@ -129,7 +141,9 @@ class DistanceCellList(torch.nn.Module):
         function = get_neighbor_pairs if self.strategy == "brute" else get_neighbor_pairs_cell
         neighbors, distance_vecs, distances = function(
             pos,
-            cutoff=self.cutoff_upper,
+            cutoff_lower=self.cutoff_lower,
+            cutoff_upper=self.cutoff_upper,
+            loop=self.loop,
             batch=batch,
             max_num_pairs=self.max_num_pairs,
             check_errors=True,
