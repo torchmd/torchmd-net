@@ -467,7 +467,6 @@ public:
         Tensor sorted_positions, hash_values;
         std::tie(sorted_positions, hash_values) =
             sortPositionsByHash(positions, batch, box_size, cutoff);
-        cudaDeviceSynchronize();
         Tensor cell_start, cell_end;
         std::tie(cell_start, cell_end) =
             fillCellOffsets(sorted_positions, hash_values, batch, box_size, cutoff);
