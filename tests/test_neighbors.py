@@ -42,7 +42,7 @@ def test_neighbors(device, strategy, n_batches, cutoff, loop):
     max_num_pairs = ref_neighbors.shape[1]
     box = torch.tensor([lbox, lbox, lbox])
 
-    nl = DistanceCellList(cutoff_lower=0.0, loop=loop, cutoff_upper=cutoff, max_num_pairs=max_num_pairs, strategy=strategy, box=box)
+    nl = DistanceCellList(cutoff_lower=0.0, loop=loop, cutoff_upper=cutoff, max_num_pairs=max_num_pairs, strategy=strategy, box=box, return_vecs=True)
     batch.to(device)
     neighbors, distances, distance_vecs = nl(pos, batch)
     neighbors = neighbors.cpu().detach().numpy()

@@ -83,6 +83,7 @@ class DistanceCellList(torch.nn.Module):
             cutoff_upper,
             cutoff_lower=0.0,
             max_num_pairs=32,
+            return_vecs=False,
             loop=False,
             strategy="cell",
             box=None
@@ -104,6 +105,8 @@ class DistanceCellList(torch.nn.Module):
             Size of the box shape (3,) or None
         loop : bool
             Whether to include self-interactions.
+        return_vecs : bool
+            Whether to return the distance vectors.
 
         """
         self.cutoff_upper = cutoff_upper
@@ -149,7 +152,10 @@ class DistanceCellList(torch.nn.Module):
             check_errors=True,
             box_size=self.box
         )
-        return neighbors, distances, distance_vecs
+        if self.return_vecs:
+            return neighbors, distances, distance_vecs
+        else:
+            return neighbors, distances, None
 
 class GaussianSmearing(nn.Module):
     def __init__(self, cutoff_lower=0.0, cutoff_upper=5.0, num_rbf=50, trainable=True):
