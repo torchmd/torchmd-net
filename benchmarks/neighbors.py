@@ -26,21 +26,26 @@ def benchmark_neighbors(device, strategy, n_batches, total_num_particles, mean_n
     num_particles = total_num_particles // n_batches
     expected_num_neighbors = mean_num_neighbors
     cutoff = np.cbrt(3 * expected_num_neighbors / (4 * np.pi * density));
-    n_atoms_per_batch = np.random.randint(num_particles-10, num_particles+10, size=n_batches)
-    #Fix the last batch so that the total number of particles is correct
-    n_atoms_per_batch[-1] += total_num_particles - n_atoms_per_batch.sum()
-    if n_atoms_per_batch[-1] < 0:
-        n_atoms_per_batch[-1] = 1
-
+    n_atoms_per_batch = torch.randint(num_particles-10, num_particles+10, size=(n_batches,))
+    #Fix so that the total number of particles is correct. Special care if the difference is negative
+    difference = total_num_particles - n_atoms_per_batch.sum()
+    if n_atoms_per_batch[-1] + difference > 0:
+        n_atoms_per_batch[-1] += difference
+    else:
+        while difference < 0:
+            i = np.random.randint(0, n_batches)
+            if n_atoms_per_batch[i] > 2:
+                n_atoms_per_batch[i] -= 1
+                difference += 1
     lbox = np.cbrt(num_particles / density);
-    batch = torch.repeat_interleave(torch.arange(n_batches, dtype=torch.int32, device=device), torch.tensor(n_atoms_per_batch, dtype=torch.int32, device=device))
-
+    batch = torch.repeat_interleave(torch.arange(n_batches, dtype=torch.int32), n_atoms_per_batch).to(device)
     cumsum = np.cumsum( np.concatenate([[0], n_atoms_per_batch]))
     pos = torch.rand(cumsum[-1], 3, device=device)*lbox
-    max_num_pairs = torch.tensor(expected_num_neighbors * n_atoms_per_batch.sum(), dtype=torch.int64).item()
+    max_num_pairs = (expected_num_neighbors * n_atoms_per_batch.sum()).item()
     nl = DistanceCellList(cutoff_upper=cutoff, max_num_pairs=max_num_pairs, strategy=strategy, box=torch.Tensor([lbox, lbox, lbox]))
     #Warmup
-    neighbors, distances, distance_vecs = nl(pos, batch)
+    for i in range(10):
+        neighbors, distances, distance_vecs = nl(pos, batch)
     if device == 'cuda':
         torch.cuda.synchronize()
     #Benchmark using torch profiler
@@ -62,7 +67,7 @@ def benchmark_neighbors(device, strategy, n_batches, total_num_particles, mean_n
 
 if __name__ == '__main__':
     n_particles = 100000
-    mean_num_neighbors = min(n_particles, 128);
+    mean_num_neighbors = min(n_particles, 16);
     print("Benchmarking neighbor list generation for {} particles with {} neighbors on average".format(n_particles, mean_num_neighbors))
     for strategy in ['brute', 'cell']:
         print("Strategy: {}".format(strategy))

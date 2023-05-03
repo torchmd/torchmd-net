@@ -15,10 +15,9 @@ def sort_neighbors(neighbors, deltas, distances):
 def test_neighbors(device, strategy, n_batches, cutoff):
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA not available")
-    np.random.seed(1234)
     torch.manual_seed(4321)
-    n_atoms_per_batch = np.random.randint(2, 10, size=n_batches)
-    batch = torch.tensor([i for i in range(n_batches) for j in range(n_atoms_per_batch[i])], device=device, dtype=torch.int)
+    n_atoms_per_batch = torch.randint(3, 100, size=(n_batches,))
+    batch = torch.repeat_interleave(torch.arange(n_batches, dtype=torch.int32), n_atoms_per_batch).to(device)
     cumsum = np.cumsum( np.concatenate([[0], n_atoms_per_batch]))
     lbox=10.0
     pos = torch.rand(cumsum[-1], 3, device=device)*lbox
@@ -26,7 +25,7 @@ def test_neighbors(device, strategy, n_batches, cutoff):
     pos[0,:] = torch.zeros(3)
     pos[1,:] = torch.zeros(3)
     pos.requires_grad = True
-    ref_neighbors = np.concatenate([np.tril_indices(n_atoms_per_batch[i], -1)+cumsum[i] for i in range(n_batches)], axis=1)
+    ref_neighbors = np.concatenate([np.tril_indices(int(n_atoms_per_batch[i]), -1)+cumsum[i] for i in range(n_batches)], axis=1)
     pos_np = pos.cpu().detach().numpy()
     ref_distances = np.linalg.norm(pos_np[ref_neighbors[0]] - pos_np[ref_neighbors[1]], axis=-1)
     ref_distance_vecs = pos_np[ref_neighbors[0]] - pos_np[ref_neighbors[1]]
