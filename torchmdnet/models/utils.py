@@ -115,6 +115,7 @@ class DistanceCellList(torch.nn.Module):
         self.strategy = strategy
         self.box = box
         self.loop = loop
+        self.return_vecs = return_vecs
         #Default the box to 3 times the cutoff
         if self.box is None and self.strategy == "cell":
             self.box = torch.tensor([cutoff_upper * 3] * 3)
