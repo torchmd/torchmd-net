@@ -9,13 +9,12 @@ def sort_neighbors(neighbors, deltas, distances):
     return neighbors[:, i_sorted], deltas[i_sorted], distances[i_sorted]
 
 @pytest.mark.parametrize("device", ["cpu", "cuda"])
-@pytest.mark.parametrize("strategy", ["cell"])
-@pytest.mark.parametrize("n_batches", [1])
-@pytest.mark.parametrize("cutoff", [1])
+@pytest.mark.parametrize("strategy", ["brute", "cell"])
+@pytest.mark.parametrize("n_batches", [1, 2, 3, 4, 128])
+@pytest.mark.parametrize("cutoff", [0.1, 1.0, 1000.0])
 def test_neighbors(device, strategy, n_batches, cutoff):
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA not available")
-
     np.random.seed(1234)
     torch.manual_seed(4321)
     n_atoms_per_batch = np.random.randint(2, 10, size=n_batches)
@@ -27,11 +26,6 @@ def test_neighbors(device, strategy, n_batches, cutoff):
     pos[0,:] = torch.zeros(3)
     pos[1,:] = torch.zeros(3)
     pos.requires_grad = True
-    print("batch")
-    print(batch)
-    print("pos")
-    print(pos)
-
     ref_neighbors = np.concatenate([np.tril_indices(n_atoms_per_batch[i], -1)+cumsum[i] for i in range(n_batches)], axis=1)
     pos_np = pos.cpu().detach().numpy()
     ref_distances = np.linalg.norm(pos_np[ref_neighbors[0]] - pos_np[ref_neighbors[1]], axis=-1)
@@ -50,10 +44,6 @@ def test_neighbors(device, strategy, n_batches, cutoff):
     neighbors = neighbors.cpu().detach().numpy()
     distance_vecs = distance_vecs.cpu().detach().numpy()
     distances = distances.cpu().detach().numpy()
-    print("neighbors")
-    print(neighbors)
-    print("ref_neighbors")
-    print(ref_neighbors)
     assert neighbors.shape == (2, max_num_pairs)
     assert distances.shape == (max_num_pairs,)
     assert distance_vecs.shape == (max_num_pairs, 3)
