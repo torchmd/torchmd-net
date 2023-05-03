@@ -3,9 +3,6 @@
 #include <c10/cuda/CUDAStream.h>
 #include <torch/extension.h>
 #include <tuple>
-#include <thrust/device_vector.h>
-#include <thrust/reduce.h>
-#include <thrust/iterator/discard_iterator.h>
 using c10::cuda::CUDAStreamGuard;
 using c10::cuda::getCurrentCUDAStream;
 using std::make_tuple;
@@ -26,7 +23,8 @@ using torch::autograd::tensor_list;
 template <typename scalar_t, int num_dims>
 using Accessor = PackedTensorAccessor32<scalar_t, num_dims, RestrictPtrTraits>;
 
-template <typename scalar_t, int num_dims> inline Accessor<scalar_t, num_dims> get_accessor(const Tensor& tensor) {
+template <typename scalar_t, int num_dims>
+inline Accessor<scalar_t, num_dims> get_accessor(const Tensor& tensor) {
     return tensor.packed_accessor32<scalar_t, num_dims, RestrictPtrTraits>();
 };
 
@@ -39,10 +37,12 @@ template <> __device__ __forceinline__ double sqrt_(double x) {
 };
 
 template <typename scalar_t>
-__global__ void forward_kernel(const int32_t num_all_pairs, const Accessor<scalar_t, 2> positions,
-                               const Accessor<int32_t, 1> batch_offsets, const int32_t batch_index,
-                               const scalar_t cutoff2, Accessor<int32_t, 1> i_curr_pair, Accessor<int32_t, 2> neighbors,
-                               Accessor<scalar_t, 2> deltas, Accessor<scalar_t, 1> distances) {
+__global__ void
+forward_kernel(const int32_t num_all_pairs, const Accessor<scalar_t, 2> positions,
+               // const Accessor<int32_t, 1> batch_offsets, const int32_t batch_index,
+               const Accessor<int32_t, 1> batch, const scalar_t cutoff2,
+               Accessor<int32_t, 1> i_curr_pair, Accessor<int32_t, 2> neighbors,
+               Accessor<scalar_t, 2> deltas, Accessor<scalar_t, 1> distances) {
     const int32_t index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index >= num_all_pairs)
         return;
@@ -50,14 +50,13 @@ __global__ void forward_kernel(const int32_t num_all_pairs, const Accessor<scala
     int32_t row = floor((sqrtf(8 * index + 1) + 1) / 2);
     if (row * (row - 1) > 2 * index)
         row--;
-    const int32_t position_offset = batch_index ? batch_offsets[batch_index - 1] : 0;
-    const int32_t column = (index - row * (row - 1) / 2) + position_offset;
-    row += position_offset;
+    const int32_t column = (index - row * (row - 1) / 2);
+    if (batch[row] != batch[column])
+        return;
     scalar_t delta_x = positions[row][0] - positions[column][0];
     scalar_t delta_y = positions[row][1] - positions[column][1];
     scalar_t delta_z = positions[row][2] - positions[column][2];
     const scalar_t distance2 = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z;
-
     if (distance2 > cutoff2)
         return;
 
@@ -73,11 +72,11 @@ __global__ void forward_kernel(const int32_t num_all_pairs, const Accessor<scala
     }
 }
 
-
 template <typename scalar_t>
-__global__ void backward_kernel(const Accessor<int32_t, 2> neighbors, const Accessor<scalar_t, 2> deltas,
-                                const Accessor<scalar_t, 1> distances, const Accessor<scalar_t, 1> grad_distances,
-                                Accessor<scalar_t, 2> grad_positions) {
+__global__ void
+backward_kernel(const Accessor<int32_t, 2> neighbors, const Accessor<scalar_t, 2> deltas,
+                const Accessor<scalar_t, 1> distances, const Accessor<scalar_t, 1> grad_distances,
+                Accessor<scalar_t, 2> grad_positions) {
     const int32_t i_pair = blockIdx.x * blockDim.x + threadIdx.x;
     const int32_t num_pairs = neighbors.size(1);
     if (i_pair >= num_pairs)
@@ -104,22 +103,24 @@ static void checkInput(const Tensor& positions, const Tensor& batch) {
     // Batch is assumed to be non-negative
     // Each batch can have a different number of atoms
     TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
-    TORCH_CHECK(positions.size(0) > 0, "Expected the 1nd dimension size of \"positions\" to be more than 0");
+    TORCH_CHECK(positions.size(0) > 0,
+                "Expected the 1nd dimension size of \"positions\" to be more than 0");
     TORCH_CHECK(positions.size(1) == 3, "Expected the 2nd dimension size of \"positions\" to be 3");
     TORCH_CHECK(positions.is_contiguous(), "Expected \"positions\" to be contiguous");
 
     TORCH_CHECK(batch.dim() == 1, "Expected \"batch\" to have one dimension");
-    TORCH_CHECK(
-        batch.size(0) == positions.size(0),
-        "Expected the 1st dimension size of \"batch\" to be the same as the 1st dimension size of \"positions\"");
+    TORCH_CHECK(batch.size(0) == positions.size(0),
+                "Expected the 1st dimension size of \"batch\" to be the same as the 1st dimension "
+                "size of \"positions\"");
     TORCH_CHECK(batch.is_contiguous(), "Expected \"batch\" to be contiguous");
     TORCH_CHECK(batch.dtype() == torch::kInt32, "Expected \"batch\" to have torch::kInt32 dtype");
 }
 
 class Autograd : public Function<Autograd> {
 public:
-    static tensor_list forward(AutogradContext* ctx, const Tensor& positions, const Tensor& batch, const Scalar& cutoff,
-                               const Scalar& max_num_pairs, bool checkErrors) {
+    static tensor_list forward(AutogradContext* ctx, const Tensor& positions, const Tensor& batch,
+                               const Scalar& cutoff, const Scalar& max_num_pairs,
+                               bool checkErrors) {
         checkInput(positions, batch);
         const auto max_num_pairs_ = max_num_pairs.toLong();
         TORCH_CHECK(max_num_pairs_ > 0, "Expected \"max_num_neighbors\" to be positive");
@@ -127,35 +128,34 @@ public:
         const int num_pairs = max_num_pairs_;
         const TensorOptions options = positions.options();
         const auto stream = getCurrentCUDAStream(positions.get_device());
-        const Tensor num_atoms_per_batch = torch::bincount(batch).to(torch::kCPU);
-        const int n_batches = num_atoms_per_batch.size(0);
-        const Tensor batch_offsets = torch::cumsum(num_atoms_per_batch, 0, torch::kInt32).to(positions.device());
         const Tensor neighbors = full({2, num_pairs}, -1, options.dtype(kInt32));
         const Tensor deltas = empty({num_pairs, 3}, options);
         const Tensor distances = full(num_pairs, 0, options);
         const Tensor i_curr_pair = zeros(1, options.dtype(kInt32));
         {
             const CUDAStreamGuard guard(stream);
-            for (int i = 0; i < n_batches; i++) {
-                const int num_atoms = num_atoms_per_batch[i].item<int>();
-                const int num_all_pairs = num_atoms * (num_atoms - 1) / 2;
-                const int num_threads = 128;
-                const int num_blocks = max((num_all_pairs + num_threads - 1) / num_threads, 1);
-                AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "get_neighbor_pairs_forward", [&]() {
+            const int num_atoms = positions.size(0);
+            const int num_all_pairs = num_atoms * (num_atoms - 1) / 2;
+            const int num_threads = 128;
+            const int num_blocks = max((num_all_pairs + num_threads - 1) / num_threads, 1);
+            AT_DISPATCH_FLOATING_TYPES(
+                positions.scalar_type(), "get_neighbor_pairs_forward", [&]() {
                     const scalar_t cutoff_ = cutoff.to<scalar_t>();
                     TORCH_CHECK(cutoff_ > 0, "Expected \"cutoff\" to be positive");
                     forward_kernel<<<num_blocks, num_threads, 0, stream>>>(
-                        num_all_pairs, get_accessor<scalar_t, 2>(positions), get_accessor<int32_t, 1>(batch_offsets), i,
-                        cutoff_ * cutoff_, get_accessor<int32_t, 1>(i_curr_pair), get_accessor<int32_t, 2>(neighbors),
+                        num_all_pairs, get_accessor<scalar_t, 2>(positions),
+                        get_accessor<int32_t, 1>(batch), cutoff_ * cutoff_,
+                        get_accessor<int32_t, 1>(i_curr_pair), get_accessor<int32_t, 2>(neighbors),
                         get_accessor<scalar_t, 2>(deltas), get_accessor<scalar_t, 1>(distances));
                 });
-            }
         }
-        // Synchronize and check the number of pairs found. Note that this is incompatible with CUDA graphs
+        // Synchronize and check the number of pairs found. Note that this is incompatible with CUDA
+        // graphs
         if (checkErrors) {
             int num_found_pairs = i_curr_pair.item<int32_t>();
             TORCH_CHECK(num_found_pairs <= max_num_pairs_,
-                        "Too many neighbor pairs found. Maximum is " + std::to_string(max_num_pairs_),
+                        "Too many neighbor pairs found. Maximum is " +
+                            std::to_string(max_num_pairs_),
                         " but found " + std::to_string(num_found_pairs));
         }
         neighbors.resize_({2, i_curr_pair[0].item<int>()});
@@ -181,22 +181,25 @@ public:
         const Tensor distances = data[2];
         const Tensor grad_positions = zeros({num_atoms, 3}, grad_distances.options());
 
-        AT_DISPATCH_FLOATING_TYPES(grad_distances.scalar_type(), "get_neighbor_pairs_backward", [&]() {
-            const CUDAStreamGuard guard(stream);
-            backward_kernel<<<blocks, num_threads, 0, stream>>>(
-                get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
-                get_accessor<scalar_t, 1>(distances), get_accessor<scalar_t, 1>(grad_distances),
-                get_accessor<scalar_t, 2>(grad_positions));
-        });
+        AT_DISPATCH_FLOATING_TYPES(
+            grad_distances.scalar_type(), "get_neighbor_pairs_backward", [&]() {
+                const CUDAStreamGuard guard(stream);
+                backward_kernel<<<blocks, num_threads, 0, stream>>>(
+                    get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
+                    get_accessor<scalar_t, 1>(distances), get_accessor<scalar_t, 1>(grad_distances),
+                    get_accessor<scalar_t, 2>(grad_positions));
+            });
 
         return {grad_positions, Tensor(), Tensor()};
     }
 };
 
 TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
-  m.impl("get_neighbor_pairs", [](const Tensor& positions, const Tensor& batch, const Tensor& box_size, const Scalar& cutoff,
-                                    const Scalar& max_num_pairs, bool checkErrors) {
-        const tensor_list results = Autograd::apply(positions, batch, cutoff, max_num_pairs, checkErrors);
-        return std::make_tuple(results[0], results[1], results[2]);
-    });
+    m.impl("get_neighbor_pairs",
+           [](const Tensor& positions, const Tensor& batch, const Tensor& box_size,
+              const Scalar& cutoff, const Scalar& max_num_pairs, bool checkErrors) {
+               const tensor_list results =
+                   Autograd::apply(positions, batch, cutoff, max_num_pairs, checkErrors);
+               return std::make_tuple(results[0], results[1], results[2]);
+           });
 }
