@@ -38,12 +38,11 @@ template <> __device__ __forceinline__ double sqrt_(double x) {
 
 template <typename scalar_t>
 __global__ void
-forward_kernel(const int32_t num_all_pairs, const Accessor<scalar_t, 2> positions,
-               // const Accessor<int32_t, 1> batch_offsets, const int32_t batch_index,
-               const Accessor<int32_t, 1> batch, const scalar_t cutoff2,
+forward_kernel(const int64_t num_all_pairs, const Accessor<scalar_t, 2> positions,
+               const Accessor<int32_t, 1> batch, scalar_t cutoff2,
                Accessor<int32_t, 1> i_curr_pair, Accessor<int32_t, 2> neighbors,
                Accessor<scalar_t, 2> deltas, Accessor<scalar_t, 1> distances) {
-    const int32_t index = blockIdx.x * blockDim.x + threadIdx.x;
+    const int64_t index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index >= num_all_pairs)
         return;
 
@@ -134,10 +133,10 @@ public:
         const Tensor i_curr_pair = zeros(1, options.dtype(kInt32));
         {
             const CUDAStreamGuard guard(stream);
-            const int num_atoms = positions.size(0);
-            const int num_all_pairs = num_atoms * (num_atoms - 1) / 2;
-            const int num_threads = 128;
-            const int num_blocks = max((num_all_pairs + num_threads - 1) / num_threads, 1);
+            const int32_t num_atoms = positions.size(0);
+            const int64_t num_all_pairs = num_atoms * (num_atoms - 1) / 2;
+            const int64_t num_threads = 128;
+            const int64_t num_blocks = max((num_all_pairs + num_threads - 1) / num_threads, 1l);
             AT_DISPATCH_FLOATING_TYPES(
                 positions.scalar_type(), "get_neighbor_pairs_forward", [&]() {
                     const scalar_t cutoff_ = cutoff.to<scalar_t>();
