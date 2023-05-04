@@ -61,15 +61,22 @@ __global__ void forward_kernel(const int64_t num_all_pairs, const Accessor<scala
         scalar_t delta_z = positions[row][2] - positions[column][2];
         const scalar_t distance2 = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z;
         if (distance2 <= cutoff_upper2 && distance2 >= cutoff_lower2) {
-            const int32_t i_pair = atomicAdd(&i_curr_pair[0], 1);
+            const int32_t i_pair = atomicAdd(&i_curr_pair[0], 2);
             // We handle too many neighbors outside of the kernel
             if (i_pair < neighbors.size(1)) {
+	      const scalar_t r2 = sqrt_(distance2);
                 neighbors[0][i_pair] = row;
                 neighbors[1][i_pair] = column;
                 deltas[i_pair][0] = delta_x;
                 deltas[i_pair][1] = delta_y;
                 deltas[i_pair][2] = delta_z;
-                distances[i_pair] = sqrt_(distance2);
+                distances[i_pair] = r2;
+		neighbors[0][i_pair+1] = column;
+                neighbors[1][i_pair+1] = row;
+                deltas[i_pair+1][0] = -delta_x;
+                deltas[i_pair+1][1] = -delta_y;
+                deltas[i_pair+1][2] = -delta_z;
+                distances[i_pair+1] = r2;
             }
         }
     }

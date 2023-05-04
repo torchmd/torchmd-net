@@ -391,7 +391,7 @@ forward_kernel(const Accessor<scalar_t, 2> sorted_positions,
                Accessor<int32_t, 2> neighbors, Accessor<scalar_t, 2> deltas,
                Accessor<scalar_t, 1> distances, Accessor<int32_t, 1> i_curr_pair, int num_atoms,
                int num_pairs, scalar3<scalar_t> box_size, scalar_t cutoff_lower,
-               scalar_t cutoff_upper, bool loop) {
+               scalar_t cutoff_upper, bool loop, bool include_traspose) {
     // Each atom traverses the cells around it and finds the neighbors
     // Atoms for all batches are placed in the same cell list, but other batches are ignored while
     // traversing
@@ -419,7 +419,10 @@ forward_kernel(const Accessor<scalar_t, 2> sorted_positions,
                 if (j_batch >
                     i_batch) // Particles are sorted by batch after cell, so we can break early here
                     break;
-                if ((orj < ori and j_batch == i_batch) or (loop and orj == ori)) {
+                const bool includePair =
+                    (j_batch == i_batch) and
+                    ((orj != ori and (orj < ori or include_traspose)) or (loop and orj == ori));
+                if (includePair) {
                     const scalar3<scalar_t> pj = {sorted_positions[cur_j][0],
                                                   sorted_positions[cur_j][1],
                                                   sorted_positions[cur_j][2]};
@@ -491,13 +494,15 @@ public:
                                                      box_size[2].item<scalar_t>()};
                 const int threads = 128;
                 const int blocks = (num_atoms + threads - 1) / threads;
+                bool include_traspose = true;
                 forward_kernel<<<blocks, threads, 0, stream>>>(
                     get_accessor<scalar_t, 2>(sorted_positions),
                     get_accessor<int32_t, 1>(hash_values), get_accessor<int32_t, 1>(batch),
                     get_accessor<int32_t, 1>(cell_start), get_accessor<int32_t, 1>(cell_end),
                     get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
                     get_accessor<scalar_t, 1>(distances), get_accessor<int32_t, 1>(i_curr_pair),
-                    num_atoms, num_pairs, box_size_, cutoff_lower_, cutoff_upper_, loop);
+                    num_atoms, num_pairs, box_size_, cutoff_lower_, cutoff_upper_, loop,
+                    include_traspose);
             });
         }
         // Synchronize and check the number of pairs found. Note that this is incompatible with CUDA

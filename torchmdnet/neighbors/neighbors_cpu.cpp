@@ -78,6 +78,8 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions, const Tens
       const Tensor mask_lower = distances_i >= cutoff_lower;
       const Tensor mask = mask_upper*mask_lower;
       neighbors_i = neighbors_i.index({Slice(), mask}) + current_offset;
+      //Add the transposed pairs
+      neighbors_i = torch::hstack({neighbors_i, torch::stack({neighbors_i[1], neighbors_i[0]})});
       //Add self interaction using batch_i
       if(loop){
 	const Tensor batch_i_tensor = torch::tensor(batch_i, kInt32);
