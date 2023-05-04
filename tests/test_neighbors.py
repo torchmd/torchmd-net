@@ -9,14 +9,15 @@ def sort_neighbors(neighbors, deltas, distances):
     return neighbors[:, i_sorted], deltas[i_sorted], distances[i_sorted]
 
 
-def compute_ref_neighbors(pos, batch, loop, cutoff):
+def compute_ref_neighbors(pos, batch, loop, include_transpose, cutoff):
     batch = batch.cpu()
     n_atoms_per_batch = torch.bincount(batch)
     n_batches = n_atoms_per_batch.shape[0]
     cumsum = torch.cumsum(torch.cat([torch.tensor([0]), n_atoms_per_batch]), dim=0).cpu().detach().numpy()
     ref_neighbors = np.concatenate([np.tril_indices(int(n_atoms_per_batch[i]), -1)+cumsum[i] for i in range(n_batches)], axis=1)
-    #add the upper triangle
-    ref_neighbors = np.concatenate([ref_neighbors, np.flip(ref_neighbors, axis=0)], axis=1)
+    # add the upper triangle
+    if(include_transpose):
+        ref_neighbors = np.concatenate([ref_neighbors, np.flip(ref_neighbors, axis=0)], axis=1)
     if(loop): # Add self interactions
         ilist=np.arange(cumsum[-1])
         ref_neighbors = np.concatenate([ref_neighbors, np.stack([ilist, ilist], axis=0)], axis=1)
@@ -36,7 +37,8 @@ def compute_ref_neighbors(pos, batch, loop, cutoff):
 @pytest.mark.parametrize("n_batches", [1, 2, 3, 4, 128])
 @pytest.mark.parametrize("cutoff", [0.1, 1.0, 1000.0])
 @pytest.mark.parametrize("loop", [True, False])
-def test_neighbors(device, strategy, n_batches, cutoff, loop):
+@pytest.mark.parametrize("include_transpose", [True, False])
+def test_neighbors(device, strategy, n_batches, cutoff, loop, include_transpose):
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA not available")
     torch.manual_seed(4321)
@@ -49,11 +51,11 @@ def test_neighbors(device, strategy, n_batches, cutoff, loop):
     pos[0,:] = torch.zeros(3)
     pos[1,:] = torch.zeros(3)
     pos.requires_grad = True
-    ref_neighbors, ref_distance_vecs, ref_distances = compute_ref_neighbors(pos, batch, loop, cutoff)
+    ref_neighbors, ref_distance_vecs, ref_distances = compute_ref_neighbors(pos, batch, loop, include_transpose, cutoff)
     max_num_pairs = ref_neighbors.shape[1]
     box = torch.tensor([lbox, lbox, lbox])
 
-    nl = DistanceCellList(cutoff_lower=0.0, loop=loop, cutoff_upper=cutoff, max_num_pairs=max_num_pairs, strategy=strategy, box=box, return_vecs=True)
+    nl = DistanceCellList(cutoff_lower=0.0, loop=loop, cutoff_upper=cutoff, max_num_pairs=max_num_pairs, strategy=strategy, box=box, return_vecs=True, include_transpose=include_transpose)
     batch.to(device)
     neighbors, distances, distance_vecs = nl(pos, batch)
     neighbors = neighbors.cpu().detach().numpy()
@@ -87,7 +89,7 @@ def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop):
     pos[0,:] = torch.zeros(3)
     pos[1,:] = torch.zeros(3)
     pos.requires_grad = True
-    ref_neighbors, ref_distance_vecs, ref_distances = compute_ref_neighbors(pos, batch, loop, cutoff)
+    ref_neighbors, ref_distance_vecs, ref_distances = compute_ref_neighbors(pos, batch, loop, True, cutoff)
     #Find the particle appearing in the most pairs
     max_num_neighbors = torch.max(torch.bincount(torch.tensor(ref_neighbors[0,:])))
     d = Distance(cutoff_lower=0.0, cutoff_upper=cutoff, loop=loop, max_num_neighbors=max_num_neighbors, return_vecs=True)
@@ -99,7 +101,7 @@ def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop):
 
     max_num_pairs = ref_neighbors.shape[1]
     box = torch.tensor([lbox, lbox, lbox])
-    nl = DistanceCellList(cutoff_lower=0.0, loop=loop, cutoff_upper=cutoff, max_num_pairs=max_num_pairs, strategy=strategy, box=box, return_vecs=True)
+    nl = DistanceCellList(cutoff_lower=0.0, loop=loop, cutoff_upper=cutoff, max_num_pairs=max_num_pairs, strategy=strategy, box=box, return_vecs=True, include_transpose=True)
     neighbors, distances, distance_vecs = nl(pos, batch)
     neighbors = neighbors.cpu().detach().numpy()
     distance_vecs = distance_vecs.cpu().detach().numpy()

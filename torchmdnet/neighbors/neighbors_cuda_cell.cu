@@ -391,7 +391,7 @@ forward_kernel(const Accessor<scalar_t, 2> sorted_positions,
                Accessor<int32_t, 2> neighbors, Accessor<scalar_t, 2> deltas,
                Accessor<scalar_t, 1> distances, Accessor<int32_t, 1> i_curr_pair, int num_atoms,
                int num_pairs, scalar3<scalar_t> box_size, scalar_t cutoff_lower,
-               scalar_t cutoff_upper, bool loop, bool include_traspose) {
+               scalar_t cutoff_upper, bool loop, bool include_transpose) {
     // Each atom traverses the cells around it and finds the neighbors
     // Atoms for all batches are placed in the same cell list, but other batches are ignored while
     // traversing
@@ -421,7 +421,7 @@ forward_kernel(const Accessor<scalar_t, 2> sorted_positions,
                     break;
                 const bool includePair =
                     (j_batch == i_batch) and
-                    ((orj != ori and (orj < ori or include_traspose)) or (loop and orj == ori));
+                    ((orj != ori and (orj < ori or include_transpose)) or (loop and orj == ori));
                 if (includePair) {
                     const scalar3<scalar_t> pj = {sorted_positions[cur_j][0],
                                                   sorted_positions[cur_j][1],
@@ -443,12 +443,12 @@ forward_kernel(const Accessor<scalar_t, 2> sorted_positions,
                             deltas[i_pair][1] = dy;
                             deltas[i_pair][2] = dz;
                             distances[i_pair] = sqrt_(distance2);
-                        }
-                    }
-                } // endfor
-            }     // endif
-        }         // endfor
-    }
+                        } // endif
+                    }     // endif
+                }         // endfor
+            }             // endif
+        }                 // endfor
+    }                     // endfor
 }
 
 class Autograd : public Function<Autograd> {
@@ -456,7 +456,7 @@ public:
     static tensor_list forward(AutogradContext* ctx, const Tensor& positions, const Tensor& batch,
                                const Tensor& box_size, const Scalar& cutoff_lower,
                                const Scalar& cutoff_upper, const Scalar& max_num_pairs, bool loop,
-                               bool checkErrors) {
+                               bool include_transpose, bool checkErrors) {
         // The algorithm for the cell list construction can be summarized in three separate steps:
         //         1. Hash (label) the particles according to the cell (bin) they lie in.
         //         2. Sort the particles and hashes using the hashes as the ordering label
@@ -494,7 +494,6 @@ public:
                                                      box_size[2].item<scalar_t>()};
                 const int threads = 128;
                 const int blocks = (num_atoms + threads - 1) / threads;
-                bool include_traspose = true;
                 forward_kernel<<<blocks, threads, 0, stream>>>(
                     get_accessor<scalar_t, 2>(sorted_positions),
                     get_accessor<int32_t, 1>(hash_values), get_accessor<int64_t, 1>(batch),
@@ -502,7 +501,7 @@ public:
                     get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
                     get_accessor<scalar_t, 1>(distances), get_accessor<int32_t, 1>(i_curr_pair),
                     num_atoms, num_pairs, box_size_, cutoff_lower_, cutoff_upper_, loop,
-                    include_traspose);
+                    include_transpose);
             });
         }
         // Synchronize and check the number of pairs found. Note that this is incompatible with CUDA
@@ -548,12 +547,13 @@ public:
 };
 
 TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
-    m.impl("get_neighbor_pairs_cell", [](const Tensor& positions, const Tensor& batch,
-                                         const Tensor& box_size, const Scalar& cutoff_lower,
-                                         const Scalar& cutoff_upper, const Scalar& max_num_pairs,
-                                         bool loop, bool checkErrors) {
-        const tensor_list results = Autograd::apply(positions, batch, box_size, cutoff_lower,
-                                                    cutoff_upper, max_num_pairs, loop, checkErrors);
-        return std::make_tuple(results[0], results[1], results[2]);
-    });
+    m.impl("get_neighbor_pairs_cell",
+           [](const Tensor& positions, const Tensor& batch, const Tensor& box_size,
+              const Scalar& cutoff_lower, const Scalar& cutoff_upper, const Scalar& max_num_pairs,
+              bool loop, bool include_transpose, bool checkErrors) {
+               const tensor_list results =
+                   Autograd::apply(positions, batch, box_size, cutoff_lower, cutoff_upper,
+                                   max_num_pairs, loop, include_transpose, checkErrors);
+               return std::make_tuple(results[0], results[1], results[2]);
+           });
 }

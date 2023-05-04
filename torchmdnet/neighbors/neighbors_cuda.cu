@@ -46,9 +46,9 @@ __device__ int32_t get_row(int index) {
 template <typename scalar_t>
 __global__ void forward_kernel(const int64_t num_all_pairs, const Accessor<scalar_t, 2> positions,
                                const Accessor<int64_t, 1> batch, scalar_t cutoff_lower2,
-                               scalar_t cutoff_upper2, bool loop, Accessor<int32_t, 1> i_curr_pair,
-                               Accessor<int32_t, 2> neighbors, Accessor<scalar_t, 2> deltas,
-                               Accessor<scalar_t, 1> distances) {
+                               scalar_t cutoff_upper2, bool loop, bool include_transpose,
+                               Accessor<int32_t, 1> i_curr_pair, Accessor<int32_t, 2> neighbors,
+                               Accessor<scalar_t, 2> deltas, Accessor<scalar_t, 1> distances) {
     const int64_t index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index >= num_all_pairs)
         return;
@@ -61,22 +61,24 @@ __global__ void forward_kernel(const int64_t num_all_pairs, const Accessor<scala
         scalar_t delta_z = positions[row][2] - positions[column][2];
         const scalar_t distance2 = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z;
         if (distance2 <= cutoff_upper2 && distance2 >= cutoff_lower2) {
-            const int32_t i_pair = atomicAdd(&i_curr_pair[0], 2);
+            const int32_t i_pair = atomicAdd(&i_curr_pair[0], include_transpose ? 2 : 1);
             // We handle too many neighbors outside of the kernel
             if (i_pair < neighbors.size(1)) {
-	      const scalar_t r2 = sqrt_(distance2);
+                const scalar_t r2 = sqrt_(distance2);
                 neighbors[0][i_pair] = row;
                 neighbors[1][i_pair] = column;
                 deltas[i_pair][0] = delta_x;
                 deltas[i_pair][1] = delta_y;
                 deltas[i_pair][2] = delta_z;
                 distances[i_pair] = r2;
-		neighbors[0][i_pair+1] = column;
-                neighbors[1][i_pair+1] = row;
-                deltas[i_pair+1][0] = -delta_x;
-                deltas[i_pair+1][1] = -delta_y;
-                deltas[i_pair+1][2] = -delta_z;
-                distances[i_pair+1] = r2;
+                if (include_transpose) {
+                    neighbors[0][i_pair + 1] = column;
+                    neighbors[1][i_pair + 1] = row;
+                    deltas[i_pair + 1][0] = -delta_x;
+                    deltas[i_pair + 1][1] = -delta_y;
+                    deltas[i_pair + 1][2] = -delta_z;
+                    distances[i_pair + 1] = r2;
+                }
             }
         }
     }
@@ -161,7 +163,8 @@ class Autograd : public Function<Autograd> {
 public:
     static tensor_list forward(AutogradContext* ctx, const Tensor& positions, const Tensor& batch,
                                const Scalar& cutoff_lower, const Scalar& cutoff_upper,
-                               const Scalar& max_num_pairs, bool loop, bool checkErrors) {
+                               const Scalar& max_num_pairs, bool loop, bool include_transpose,
+                               bool checkErrors) {
         checkInput(positions, batch);
         const auto max_num_pairs_ = max_num_pairs.toLong();
         TORCH_CHECK(max_num_pairs_ > 0, "Expected \"max_num_neighbors\" to be positive");
@@ -187,9 +190,9 @@ public:
                     forward_kernel<<<num_blocks, num_threads, 0, stream>>>(
                         num_all_pairs, get_accessor<scalar_t, 2>(positions),
                         get_accessor<int64_t, 1>(batch), cutoff_lower_ * cutoff_lower_,
-                        cutoff_upper_ * cutoff_upper_, loop, get_accessor<int32_t, 1>(i_curr_pair),
-                        get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
-                        get_accessor<scalar_t, 1>(distances));
+                        cutoff_upper_ * cutoff_upper_, loop, include_transpose,
+                        get_accessor<int32_t, 1>(i_curr_pair), get_accessor<int32_t, 2>(neighbors),
+                        get_accessor<scalar_t, 2>(deltas), get_accessor<scalar_t, 1>(distances));
                     if (loop) {
                         const int64_t num_threads = 128;
                         const int64_t num_blocks =
@@ -245,12 +248,13 @@ public:
 };
 
 TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
-    m.impl("get_neighbor_pairs", [](const Tensor& positions, const Tensor& batch,
-                                    const Tensor& box_size, const Scalar& cutoff_lower,
-                                    const Scalar& cutoff_upper, const Scalar& max_num_pairs,
-                                    bool loop, bool checkErrors) {
-        const tensor_list results = Autograd::apply(positions, batch, cutoff_lower, cutoff_upper,
-                                                    max_num_pairs, loop, checkErrors);
-        return std::make_tuple(results[0], results[1], results[2]);
-    });
+    m.impl("get_neighbor_pairs",
+           [](const Tensor& positions, const Tensor& batch, const Tensor& box_size,
+              const Scalar& cutoff_lower, const Scalar& cutoff_upper, const Scalar& max_num_pairs,
+              bool loop, bool include_transpose, bool checkErrors) {
+               const tensor_list results =
+                   Autograd::apply(positions, batch, cutoff_lower, cutoff_upper, max_num_pairs,
+                                   loop, include_transpose, checkErrors);
+               return std::make_tuple(results[0], results[1], results[2]);
+           });
 }
