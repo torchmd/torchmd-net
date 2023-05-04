@@ -45,7 +45,7 @@ __device__ int32_t get_row(int index) {
 
 template <typename scalar_t>
 __global__ void forward_kernel(const int64_t num_all_pairs, const Accessor<scalar_t, 2> positions,
-                               const Accessor<int32_t, 1> batch, scalar_t cutoff_lower2,
+                               const Accessor<int64_t, 1> batch, scalar_t cutoff_lower2,
                                scalar_t cutoff_upper2, bool loop, Accessor<int32_t, 1> i_curr_pair,
                                Accessor<int32_t, 2> neighbors, Accessor<scalar_t, 2> deltas,
                                Accessor<scalar_t, 1> distances) {
@@ -154,7 +154,7 @@ static void checkInput(const Tensor& positions, const Tensor& batch) {
                 "Expected the 1st dimension size of \"batch\" to be the same as the 1st dimension "
                 "size of \"positions\"");
     TORCH_CHECK(batch.is_contiguous(), "Expected \"batch\" to be contiguous");
-    TORCH_CHECK(batch.dtype() == torch::kInt32, "Expected \"batch\" to have torch::kInt32 dtype");
+    TORCH_CHECK(batch.dtype() == torch::kInt64, "Expected \"batch\" to be of type torch::kLong");
 }
 
 class Autograd : public Function<Autograd> {
@@ -186,7 +186,7 @@ public:
                     TORCH_CHECK(cutoff_upper_ > 0, "Expected \"cutoff\" to be positive");
                     forward_kernel<<<num_blocks, num_threads, 0, stream>>>(
                         num_all_pairs, get_accessor<scalar_t, 2>(positions),
-                        get_accessor<int32_t, 1>(batch), cutoff_lower_ * cutoff_lower_,
+                        get_accessor<int64_t, 1>(batch), cutoff_lower_ * cutoff_lower_,
                         cutoff_upper_ * cutoff_upper_, loop, get_accessor<int32_t, 1>(i_curr_pair),
                         get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
                         get_accessor<scalar_t, 1>(distances));

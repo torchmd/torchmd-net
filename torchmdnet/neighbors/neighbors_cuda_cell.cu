@@ -78,7 +78,7 @@ static void checkInput(const Tensor& positions, const Tensor& batch) {
     // Batch is a 1D tensor of size (N_atoms)
     // Batch is assumed to be sorted and starts at zero.
     // Batch is assumed to be contiguous
-    // Batch is assumed to be of type torch::kInt32
+    // Batch is assumed to be of type torch::kLong
     // Batch is assumed to be non-negative
     // Each batch can have a different number of atoms
     TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
@@ -92,7 +92,7 @@ static void checkInput(const Tensor& positions, const Tensor& batch) {
                 "Expected the 1st dimension size of \"batch\" to be the same as the 1st dimension "
                 "size of \"positions\"");
     TORCH_CHECK(batch.is_contiguous(), "Expected \"batch\" to be contiguous");
-    TORCH_CHECK(batch.dtype() == torch::kInt32, "Expected \"batch\" to be of type torch::kInt32");
+    TORCH_CHECK(batch.dtype() == torch::kInt64, "Expected \"batch\" to be of type torch::kLong");
 }
 
 /*
@@ -219,7 +219,7 @@ __device__ int3 getPeriodicCell(int3 cell, int3 cell_dim) {
 // This hash is such that atoms in the same cell and batch have the same hash.
 template <typename scalar_t>
 __global__ void assignHash(const Accessor<scalar_t, 2> positions, uint64_t* hash_keys,
-                           Accessor<int32_t, 1> hash_values, const Accessor<int32_t, 1> batch,
+                           Accessor<int32_t, 1> hash_values, const Accessor<int64_t, 1> batch,
                            scalar3<scalar_t> box_size, scalar_t cutoff, int32_t num_atoms) {
     const int32_t i_atom = blockIdx.x * blockDim.x + threadIdx.x;
     if (i_atom >= num_atoms)
@@ -278,7 +278,7 @@ static auto sortPositionsByHash(const Tensor& positions, const Tensor& batch,
                                        box_size[2].item<scalar_t>()};
         assignHash<<<blocks, threads, 0, stream>>>(
             get_accessor<scalar_t, 2>(positions), thrust::raw_pointer_cast(hash_keys.data()),
-            get_accessor<int32_t, 1>(hash_values), get_accessor<int32_t, 1>(batch), box_size_,
+            get_accessor<int32_t, 1>(hash_values), get_accessor<int64_t, 1>(batch), box_size_,
             cutoff_, num_atoms);
     });
     thrust::device_ptr<int32_t> index_ptr(hash_values.data_ptr<int32_t>());
@@ -293,7 +293,7 @@ template <typename scalar_t>
 __global__ void fillCellOffsetsD(const Accessor<scalar_t, 2> sorted_positions,
                                  const Accessor<int32_t, 1> sorted_indices,
                                  Accessor<int32_t, 1> cell_start, Accessor<int32_t, 1> cell_end,
-                                 const Accessor<int32_t, 1> batch, scalar3<scalar_t> box_size,
+                                 const Accessor<int64_t, 1> batch, scalar3<scalar_t> box_size,
                                  scalar_t cutoff) {
     // Since positions are sorted by cell, for a given atom, if the previous atom is in a different
     // cell, then the current atom is the first atom in its cell We use this fact to fill the
@@ -360,7 +360,7 @@ static auto fillCellOffsets(const Tensor& sorted_positions, const Tensor& sorted
         fillCellOffsetsD<<<blocks, threads, 0, stream>>>(
             get_accessor<scalar_t, 2>(sorted_positions), get_accessor<int32_t, 1>(sorted_indices),
             get_accessor<int32_t, 1>(cell_start), get_accessor<int32_t, 1>(cell_end),
-            get_accessor<int32_t, 1>(batch), box_size_, cutoff_);
+            get_accessor<int64_t, 1>(batch), box_size_, cutoff_);
     });
     return std::make_tuple(cell_start, cell_end);
 }
@@ -386,7 +386,7 @@ __device__ int getNeighborCellIndex(int3 cell_i, int i, int3 cell_dim) {
 template <typename scalar_t>
 __global__ void
 forward_kernel(const Accessor<scalar_t, 2> sorted_positions,
-               const Accessor<int32_t, 1> original_index, const Accessor<int32_t, 1> batch,
+               const Accessor<int32_t, 1> original_index, const Accessor<int64_t, 1> batch,
                const Accessor<int32_t, 1> cell_start, const Accessor<int32_t, 1> cell_end,
                Accessor<int32_t, 2> neighbors, Accessor<scalar_t, 2> deltas,
                Accessor<scalar_t, 1> distances, Accessor<int32_t, 1> i_curr_pair, int num_atoms,
@@ -399,7 +399,7 @@ forward_kernel(const Accessor<scalar_t, 2> sorted_positions,
     if (i_atom >= num_atoms)
         return;
     const int ori = original_index[i_atom];
-    const int i_batch = batch[ori];
+    const auto i_batch = batch[ori];
     const scalar3<scalar_t> pi = {sorted_positions[i_atom][0], sorted_positions[i_atom][1],
                                   sorted_positions[i_atom][2]};
     const int3 cell_i = getCell(pi, box_size, cutoff_upper);
@@ -413,9 +413,9 @@ forward_kernel(const Accessor<scalar_t, 2> sorted_positions,
             const int lastParticle = cell_end[icellj];
             const int nincell = lastParticle - firstParticle;
             for (int j = 0; j < nincell; j++) {
-                int cur_j = j + firstParticle;
-                int orj = original_index[cur_j];
-                int j_batch = batch[orj];
+                const int cur_j = j + firstParticle;
+                const int orj = original_index[cur_j];
+                const auto j_batch = batch[orj];
                 if (j_batch >
                     i_batch) // Particles are sorted by batch after cell, so we can break early here
                     break;
@@ -497,7 +497,7 @@ public:
                 bool include_traspose = true;
                 forward_kernel<<<blocks, threads, 0, stream>>>(
                     get_accessor<scalar_t, 2>(sorted_positions),
-                    get_accessor<int32_t, 1>(hash_values), get_accessor<int32_t, 1>(batch),
+                    get_accessor<int32_t, 1>(hash_values), get_accessor<int64_t, 1>(batch),
                     get_accessor<int32_t, 1>(cell_start), get_accessor<int32_t, 1>(cell_end),
                     get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
                     get_accessor<scalar_t, 1>(distances), get_accessor<int32_t, 1>(i_curr_pair),

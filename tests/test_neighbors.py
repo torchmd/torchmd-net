@@ -41,7 +41,7 @@ def test_neighbors(device, strategy, n_batches, cutoff, loop):
         pytest.skip("CUDA not available")
     torch.manual_seed(4321)
     n_atoms_per_batch = torch.randint(3, 100, size=(n_batches,))
-    batch = torch.repeat_interleave(torch.arange(n_batches, dtype=torch.int32), n_atoms_per_batch).to(device)
+    batch = torch.repeat_interleave(torch.arange(n_batches, dtype=torch.int64), n_atoms_per_batch).to(device)
     cumsum = np.cumsum( np.concatenate([[0], n_atoms_per_batch]))
     lbox=10.0
     pos = torch.rand(cumsum[-1], 3, device=device)*lbox
@@ -100,9 +100,7 @@ def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop):
     max_num_pairs = ref_neighbors.shape[1]
     box = torch.tensor([lbox, lbox, lbox])
     nl = DistanceCellList(cutoff_lower=0.0, loop=loop, cutoff_upper=cutoff, max_num_pairs=max_num_pairs, strategy=strategy, box=box, return_vecs=True)
-    batch = batch.to(torch.int32).to(device)
     neighbors, distances, distance_vecs = nl(pos, batch)
-
     neighbors = neighbors.cpu().detach().numpy()
     distance_vecs = distance_vecs.cpu().detach().numpy()
     distances = distances.cpu().detach().numpy()
