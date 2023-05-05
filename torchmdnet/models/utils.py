@@ -104,7 +104,8 @@ class DistanceCellList(torch.nn.Module):
             Strategy to use for computing the neighbor list. Can be one of
             ["brute", "cell"].
         box : torch.Tensor
-            Size of the box shape (3,) or None
+            Size of the box shape (3,3) or None.
+            If strategy is "cell", the box must be diagonal.
         loop : bool
             Whether to include self-interactions.
         include_transpose : bool
@@ -113,7 +114,6 @@ class DistanceCellList(torch.nn.Module):
             Whether to resize the neighbor list to the actual number of pairs found.
         return_vecs : bool
             Whether to return the distance vectors.
-
         """
         self.cutoff_upper = cutoff_upper
         self.cutoff_lower = cutoff_lower
@@ -124,10 +124,13 @@ class DistanceCellList(torch.nn.Module):
         self.return_vecs = return_vecs
         self.include_transpose = include_transpose
         self.resize_to_fit = resize_to_fit
-        #Default the box to 3 times the cutoff
-        if self.box is None and self.strategy == "cell":
-            self.box = torch.tensor([cutoff_upper * 3] * 3)
-
+        self.use_periodic = True
+        if self.box is None:
+            self.use_periodic = False
+            if self.strategy == "cell":
+                #Default the box to 3 times the cutoff, really inefficient for the cell list
+                lbox = cutoff_upper * 3.0
+                self.box = torch.tensor([[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]])
 
     def forward(self, pos, batch):
         """
@@ -154,6 +157,9 @@ class DistanceCellList(torch.nn.Module):
 
         """
         function = get_neighbor_pairs if self.strategy == "brute" else get_neighbor_pairs_cell
+        if self.box is None:
+            self.box = torch.empty((0, 0), dtype=pos.dtype)
+        self.box = self.box.to(pos.dtype).to(pos.device)
         neighbors, distance_vecs, distances = function(
             pos,
             cutoff_lower=self.cutoff_lower,
@@ -163,7 +169,8 @@ class DistanceCellList(torch.nn.Module):
             max_num_pairs=self.max_num_pairs,
             check_errors=True,
             include_transpose=self.include_transpose,
-            box_size=self.box
+            box_vectors=self.box,
+            use_periodic=self.use_periodic
         )
         #Remove (-1,-1)  pairs
         if self.resize_to_fit:
@@ -171,7 +178,6 @@ class DistanceCellList(torch.nn.Module):
             neighbors = neighbors[:, mask]
             distances = distances[mask]
             distance_vecs = distance_vecs[mask,:]
-
         if self.return_vecs:
             return neighbors, distances, distance_vecs
         else:

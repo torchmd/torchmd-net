@@ -1,7 +1,9 @@
 import os
 import torch
 import numpy as np
-from torchmdnet.models.utils import DistanceCellList
+from torchmdnet.models.utils import Distance, DistanceCellList
+
+
 
 
 def benchmark_neighbors(device, strategy, n_batches, total_num_particles, mean_num_neighbors=32):
@@ -22,34 +24,48 @@ def benchmark_neighbors(device, strategy, n_batches, total_num_particles, mean_n
     float
         Average time per batch in seconds.
     """
-    density = 0.5;
+    density = 0.7;
+    torch.random.manual_seed(12344)
     num_particles = total_num_particles // n_batches
     expected_num_neighbors = mean_num_neighbors
     cutoff = np.cbrt(3 * expected_num_neighbors / (4 * np.pi * density));
-    n_atoms_per_batch = torch.randint(num_particles-10, num_particles+10, size=(n_batches,))
+    n_atoms_per_batch = torch.randint(int(num_particles/2), int(num_particles*2), size=(n_batches,),device="cpu")
     #Fix so that the total number of particles is correct. Special care if the difference is negative
     difference = total_num_particles - n_atoms_per_batch.sum()
-    if n_atoms_per_batch[-1] + difference > 0:
-        n_atoms_per_batch[-1] += difference
+    if difference > 0:
+        while difference > 0:
+            i = np.random.randint(0, n_batches)
+            n_atoms_per_batch[i] += 1
+            difference -= 1
+
     else:
         while difference < 0:
             i = np.random.randint(0, n_batches)
-            if n_atoms_per_batch[i] > 2:
+            if n_atoms_per_batch[i] > num_particles:
                 n_atoms_per_batch[i] -= 1
                 difference += 1
     lbox = np.cbrt(num_particles / density);
-    batch = torch.repeat_interleave(torch.arange(n_batches, dtype=torch.int32), n_atoms_per_batch).to(device)
+    batch = torch.repeat_interleave(torch.arange(n_batches, dtype=torch.int64), n_atoms_per_batch).to(device)
     cumsum = np.cumsum( np.concatenate([[0], n_atoms_per_batch]))
-    pos = torch.rand(cumsum[-1], 3, device=device)*lbox
-    max_num_pairs = (expected_num_neighbors * n_atoms_per_batch.sum()).item()
-    nl = DistanceCellList(cutoff_upper=cutoff, max_num_pairs=max_num_pairs, strategy=strategy, box=torch.Tensor([lbox, lbox, lbox]))
+    pos = torch.rand(cumsum[-1], 3, device="cpu").to(device)*lbox
+    if strategy != 'distance':
+        max_num_pairs = (expected_num_neighbors * n_atoms_per_batch.sum()).item()*2
+        box = torch.eye(3, device=device)*lbox
+        nl = DistanceCellList(cutoff_upper=cutoff, max_num_pairs=max_num_pairs, strategy=strategy, box=box)
+    else:
+        max_num_neighbors = int(expected_num_neighbors*5)
+        nl = Distance(loop=False, cutoff_lower=0.0, cutoff_upper=cutoff, max_num_neighbors=max_num_neighbors)
     #Warmup
     for i in range(10):
         neighbors, distances, distance_vecs = nl(pos, batch)
+    #print
+    print("Batch with largest number of atoms: {}".format(int(n_atoms_per_batch.max())))
+    print("Batch with smallest number of atoms: {}".format(int(n_atoms_per_batch.min())))
+    print("Number of pairs: {}, Number of particles: {}".format(int(neighbors.shape[1]), int(n_atoms_per_batch.to(torch.double).
+                                                                                             sum().item())))
     if device == 'cuda':
         torch.cuda.synchronize()
-    #Benchmark using torch profiler
-    nruns = 100
+    nruns = 10
     if device == 'cuda':
         torch.cuda.synchronize()
 
@@ -66,20 +82,49 @@ def benchmark_neighbors(device, strategy, n_batches, total_num_particles, mean_n
     return (start.elapsed_time(end) / nruns)
 
 if __name__ == '__main__':
-    n_particles = 100000
+    n_particles = 32767
     mean_num_neighbors = min(n_particles, 16);
     print("Benchmarking neighbor list generation for {} particles with {} neighbors on average".format(n_particles, mean_num_neighbors))
-    for strategy in ['brute', 'cell']:
+    results = {}
+    batch_sizes = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+    for strategy in ['brute', 'cell', 'distance']:
         print("Strategy: {}".format(strategy))
         print("--------")
         print("{:<10} {:<10}".format("Batch size", "Time (ms)"))
         print("{:<10} {:<10}".format("----------", "---------"))
-        #Loop over different number of batches
-        for n_batches in [1, 10, 100, 1000]:
+        #Loop over different number of batches, random
+        for n_batches in batch_sizes:
             time = benchmark_neighbors(device='cuda',
                                        strategy=strategy,
                                        n_batches=n_batches,
                                        total_num_particles=n_particles,
                                        mean_num_neighbors=mean_num_neighbors
                                        )
+            #Store results in a dictionary
+            results[strategy, n_batches] = time
             print("{:<10} {:<10.2f}".format(n_batches, time))
+        print("\n")
+    print("Summary")
+    print("-------")
+    print("{:<10} {:<21} {:<18} {:<10}".format("Batch size", "Brute(ms)", "Cell(ms)", "Distance(ms)"))
+    print("{:<10} {:<21} {:<18} {:<10}".format("----------", "---------", "--------", "-----------"))
+    #Print a column per strategy, show speedup over Distance in parenthesis
+    for n_batches in batch_sizes:
+        base = results['distance', n_batches]
+        print("{:<10} {:<4.2f} x{:<14.2f}  {:<4.2f} x{:<14.2f} {:<10.2f}".format(n_batches,
+                                                                                  results['brute', n_batches],
+                                                                                  base/results['brute', n_batches],
+                                                                                  results['cell', n_batches],
+                                                                                  base/results['cell', n_batches],
+                                                                                  results['distance', n_batches]))
+
+    #Print a second table showing time per atom, show in ns
+    print("\n")
+    print("Time per atom")
+    print("{:<10} {:<10} {:<10} {:<10}".format("Batch size", "Brute(ns)", "Cell(ns)", "Distance(ns)"))
+    print("{:<10} {:<10} {:<10} {:<10}".format("----------", "---------", "--------", "-----------"))
+    for n_batches in batch_sizes:
+        print("{:<10} {:<10.2f} {:<10.2f} {:<10.2f}".format(n_batches,
+                                                            results['brute', n_batches]/n_particles*1e6,
+                                                            results['cell', n_batches]/n_particles*1e6,
+                                                            results['distance', n_batches]/n_particles*1e6))

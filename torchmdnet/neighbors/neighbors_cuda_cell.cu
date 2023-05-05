@@ -128,7 +128,7 @@ inline __host__ __device__ uint hashMorton(int3 ci) {
  * @return The point in the unit cell
  */
 template <typename scalar_t>
-__device__ auto takeToUnitCell(scalar3<scalar_t> p, scalar3<scalar_t> box_size) {
+__device__ auto apply_pbc(scalar3<scalar_t> p, scalar3<scalar_t> box_size) {
     p.x = p.x - floorf(p.x / box_size.x + scalar_t(0.5)) * box_size.x;
     p.y = p.y - floorf(p.y / box_size.y + scalar_t(0.5)) * box_size.y;
     p.z = p.z - floorf(p.z / box_size.z + scalar_t(0.5)) * box_size.z;
@@ -166,7 +166,7 @@ __host__ __device__ int3 getCellDimensions(scalar3<scalar_t> box_size, scalar_t 
  */
 template <typename scalar_t>
 __device__ int3 getCell(scalar3<scalar_t> p, scalar3<scalar_t> box_size, scalar_t cutoff) {
-    p = takeToUnitCell(p, box_size);
+    p = apply_pbc(p, box_size);
     // Take to the [0, box_size] range and divide by cutoff (which is the cell size)
     int cx = floorf((p.x + scalar_t(0.5) * box_size.x) / cutoff);
     int cy = floorf((p.y + scalar_t(0.5) * box_size.y) / cutoff);
@@ -261,7 +261,6 @@ public:
  * @param cutoff The cutoff
  * @return A tuple of the sorted positions and the original indices of each atom in the sorted list
  */
-
 static auto sortPositionsByHash(const Tensor& positions, const Tensor& batch,
                                 const Tensor& box_size, const Scalar& cutoff) {
 
@@ -274,15 +273,15 @@ static auto sortPositionsByHash(const Tensor& positions, const Tensor& batch,
     auto stream = at::cuda::getCurrentCUDAStream();
     AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "assignHash", [&] {
         scalar_t cutoff_ = cutoff.to<scalar_t>();
-        scalar3<scalar_t> box_size_ = {box_size[0].item<scalar_t>(), box_size[1].item<scalar_t>(),
-                                       box_size[2].item<scalar_t>()};
+        scalar3<scalar_t> box_size_ = {box_size[0][0].item<scalar_t>(),
+				       box_size[1][1].item<scalar_t>(),
+                                       box_size[2][2].item<scalar_t>()};
         assignHash<<<blocks, threads, 0, stream>>>(
             get_accessor<scalar_t, 2>(positions), thrust::raw_pointer_cast(hash_keys.data()),
             get_accessor<int32_t, 1>(hash_values), get_accessor<int64_t, 1>(batch), box_size_,
             cutoff_, num_atoms);
     });
     thrust::device_ptr<int32_t> index_ptr(hash_values.data_ptr<int32_t>());
-    CudaAllocator<char> allocator;
     thrust::sort_by_key(thrust::cuda::par.on(stream), hash_keys.begin(), hash_keys.end(),
                         index_ptr);
     Tensor sorted_positions = positions.index_select(0, hash_values);
@@ -343,8 +342,9 @@ static auto fillCellOffsets(const Tensor& sorted_positions, const Tensor& sorted
     int3 cell_dim;
     AT_DISPATCH_FLOATING_TYPES(sorted_positions.scalar_type(), "fillCellOffsets", [&] {
         scalar_t cutoff_ = cutoff.to<scalar_t>();
-        scalar3<scalar_t> box_size_ = {box_size[0].item<scalar_t>(), box_size[1].item<scalar_t>(),
-                                       box_size[2].item<scalar_t>()};
+        scalar3<scalar_t> box_size_ = {box_size[0][0].item<scalar_t>(),
+				       box_size[1][1].item<scalar_t>(),
+                                       box_size[2][2].item<scalar_t>()};
         cell_dim = getCellDimensions(box_size_, cutoff_);
     });
     const int num_cells = cell_dim.x * cell_dim.y * cell_dim.z;
@@ -355,8 +355,9 @@ static auto fillCellOffsets(const Tensor& sorted_positions, const Tensor& sorted
     AT_DISPATCH_FLOATING_TYPES(sorted_positions.scalar_type(), "fillCellOffsets", [&] {
         auto stream = at::cuda::getCurrentCUDAStream();
         scalar_t cutoff_ = cutoff.to<scalar_t>();
-        scalar3<scalar_t> box_size_ = {box_size[0].item<scalar_t>(), box_size[1].item<scalar_t>(),
-                                       box_size[2].item<scalar_t>()};
+        scalar3<scalar_t> box_size_ = {box_size[0][0].item<scalar_t>(),
+				       box_size[1][1].item<scalar_t>(),
+                                       box_size[2][2].item<scalar_t>()};
         fillCellOffsetsD<<<blocks, threads, 0, stream>>>(
             get_accessor<scalar_t, 2>(sorted_positions), get_accessor<int32_t, 1>(sorted_indices),
             get_accessor<int32_t, 1>(cell_start), get_accessor<int32_t, 1>(cell_end),
@@ -390,7 +391,7 @@ forward_kernel(const Accessor<scalar_t, 2> sorted_positions,
                const Accessor<int32_t, 1> cell_start, const Accessor<int32_t, 1> cell_end,
                Accessor<int32_t, 2> neighbors, Accessor<scalar_t, 2> deltas,
                Accessor<scalar_t, 1> distances, Accessor<int32_t, 1> i_curr_pair, int num_atoms,
-               int num_pairs, scalar3<scalar_t> box_size, scalar_t cutoff_lower,
+               int num_pairs, bool use_periodic, scalar3<scalar_t> box_size, scalar_t cutoff_lower,
                scalar_t cutoff_upper, bool loop, bool include_transpose) {
     // Each atom traverses the cells around it and finds the neighbors
     // Atoms for all batches are placed in the same cell list, but other batches are ignored while
@@ -419,30 +420,42 @@ forward_kernel(const Accessor<scalar_t, 2> sorted_positions,
                 if (j_batch >
                     i_batch) // Particles are sorted by batch after cell, so we can break early here
                     break;
-                const bool includePair =
-                    (j_batch == i_batch) and
-                    ((orj != ori and (orj < ori or include_transpose)) or (loop and orj == ori));
-                if (includePair) {
+                const bool testPair =
+                    (j_batch == i_batch) and ((orj < ori) or (loop and orj == ori));
+                if (testPair) {
                     const scalar3<scalar_t> pj = {sorted_positions[cur_j][0],
                                                   sorted_positions[cur_j][1],
                                                   sorted_positions[cur_j][2]};
-                    const scalar_t dx = pi.x - pj.x;
-                    const scalar_t dy = pi.y - pj.y;
-                    const scalar_t dz = pi.z - pj.z;
-                    const scalar_t distance2 = dx * dx + dy * dy + dz * dz;
+                    scalar3<scalar_t> delta = {pi.x - pj.x, pi.y - pj.y, pi.z - pj.z};
+                    if (use_periodic) {
+                        delta = apply_pbc(delta, box_size);
+                    }
+                    const scalar_t distance2 =
+                        delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
                     const scalar_t cutoff_upper2 = cutoff_upper * cutoff_upper;
                     const scalar_t cutoff_lower2 = cutoff_lower * cutoff_lower;
-                    if ((distance2 <= cutoff_upper2 and distance2 >= cutoff_lower2) or
+                    if ((distance2 < cutoff_upper2 and distance2 >= cutoff_lower2) or
                         (loop and orj == ori)) {
-                        const int32_t i_pair = atomicAdd(&i_curr_pair[0], 1);
+                        const bool requires_transpose = (orj != ori) and include_transpose;
+                        const int32_t i_pair =
+                            atomicAdd(&i_curr_pair[0], requires_transpose ? 2 : 1);
                         // We handle too many neighbors outside of the kernel
                         if (i_pair < neighbors.size(1)) {
+                            const scalar_t sqrt_distance2 = sqrt_(distance2);
                             neighbors[0][i_pair] = ori;
                             neighbors[1][i_pair] = orj;
-                            deltas[i_pair][0] = dx;
-                            deltas[i_pair][1] = dy;
-                            deltas[i_pair][2] = dz;
-                            distances[i_pair] = sqrt_(distance2);
+                            deltas[i_pair][0] = delta.x;
+                            deltas[i_pair][1] = delta.y;
+                            deltas[i_pair][2] = delta.z;
+                            distances[i_pair] = sqrt_distance2;
+                            if (requires_transpose) {
+                                neighbors[0][i_pair + 1] = orj;
+                                neighbors[1][i_pair + 1] = ori;
+                                deltas[i_pair + 1][0] = -delta.x;
+                                deltas[i_pair + 1][1] = -delta.y;
+                                deltas[i_pair + 1][2] = -delta.z;
+                                distances[i_pair + 1] = sqrt_distance2;
+                            }
                         } // endif
                     }     // endif
                 }         // endfor
@@ -454,9 +467,10 @@ forward_kernel(const Accessor<scalar_t, 2> sorted_positions,
 class Autograd : public Function<Autograd> {
 public:
     static tensor_list forward(AutogradContext* ctx, const Tensor& positions, const Tensor& batch,
-                               const Tensor& box_size, const Scalar& cutoff_lower,
-                               const Scalar& cutoff_upper, const Scalar& max_num_pairs, bool loop,
-                               bool include_transpose, bool checkErrors) {
+                               const Tensor& box_size_gpu, bool use_periodic,
+                               const Scalar& cutoff_lower, const Scalar& cutoff_upper,
+                               const Scalar& max_num_pairs, bool loop, bool include_transpose,
+                               bool checkErrors) {
         // The algorithm for the cell list construction can be summarized in three separate steps:
         //         1. Hash (label) the particles according to the cell (bin) they lie in.
         //         2. Sort the particles and hashes using the hashes as the ordering label
@@ -465,7 +479,15 @@ public:
         //         3. Identify where each cell starts and ends in the sorted particle positions
         //         array.
         checkInput(positions, batch);
-        TORCH_CHECK(box_size.size(0) == 3, "Expected \"box_size\" to have 3 elements");
+	auto box_size = box_size_gpu.cpu();
+        TORCH_CHECK(box_size.dim() == 2, "Expected \"box_size\" to have two dimensions");
+        TORCH_CHECK(box_size.size(0) == 3 && box_size.size(1) == 3,
+                    "Expected \"box_size\" to have shape (3, 3)");
+	//Ensure that box size has no non-zero values outside of the diagonal
+	TORCH_CHECK(box_size[0][1].item<double>() == 0 && box_size[0][2].item<double>() == 0 &&
+		    box_size[1][0].item<double>() == 0 && box_size[1][2].item<double>() == 0 &&
+		    box_size[2][0].item<double>() == 0 && box_size[2][1].item<double>() == 0,
+		    "Expected \"box_size\" to be diagonal");
         const auto max_num_pairs_ = max_num_pairs.toLong();
         TORCH_CHECK(max_num_pairs_ > 0, "Expected \"max_num_neighbors\" to be positive");
         const int num_atoms = positions.size(0);
@@ -489,9 +511,9 @@ public:
                 const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
                 TORCH_CHECK(cutoff_upper_ > 0, "Expected cutoff_upper to be positive");
                 const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();
-                const scalar3<scalar_t> box_size_ = {box_size[0].item<scalar_t>(),
-                                                     box_size[1].item<scalar_t>(),
-                                                     box_size[2].item<scalar_t>()};
+                const scalar3<scalar_t> box_size_ = {box_size[0][0].item<scalar_t>(),
+                                                     box_size[1][1].item<scalar_t>(),
+                                                     box_size[2][2].item<scalar_t>()};
                 const int threads = 128;
                 const int blocks = (num_atoms + threads - 1) / threads;
                 forward_kernel<<<blocks, threads, 0, stream>>>(
@@ -500,8 +522,8 @@ public:
                     get_accessor<int32_t, 1>(cell_start), get_accessor<int32_t, 1>(cell_end),
                     get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
                     get_accessor<scalar_t, 1>(distances), get_accessor<int32_t, 1>(i_curr_pair),
-                    num_atoms, num_pairs, box_size_, cutoff_lower_, cutoff_upper_, loop,
-                    include_transpose);
+                    num_atoms, num_pairs, use_periodic, box_size_,
+                    cutoff_lower_, cutoff_upper_, loop, include_transpose);
             });
         }
         // Synchronize and check the number of pairs found. Note that this is incompatible with CUDA
@@ -548,12 +570,12 @@ public:
 
 TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
     m.impl("get_neighbor_pairs_cell",
-           [](const Tensor& positions, const Tensor& batch, const Tensor& box_size,
-              const Scalar& cutoff_lower, const Scalar& cutoff_upper, const Scalar& max_num_pairs,
-              bool loop, bool include_transpose, bool checkErrors) {
-               const tensor_list results =
-                   Autograd::apply(positions, batch, box_size, cutoff_lower, cutoff_upper,
-                                   max_num_pairs, loop, include_transpose, checkErrors);
+           [](const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
+              bool use_periodic, const Scalar& cutoff_lower, const Scalar& cutoff_upper,
+              const Scalar& max_num_pairs, bool loop, bool include_transpose, bool checkErrors) {
+               const tensor_list results = Autograd::apply(
+                   positions, batch, box_vectors, use_periodic, cutoff_lower, cutoff_upper,
+                   max_num_pairs, loop, include_transpose, checkErrors);
                return std::make_tuple(results[0], results[1], results[2]);
            });
 }

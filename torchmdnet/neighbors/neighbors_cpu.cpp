@@ -17,8 +17,8 @@ using torch::vstack;
 using torch::indexing::Slice;
 
 static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions, const Tensor& batch,
-                                             const Tensor& box_size, const Scalar& cutoff_lower,
-                                             const Scalar& cutoff_upper,
+                                             const Tensor& box_vectors, bool use_periodic,
+                                             const Scalar& cutoff_lower, const Scalar& cutoff_upper,
                                              const Scalar& max_num_pairs, bool loop,
                                              bool include_transpose, bool checkErrors) {
     TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
@@ -28,8 +28,7 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions, const Tens
     TORCH_CHECK(positions.is_contiguous(), "Expected \"positions\" to be contiguous");
 
     TORCH_CHECK(cutoff_upper.to<double>() > 0, "Expected \"cutoff\" to be positive");
-    auto box_vectors = torch::empty(0);
-    if (box_vectors.size(0) != 0) {
+    if (use_periodic) {
         TORCH_CHECK(box_vectors.dim() == 2, "Expected \"box_vectors\" to have two dimensions");
         TORCH_CHECK(box_vectors.size(0) == 3 && box_vectors.size(1) == 3,
                     "Expected \"box_vectors\" to have shape (3, 3)");
@@ -69,18 +68,25 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions, const Tens
                 break;
             }
         }
+	// batch_i = torch.where(batch[current_offset:] == i)
+
         const int n_atoms_i = batch_i.size();
         Tensor positions_i = index_select(positions, 0, torch::tensor(batch_i, kInt32));
         Tensor indices_i =
-            arange(0, n_atoms_i * (n_atoms_i - 1) / 2, positions.options().dtype(kInt32));
-        Tensor rows_i = (((8 * indices_i + 1).sqrt() + 1) / 2).floor().to(kInt32);
-        rows_i -= (rows_i * (rows_i - 1) > 2 * indices_i).to(kInt32);
-        Tensor columns_i = indices_i - div(rows_i * (rows_i - 1), 2, "floor");
+            arange(0, n_atoms_i * (n_atoms_i - 1l) / 2l, positions.options().dtype(torch::kLong));
+        Tensor rows_i = (((8l * indices_i + 1l).sqrt() + 1l) / 2l).floor().to(torch::kLong);
+        rows_i -= (rows_i * (rows_i - 1l) > 2l * indices_i).to(torch::kLong);
+        Tensor columns_i = indices_i - div(rows_i * (rows_i - 1l), 2, "floor");
         Tensor neighbors_i = vstack({rows_i, columns_i});
         Tensor deltas_i =
             index_select(positions_i, 0, rows_i) - index_select(positions_i, 0, columns_i);
+        if (use_periodic) {
+	  deltas_i -= outer(round(deltas_i.index({Slice(), 2})/box_vectors.index({2, 2})), box_vectors.index({2}));
+	  deltas_i -= outer(round(deltas_i.index({Slice(), 1})/box_vectors.index({1, 1})), box_vectors.index({1}));
+	  deltas_i -= outer(round(deltas_i.index({Slice(), 0})/box_vectors.index({0, 0})), box_vectors.index({0}));
+        }
         Tensor distances_i = frobenius_norm(deltas_i, 1);
-        const Tensor mask_upper = distances_i <= cutoff_upper;
+        const Tensor mask_upper = distances_i < cutoff_upper;
         const Tensor mask_lower = distances_i >= cutoff_lower;
         const Tensor mask = mask_upper * mask_lower;
         neighbors_i = neighbors_i.index({Slice(), mask}) + current_offset;
@@ -105,8 +111,12 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions, const Tens
         neighbors = torch::cat(neighbors, 0).to(kInt32);
     }
     deltas = index_select(positions, 0, neighbors[0]) - index_select(positions, 0, neighbors[1]);
+    if (use_periodic) {
+      deltas -= outer(round(deltas.index({Slice(), 2})/box_vectors.index({2, 2})), box_vectors.index({2}));
+      deltas -= outer(round(deltas.index({Slice(), 1})/box_vectors.index({1, 1})), box_vectors.index({1}));
+      deltas -= outer(round(deltas.index({Slice(), 0})/box_vectors.index({0, 0})), box_vectors.index({0}));
+    }
     distances = frobenius_norm(deltas, 1);
-
     return {neighbors, deltas, distances};
 }
 
