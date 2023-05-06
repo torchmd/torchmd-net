@@ -45,7 +45,7 @@ def compute_ref_neighbors(pos, batch, loop, include_transpose, cutoff, box_vecto
     return ref_neighbors, ref_distance_vecs, ref_distances
 
 @pytest.mark.parametrize("device", ["cpu", "cuda"])
-@pytest.mark.parametrize("strategy", ["brute", "cell"])
+@pytest.mark.parametrize("strategy", ["brute", "shared", "cell"])
 @pytest.mark.parametrize("n_batches", [1, 2, 3, 4, 128])
 @pytest.mark.parametrize("cutoff", [0.1, 1.0, 3.0, 4.9])
 @pytest.mark.parametrize("loop", [True, False])
@@ -56,6 +56,8 @@ def test_neighbors(device, strategy, n_batches, cutoff, loop, include_transpose,
         pytest.skip("CUDA not available")
     if box_type == "triclinic" and strategy == "cell":
         pytest.skip("Triclinic only supported for brute force")
+    if device=="cpu" and strategy!="brute":
+        pytest.skip("Only brute force supported on CPU")
     torch.manual_seed(4321)
     n_atoms_per_batch = torch.randint(3, 100, size=(n_batches,))
     batch = torch.repeat_interleave(torch.arange(n_batches, dtype=torch.int64), n_atoms_per_batch).to(device)
@@ -89,13 +91,16 @@ def test_neighbors(device, strategy, n_batches, cutoff, loop, include_transpose,
 
 
 @pytest.mark.parametrize("device", ["cpu", "cuda"])
-@pytest.mark.parametrize("strategy", ["brute", "cell"])
+@pytest.mark.parametrize("strategy", ["brute", "cell", "shared"])
 @pytest.mark.parametrize("n_batches", [1, 2, 3, 4])
 @pytest.mark.parametrize("cutoff", [0.1, 1.0, 1000.0])
 @pytest.mark.parametrize("loop", [True, False])
 def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop):
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA not available")
+    if device=="cpu" and strategy!="brute":
+        pytest.skip("Only brute force supported on CPU")
+
     torch.manual_seed(4321)
     n_atoms_per_batch = torch.randint(3, 100, size=(n_batches,))
     batch = torch.repeat_interleave(torch.arange(n_batches, dtype=torch.long), n_atoms_per_batch).to(device)
@@ -130,7 +135,7 @@ def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop):
 
 
 
-@pytest.mark.parametrize("strategy", ["brute", "cell"])
+@pytest.mark.parametrize("strategy", ["brute", "cell", "shared"])
 @pytest.mark.parametrize("n_batches", [1, 2, 3, 4])
 def test_large_size(strategy, n_batches):
     device = "cuda"

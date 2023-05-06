@@ -16,11 +16,10 @@ using torch::Tensor;
 using torch::vstack;
 using torch::indexing::Slice;
 
-static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions, const Tensor& batch,
-                                             const Tensor& box_vectors, bool use_periodic,
-                                             const Scalar& cutoff_lower, const Scalar& cutoff_upper,
-                                             const Scalar& max_num_pairs, bool loop,
-                                             bool include_transpose, bool checkErrors) {
+static tuple<Tensor, Tensor, Tensor, Tensor>
+forward(const Tensor& positions, const Tensor& batch, const Tensor& box_vectors, bool use_periodic,
+        const Scalar& cutoff_lower, const Scalar& cutoff_upper, const Scalar& max_num_pairs,
+        bool loop, bool include_transpose) {
     TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
     TORCH_CHECK(positions.size(0) > 0,
                 "Expected the 1nd dimension size of \"positions\" to be more than 0");
@@ -68,7 +67,6 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions, const Tens
                 break;
             }
         }
-	// batch_i = torch.where(batch[current_offset:] == i)
 
         const int n_atoms_i = batch_i.size();
         Tensor positions_i = index_select(positions, 0, torch::tensor(batch_i, kInt32));
@@ -81,9 +79,12 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions, const Tens
         Tensor deltas_i =
             index_select(positions_i, 0, rows_i) - index_select(positions_i, 0, columns_i);
         if (use_periodic) {
-	  deltas_i -= outer(round(deltas_i.index({Slice(), 2})/box_vectors.index({2, 2})), box_vectors.index({2}));
-	  deltas_i -= outer(round(deltas_i.index({Slice(), 1})/box_vectors.index({1, 1})), box_vectors.index({1}));
-	  deltas_i -= outer(round(deltas_i.index({Slice(), 0})/box_vectors.index({0, 0})), box_vectors.index({0}));
+            deltas_i -= outer(round(deltas_i.index({Slice(), 2}) / box_vectors.index({2, 2})),
+                              box_vectors.index({2}));
+            deltas_i -= outer(round(deltas_i.index({Slice(), 1}) / box_vectors.index({1, 1})),
+                              box_vectors.index({1}));
+            deltas_i -= outer(round(deltas_i.index({Slice(), 0}) / box_vectors.index({0, 0})),
+                              box_vectors.index({0}));
         }
         Tensor distances_i = frobenius_norm(deltas_i, 1);
         const Tensor mask_upper = distances_i < cutoff_upper;
@@ -112,15 +113,21 @@ static tuple<Tensor, Tensor, Tensor> forward(const Tensor& positions, const Tens
     }
     deltas = index_select(positions, 0, neighbors[0]) - index_select(positions, 0, neighbors[1]);
     if (use_periodic) {
-      deltas -= outer(round(deltas.index({Slice(), 2})/box_vectors.index({2, 2})), box_vectors.index({2}));
-      deltas -= outer(round(deltas.index({Slice(), 1})/box_vectors.index({1, 1})), box_vectors.index({1}));
-      deltas -= outer(round(deltas.index({Slice(), 0})/box_vectors.index({0, 0})), box_vectors.index({0}));
+        deltas -= outer(round(deltas.index({Slice(), 2}) / box_vectors.index({2, 2})),
+                        box_vectors.index({2}));
+        deltas -= outer(round(deltas.index({Slice(), 1}) / box_vectors.index({1, 1})),
+                        box_vectors.index({1}));
+        deltas -= outer(round(deltas.index({Slice(), 0}) / box_vectors.index({0, 0})),
+                        box_vectors.index({0}));
     }
     distances = frobenius_norm(deltas, 1);
-    return {neighbors, deltas, distances};
+    Tensor num_pairs_found = torch::empty(1, distances.options().dtype(kInt32));
+    num_pairs_found[0] = distances.size(0);
+    return {neighbors, deltas, distances, num_pairs_found};
 }
 
 TORCH_LIBRARY_IMPL(neighbors, CPU, m) {
-    m.impl("get_neighbor_pairs", &forward);
+    m.impl("get_neighbor_pairs_brute", &forward);
+    m.impl("get_neighbor_pairs_shared", &forward);
     m.impl("get_neighbor_pairs_cell", &forward);
 }

@@ -76,18 +76,22 @@ class NeighborEmbedding(MessagePassing):
     def message(self, x_j, W):
         return x_j * W
 
-from torchmdnet.neighbors import get_neighbor_pairs, get_neighbor_pairs_cell
+from torchmdnet.neighbors import get_neighbor_pairs_brute, get_neighbor_pairs_cell, get_neighbor_pairs_shared
 class DistanceCellList(torch.nn.Module):
+
+    _backends = { "brute": get_neighbor_pairs_brute, "cell": get_neighbor_pairs_cell, "shared": get_neighbor_pairs_shared }
+
     def __init__(
             self,
-            cutoff_upper,
             cutoff_lower=0.0,
+            cutoff_upper=5.0,
             max_num_pairs=32,
             return_vecs=False,
             loop=False,
             strategy="brute",
             include_transpose=True,
             resize_to_fit=True,
+            check_errors=False,
             box=None
     ):
         super(DistanceCellList, self).__init__()
@@ -100,6 +104,7 @@ class DistanceCellList(torch.nn.Module):
             Upper cutoff for the neighbor list.
         max_num_pairs : int
             Maximum number of pairs to store.
+            If negative, it is interpreted as (minus) the maximum number of neighbors per atom.
         strategy : str
             Strategy to use for computing the neighbor list. Can be one of
             ["brute", "cell"].
@@ -112,6 +117,8 @@ class DistanceCellList(torch.nn.Module):
             Whether to include the transpose of the neighbor list.
         resize_to_fit : bool
             Whether to resize the neighbor list to the actual number of pairs found.
+        check_errors : bool
+            Whether to check for too many pairs.
         return_vecs : bool
             Whether to return the distance vectors.
         """
@@ -131,6 +138,11 @@ class DistanceCellList(torch.nn.Module):
                 #Default the box to 3 times the cutoff, really inefficient for the cell list
                 lbox = cutoff_upper * 3.0
                 self.box = torch.tensor([[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]])
+
+        self.kernel = self._backends[self.strategy]
+        if self.kernel is None:
+            raise ValueError("Unknown strategy: {}".format(self.strategy))
+        self.check_errors = check_errors
 
     def forward(self, pos, batch):
         """
@@ -156,22 +168,26 @@ class DistanceCellList(torch.nn.Module):
         otherwise the tensors will have size max_num_pairs, with neighbor pairs (-1, -1) at the end.
 
         """
-        function = get_neighbor_pairs if self.strategy == "brute" else get_neighbor_pairs_cell
         if self.box is None:
             self.box = torch.empty((0, 0), dtype=pos.dtype)
         self.box = self.box.to(pos.dtype).to(pos.device)
-        neighbors, distance_vecs, distances = function(
+        max_pairs = self.max_num_pairs
+        if self.max_num_pairs < 0:
+            max_pairs = -self.max_num_pairs*pos.shape[0]
+        neighbors, distance_vecs, distances, num_pairs = self.kernel(
             pos,
             cutoff_lower=self.cutoff_lower,
             cutoff_upper=self.cutoff_upper,
             loop=self.loop,
             batch=batch,
-            max_num_pairs=self.max_num_pairs,
-            check_errors=True,
+            max_num_pairs=max_pairs,
             include_transpose=self.include_transpose,
             box_vectors=self.box,
             use_periodic=self.use_periodic
         )
+        if self.check_errors:
+            if num_pairs[0] > self.max_num_pairs:
+                raise RuntimeError("Found num_pairs({}) > max_num_pairs({})".format(num_pairs[0], self.max_num_pairs))
         #Remove (-1,-1)  pairs
         if self.resize_to_fit:
             mask = neighbors[0] != -1

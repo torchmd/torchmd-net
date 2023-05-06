@@ -1,40 +1,7 @@
+#include "common.cuh"
 #include <algorithm>
-#include <c10/cuda/CUDAGuard.h>
-#include <c10/cuda/CUDAStream.h>
 #include <thrust/tuple.h>
 #include <torch/extension.h>
-using c10::cuda::CUDAStreamGuard;
-using c10::cuda::getCurrentCUDAStream;
-using std::make_tuple;
-using std::max;
-using torch::empty;
-using torch::full;
-using torch::kInt32;
-using torch::PackedTensorAccessor32;
-using torch::RestrictPtrTraits;
-using torch::Scalar;
-using torch::Tensor;
-using torch::TensorOptions;
-using torch::zeros;
-using torch::autograd::AutogradContext;
-using torch::autograd::Function;
-using torch::autograd::tensor_list;
-
-template <typename scalar_t, int num_dims>
-using Accessor = PackedTensorAccessor32<scalar_t, num_dims, RestrictPtrTraits>;
-
-template <typename scalar_t, int num_dims>
-inline Accessor<scalar_t, num_dims> get_accessor(const Tensor& tensor) {
-    return tensor.packed_accessor32<scalar_t, num_dims, RestrictPtrTraits>();
-};
-
-template <typename scalar_t> __device__ __forceinline__ scalar_t sqrt_(scalar_t x){};
-template <> __device__ __forceinline__ float sqrt_(float x) {
-    return ::sqrtf(x);
-};
-template <> __device__ __forceinline__ double sqrt_(double x) {
-    return ::sqrt(x);
-};
 
 __device__ uint32_t get_row(uint32_t index) {
     uint32_t row = floor((sqrtf(8 * index + 1) + 1) / 2);
@@ -44,58 +11,41 @@ __device__ uint32_t get_row(uint32_t index) {
 }
 
 template <typename scalar_t>
-__device__ auto apply_pbc(scalar_t delta_x, scalar_t delta_y, scalar_t delta_z,
-                          const Accessor<scalar_t, 2> box_vectors) {
-    scalar_t scale3 = round(delta_z / box_vectors[2][2]);
-    delta_x -= scale3 * box_vectors[2][0];
-    delta_y -= scale3 * box_vectors[2][1];
-    delta_z -= scale3 * box_vectors[2][2];
-    scalar_t scale2 = round(delta_y / box_vectors[1][1]);
-    delta_x -= scale2 * box_vectors[1][0];
-    delta_y -= scale2 * box_vectors[1][1];
-    scalar_t scale1 = round(delta_x / box_vectors[0][0]);
-    delta_x -= scale1 * box_vectors[0][0];
-    return thrust::make_tuple(delta_x, delta_y, delta_z);
-}
-
-template <typename scalar_t>
-__global__ void forward_kernel(uint32_t num_all_pairs, const Accessor<scalar_t, 2> positions,
-                               const Accessor<int64_t, 1> batch, scalar_t cutoff_lower2,
-                               scalar_t cutoff_upper2, bool loop, bool include_transpose,
-                               Accessor<int32_t, 1> i_curr_pair, Accessor<int32_t, 2> neighbors,
-                               Accessor<scalar_t, 2> deltas, Accessor<scalar_t, 1> distances,
-                               bool use_periodic, const Accessor<scalar_t, 2> box_vectors) {
+__global__ void forward_kernel_brute(uint32_t num_all_pairs, const Accessor<scalar_t, 2> positions,
+                                     const Accessor<int64_t, 1> batch, scalar_t cutoff_lower2,
+                                     scalar_t cutoff_upper2, bool loop, bool include_transpose,
+                                     Accessor<int32_t, 1> i_curr_pair,
+                                     Accessor<int32_t, 2> neighbors, Accessor<scalar_t, 2> deltas,
+                                     Accessor<scalar_t, 1> distances, bool use_periodic,
+                                     const Accessor<scalar_t, 2> box_vectors) {
     const uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index >= num_all_pairs)
         return;
     const uint32_t row = get_row(index);
     const uint32_t column = (index - row * (row - 1) / 2);
     if (batch[row] == batch[column]) {
-        scalar_t delta_x = positions[row][0] - positions[column][0];
-        scalar_t delta_y = positions[row][1] - positions[column][1];
-        scalar_t delta_z = positions[row][2] - positions[column][2];
-        if (use_periodic) {
-            thrust::tie(delta_x, delta_y, delta_z) =
-                apply_pbc(delta_x, delta_y, delta_z, box_vectors);
-        }
-        const scalar_t distance2 = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z;
+        const scalar3<scalar_t> pos_i{positions[row][0], positions[row][1], positions[row][2]};
+        const scalar3<scalar_t> pos_j{positions[column][0], positions[column][1],
+                                      positions[column][2]};
+        const auto delta = triclinic::compute_distance(pos_i, pos_j, use_periodic, box_vectors);
+        const scalar_t distance2 = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
         if (distance2 < cutoff_upper2 && distance2 >= cutoff_lower2) {
             const int32_t i_pair = atomicAdd(&i_curr_pair[0], include_transpose ? 2 : 1);
             // We handle too many neighbors outside of the kernel
-            if (i_pair < neighbors.size(1)) {
+            if (i_pair + include_transpose < neighbors.size(1)) {
                 const scalar_t r2 = sqrt_(distance2);
                 neighbors[0][i_pair] = row;
                 neighbors[1][i_pair] = column;
-                deltas[i_pair][0] = delta_x;
-                deltas[i_pair][1] = delta_y;
-                deltas[i_pair][2] = delta_z;
+                deltas[i_pair][0] = delta.x;
+                deltas[i_pair][1] = delta.y;
+                deltas[i_pair][2] = delta.z;
                 distances[i_pair] = r2;
                 if (include_transpose) {
                     neighbors[0][i_pair + 1] = column;
                     neighbors[1][i_pair + 1] = row;
-                    deltas[i_pair + 1][0] = -delta_x;
-                    deltas[i_pair + 1][1] = -delta_y;
-                    deltas[i_pair + 1][2] = -delta_z;
+                    deltas[i_pair + 1][0] = -delta.x;
+                    deltas[i_pair + 1][1] = -delta.y;
+                    deltas[i_pair + 1][2] = -delta.z;
                     distances[i_pair + 1] = r2;
                 }
             }
@@ -118,6 +68,85 @@ __global__ void add_self_kernel(const int num_atoms, Accessor<scalar_t, 2> posit
         deltas[i_pair][1] = 0;
         deltas[i_pair][2] = 0;
         distances[i_pair] = 0;
+    }
+}
+
+template <int BLOCKSIZE, typename scalar_t>
+__global__ void forward_kernel_shared(uint32_t num_atoms, const Accessor<scalar_t, 2> positions,
+                                      const Accessor<int64_t, 1> batch, scalar_t cutoff_lower2,
+                                      scalar_t cutoff_upper2, bool loop, bool include_transpose,
+                                      Accessor<int32_t, 1> i_curr_pair,
+                                      Accessor<int32_t, 2> neighbors, Accessor<scalar_t, 2> deltas,
+                                      Accessor<scalar_t, 1> distances, int32_t num_tiles,
+                                      bool use_periodic, const Accessor<scalar_t, 2> box_vectors) {
+    // A thread per atom
+    const int id = blockIdx.x * blockDim.x + threadIdx.x;
+    // All threads must pass through __syncthreads,
+    // but when N is not a multiple of 32 some threads are assigned a particle i>N.
+    // This threads cant return, so they are masked to not do any work
+    const bool active = id < num_atoms;
+    __shared__ scalar3<scalar_t> sh_pos[BLOCKSIZE];
+    __shared__ int64_t sh_batch[BLOCKSIZE];
+    scalar3<scalar_t> pos_i;
+    int64_t batch_i;
+    if(active){
+      pos_i = {positions[id][0], positions[id][1], positions[id][2]};
+      batch_i = batch[id];
+    }
+    // Distribute the N particles in a group of tiles. Storing in each tile blockDim.x values in
+    // shared memory. This way all threads are accesing the same memory addresses at the same time
+    for (int tile = 0; tile < num_tiles; tile++) {
+        // Load this tiles particles values to shared memory
+        const int i_load = tile * blockDim.x + threadIdx.x;
+        if (i_load < num_atoms) { // Even if im not active, my thread may load a value each tile to
+            // shared memory.
+            sh_pos[threadIdx.x] = {positions[i_load][0], positions[i_load][1],
+                                   positions[i_load][2]};
+            sh_batch[threadIdx.x] = batch[i_load];
+        }
+        // Wait for all threads to arrive
+        __syncthreads();
+        // Go through all the particles in the current tile
+#pragma unroll 8
+        for (int counter = 0; counter < blockDim.x; counter++) {
+            if (!active)
+                break; // An out of bounds thread must be masked
+            const int cur_j = tile * blockDim.x + counter;
+            const bool testPair = cur_j < num_atoms and (cur_j < id or (loop and cur_j == id));
+            if (testPair) {
+                const auto batch_j = sh_batch[counter];
+                if (batch_i == batch_j) {
+                    const auto pos_j = sh_pos[counter];
+                    const auto delta =
+                        triclinic::compute_distance(pos_i, pos_j, use_periodic, box_vectors);
+                    const scalar_t distance2 =
+                        delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
+                    if (distance2 < cutoff_upper2 && distance2 >= cutoff_lower2) {
+                        const bool requires_transpose = include_transpose && !(cur_j == id);
+                        const int32_t i_pair =
+                            atomicAdd(&i_curr_pair[0], requires_transpose ? 2 : 1);
+                        if (i_pair + requires_transpose < neighbors.size(1)) {
+                            const auto distance = sqrt_(distance2);
+                            neighbors[0][i_pair] = id;
+                            neighbors[1][i_pair] = cur_j;
+                            deltas[i_pair][0] = delta.x;
+                            deltas[i_pair][1] = delta.y;
+                            deltas[i_pair][2] = delta.z;
+                            distances[i_pair] = distance;
+                            if (requires_transpose) {
+                                neighbors[0][i_pair + 1] = cur_j;
+                                neighbors[1][i_pair + 1] = id;
+                                deltas[i_pair + 1][0] = -delta.x;
+                                deltas[i_pair + 1][1] = -delta.y;
+                                deltas[i_pair + 1][2] = -delta.z;
+                                distances[i_pair + 1] = distance;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        __syncthreads();
     }
 }
 
@@ -166,13 +195,15 @@ static void checkInput(const Tensor& positions, const Tensor& batch) {
     TORCH_CHECK(batch.dtype() == torch::kInt64, "Expected \"batch\" to be of type torch::kLong");
 }
 
+enum class strategy { brute, shared };
+
 class Autograd : public Function<Autograd> {
 public:
     static tensor_list forward(AutogradContext* ctx, const Tensor& positions, const Tensor& batch,
                                const Scalar& cutoff_lower, const Scalar& cutoff_upper,
                                const Tensor& box_vectors, bool use_periodic,
                                const Scalar& max_num_pairs, bool loop, bool include_transpose,
-                               bool checkErrors) {
+                               strategy strat) {
         checkInput(positions, batch);
         const auto max_num_pairs_ = max_num_pairs.toLong();
         TORCH_CHECK(max_num_pairs_ > 0, "Expected \"max_num_neighbors\" to be positive");
@@ -191,54 +222,69 @@ public:
         const Tensor i_curr_pair = zeros(1, options.dtype(kInt32));
         {
             const CUDAStreamGuard guard(stream);
-            const uint64_t num_atoms = positions.size(0);
-            const uint64_t num_all_pairs = num_atoms * (num_atoms - 1ul) / 2ul;
-            const uint64_t num_threads = 128;
-            const uint64_t num_blocks = max((num_all_pairs + num_threads - 1ul) / num_threads, 1ul);
-            AT_DISPATCH_FLOATING_TYPES(
-                positions.scalar_type(), "get_neighbor_pairs_forward", [&]() {
-                    const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
-                    const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();
-                    TORCH_CHECK(cutoff_upper_ > 0, "Expected \"cutoff\" to be positive");
-                    forward_kernel<<<num_blocks, num_threads, 0, stream>>>(
-                        num_all_pairs, get_accessor<scalar_t, 2>(positions),
-                        get_accessor<int64_t, 1>(batch), cutoff_lower_ * cutoff_lower_,
-                        cutoff_upper_ * cutoff_upper_, loop, include_transpose,
-                        get_accessor<int32_t, 1>(i_curr_pair), get_accessor<int32_t, 2>(neighbors),
-                        get_accessor<scalar_t, 2>(deltas), get_accessor<scalar_t, 1>(distances),
-                        use_periodic, get_accessor<scalar_t, 2>(box_vectors));
-                    if (loop) {
-                        const uint64_t num_threads = 128;
-                        const uint64_t num_blocks =
-                            max((num_atoms + num_threads - 1ul) / num_threads, 1ul);
-                        add_self_kernel<<<num_blocks, num_threads, 0, stream>>>(
-                            num_atoms, get_accessor<scalar_t, 2>(positions),
+            const int32_t num_atoms = positions.size(0);
+            if (strat == strategy::brute) {
+                const uint64_t num_all_pairs = num_atoms * (num_atoms - 1ul) / 2ul;
+                const uint64_t num_threads = 128;
+                const uint64_t num_blocks =
+                    std::max((num_all_pairs + num_threads - 1ul) / num_threads, 1ul);
+                AT_DISPATCH_FLOATING_TYPES(
+                    positions.scalar_type(), "get_neighbor_pairs_forward", [&]() {
+                        const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
+                        const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();
+                        TORCH_CHECK(cutoff_upper_ > 0, "Expected \"cutoff\" to be positive");
+                        forward_kernel_brute<<<num_blocks, num_threads, 0, stream>>>(
+                            num_all_pairs, get_accessor<scalar_t, 2>(positions),
+                            get_accessor<int64_t, 1>(batch), cutoff_lower_ * cutoff_lower_,
+                            cutoff_upper_ * cutoff_upper_, loop, include_transpose,
                             get_accessor<int32_t, 1>(i_curr_pair),
                             get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
-                            get_accessor<scalar_t, 1>(distances));
-                    }
-                });
-        }
-        // Synchronize and check the number of pairs found. Note that this is incompatible with CUDA
-        // graphs
-        if (checkErrors) {
-            int num_found_pairs = i_curr_pair.item<int32_t>();
-            TORCH_CHECK(num_found_pairs <= max_num_pairs_,
-                        "Too many neighbor pairs found. Maximum is " +
-                            std::to_string(max_num_pairs_),
-                        " but found " + std::to_string(num_found_pairs));
+                            get_accessor<scalar_t, 1>(distances), use_periodic,
+                            get_accessor<scalar_t, 2>(box_vectors));
+                        if (loop) {
+                            const uint64_t num_threads = 128;
+                            const uint64_t num_blocks =
+                                std::max((num_atoms + num_threads - 1ul) / num_threads, 1ul);
+                            add_self_kernel<<<num_blocks, num_threads, 0, stream>>>(
+                                num_atoms, get_accessor<scalar_t, 2>(positions),
+                                get_accessor<int32_t, 1>(i_curr_pair),
+                                get_accessor<int32_t, 2>(neighbors),
+                                get_accessor<scalar_t, 2>(deltas),
+                                get_accessor<scalar_t, 1>(distances));
+                        }
+                    });
+            } else if (strat == strategy::shared) {
+                AT_DISPATCH_FLOATING_TYPES(
+                    positions.scalar_type(), "get_neighbor_pairs_shared_forward", [&]() {
+                        const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
+                        const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();
+                        TORCH_CHECK(cutoff_upper_ > 0, "Expected \"cutoff\" to be positive");
+                        constexpr int BLOCKSIZE = 64;
+                        const int num_blocks = std::max((num_atoms + BLOCKSIZE - 1) / BLOCKSIZE, 1);
+                        const int num_threads = BLOCKSIZE;
+                        const int num_tiles = num_blocks;
+                        forward_kernel_shared<BLOCKSIZE><<<num_blocks, num_threads, 0, stream>>>(
+                            num_atoms, get_accessor<scalar_t, 2>(positions),
+                            get_accessor<int64_t, 1>(batch), cutoff_lower_ * cutoff_lower_,
+                            cutoff_upper_ * cutoff_upper_, loop, include_transpose,
+                            get_accessor<int32_t, 1>(i_curr_pair),
+                            get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
+                            get_accessor<scalar_t, 1>(distances), num_tiles, use_periodic,
+                            get_accessor<scalar_t, 2>(box_vectors));
+                    });
+            }
         }
         ctx->save_for_backward({neighbors, deltas, distances});
         ctx->saved_data["num_atoms"] = num_atoms;
-        return {neighbors, deltas, distances};
+        return {neighbors, deltas, distances, i_curr_pair};
     }
 
     static tensor_list backward(AutogradContext* ctx, tensor_list grad_inputs) {
         const Tensor grad_distances = grad_inputs[1];
         const int num_atoms = ctx->saved_data["num_atoms"].toInt();
         const int num_pairs = grad_distances.size(0);
-        const int num_threads = 128;
-        const int num_blocks_x = max((num_pairs + num_threads - 1) / num_threads, 1);
+        const int num_threads = 32;
+        const int num_blocks_x = std::max((num_pairs + num_threads - 1) / num_threads, 1);
         const dim3 blocks(num_blocks_x, 2, 3);
         const auto stream = getCurrentCUDAStream(grad_distances.get_device());
 
@@ -257,18 +303,27 @@ public:
                     get_accessor<scalar_t, 2>(grad_positions));
             });
 
-        return {grad_positions, Tensor(), Tensor()};
+        return {grad_positions, Tensor(), Tensor(), Tensor()};
     }
 };
 
 TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
-    m.impl("get_neighbor_pairs",
+    m.impl("get_neighbor_pairs_brute",
            [](const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
               bool use_periodic, const Scalar& cutoff_lower, const Scalar& cutoff_upper,
-              const Scalar& max_num_pairs, bool loop, bool include_transpose, bool checkErrors) {
+              const Scalar& max_num_pairs, bool loop, bool include_transpose) {
                const tensor_list results = Autograd::apply(
                    positions, batch, cutoff_lower, cutoff_upper, box_vectors, use_periodic,
-                   max_num_pairs, loop, include_transpose, checkErrors);
-               return std::make_tuple(results[0], results[1], results[2]);
+                   max_num_pairs, loop, include_transpose, strategy::brute);
+               return std::make_tuple(results[0], results[1], results[2], results[3]);
+           });
+    m.impl("get_neighbor_pairs_shared",
+           [](const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
+              bool use_periodic, const Scalar& cutoff_lower, const Scalar& cutoff_upper,
+              const Scalar& max_num_pairs, bool loop, bool include_transpose) {
+               const tensor_list results = Autograd::apply(
+                   positions, batch, cutoff_lower, cutoff_upper, box_vectors, use_periodic,
+                   max_num_pairs, loop, include_transpose, strategy::shared);
+               return std::make_tuple(results[0], results[1], results[2], results[3]);
            });
 }
