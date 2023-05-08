@@ -1,6 +1,7 @@
 import math
-from typing import Optional
+from typing import Optional, Tuple
 import torch
+from torch import Tensor
 from torch import nn
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
@@ -144,13 +145,13 @@ class DistanceCellList(torch.nn.Module):
             raise ValueError("Unknown strategy: {}".format(self.strategy))
         self.check_errors = check_errors
 
-    def forward(self, pos, batch):
-        """
+    def forward(self, pos: Tensor, batch: Optional[Tensor] = None) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
+        """ Compute the neighbor list for a given cutoff.
         Parameters
         ----------
         pos : torch.Tensor
             shape (N, 3)
-        batch : torch.Tensor
+        batch : torch.Tensor or None
             shape (N,)
         Returns
         -------
@@ -174,6 +175,8 @@ class DistanceCellList(torch.nn.Module):
         max_pairs = self.max_num_pairs
         if self.max_num_pairs < 0:
             max_pairs = -self.max_num_pairs*pos.shape[0]
+        if batch is None:
+            batch = torch.zeros(pos.shape[0], dtype=torch.long, device=pos.device)
         neighbors, distance_vecs, distances, num_pairs = self.kernel(
             pos,
             cutoff_lower=self.cutoff_lower,
