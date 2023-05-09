@@ -77,23 +77,33 @@ class NeighborEmbedding(MessagePassing):
     def message(self, x_j, W):
         return x_j * W
 
-from torchmdnet.neighbors import get_neighbor_pairs_brute, get_neighbor_pairs_cell, get_neighbor_pairs_shared
-class DistanceCellList(torch.nn.Module):
 
-    _backends = { "brute": get_neighbor_pairs_brute, "cell": get_neighbor_pairs_cell, "shared": get_neighbor_pairs_shared }
+from torchmdnet.neighbors import (
+    get_neighbor_pairs_brute,
+    get_neighbor_pairs_cell,
+    get_neighbor_pairs_shared,
+)
+
+
+class DistanceCellList(torch.nn.Module):
+    _backends = {
+        "brute": get_neighbor_pairs_brute,
+        "cell": get_neighbor_pairs_cell,
+        "shared": get_neighbor_pairs_shared,
+    }
 
     def __init__(
-            self,
-            cutoff_lower=0.0,
-            cutoff_upper=5.0,
-            max_num_pairs=32,
-            return_vecs=False,
-            loop=False,
-            strategy="brute",
-            include_transpose=True,
-            resize_to_fit=True,
-            check_errors=False,
-            box=None
+        self,
+        cutoff_lower=0.0,
+        cutoff_upper=5.0,
+        max_num_pairs=32,
+        return_vecs=False,
+        loop=False,
+        strategy="brute",
+        include_transpose=True,
+        resize_to_fit=True,
+        check_errors=False,
+        box=None,
     ):
         super(DistanceCellList, self).__init__()
         """ Compute the neighbor list for a given cutoff.
@@ -138,19 +148,21 @@ class DistanceCellList(torch.nn.Module):
         self.use_periodic = True
         if self.box is None:
             self.use_periodic = False
-            self.box = torch.empty((0,0))
+            self.box = torch.empty((0, 0))
             if self.strategy == "cell":
-                #Default the box to 3 times the cutoff, really inefficient for the cell list
+                # Default the box to 3 times the cutoff, really inefficient for the cell list
                 lbox = cutoff_upper * 3.0
                 self.box = torch.tensor([[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]])
-        self.box = self.box.cpu() #All strategies expect the box to be in CPU memory
+        self.box = self.box.cpu()  # All strategies expect the box to be in CPU memory
         self.kernel = self._backends[self.strategy]
         if self.kernel is None:
             raise ValueError("Unknown strategy: {}".format(self.strategy))
         self.check_errors = check_errors
 
-    def forward(self, pos: Tensor, batch: Optional[Tensor] = None) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
-        """ Compute the neighbor list for a given cutoff.
+    def forward(
+        self, pos: Tensor, batch: Optional[Tensor] = None
+    ) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
+        """Compute the neighbor list for a given cutoff.
         Parameters
         ----------
         pos : torch.Tensor
@@ -176,7 +188,7 @@ class DistanceCellList(torch.nn.Module):
         self.box = self.box.to(pos.dtype)
         max_pairs = self.max_num_pairs
         if self.max_num_pairs < 0:
-            max_pairs = -self.max_num_pairs*pos.shape[0]
+            max_pairs = -self.max_num_pairs * pos.shape[0]
         if batch is None:
             batch = torch.zeros(pos.shape[0], dtype=torch.long, device=pos.device)
         neighbors, distance_vecs, distances, num_pairs = self.kernel(
@@ -188,21 +200,26 @@ class DistanceCellList(torch.nn.Module):
             max_num_pairs=max_pairs,
             include_transpose=self.include_transpose,
             box_vectors=self.box,
-            use_periodic=self.use_periodic
+            use_periodic=self.use_periodic,
         )
         if self.check_errors:
             if num_pairs[0] > self.max_num_pairs:
-                raise RuntimeError("Found num_pairs({}) > max_num_pairs({})".format(num_pairs[0], self.max_num_pairs))
-        #Remove (-1,-1)  pairs
+                raise RuntimeError(
+                    "Found num_pairs({}) > max_num_pairs({})".format(
+                        num_pairs[0], self.max_num_pairs
+                    )
+                )
+        # Remove (-1,-1)  pairs
         if self.resize_to_fit:
             mask = neighbors[0] != -1
             neighbors = neighbors[:, mask]
             distances = distances[mask]
-            distance_vecs = distance_vecs[mask,:]
+            distance_vecs = distance_vecs[mask, :]
         if self.return_vecs:
             return neighbors, distances, distance_vecs
         else:
             return neighbors, distances, None
+
 
 class GaussianSmearing(nn.Module):
     def __init__(self, cutoff_lower=0.0, cutoff_upper=5.0, num_rbf=50, trainable=True):
@@ -378,6 +395,7 @@ class Distance(nn.Module):
         # TODO: return only `edge_index` and `edge_weight` once
         # Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
         return edge_index, edge_weight, None
+
 
 class GatedEquivariantBlock(nn.Module):
     """Gated Equivariant Block as defined in Schütt et al. (2021):
