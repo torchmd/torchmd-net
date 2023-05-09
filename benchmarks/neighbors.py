@@ -71,11 +71,20 @@ def benchmark_neighbors(device, strategy, n_batches, total_num_particles, mean_n
 
     start = torch.cuda.Event(enable_timing=True)
     end = torch.cuda.Event(enable_timing=True)
-
-    start.record()
-    for i in range(nruns):
-        neighbors, distances, distance_vecs = nl(pos, batch)
-    end.record()
+    #record in a cuda graph
+    if strategy != 'distance':
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph):
+            neighbors, distances, distance_vecs = nl(pos, batch)
+        start.record()
+        for i in range(nruns):
+            graph.replay()
+        end.record()
+    else:
+        start.record()
+        for i in range(nruns):
+            neighbors, distances, distance_vecs = nl(pos, batch)
+        end.record()
     if device == 'cuda':
         torch.cuda.synchronize()
     #Final time

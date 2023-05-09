@@ -2,32 +2,9 @@
 
  */
 #include "common.cuh"
+#include <cub/device/device_radix_sort.cuh>
 #include <thrust/device_malloc_allocator.h>
 #include <thrust/device_vector.h>
-#include <thrust/sort.h>
-
-static void checkInput(const Tensor& positions, const Tensor& batch) {
-    // Batch contains the molecule index for each atom in positions
-    // Neighbors are only calculated within the same molecule
-    // Batch is a 1D tensor of size (N_atoms)
-    // Batch is assumed to be sorted and starts at zero.
-    // Batch is assumed to be contiguous
-    // Batch is assumed to be of type torch::kLong
-    // Batch is assumed to be non-negative
-    // Each batch can have a different number of atoms
-    TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
-    TORCH_CHECK(positions.size(0) > 0,
-                "Expected the 1nd dimension size of \"positions\" to be more than 0");
-    TORCH_CHECK(positions.size(1) == 3, "Expected the 2nd dimension size of \"positions\" to be 3");
-    TORCH_CHECK(positions.is_contiguous(), "Expected \"positions\" to be contiguous");
-
-    TORCH_CHECK(batch.dim() == 1, "Expected \"batch\" to have one dimension");
-    TORCH_CHECK(batch.size(0) == positions.size(0),
-                "Expected the 1st dimension size of \"batch\" to be the same as the 1st dimension "
-                "size of \"positions\"");
-    TORCH_CHECK(batch.is_contiguous(), "Expected \"batch\" to be contiguous");
-    TORCH_CHECK(batch.dtype() == torch::kInt64, "Expected \"batch\" to be of type torch::kLong");
-}
 
 /*
  * @brief Encodes an unsigned integer lower than 1024 as a 32 bit integer by filling every third
@@ -163,12 +140,12 @@ template <typename T> struct torch_cached_allocator : thrust::device_malloc_allo
     typedef typename super_t::pointer pointer;
     typedef typename super_t::size_type size_type;
 
-    pointer allocate(size_type n) {
+    static pointer allocate(size_type n) {
         auto ptr = static_cast<T*>(at::cuda::CUDACachingAllocator::raw_alloc(n * sizeof(T)));
         return pointer(ptr);
     }
 
-    void deallocate(pointer p, size_type n) {
+    static void deallocate(pointer p, size_type n) {
         at::cuda::CUDACachingAllocator::raw_delete(p.get());
     }
 };
@@ -185,7 +162,8 @@ template <typename T> struct torch_cached_allocator : thrust::device_malloc_allo
 static auto sortPositionsByHash(const Tensor& positions, const Tensor& batch,
                                 const Tensor& box_size, const Scalar& cutoff) {
     const int num_atoms = positions.size(0);
-    thrust::device_vector<uint64_t, torch_cached_allocator<uint64_t>> hash_keys(num_atoms);
+    torch_cached_allocator<char> alloc;
+    auto hash_keys = (uint64_t*)(alloc.allocate(num_atoms * sizeof(uint64_t)).get());
     Tensor hash_values = empty({num_atoms}, positions.options().dtype(torch::kInt32));
     const int threads = 128;
     const int blocks = (num_atoms + threads - 1) / threads;
@@ -196,13 +174,23 @@ static auto sortPositionsByHash(const Tensor& positions, const Tensor& batch,
                                        box_size[1][1].item<scalar_t>(),
                                        box_size[2][2].item<scalar_t>()};
         assignHash<<<blocks, threads, 0, stream>>>(
-            get_accessor<scalar_t, 2>(positions), thrust::raw_pointer_cast(hash_keys.data()),
-            get_accessor<int32_t, 1>(hash_values), get_accessor<int64_t, 1>(batch), box_size_,
-            cutoff_, num_atoms);
+            get_accessor<scalar_t, 2>(positions), hash_keys, get_accessor<int32_t, 1>(hash_values),
+            get_accessor<int64_t, 1>(batch), box_size_, cutoff_, num_atoms);
     });
-    thrust::device_ptr<int32_t> index_ptr(hash_values.data_ptr<int32_t>());
-    thrust::sort_by_key(thrust::cuda::par(torch_cached_allocator<char>()).on(stream),
-                        hash_keys.begin(), hash_keys.end(), index_ptr);
+    // I have to use cub directly because thrust::sort_by_key is not compatible with graphs
+    //  and torch::lexsort does not support uint64_t
+    size_t tmp_storage_bytes = 0;
+    void* tmp_storage = NULL;
+    uint64_t* d_keys_out = (uint64_t*)alloc.allocate(num_atoms * sizeof(uint64_t)).get();
+    int32_t* d_values_out = (int32_t*)alloc.allocate(num_atoms * sizeof(int32_t)).get();
+    int32_t* hash_values_ptr = hash_values.data_ptr<int32_t>();
+    cub::DeviceRadixSort::SortPairs(tmp_storage, tmp_storage_bytes, hash_keys, d_keys_out,
+                                    hash_values_ptr, d_values_out, num_atoms, 0, 64, stream);
+    tmp_storage = alloc.allocate(tmp_storage_bytes).get();
+    cub::DeviceRadixSort::SortPairs(tmp_storage, tmp_storage_bytes, hash_keys, d_keys_out,
+                                    hash_values_ptr, d_values_out, num_atoms, 0, 64, stream);
+    cudaMemcpyAsync(hash_values_ptr, d_values_out, num_atoms * sizeof(int32_t),
+                    cudaMemcpyDeviceToDevice, stream);
     Tensor sorted_positions = positions.index_select(0, hash_values);
     return std::make_tuple(sorted_positions, hash_values);
 }
@@ -383,7 +371,7 @@ forward_kernel(const Accessor<scalar_t, 2> sorted_positions,
 class Autograd : public Function<Autograd> {
 public:
     static tensor_list forward(AutogradContext* ctx, const Tensor& positions, const Tensor& batch,
-                               const Tensor& box_size_gpu, bool use_periodic,
+                               const Tensor& box_size, bool use_periodic,
                                const Scalar& cutoff_lower, const Scalar& cutoff_upper,
                                const Scalar& max_num_pairs, bool loop, bool include_transpose) {
         // The algorithm for the cell list construction can be summarized in three separate steps:
@@ -394,11 +382,9 @@ public:
         //         3. Identify where each cell starts and ends in the sorted particle positions
         //         array.
         checkInput(positions, batch);
-        auto box_size = box_size_gpu.cpu();
         TORCH_CHECK(box_size.dim() == 2, "Expected \"box_size\" to have two dimensions");
         TORCH_CHECK(box_size.size(0) == 3 && box_size.size(1) == 3,
                     "Expected \"box_size\" to have shape (3, 3)");
-        // Ensure that box size has no non-zero values outside of the diagonal
         TORCH_CHECK(box_size[0][1].item<double>() == 0 && box_size[0][2].item<double>() == 0 &&
                         box_size[1][0].item<double>() == 0 && box_size[1][2].item<double>() == 0 &&
                         box_size[2][0].item<double>() == 0 && box_size[2][1].item<double>() == 0,
@@ -419,7 +405,7 @@ public:
         const Tensor deltas = empty({max_num_pairs_, 3}, options);
         const Tensor distances = full(max_num_pairs_, 0, options);
         const Tensor i_curr_pair = zeros(1, options.dtype(kInt32));
-        const auto stream = getCurrentCUDAStream(positions.get_device());
+	const auto stream = getCurrentCUDAStream(positions.get_device());
         { // Traverse the cell list to find the neighbors
             const CUDAStreamGuard guard(stream);
             AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "forward", [&] {

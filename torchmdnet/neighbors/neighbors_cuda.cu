@@ -16,7 +16,7 @@ __global__ void forward_kernel_brute(uint32_t num_all_pairs, const Accessor<scal
                                      Accessor<int32_t, 1> i_curr_pair,
                                      Accessor<int32_t, 2> neighbors, Accessor<scalar_t, 2> deltas,
                                      Accessor<scalar_t, 1> distances, bool use_periodic,
-                                     const Accessor<scalar_t, 2> box_vectors) {
+                                     triclinic::Box<scalar_t> box) {
     const uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index >= num_all_pairs)
         return;
@@ -26,7 +26,7 @@ __global__ void forward_kernel_brute(uint32_t num_all_pairs, const Accessor<scal
         const scalar3<scalar_t> pos_i{positions[row][0], positions[row][1], positions[row][2]};
         const scalar3<scalar_t> pos_j{positions[column][0], positions[column][1],
                                       positions[column][2]};
-        const auto delta = triclinic::compute_distance(pos_i, pos_j, use_periodic, box_vectors);
+        const auto delta = triclinic::compute_distance(pos_i, pos_j, use_periodic, box);
         const scalar_t distance2 = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
         if (distance2 < cutoff_upper2 && distance2 >= cutoff_lower2) {
             const int32_t i_pair = atomicAdd(&i_curr_pair[0], include_transpose ? 2 : 1);
@@ -77,7 +77,7 @@ __global__ void forward_kernel_shared(uint32_t num_atoms, const Accessor<scalar_
                                       Accessor<int32_t, 1> i_curr_pair,
                                       Accessor<int32_t, 2> neighbors, Accessor<scalar_t, 2> deltas,
                                       Accessor<scalar_t, 1> distances, int32_t num_tiles,
-                                      bool use_periodic, const Accessor<scalar_t, 2> box_vectors) {
+                                      bool use_periodic, triclinic::Box<scalar_t> box) {
     // A thread per atom
     const int id = blockIdx.x * blockDim.x + threadIdx.x;
     // All threads must pass through __syncthreads,
@@ -116,8 +116,7 @@ __global__ void forward_kernel_shared(uint32_t num_atoms, const Accessor<scalar_
                 const auto batch_j = sh_batch[counter];
                 if (batch_i == batch_j) {
                     const auto pos_j = sh_pos[counter];
-                    const auto delta =
-                        triclinic::compute_distance(pos_i, pos_j, use_periodic, box_vectors);
+                    const auto delta = triclinic::compute_distance(pos_i, pos_j, use_periodic, box);
                     const scalar_t distance2 =
                         delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
                     if (distance2 < cutoff_upper2 && distance2 >= cutoff_lower2) {
@@ -149,31 +148,6 @@ __global__ void forward_kernel_shared(uint32_t num_atoms, const Accessor<scalar_
     }
 }
 
-static void checkInput(const Tensor& positions, const Tensor& batch) {
-    // This version works with batches
-    // Batch contains the molecule index for each atom in positions
-    // Neighbors are only calculated within the same molecule
-    // Batch is a 1D tensor of size (N_atoms)
-    // Batch is assumed to be sorted and starts at zero.
-    // Batch is assumed to be contiguous
-    // Batch is assumed to be of type torch::kLong
-    // Batch is assumed to be non-negative
-    // Each batch can have a different number of atoms
-    TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
-    TORCH_CHECK(positions.size(0) > 0,
-                "Expected the 1nd dimension size of \"positions\" to be more than 0");
-    TORCH_CHECK(positions.size(1) == 3, "Expected the 2nd dimension size of \"positions\" to be 3");
-    TORCH_CHECK(positions.is_contiguous(), "Expected \"positions\" to be contiguous");
-    TORCH_CHECK(positions.size(0) < 1l << 15l,
-                "Expected the 1st dimension size of \"positions\" to be less than ", 1l << 15l);
-    TORCH_CHECK(batch.dim() == 1, "Expected \"batch\" to have one dimension");
-    TORCH_CHECK(batch.size(0) == positions.size(0),
-                "Expected the 1st dimension size of \"batch\" to be the same as the 1st dimension "
-                "size of \"positions\"");
-    TORCH_CHECK(batch.is_contiguous(), "Expected \"batch\" to be contiguous");
-    TORCH_CHECK(batch.dtype() == torch::kInt64, "Expected \"batch\" to be of type torch::kLong");
-}
-
 enum class strategy { brute, shared };
 
 class Autograd : public Function<Autograd> {
@@ -191,6 +165,7 @@ public:
             TORCH_CHECK(box_vectors.size(0) == 3 && box_vectors.size(1) == 3,
                         "Expected \"box_vectors\" to have shape (3, 3)");
         }
+        TORCH_CHECK(box_vectors.device() == torch::kCPU, "Expected \"box_vectors\" to be on CPU");
         const int num_atoms = positions.size(0);
         const int num_pairs = max_num_pairs_;
         const TensorOptions options = positions.options();
@@ -209,6 +184,7 @@ public:
                     std::max((num_all_pairs + num_threads - 1ul) / num_threads, 1ul);
                 AT_DISPATCH_FLOATING_TYPES(
                     positions.scalar_type(), "get_neighbor_pairs_forward", [&]() {
+                        triclinic::Box<scalar_t> box(box_vectors);
                         const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
                         const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();
                         TORCH_CHECK(cutoff_upper_ > 0, "Expected \"cutoff\" to be positive");
@@ -218,8 +194,7 @@ public:
                             cutoff_upper_ * cutoff_upper_, loop, include_transpose,
                             get_accessor<int32_t, 1>(i_curr_pair),
                             get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
-                            get_accessor<scalar_t, 1>(distances), use_periodic,
-                            get_accessor<scalar_t, 2>(box_vectors));
+                            get_accessor<scalar_t, 1>(distances), use_periodic, box);
                         if (loop) {
                             const uint64_t num_threads = 128;
                             const uint64_t num_blocks =
@@ -237,6 +212,7 @@ public:
                     positions.scalar_type(), "get_neighbor_pairs_shared_forward", [&]() {
                         const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
                         const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();
+                        triclinic::Box<scalar_t> box(box_vectors);
                         TORCH_CHECK(cutoff_upper_ > 0, "Expected \"cutoff\" to be positive");
                         constexpr int BLOCKSIZE = 64;
                         const int num_blocks = std::max((num_atoms + BLOCKSIZE - 1) / BLOCKSIZE, 1);
@@ -248,8 +224,7 @@ public:
                             cutoff_upper_ * cutoff_upper_, loop, include_transpose,
                             get_accessor<int32_t, 1>(i_curr_pair),
                             get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
-                            get_accessor<scalar_t, 1>(distances), num_tiles, use_periodic,
-                            get_accessor<scalar_t, 2>(box_vectors));
+                            get_accessor<scalar_t, 1>(distances), num_tiles, use_periodic, box);
                     });
             }
         }

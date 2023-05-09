@@ -97,6 +97,8 @@ class DistanceCellList(torch.nn.Module):
     ):
         super(DistanceCellList, self).__init__()
         """ Compute the neighbor list for a given cutoff.
+        This operation can be placed inside a CUDA graph in some cases.
+        In particular, resize_to_fit and check_errors must be False.
         Parameters
         ----------
         cutoff_lower : float
@@ -108,18 +110,19 @@ class DistanceCellList(torch.nn.Module):
             If negative, it is interpreted as (minus) the maximum number of neighbors per atom.
         strategy : str
             Strategy to use for computing the neighbor list. Can be one of
-            ["brute", "cell"].
-        box : torch.Tensor
-            Size of the box shape (3,3) or None.
+            ["shared", "brute", "cell"].
+        box : Optional[torch.Tensor]
+            Size of the box, shape (3,3) or None.
             If strategy is "cell", the box must be diagonal.
         loop : bool
             Whether to include self-interactions.
         include_transpose : bool
             Whether to include the transpose of the neighbor list.
         resize_to_fit : bool
-            Whether to resize the neighbor list to the actual number of pairs found.
+            Whether to resize the neighbor list to the actual number of pairs found. When False, the list is padded with (-1,-1) pairs up to max_num_pairs
+            If this is True the operation is not CUDA graph compatible.
         check_errors : bool
-            Whether to check for too many pairs.
+            Whether to check for too many pairs. If this is True the operation is not CUDA graph compatible.
         return_vecs : bool
             Whether to return the distance vectors.
         """
@@ -140,7 +143,7 @@ class DistanceCellList(torch.nn.Module):
                 #Default the box to 3 times the cutoff, really inefficient for the cell list
                 lbox = cutoff_upper * 3.0
                 self.box = torch.tensor([[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]])
-
+        self.box = self.box.cpu() #All strategies expect the box to be in CPU memory
         self.kernel = self._backends[self.strategy]
         if self.kernel is None:
             raise ValueError("Unknown strategy: {}".format(self.strategy))
@@ -170,7 +173,7 @@ class DistanceCellList(torch.nn.Module):
         otherwise the tensors will have size max_num_pairs, with neighbor pairs (-1, -1) at the end.
 
         """
-        self.box = self.box.to(pos.dtype).to(pos.device)
+        self.box = self.box.to(pos.dtype)
         max_pairs = self.max_num_pairs
         if self.max_num_pairs < 0:
             max_pairs = -self.max_num_pairs*pos.shape[0]

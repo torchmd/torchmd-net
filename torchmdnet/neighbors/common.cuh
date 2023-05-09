@@ -58,6 +58,27 @@ template <> struct vec3<double> {
 
 template <typename scalar_t> using scalar3 = typename vec3<scalar_t>::type;
 
+static void checkInput(const Tensor& positions, const Tensor& batch) {
+    // Batch contains the molecule index for each atom in positions
+    // Neighbors are only calculated within the same molecule
+    // Batch is a 1D tensor of size (N_atoms)
+    // Batch is assumed to be sorted
+    // Batch is assumed to be contiguous
+    // Batch is assumed to be of type torch::kLong
+    TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
+    TORCH_CHECK(positions.size(0) > 0,
+                "Expected the 1nd dimension size of \"positions\" to be more than 0");
+    TORCH_CHECK(positions.size(1) == 3, "Expected the 2nd dimension size of \"positions\" to be 3");
+    TORCH_CHECK(positions.is_contiguous(), "Expected \"positions\" to be contiguous");
+
+    TORCH_CHECK(batch.dim() == 1, "Expected \"batch\" to have one dimension");
+    TORCH_CHECK(batch.size(0) == positions.size(0),
+                "Expected the 1st dimension size of \"batch\" to be the same as the 1st dimension "
+                "size of \"positions\"");
+    TORCH_CHECK(batch.is_contiguous(), "Expected \"batch\" to be contiguous");
+    TORCH_CHECK(batch.dtype() == torch::kInt64, "Expected \"batch\" to be of type torch::kLong");
+}
+
 namespace rect {
 
 /*
@@ -86,7 +107,20 @@ __device__ auto compute_distance(scalar3<scalar_t> pos_i, scalar3<scalar_t> pos_
 }
 
 } // namespace rect
+
 namespace triclinic {
+template <typename scalar_t> struct Box {
+    scalar_t size[3][3];
+    Box(const Tensor& box_vectors) {
+        if (box_vectors.size(0) == 3 && box_vectors.size(1) == 3) {
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    size[i][j] = box_vectors[i][j].item<scalar_t>();
+                }
+            }
+        }
+    }
+};
 /*
  * @brief Takes a point to the unit cell using Minimum Image
  * Convention
@@ -95,25 +129,25 @@ namespace triclinic {
  * @return The point in the unit cell
  */
 template <typename scalar_t>
-__device__ auto apply_pbc(scalar3<scalar_t> delta, const Accessor<scalar_t, 2> box_vectors) {
-    scalar_t scale3 = round(delta.z / box_vectors[2][2]);
-    delta.x -= scale3 * box_vectors[2][0];
-    delta.y -= scale3 * box_vectors[2][1];
-    delta.z -= scale3 * box_vectors[2][2];
-    scalar_t scale2 = round(delta.y / box_vectors[1][1]);
-    delta.x -= scale2 * box_vectors[1][0];
-    delta.y -= scale2 * box_vectors[1][1];
-    scalar_t scale1 = round(delta.x / box_vectors[0][0]);
-    delta.x -= scale1 * box_vectors[0][0];
+__device__ auto apply_pbc(scalar3<scalar_t> delta, const Box<scalar_t>& box) {
+    scalar_t scale3 = round(delta.z / box.size[2][2]);
+    delta.x -= scale3 * box.size[2][0];
+    delta.y -= scale3 * box.size[2][1];
+    delta.z -= scale3 * box.size[2][2];
+    scalar_t scale2 = round(delta.y / box.size[1][1]);
+    delta.x -= scale2 * box.size[1][0];
+    delta.y -= scale2 * box.size[1][1];
+    scalar_t scale1 = round(delta.x / box.size[0][0]);
+    delta.x -= scale1 * box.size[0][0];
     return delta;
 }
 
 template <typename scalar_t>
 __device__ auto compute_distance(scalar3<scalar_t> pos_i, scalar3<scalar_t> pos_j,
-                                 bool use_periodic, const Accessor<scalar_t, 2> box_vectors) {
+                                 bool use_periodic, const Box<scalar_t>& box) {
     scalar3<scalar_t> delta = {pos_i.x - pos_j.x, pos_i.y - pos_j.y, pos_i.z - pos_j.z};
     if (use_periodic) {
-        delta = apply_pbc(delta, box_vectors);
+        delta = apply_pbc(delta, box);
     }
     return delta;
 }
