@@ -120,15 +120,15 @@ __global__ void assignHash(const Accessor<scalar_t, 2> positions, uint64_t* hash
     const int32_t i_atom = blockIdx.x * blockDim.x + threadIdx.x;
     if (i_atom >= num_atoms)
         return;
-    const int32_t i_batch = batch[i_atom];
+    const uint32_t i_batch = batch[i_atom];
     // Move to the unit cell
     scalar3<scalar_t> pi = {positions[i_atom][0], positions[i_atom][1], positions[i_atom][2]};
     auto ci = getCell(pi, box_size, cutoff);
     // Calculate the hash
-    const int32_t hash = hashMorton(ci);
+    const uint32_t hash = hashMorton(ci);
     // Create a hash combining the Morton hash and the batch index, so that atoms in the same cell
     // are contiguous
-    const int64_t hash_final = (static_cast<int64_t>(hash) << 32) | i_batch;
+    const uint64_t hash_final = (static_cast<uint64_t>(hash) << 32) | i_batch;
     hash_keys[i_atom] = hash_final;
     hash_values[i_atom] = i_atom;
 }
