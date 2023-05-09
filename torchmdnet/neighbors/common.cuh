@@ -1,7 +1,8 @@
-#pragma once
+#ifndef NEIGHBORS_COMMON_CUH
+#define NEIGHBORS_COMMON_CUH
+#include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAStream.h>
-#include <ATen/cuda/CUDAContext.h>
 #include <torch/extension.h>
 
 using c10::cuda::CUDAStreamGuard;
@@ -118,3 +119,6 @@ __device__ auto compute_distance(scalar3<scalar_t> pos_i, scalar3<scalar_t> pos_
 }
 
 } // namespace triclinic
+
+tensor_list common_backward(AutogradContext* ctx, tensor_list grad_inputs);
+#endif

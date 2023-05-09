@@ -1,6 +1,5 @@
 #include "common.cuh"
 #include <algorithm>
-#include <thrust/tuple.h>
 #include <torch/extension.h>
 
 __device__ uint32_t get_row(uint32_t index) {
@@ -89,9 +88,9 @@ __global__ void forward_kernel_shared(uint32_t num_atoms, const Accessor<scalar_
     __shared__ int64_t sh_batch[BLOCKSIZE];
     scalar3<scalar_t> pos_i;
     int64_t batch_i;
-    if(active){
-      pos_i = {positions[id][0], positions[id][1], positions[id][2]};
-      batch_i = batch[id];
+    if (active) {
+        pos_i = {positions[id][0], positions[id][1], positions[id][2]};
+        batch_i = batch[id];
     }
     // Distribute the N particles in a group of tiles. Storing in each tile blockDim.x values in
     // shared memory. This way all threads are accesing the same memory addresses at the same time
@@ -148,26 +147,6 @@ __global__ void forward_kernel_shared(uint32_t num_atoms, const Accessor<scalar_
         }
         __syncthreads();
     }
-}
-
-template <typename scalar_t>
-__global__ void
-backward_kernel(const Accessor<int32_t, 2> neighbors, const Accessor<scalar_t, 2> deltas,
-                const Accessor<scalar_t, 1> distances, const Accessor<scalar_t, 1> grad_distances,
-                Accessor<scalar_t, 2> grad_positions) {
-    const int32_t i_pair = blockIdx.x * blockDim.x + threadIdx.x;
-    const int32_t num_pairs = neighbors.size(1);
-    if (i_pair >= num_pairs)
-        return;
-
-    const int32_t i_dir = blockIdx.y;
-    const int32_t i_atom = neighbors[i_dir][i_pair];
-    if (i_atom < 0)
-        return;
-
-    const int32_t i_comp = blockIdx.z;
-    const scalar_t grad = deltas[i_pair][i_comp] / distances[i_pair] * grad_distances[i_pair];
-    atomicAdd(&grad_positions[i_atom][i_comp], (i_dir ? -1 : 1) * grad);
 }
 
 static void checkInput(const Tensor& positions, const Tensor& batch) {
@@ -280,30 +259,7 @@ public:
     }
 
     static tensor_list backward(AutogradContext* ctx, tensor_list grad_inputs) {
-        const Tensor grad_distances = grad_inputs[1];
-        const int num_atoms = ctx->saved_data["num_atoms"].toInt();
-        const int num_pairs = grad_distances.size(0);
-        const int num_threads = 32;
-        const int num_blocks_x = std::max((num_pairs + num_threads - 1) / num_threads, 1);
-        const dim3 blocks(num_blocks_x, 2, 3);
-        const auto stream = getCurrentCUDAStream(grad_distances.get_device());
-
-        const tensor_list data = ctx->get_saved_variables();
-        const Tensor neighbors = data[0];
-        const Tensor deltas = data[1];
-        const Tensor distances = data[2];
-        const Tensor grad_positions = zeros({num_atoms, 3}, grad_distances.options());
-
-        AT_DISPATCH_FLOATING_TYPES(
-            grad_distances.scalar_type(), "get_neighbor_pairs_backward", [&]() {
-                const CUDAStreamGuard guard(stream);
-                backward_kernel<<<blocks, num_threads, 0, stream>>>(
-                    get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
-                    get_accessor<scalar_t, 1>(distances), get_accessor<scalar_t, 1>(grad_distances),
-                    get_accessor<scalar_t, 2>(grad_positions));
-            });
-
-        return {grad_positions, Tensor(), Tensor(), Tensor()};
+        return common_backward(ctx, grad_inputs);
     }
 };
 

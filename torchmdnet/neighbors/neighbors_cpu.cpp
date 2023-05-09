@@ -54,10 +54,12 @@ forward(const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
     Tensor neighbors = torch::empty({0}, positions.options().dtype(kInt32));
     Tensor distances = torch::empty({0}, positions.options());
     Tensor deltas = torch::empty({0}, positions.options());
-    neighbors = torch::vstack((torch::tril_indices(n_atoms,n_atoms, -1, neighbors.options())));
-    auto mask = index_select(batch, 0, neighbors.index({0, Slice()})) == index_select(batch, 0, neighbors.index({1, Slice()}));
+    neighbors = torch::vstack((torch::tril_indices(n_atoms, n_atoms, -1, neighbors.options())));
+    auto mask = index_select(batch, 0, neighbors.index({0, Slice()})) ==
+                index_select(batch, 0, neighbors.index({1, Slice()}));
     neighbors = neighbors.index({Slice(), mask}).to(kInt32);
-    deltas = index_select(positions, 0, neighbors.index({0, Slice()})) - index_select(positions, 0, neighbors.index({1, Slice()}));
+    deltas = index_select(positions, 0, neighbors.index({0, Slice()})) -
+             index_select(positions, 0, neighbors.index({1, Slice()}));
     if (use_periodic) {
         deltas -= outer(round(deltas.index({Slice(), 2}) / box_vectors.index({2, 2})),
                         box_vectors.index({2}));
@@ -67,20 +69,20 @@ forward(const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
                         box_vectors.index({0}));
     }
     distances = frobenius_norm(deltas, 1);
-    mask = (distances < cutoff_upper)*(distances >= cutoff_lower);
+    mask = (distances < cutoff_upper) * (distances >= cutoff_lower);
     neighbors = neighbors.index({Slice(), mask});
     deltas = deltas.index({mask, Slice()});
     distances = distances.index({mask});
     if (include_transpose) {
-      neighbors = torch::hstack({neighbors, torch::stack({neighbors[1], neighbors[0]})});
-      distances = torch::hstack({distances, distances});
-      deltas = torch::vstack({deltas, -deltas});
+        neighbors = torch::hstack({neighbors, torch::stack({neighbors[1], neighbors[0]})});
+        distances = torch::hstack({distances, distances});
+        deltas = torch::vstack({deltas, -deltas});
     }
-    if(loop) {
-      const Tensor range = torch::arange(0, n_atoms, torch::kInt32);
-      neighbors = torch::hstack({neighbors, torch::stack({range, range})});
-      distances = torch::hstack({distances, torch::zeros_like(range)});
-      deltas = torch::vstack({deltas, torch::zeros({n_atoms,3}, deltas.options())});
+    if (loop) {
+        const Tensor range = torch::arange(0, n_atoms, torch::kInt32);
+        neighbors = torch::hstack({neighbors, torch::stack({range, range})});
+        distances = torch::hstack({distances, torch::zeros_like(range)});
+        deltas = torch::vstack({deltas, torch::zeros({n_atoms, 3}, deltas.options())});
     }
     Tensor num_pairs_found = torch::empty(1, distances.options().dtype(kInt32));
     num_pairs_found[0] = distances.size(0);

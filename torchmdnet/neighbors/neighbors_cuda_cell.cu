@@ -2,34 +2,9 @@
 
  */
 #include "common.cuh"
+#include <thrust/device_malloc_allocator.h>
 #include <thrust/device_vector.h>
-#include <thrust/iterator/discard_iterator.h>
-#include <thrust/reduce.h>
-
-template <typename scalar_t>
-__global__ void
-backward_kernel(const Accessor<int32_t, 2> neighbors, const Accessor<scalar_t, 2> deltas,
-                const Accessor<scalar_t, 1> distances, const Accessor<scalar_t, 1> grad_distances,
-                Accessor<scalar_t, 2> grad_positions) {
-    // What the backward kernel does:
-    // For each pair of atoms, it calculates the gradient of the distance between them
-    // with respect to the positions of the atoms.
-    // The gradient is then added to the gradient of the positions.
-    // The gradient of the distance is calculated using the chain rule:
-    const int32_t i_pair = blockIdx.x * blockDim.x + threadIdx.x;
-    const int32_t num_pairs = neighbors.size(1);
-    if (i_pair >= num_pairs)
-        return;
-
-    const int32_t i_dir = blockIdx.y;
-    const int32_t i_atom = neighbors[i_dir][i_pair];
-    if (i_atom < 0)
-        return;
-
-    const int32_t i_comp = blockIdx.z;
-    const scalar_t grad = deltas[i_pair][i_comp] / distances[i_pair] * grad_distances[i_pair];
-    atomicAdd(&grad_positions[i_atom][i_comp], (i_dir ? -1 : 1) * grad);
-}
+#include <thrust/sort.h>
 
 static void checkInput(const Tensor& positions, const Tensor& batch) {
     // Batch contains the molecule index for each atom in positions
@@ -181,36 +156,37 @@ __global__ void assignHash(const Accessor<scalar_t, 2> positions, uint64_t* hash
     hash_values[i_atom] = i_atom;
 }
 
-// Adaptor from pytorch cached allocator to thrust
-template <typename T> class CudaAllocator {
-public:
-    using value_type = T;
-    CudaAllocator() {
+// This is a custom allocator for thrust that uses the caching allocator from pytorch
+// Its existence is due to the fact that Pytorch does not support uint64_t as a valid Tensor type
+template <typename T> struct torch_cached_allocator : thrust::device_malloc_allocator<T> {
+    typedef thrust::device_malloc_allocator<T> super_t;
+    typedef typename super_t::pointer pointer;
+    typedef typename super_t::size_type size_type;
+
+    pointer allocate(size_type n) {
+        auto ptr = static_cast<T*>(at::cuda::CUDACachingAllocator::raw_alloc(n * sizeof(T)));
+        return pointer(ptr);
     }
-    T* allocate(std::ptrdiff_t num_elements) {
-        return static_cast<T*>(
-            at::cuda::getCUDADeviceAllocator()->raw_allocate(num_elements * sizeof(T)));
-    }
-    void deallocate(T* ptr, size_t) {
-        at::cuda::getCUDADeviceAllocator()->raw_deallocate(ptr);
+
+    void deallocate(pointer p, size_type n) {
+        at::cuda::CUDACachingAllocator::raw_delete(p.get());
     }
 };
 
 /*
- * @brief Sort the positions by hash, based on the cell assigned to each position and the batch
+ * @brief Sort the positions by hash, first by the cell assigned to each position and the batch
  * index
  * @param positions The positions of the atoms
  * @param batch The batch index of each atom
- * @param box_size The size of the box in each dimension
+ * @param box_size The box vectors
  * @param cutoff The cutoff
  * @return A tuple of the sorted positions and the original indices of each atom in the sorted list
  */
 static auto sortPositionsByHash(const Tensor& positions, const Tensor& batch,
                                 const Tensor& box_size, const Scalar& cutoff) {
     const int num_atoms = positions.size(0);
-    const auto options = positions.options();
-    thrust::device_vector<uint64_t> hash_keys(num_atoms);
-    Tensor hash_values = empty({num_atoms}, options.dtype(torch::kInt32));
+    thrust::device_vector<uint64_t, torch_cached_allocator<uint64_t>> hash_keys(num_atoms);
+    Tensor hash_values = empty({num_atoms}, positions.options().dtype(torch::kInt32));
     const int threads = 128;
     const int blocks = (num_atoms + threads - 1) / threads;
     auto stream = at::cuda::getCurrentCUDAStream();
@@ -225,8 +201,8 @@ static auto sortPositionsByHash(const Tensor& positions, const Tensor& batch,
             cutoff_, num_atoms);
     });
     thrust::device_ptr<int32_t> index_ptr(hash_values.data_ptr<int32_t>());
-    thrust::sort_by_key(thrust::cuda::par.on(stream), hash_keys.begin(), hash_keys.end(),
-                        index_ptr);
+    thrust::sort_by_key(thrust::cuda::par(torch_cached_allocator<char>()).on(stream),
+                        hash_keys.begin(), hash_keys.end(), index_ptr);
     Tensor sorted_positions = positions.index_select(0, hash_values);
     return std::make_tuple(sorted_positions, hash_values);
 }
@@ -274,7 +250,7 @@ __global__ void fillCellOffsetsD(const Accessor<scalar_t, 2> sorted_positions,
   @param sorted_positions The positions sorted by cell
   @param sorted_indices The original indices of the sorted positions
   @param batch The batch index of each position
-  @param box_size The size of the box
+  @param box_size The box vectors
   @param cutoff The cutoff distance
   @return A tuple of cell_start and cell_end arrays
 */
@@ -436,6 +412,7 @@ public:
         std::tie(sorted_positions, hash_values) =
             sortPositionsByHash(positions, batch, box_size, cutoff_upper);
         Tensor cell_start, cell_end;
+        // Step 3
         std::tie(cell_start, cell_end) =
             fillCellOffsets(sorted_positions, hash_values, batch, box_size, cutoff_upper);
         const Tensor neighbors = full({2, max_num_pairs_}, -1, options.dtype(kInt32));
@@ -443,7 +420,7 @@ public:
         const Tensor distances = full(max_num_pairs_, 0, options);
         const Tensor i_curr_pair = zeros(1, options.dtype(kInt32));
         const auto stream = getCurrentCUDAStream(positions.get_device());
-        { // Use the cell list for each batch to find the neighbors
+        { // Traverse the cell list to find the neighbors
             const CUDAStreamGuard guard(stream);
             AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "forward", [&] {
                 const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
@@ -470,30 +447,7 @@ public:
     }
 
     static tensor_list backward(AutogradContext* ctx, tensor_list grad_inputs) {
-        const Tensor grad_distances = grad_inputs[1];
-        const int num_atoms = ctx->saved_data["num_atoms"].toInt();
-        const int num_pairs = grad_distances.size(0);
-        const int num_threads = 128;
-        const int num_blocks_x = std::max((num_pairs + num_threads - 1) / num_threads, 1);
-        const dim3 blocks(num_blocks_x, 2, 3);
-        const auto stream = getCurrentCUDAStream(grad_distances.get_device());
-
-        const tensor_list data = ctx->get_saved_variables();
-        const Tensor neighbors = data[0];
-        const Tensor deltas = data[1];
-        const Tensor distances = data[2];
-        const Tensor grad_positions = zeros({num_atoms, 3}, grad_distances.options());
-
-        AT_DISPATCH_FLOATING_TYPES(
-            grad_distances.scalar_type(), "get_neighbor_pairs_backward", [&]() {
-                const CUDAStreamGuard guard(stream);
-                backward_kernel<<<blocks, num_threads, 0, stream>>>(
-                    get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
-                    get_accessor<scalar_t, 1>(distances), get_accessor<scalar_t, 1>(grad_distances),
-                    get_accessor<scalar_t, 2>(grad_positions));
-            });
-
-        return {grad_positions, Tensor(), Tensor(), Tensor()};
+        return common_backward(ctx, grad_inputs);
     }
 };
 
