@@ -1,6 +1,7 @@
 import os
 import pytest
 import torch
+import torch.jit
 import numpy as np
 from torchmdnet.models.utils import Distance, DistanceCellList
 
@@ -254,3 +255,52 @@ def test_neighbor_grads(device, strategy, loop, include_transpose, dtype, num_at
         assert np.allclose(ref_pos_grad_sorted, pos_grad_sorted, atol=1e-2, rtol=1e-2)
     else:
         assert np.allclose(ref_pos_grad_sorted, pos_grad_sorted, atol=1e-8, rtol=1e-5)
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("strategy", ["brute", "shared", "cell"])
+@pytest.mark.parametrize("n_batches", [1, 128])
+@pytest.mark.parametrize("cutoff", [1.0])
+@pytest.mark.parametrize("loop", [True, False])
+@pytest.mark.parametrize("include_transpose", [True, False])
+@pytest.mark.parametrize("box_type", [None, "triclinic", "rectangular"])
+@pytest.mark.parametrize('dtype', [torch.float32])
+def test_jit_script_compatible(device, strategy, n_batches, cutoff, loop, include_transpose, box_type, dtype):
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    if box_type == "triclinic" and strategy == "cell":
+        pytest.skip("Triclinic only supported for brute force")
+    if device=="cpu" and strategy!="brute":
+        pytest.skip("Only brute force supported on CPU")
+    torch.manual_seed(4321)
+    n_atoms_per_batch = torch.randint(3, 100, size=(n_batches,))
+    batch = torch.repeat_interleave(torch.arange(n_batches, dtype=torch.int64), n_atoms_per_batch).to(device)
+    cumsum = np.cumsum( np.concatenate([[0], n_atoms_per_batch]))
+    lbox=10.0
+    pos = torch.rand(cumsum[-1], 3, device=device, dtype=dtype)*lbox
+    #Ensure there is at least one pair
+    pos[0,:] = torch.zeros(3)
+    pos[1,:] = torch.zeros(3)
+    pos.requires_grad = True
+    if(box_type is None):
+        box = None
+    else:
+        box = torch.tensor([[lbox, 0.0, 0.0], [0.0, lbox, 0.0], [0.0, 0.0, lbox]]).to(pos.dtype).to(device)
+    ref_neighbors, ref_distance_vecs, ref_distances = compute_ref_neighbors(pos, batch, loop, include_transpose, cutoff, box)
+    max_num_pairs = ref_neighbors.shape[1]
+    nl = DistanceCellList(cutoff_lower=0.0, loop=loop, cutoff_upper=cutoff, max_num_pairs=max_num_pairs, strategy=strategy, box=box, return_vecs=True, include_transpose=include_transpose)
+    batch.to(device)
+
+    nl = torch.jit.script(nl)
+    neighbors, distances, distance_vecs = nl(pos, batch)
+    neighbors = neighbors.cpu().detach().numpy()
+    distance_vecs = distance_vecs.cpu().detach().numpy()
+    distances = distances.cpu().detach().numpy()
+    neighbors, distance_vecs, distances = sort_neighbors(neighbors, distance_vecs, distances)
+    assert neighbors.shape == (2, max_num_pairs)
+    assert distances.shape == (max_num_pairs,)
+    assert distance_vecs.shape == (max_num_pairs, 3)
+
+    assert np.allclose(neighbors, ref_neighbors)
+    assert np.allclose(distances, ref_distances)
+    assert np.allclose(distance_vecs, ref_distance_vecs)

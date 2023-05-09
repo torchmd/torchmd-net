@@ -127,7 +127,7 @@ class DistanceCellList(torch.nn.Module):
         self.cutoff_lower = cutoff_lower
         self.max_num_pairs = max_num_pairs
         self.strategy = strategy
-        self.box = box
+        self.box: Optional[Tensor] = box
         self.loop = loop
         self.return_vecs = return_vecs
         self.include_transpose = include_transpose
@@ -135,6 +135,7 @@ class DistanceCellList(torch.nn.Module):
         self.use_periodic = True
         if self.box is None:
             self.use_periodic = False
+            self.box = torch.empty((0,0))
             if self.strategy == "cell":
                 #Default the box to 3 times the cutoff, really inefficient for the cell list
                 lbox = cutoff_upper * 3.0
@@ -169,8 +170,6 @@ class DistanceCellList(torch.nn.Module):
         otherwise the tensors will have size max_num_pairs, with neighbor pairs (-1, -1) at the end.
 
         """
-        if self.box is None:
-            self.box = torch.empty((0, 0), dtype=pos.dtype)
         self.box = self.box.to(pos.dtype).to(pos.device)
         max_pairs = self.max_num_pairs
         if self.max_num_pairs < 0:
