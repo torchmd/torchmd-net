@@ -133,21 +133,26 @@ __global__ void assignHash(const Accessor<scalar_t, 2> positions, uint64_t* hash
     hash_values[i_atom] = i_atom;
 }
 
-// This is a custom allocator for thrust that uses the caching allocator from pytorch
-// Its existence is due to the fact that Pytorch does not support uint64_t as a valid Tensor type
-template <typename T> struct torch_cached_allocator : thrust::device_malloc_allocator<T> {
-    typedef thrust::device_malloc_allocator<T> super_t;
-    typedef typename super_t::pointer pointer;
-    typedef typename super_t::size_type size_type;
-
-    static pointer allocate(size_type n) {
-        auto ptr = static_cast<T*>(at::cuda::CUDACachingAllocator::raw_alloc(n * sizeof(T)));
-        return pointer(ptr);
+/*
+ * @brief A buffer that is allocated and deallocated using the CUDA caching allocator from torch
+ */
+template <class T> struct cached_buffer {
+    cached_buffer(size_t size) : size_(size) {
+        ptr_ = static_cast<T*>(at::cuda::CUDACachingAllocator::raw_alloc(size * sizeof(T)));
+    }
+    ~cached_buffer() {
+        at::cuda::CUDACachingAllocator::raw_delete(ptr_);
+    }
+    T* get() {
+        return ptr_;
+    }
+    size_t size() {
+        return size_;
     }
 
-    static void deallocate(pointer p, size_type n) {
-        at::cuda::CUDACachingAllocator::raw_delete(p.get());
-    }
+private:
+    T* ptr_;
+    size_t size_;
 };
 
 /*
@@ -162,8 +167,7 @@ template <typename T> struct torch_cached_allocator : thrust::device_malloc_allo
 static auto sortPositionsByHash(const Tensor& positions, const Tensor& batch,
                                 const Tensor& box_size, const Scalar& cutoff) {
     const int num_atoms = positions.size(0);
-    torch_cached_allocator<char> alloc;
-    auto hash_keys = (uint64_t*)(alloc.allocate(num_atoms * sizeof(uint64_t)).get());
+    auto hash_keys = cached_buffer<uint64_t>(num_atoms);
     Tensor hash_values = empty({num_atoms}, positions.options().dtype(torch::kInt32));
     const int threads = 128;
     const int blocks = (num_atoms + threads - 1) / threads;
@@ -174,22 +178,23 @@ static auto sortPositionsByHash(const Tensor& positions, const Tensor& batch,
                                        box_size[1][1].item<scalar_t>(),
                                        box_size[2][2].item<scalar_t>()};
         assignHash<<<blocks, threads, 0, stream>>>(
-            get_accessor<scalar_t, 2>(positions), hash_keys, get_accessor<int32_t, 1>(hash_values),
-            get_accessor<int64_t, 1>(batch), box_size_, cutoff_, num_atoms);
+            get_accessor<scalar_t, 2>(positions), hash_keys.get(),
+            get_accessor<int32_t, 1>(hash_values), get_accessor<int64_t, 1>(batch), box_size_,
+            cutoff_, num_atoms);
     });
     // I have to use cub directly because thrust::sort_by_key is not compatible with graphs
     //  and torch::lexsort does not support uint64_t
     size_t tmp_storage_bytes = 0;
-    void* tmp_storage = NULL;
-    uint64_t* d_keys_out = (uint64_t*)alloc.allocate(num_atoms * sizeof(uint64_t)).get();
-    int32_t* d_values_out = (int32_t*)alloc.allocate(num_atoms * sizeof(int32_t)).get();
+    auto d_keys_out = cached_buffer<uint64_t>(num_atoms);
+    auto d_values_out = cached_buffer<int32_t>(num_atoms);
     int32_t* hash_values_ptr = hash_values.data_ptr<int32_t>();
-    cub::DeviceRadixSort::SortPairs(tmp_storage, tmp_storage_bytes, hash_keys, d_keys_out,
-                                    hash_values_ptr, d_values_out, num_atoms, 0, 64, stream);
-    tmp_storage = alloc.allocate(tmp_storage_bytes).get();
-    cub::DeviceRadixSort::SortPairs(tmp_storage, tmp_storage_bytes, hash_keys, d_keys_out,
-                                    hash_values_ptr, d_values_out, num_atoms, 0, 64, stream);
-    cudaMemcpyAsync(hash_values_ptr, d_values_out, num_atoms * sizeof(int32_t),
+    cub::DeviceRadixSort::SortPairs(nullptr, tmp_storage_bytes, hash_keys.get(), d_keys_out.get(),
+                                    hash_values_ptr, d_values_out.get(), num_atoms, 0, 64, stream);
+    auto tmp_storage = cached_buffer<char>(tmp_storage_bytes);
+    cub::DeviceRadixSort::SortPairs(tmp_storage.get(), tmp_storage_bytes, hash_keys.get(),
+                                    d_keys_out.get(), hash_values_ptr, d_values_out.get(),
+                                    num_atoms, 0, 64, stream);
+    cudaMemcpyAsync(hash_values_ptr, d_values_out.get(), num_atoms * sizeof(int32_t),
                     cudaMemcpyDeviceToDevice, stream);
     Tensor sorted_positions = positions.index_select(0, hash_values);
     return std::make_tuple(sorted_positions, hash_values);
@@ -405,7 +410,7 @@ public:
         const Tensor deltas = empty({max_num_pairs_, 3}, options);
         const Tensor distances = full(max_num_pairs_, 0, options);
         const Tensor i_curr_pair = zeros(1, options.dtype(kInt32));
-	const auto stream = getCurrentCUDAStream(positions.get_device());
+        const auto stream = getCurrentCUDAStream(positions.get_device());
         { // Traverse the cell list to find the neighbors
             const CUDAStreamGuard guard(stream);
             AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "forward", [&] {
