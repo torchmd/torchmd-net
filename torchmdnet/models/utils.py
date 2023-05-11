@@ -233,7 +233,7 @@ class Distance(nn.Module):
             # the norm of 0 produces NaN gradients
             # NOTE: might influence force predictions as self loop gradients are ignored
             mask = edge_index[0] != edge_index[1]
-            edge_weight = torch.zeros(edge_vec.size(0), device=edge_vec.device)
+            edge_weight = torch.zeros(edge_vec.size(0), device=edge_vec.device, dtype=edge_vec.dtype)
             edge_weight[mask] = torch.norm(edge_vec[mask], dim=-1)
         else:
             edge_weight = torch.norm(edge_vec, dim=-1)
