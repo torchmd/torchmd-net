@@ -102,7 +102,7 @@ class DistanceCellList(torch.nn.Module):
         strategy="brute",
         include_transpose=True,
         resize_to_fit=True,
-        check_errors=False,
+        check_errors=True,
         box=None,
     ):
         super(DistanceCellList, self).__init__()
