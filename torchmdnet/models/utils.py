@@ -215,6 +215,7 @@ class DistanceCellList(torch.nn.Module):
             neighbors = neighbors[:, mask]
             distances = distances[mask]
             distance_vecs = distance_vecs[mask, :]
+        neighbors = neighbors.to(torch.long)
         if self.return_vecs:
             return neighbors, distances, distance_vecs
         else:
