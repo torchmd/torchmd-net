@@ -96,7 +96,7 @@ class DistanceCellList(torch.nn.Module):
         self,
         cutoff_lower=0.0,
         cutoff_upper=5.0,
-        max_num_pairs=32,
+        max_num_pairs=-32,
         return_vecs=False,
         loop=False,
         strategy="brute",
@@ -203,10 +203,10 @@ class DistanceCellList(torch.nn.Module):
             use_periodic=self.use_periodic,
         )
         if self.check_errors:
-            if num_pairs[0] > self.max_num_pairs:
+            if num_pairs[0] > max_pairs:
                 raise RuntimeError(
                     "Found num_pairs({}) > max_num_pairs({})".format(
-                        num_pairs[0], self.max_num_pairs
+                        num_pairs[0], max_pairs
                     )
                 )
         # Remove (-1,-1)  pairs
