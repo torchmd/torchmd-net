@@ -139,7 +139,8 @@ def test_neighbors(
 @pytest.mark.parametrize("n_batches", [1, 2, 3, 4])
 @pytest.mark.parametrize("cutoff", [0.1, 1.0, 1000.0])
 @pytest.mark.parametrize("loop", [True, False])
-def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop):
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop, dtype):
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA not available")
     if device == "cpu" and strategy != "brute":
@@ -152,7 +153,7 @@ def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop):
     ).to(device)
     cumsum = np.cumsum(np.concatenate([[0], n_atoms_per_batch]))
     lbox = 10.0
-    pos = torch.rand(cumsum[-1], 3, device=device) * lbox
+    pos = torch.rand(cumsum[-1], 3, device=device, dtype=dtype) * lbox
     # Ensure there is at least one pair
     pos[0, :] = torch.zeros(3)
     pos[1, :] = torch.zeros(3)
