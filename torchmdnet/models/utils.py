@@ -77,6 +77,7 @@ class NeighborEmbedding(MessagePassing):
     def message(self, x_j, W):
         return x_j * W
 
+import torchmdnet.neighbors as neighbors
 class DistanceCellList(torch.nn.Module):
 
     def __init__(
@@ -141,17 +142,7 @@ class DistanceCellList(torch.nn.Module):
                 lbox = cutoff_upper * 3.0
                 self.box = torch.tensor([[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]])
         self.box = self.box.cpu()  # All strategies expect the box to be in CPU memory
-        from torchmdnet.neighbors import (
-            get_neighbor_pairs_brute,
-            get_neighbor_pairs_cell,
-            get_neighbor_pairs_shared,
-        )
-        self._backends = {
-            "brute": get_neighbor_pairs_brute,
-            "cell": get_neighbor_pairs_cell,
-            "shared": get_neighbor_pairs_shared,
-        }
-
+        self._backends = neighbors.get_backends()
         self.kernel = self._backends[self.strategy]
         if self.kernel is None:
             raise ValueError("Unknown strategy: {}".format(self.strategy))
