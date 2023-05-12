@@ -43,7 +43,6 @@ def benchmark_neighbors(
             i = np.random.randint(0, n_batches)
             n_atoms_per_batch[i] += 1
             difference -= 1
-
     else:
         while difference < 0:
             i = np.random.randint(0, n_batches)
@@ -66,6 +65,7 @@ def benchmark_neighbors(
             box=box,
             loop=False,
             include_transpose=True,
+            check_errors=False,
             resize_to_fit=False,
         )
     else:
@@ -77,19 +77,20 @@ def benchmark_neighbors(
             max_num_neighbors=max_num_neighbors,
         )
     # Warmup
-    for i in range(10):
-        neighbors, distances, distance_vecs = nl(pos, batch)
-    if device == "cuda":
-        torch.cuda.synchronize()
+    s = torch.cuda.Stream()
+    s.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(s):
+        for i in range(10):
+            neighbors, distances, distance_vecs = nl(pos, batch)
+    torch.cuda.synchronize()
     nruns = 50
-    if device == "cuda":
-        torch.cuda.synchronize()
+    torch.cuda.synchronize()
 
     start = torch.cuda.Event(enable_timing=True)
     end = torch.cuda.Event(enable_timing=True)
+    graph = torch.cuda.CUDAGraph()
     # record in a cuda graph
     if strategy != "distance":
-        graph = torch.cuda.CUDAGraph()
         with torch.cuda.graph(graph):
             neighbors, distances, distance_vecs = nl(pos, batch)
         start.record()
@@ -101,8 +102,7 @@ def benchmark_neighbors(
         for i in range(nruns):
             neighbors, distances, distance_vecs = nl(pos, batch)
         end.record()
-    if device == "cuda":
-        torch.cuda.synchronize()
+    torch.cuda.synchronize()
     # Final time
     return start.elapsed_time(end) / nruns
 
@@ -117,13 +117,8 @@ if __name__ == "__main__":
         )
     )
     results = {}
-    batch_sizes = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
+    batch_sizes = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
     for strategy in ["shared", "brute", "cell", "distance"]:
-        # print("Strategy: {}".format(strategy))
-        # print("--------")
-        # print("{:<10} {:<10}".format("Batch size", "Time (ms)"))
-        # print("{:<10} {:<10}".format("----------", "---------"))
-        # Loop over different number of batches, random
         for n_batches in batch_sizes:
             time = benchmark_neighbors(
                 device="cuda",
@@ -135,7 +130,6 @@ if __name__ == "__main__":
             )
             # Store results in a dictionary
             results[strategy, n_batches] = time
-            # print("{:<10} {:<10.2f}".format(n_batches, time))
     print("Summary")
     print("-------")
     print(
@@ -163,27 +157,80 @@ if __name__ == "__main__":
                 results["distance", n_batches],
             )
         )
+    n_particles_list = np.power(2, np.arange(8, 18))
 
-    # Print a second table showing time per atom, show in ns
-    print("\n")
-    print("Time per atom")
-    print(
-        "{:<10} {:<10} {:<10} {:<10} {:<10}".format(
-            "Batch size", "Shared(ns)", "Brute(ns)", "Cell(ns)", "Distance(ns)"
-        )
-    )
-    print(
-        "{:<10} {:<10} {:<10} {:<10} {:<10}".format(
-            "----------", "---------", "---------", "---------", "---------"
-        )
-    )
-    for n_batches in batch_sizes:
+    for n_batches in [1, 2, 32, 64]:
         print(
-            "{:<10} {:<10.2f} {:<10.2f} {:<10.2f} {:<10.2f}".format(
-                n_batches,
-                results["shared", n_batches] / n_particles * 1e6,
-                results["brute", n_batches] / n_particles * 1e6,
-                results["cell", n_batches] / n_particles * 1e6,
-                results["distance", n_batches] / n_particles * 1e6,
+            "Benchmarking neighbor list generation for {} batches with {} neighbors on average".format(
+                n_batches, mean_num_neighbors
             )
         )
+        results = {}
+        for strategy in ["shared", "brute", "cell", "distance"]:
+            for n_particles in n_particles_list:
+                mean_num_neighbors = min(n_particles, 64)
+                time = benchmark_neighbors(
+                    device="cuda",
+                    strategy=strategy,
+                    n_batches=n_batches,
+                    total_num_particles=n_particles,
+                    mean_num_neighbors=mean_num_neighbors,
+                    density=density,
+                )
+                # Store results in a dictionary
+                results[strategy, n_particles] = time
+        print("Summary")
+        print("-------")
+        print(
+            "{:<10} {:<21} {:<21} {:<18} {:<10}".format(
+                "N Particles", "Shared(ms)", "Brute(ms)", "Cell(ms)", "Distance(ms)"
+            )
+        )
+        print(
+            "{:<10} {:<21} {:<21} {:<18} {:<10}".format(
+                "----------", "---------", "---------", "---------", "---------"
+            )
+        )
+        # Print a column per strategy, show speedup over Distance in parenthesis
+        for n_particles in n_particles_list:
+            base = results["distance", n_particles]
+            brute_speedup = base / results["brute", n_particles]
+            if n_particles > 32000:
+                results["brute", n_particles] = 0
+                brute_speedup = 0
+            print(
+                "{:<10} {:<4.2f} x{:<14.2f} {:<4.2f} x{:<14.2f}  {:<4.2f} x{:<14.2f} {:<10.2f}".format(
+                    n_particles,
+                    results["shared", n_particles],
+                    base / results["shared", n_particles],
+                    results["brute", n_particles],
+                    brute_speedup,
+                    results["cell", n_particles],
+                    base / results["cell", n_particles],
+                    results["distance", n_particles],
+                )
+            )
+
+    # # Print a second table showing time per atom, show in ns
+    # print("\n")
+    # print("Time per atom")
+    # print(
+    #     "{:<10} {:<10} {:<10} {:<10} {:<10}".format(
+    #         "Batch size", "Shared(ns)", "Brute(ns)", "Cell(ns)", "Distance(ns)"
+    #     )
+    # )
+    # print(
+    #     "{:<10} {:<10} {:<10} {:<10} {:<10}".format(
+    #         "----------", "---------", "---------", "---------", "---------"
+    #     )
+    # )
+    # for n_batches in batch_sizes:
+    #     print(
+    #         "{:<10} {:<10.2f} {:<10.2f} {:<10.2f} {:<10.2f}".format(
+    #             n_batches,
+    #             results["shared", n_batches] / n_particles * 1e6,
+    #             results["brute", n_batches] / n_particles * 1e6,
+    #             results["cell", n_batches] / n_particles * 1e6,
+    #             results["distance", n_batches] / n_particles * 1e6,
+    #         )
+    #     )
