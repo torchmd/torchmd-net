@@ -1,3 +1,6 @@
+/* Raul P. Pelaez 2023. Backwards pass for the CUDA neighbor list operation.
+   Computes the gradient of the positions with respect to the distances and deltas.
+ */
 #include "common.cuh"
 
 template <typename scalar_t>
@@ -12,8 +15,8 @@ backward_kernel(const Accessor<int32_t, 2> neighbors, const Accessor<scalar_t, 2
     const int32_t i_dir = blockIdx.y;
     const int32_t i_atom = neighbors[i_dir][i_pair];
     const int32_t i_comp = blockIdx.z;
-    if (i_atom < 0){
-      return;
+    if (i_atom < 0) {
+        return;
     }
     const scalar_t grad_deltas_ = grad_deltas[i_pair][i_comp];
     const scalar_t dist = distances[i_pair];
@@ -26,6 +29,7 @@ backward_kernel(const Accessor<int32_t, 2> neighbors, const Accessor<scalar_t, 2
 }
 
 tensor_list common_backward(AutogradContext* ctx, tensor_list grad_inputs) {
+    // Common backward pass for all the CUDA neighbor list operations
     const Tensor grad_deltas = grad_inputs[1];
     const Tensor grad_distances = grad_inputs[2];
     const int num_atoms = ctx->saved_data["num_atoms"].toInt();
