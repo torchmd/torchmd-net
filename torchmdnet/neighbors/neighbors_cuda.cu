@@ -167,6 +167,10 @@ public:
         }
         TORCH_CHECK(box_vectors.device() == torch::kCPU, "Expected \"box_vectors\" to be on CPU");
         const int num_atoms = positions.size(0);
+	if(num_atoms > 32768){
+	  //The brute force method runs into integer overflow for num_atoms > 32768
+	  strat = strategy::shared;
+	}
         const int num_pairs = max_num_pairs_;
         const TensorOptions options = positions.options();
         const auto stream = getCurrentCUDAStream(positions.get_device());
