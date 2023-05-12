@@ -109,6 +109,9 @@ class DistanceCellList(torch.nn.Module):
         strategy : str
             Strategy to use for computing the neighbor list. Can be one of
             ["shared", "brute", "cell"].
+            Shared: An O(N^2) algorithm that leverages CUDA shared memory, best for large number of particles.
+            Brute: A brute force O(N^2) algorithm, best for small number of particles.
+            Cell:  A cell list algorithm, best for large number of particles, low cutoffs and low batch size.
         box : Optional[torch.Tensor]
             Size of the box, shape (3,3) or None.
             If strategy is "cell", the box must be diagonal.
