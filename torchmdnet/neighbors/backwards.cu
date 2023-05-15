@@ -28,8 +28,8 @@ backward_kernel(const Accessor<int32_t, 2> neighbors, const Accessor<scalar_t, 2
     atomicAdd(&grad_positions[i_atom][i_comp], grad);
 }
 
+
 tensor_list common_backward(AutogradContext* ctx, tensor_list grad_inputs) {
-    // Common backward pass for all the CUDA neighbor list operations
     const Tensor grad_deltas = grad_inputs[1];
     const Tensor grad_distances = grad_inputs[2];
     const int num_atoms = ctx->saved_data["num_atoms"].toInt();

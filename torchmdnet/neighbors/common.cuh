@@ -1,3 +1,5 @@
+/* Raul P. Pelaez 2023. Common utilities for the CUDA neighbor operation.
+ */
 #ifndef NEIGHBORS_COMMON_CUH
 #define NEIGHBORS_COMMON_CUH
 #include <ATen/cuda/CUDAContext.h>
@@ -34,24 +36,14 @@ template <> __device__ __forceinline__ double sqrt_(double x) {
     return ::sqrt(x);
 };
 
-template <typename scalar_t> struct vec4 {
-    using type = void;
-};
-template <> struct vec4<float> {
-    using type = float4;
-};
-template <> struct vec4<double> {
-    using type = double4;
-};
-
-template <typename scalar_t> using scalar4 = typename vec4<scalar_t>::type;
-
 template <typename scalar_t> struct vec3 {
     using type = void;
 };
+
 template <> struct vec3<float> {
     using type = float3;
 };
+
 template <> struct vec3<double> {
     using type = double3;
 };
@@ -59,12 +51,6 @@ template <> struct vec3<double> {
 template <typename scalar_t> using scalar3 = typename vec3<scalar_t>::type;
 
 static void checkInput(const Tensor& positions, const Tensor& batch) {
-    // Batch contains the molecule index for each atom in positions
-    // Neighbors are only calculated within the same molecule
-    // Batch is a 1D tensor of size (N_atoms)
-    // Batch is assumed to be sorted
-    // Batch is assumed to be contiguous
-    // Batch is assumed to be of type torch::kLong
     TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
     TORCH_CHECK(positions.size(0) > 0,
                 "Expected the 1nd dimension size of \"positions\" to be more than 0");
@@ -154,5 +140,9 @@ __device__ auto compute_distance(scalar3<scalar_t> pos_i, scalar3<scalar_t> pos_
 
 } // namespace triclinic
 
+/*
+ * Backward pass for the CUDA neighbor list operation.
+ * Computes the gradient of the positions with respect to the distances and deltas.
+ */
 tensor_list common_backward(AutogradContext* ctx, tensor_list grad_inputs);
 #endif
