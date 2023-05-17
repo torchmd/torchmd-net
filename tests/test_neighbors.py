@@ -66,8 +66,7 @@ def compute_ref_neighbors(pos, batch, loop, include_transpose, cutoff, box_vecto
     return ref_neighbors, ref_distance_vecs, ref_distances
 
 
-@pytest.mark.parametrize("device", ["cpu", "cuda"])
-@pytest.mark.parametrize("strategy", ["brute", "shared", "cell"])
+@pytest.mark.parametrize(("device", "strategy"), [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")])
 @pytest.mark.parametrize("n_batches", [1, 2, 3, 4, 128])
 @pytest.mark.parametrize("cutoff", [0.1, 1.0, 3.0, 4.9])
 @pytest.mark.parametrize("loop", [True, False])
@@ -80,7 +79,7 @@ def test_neighbors(
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA not available")
     if box_type == "triclinic" and strategy == "cell":
-        pytest.skip("Triclinic only supported for brute force")
+        pytest.skip("Triclinic not supported for cell")
     if device == "cpu" and strategy != "brute":
         pytest.skip("Only brute force supported on CPU")
     torch.manual_seed(4321)
@@ -134,8 +133,7 @@ def test_neighbors(
     assert np.allclose(distance_vecs, ref_distance_vecs)
 
 
-@pytest.mark.parametrize("device", ["cpu", "cuda"])
-@pytest.mark.parametrize("strategy", ["brute", "cell", "shared"])
+@pytest.mark.parametrize(("device", "strategy"), [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")])
 @pytest.mark.parametrize("n_batches", [1, 2, 3, 4])
 @pytest.mark.parametrize("cutoff", [0.1, 1.0, 1000.0])
 @pytest.mark.parametrize("loop", [True, False])
@@ -267,8 +265,7 @@ def test_large_size(strategy, n_batches):
     assert np.allclose(distance_vecs, ref_distance_vecs)
 
 
-@pytest.mark.parametrize("device", ["cpu", "cuda"])
-@pytest.mark.parametrize("strategy", ["brute", "shared", "cell"])
+@pytest.mark.parametrize(("device", "strategy"), [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")])
 @pytest.mark.parametrize("loop", [True, False])
 @pytest.mark.parametrize("include_transpose", [True, False])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
@@ -377,8 +374,7 @@ def test_neighbor_grads(
         assert np.allclose(ref_pos_grad_sorted, pos_grad_sorted, atol=1e-8, rtol=1e-5)
 
 
-@pytest.mark.parametrize("device", ["cpu", "cuda"])
-@pytest.mark.parametrize("strategy", ["brute", "shared", "cell"])
+@pytest.mark.parametrize(("device", "strategy"), [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")])
 @pytest.mark.parametrize("n_batches", [1, 128])
 @pytest.mark.parametrize("cutoff", [1.0])
 @pytest.mark.parametrize("loop", [True, False])
