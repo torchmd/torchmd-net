@@ -144,5 +144,5 @@ __device__ auto compute_distance(scalar3<scalar_t> pos_i, scalar3<scalar_t> pos_
  * Backward pass for the CUDA neighbor list operation.
  * Computes the gradient of the positions with respect to the distances and deltas.
  */
-tensor_list common_backward(AutogradContext* ctx, tensor_list grad_inputs);
+tensor_list common_backward(AutogradContext* ctx, const tensor_list &grad_inputs);
 #endif

@@ -7,6 +7,17 @@
 #include <thrust/device_vector.h>
 
 /*
+ * @brief Get the position of the i'th particle
+ * @param positions The positions tensor
+ * @param i The index of the particle
+ * @return The position of the i'th particle
+ */
+template <class scalar_t>
+__device__ scalar3<scalar_t> fetchPosition(const Accessor<scalar_t, 2> positions, const int i) {
+    return {positions[i][0], positions[i][1], positions[i][2]};
+}
+
+/*
  * @brief Encodes an unsigned integer lower than 1024 as a 32 bit integer by filling every third
  * bit.
  * @param i The integer to encode
@@ -136,11 +147,11 @@ __global__ void assignHash(const Accessor<scalar_t, 2> positions, uint64_t* hash
 /*
  * @brief A buffer that is allocated and deallocated using the CUDA caching allocator from torch
  */
-template <class T> struct cached_buffer {
-    cached_buffer(size_t size) : size_(size) {
+template <class T> struct CachedBuffer {
+    explicit CachedBuffer(size_t size) : size_(size) {
         ptr_ = static_cast<T*>(at::cuda::CUDACachingAllocator::raw_alloc(size * sizeof(T)));
     }
-    ~cached_buffer() {
+    ~CachedBuffer() {
         at::cuda::CUDACachingAllocator::raw_delete(ptr_);
     }
     T* get() {
@@ -162,12 +173,13 @@ private:
  * @param batch The batch index of each atom
  * @param box_size The box vectors
  * @param cutoff The cutoff
- * @return A tuple of the sorted positions and the original indices of each atom in the sorted list
+ * @return A tuple of the sorted positions, sorted batch indices and the original indices of each
+ * atom in the sorted list
  */
 static auto sortPositionsByHash(const Tensor& positions, const Tensor& batch,
                                 const Tensor& box_size, const Scalar& cutoff) {
     const int num_atoms = positions.size(0);
-    auto hash_keys = cached_buffer<uint64_t>(num_atoms);
+    auto hash_keys = CachedBuffer<uint64_t>(num_atoms);
     Tensor hash_values = empty({num_atoms}, positions.options().dtype(torch::kInt32));
     const int threads = 128;
     const int blocks = (num_atoms + threads - 1) / threads;
@@ -185,42 +197,40 @@ static auto sortPositionsByHash(const Tensor& positions, const Tensor& batch,
     // I have to use cub directly because thrust::sort_by_key is not compatible with graphs
     //  and torch::lexsort does not support uint64_t
     size_t tmp_storage_bytes = 0;
-    auto d_keys_out = cached_buffer<uint64_t>(num_atoms);
-    auto d_values_out = cached_buffer<int32_t>(num_atoms);
-    int32_t* hash_values_ptr = hash_values.data_ptr<int32_t>();
+    auto d_keys_out = CachedBuffer<uint64_t>(num_atoms);
+    auto d_values_out = CachedBuffer<int32_t>(num_atoms);
+    auto* hash_values_ptr = hash_values.data_ptr<int32_t>();
     cub::DeviceRadixSort::SortPairs(nullptr, tmp_storage_bytes, hash_keys.get(), d_keys_out.get(),
                                     hash_values_ptr, d_values_out.get(), num_atoms, 0, 64, stream);
-    auto tmp_storage = cached_buffer<char>(tmp_storage_bytes);
+    auto tmp_storage = CachedBuffer<char>(tmp_storage_bytes);
     cub::DeviceRadixSort::SortPairs(tmp_storage.get(), tmp_storage_bytes, hash_keys.get(),
                                     d_keys_out.get(), hash_values_ptr, d_values_out.get(),
                                     num_atoms, 0, 64, stream);
     cudaMemcpyAsync(hash_values_ptr, d_values_out.get(), num_atoms * sizeof(int32_t),
                     cudaMemcpyDeviceToDevice, stream);
     Tensor sorted_positions = positions.index_select(0, hash_values);
-    return std::make_tuple(sorted_positions, hash_values);
+    Tensor sorted_batch = batch.index_select(0, hash_values);
+    return std::make_tuple(sorted_positions, sorted_batch, hash_values);
 }
 
 template <typename scalar_t>
 __global__ void fillCellOffsetsD(const Accessor<scalar_t, 2> sorted_positions,
                                  const Accessor<int32_t, 1> sorted_indices,
                                  Accessor<int32_t, 1> cell_start, Accessor<int32_t, 1> cell_end,
-                                 const Accessor<int64_t, 1> batch, scalar3<scalar_t> box_size,
-                                 scalar_t cutoff) {
+                                 scalar3<scalar_t> box_size, scalar_t cutoff) {
     // Since positions are sorted by cell, for a given atom, if the previous atom is in a different
     // cell, then the current atom is the first atom in its cell We use this fact to fill the
     // cell_start and cell_end arrays
     const int32_t i_atom = blockIdx.x * blockDim.x + threadIdx.x;
     if (i_atom >= sorted_positions.size(0))
         return;
-    const scalar3<scalar_t> pi = {sorted_positions[i_atom][0], sorted_positions[i_atom][1],
-                                  sorted_positions[i_atom][2]};
+    const auto pi = fetchPosition(sorted_positions, i_atom);
     const int3 cell_dim = getCellDimensions(box_size, cutoff);
     const int icell = getCellIndex(getCell(pi, box_size, cutoff), cell_dim);
     int im1_cell;
     if (i_atom > 0) {
         int im1 = i_atom - 1;
-        const scalar3<scalar_t> pim1 = {sorted_positions[im1][0], sorted_positions[im1][1],
-                                        sorted_positions[im1][2]};
+        const auto pim1 = fetchPosition(sorted_positions, im1);
         im1_cell = getCellIndex(getCell(pim1, box_size, cutoff), cell_dim);
     } else {
         im1_cell = 0;
@@ -228,8 +238,9 @@ __global__ void fillCellOffsetsD(const Accessor<scalar_t, 2> sorted_positions,
     if (icell != im1_cell || i_atom == 0) {
         int n_cells = cell_start.size(0);
         cell_start[icell] = i_atom;
-        if (i_atom > 0)
+        if (i_atom > 0) {
             cell_end[im1_cell] = i_atom;
+        }
     }
     if (i_atom == sorted_positions.size(0) - 1) {
         cell_end[icell] = i_atom + 1;
@@ -237,9 +248,7 @@ __global__ void fillCellOffsetsD(const Accessor<scalar_t, 2> sorted_positions,
 }
 
 /*
-  @brief
-  Fill the cell offsets for each batch, identifying the start and end of each cell in the sorted
-  positions
+  @brief Fills the cell_start and cell_end arrays, identifying the first and last atom in each cell
   @param sorted_positions The positions sorted by cell
   @param sorted_indices The original indices of the sorted positions
   @param batch The batch index of each position
@@ -248,7 +257,7 @@ __global__ void fillCellOffsetsD(const Accessor<scalar_t, 2> sorted_positions,
   @return A tuple of cell_start and cell_end arrays
 */
 static auto fillCellOffsets(const Tensor& sorted_positions, const Tensor& sorted_indices,
-                            const Tensor& batch, const Tensor& box_size, const Scalar& cutoff) {
+                            const Tensor& box_size, const Scalar& cutoff) {
     const TensorOptions options = sorted_positions.options();
     int3 cell_dim;
     AT_DISPATCH_FLOATING_TYPES(sorted_positions.scalar_type(), "fillCellOffsets", [&] {
@@ -271,8 +280,8 @@ static auto fillCellOffsets(const Tensor& sorted_positions, const Tensor& sorted
                                        box_size[2][2].item<scalar_t>()};
         fillCellOffsetsD<<<blocks, threads, 0, stream>>>(
             get_accessor<scalar_t, 2>(sorted_positions), get_accessor<int32_t, 1>(sorted_indices),
-            get_accessor<int32_t, 1>(cell_start), get_accessor<int32_t, 1>(cell_end),
-            get_accessor<int64_t, 1>(batch), box_size_, cutoff_);
+            get_accessor<int32_t, 1>(cell_start), get_accessor<int32_t, 1>(cell_end), box_size_,
+            cutoff_);
     });
     return std::make_tuple(cell_start, cell_end);
 }
@@ -294,83 +303,186 @@ __device__ int getNeighborCellIndex(int3 cell_i, int i, int3 cell_dim) {
     return icellj;
 }
 
+template <class scalar_t> struct Particle {
+    int index;          // Index in the sorted arrays
+    int original_index; // Index in the original arrays
+    int batch;
+    scalar3<scalar_t> position;
+    scalar_t cutoff_upper2, cutoff_lower2;
+};
+
+struct CellList {
+    Tensor cell_start, cell_end;
+    Tensor original_indices;
+    Tensor sorted_positions, sorted_batch;
+};
+
+struct PairList {
+    Tensor i_curr_pair;
+    Tensor neighbors;
+    Tensor deltas;
+    Tensor distances;
+    const bool loop, include_transpose, use_periodic;
+    PairList(int max_num_pairs, TensorOptions options, bool loop, bool include_transpose,
+             bool use_periodic)
+        : i_curr_pair(zeros({1}, options.dtype(torch::kInt))),
+          neighbors(full({2, max_num_pairs}, -1, options.dtype(torch::kInt))),
+          deltas(empty({max_num_pairs, 3}, options)), distances(full({max_num_pairs}, 0, options)),
+          loop(loop), include_transpose(include_transpose), use_periodic(use_periodic) {
+    }
+};
+
+CellList constructCellList(const Tensor& positions, const Tensor& batch, const Tensor& box_size,
+                           const Scalar& cutoff) {
+    // The algorithm for the cell list construction can be summarized in three separate steps:
+    //         1. Hash (label) the particles according to the cell (bin) they lie in.
+    //         2. Sort the particles and hashes using the hashes as the ordering label
+    //         (technically this is known as sorting by key). So that particles with positions
+    //         lying in the same cell become contiguous in memory.
+    //         3. Identify where each cell starts and ends in the sorted particle positions
+    //         array.
+    const TensorOptions options = positions.options();
+    CellList cl;
+    // Steps 1 and 2
+    std::tie(cl.sorted_positions, cl.sorted_batch, cl.original_indices) =
+        sortPositionsByHash(positions, batch, box_size, cutoff);
+    // Step 3
+    std::tie(cl.cell_start, cl.cell_end) =
+        fillCellOffsets(cl.sorted_positions, cl.original_indices, box_size, cutoff);
+    return cl;
+}
+
+template <class scalar_t> struct CellListAccessor {
+    Accessor<int32_t, 1> cell_start, cell_end;
+    Accessor<int32_t, 1> original_indices;
+    Accessor<scalar_t, 2> sorted_positions;
+    Accessor<int64_t, 1> sorted_batch;
+
+    CellListAccessor(const CellList& cl)
+        : cell_start(get_accessor<int32_t, 1>(cl.cell_start)),
+          cell_end(get_accessor<int32_t, 1>(cl.cell_end)),
+          original_indices(get_accessor<int32_t, 1>(cl.original_indices)),
+          sorted_positions(get_accessor<scalar_t, 2>(cl.sorted_positions)),
+          sorted_batch(get_accessor<int64_t, 1>(cl.sorted_batch)) {
+    }
+};
+
+template <class scalar_t> struct PairListAccessor {
+    Accessor<int32_t, 1> i_curr_pair;
+    Accessor<int32_t, 2> neighbors;
+    Accessor<scalar_t, 2> deltas;
+    Accessor<scalar_t, 1> distances;
+    bool loop, include_transpose, use_periodic;
+    PairListAccessor(const PairList& pl)
+        : i_curr_pair(get_accessor<int32_t, 1>(pl.i_curr_pair)),
+          neighbors(get_accessor<int32_t, 2>(pl.neighbors)),
+          deltas(get_accessor<scalar_t, 2>(pl.deltas)),
+          distances(get_accessor<scalar_t, 1>(pl.distances)), loop(pl.loop),
+          include_transpose(pl.include_transpose), use_periodic(pl.use_periodic) {
+    }
+};
+
+/*
+ * @brief Add a pair of particles to the pair list. If necessary, also add the transpose pair.
+ * @param list The pair list
+ * @param i The index of the first particle
+ * @param j The index of the second particle
+ * @param distance2 The squared distance between the particles
+ * @param delta The vector between the particles
+ */
+template <class scalar_t>
+__device__ void addNeighborPair(PairListAccessor<scalar_t>& list, const int i, const int j,
+                                scalar_t distance2, const scalar3<scalar_t> delta) {
+    const bool requires_transpose = list.include_transpose and (j != i);
+    const int32_t i_pair = atomicAdd(&list.i_curr_pair[0], requires_transpose ? 2 : 1);
+    // We handle too many neighbors outside of the kernel
+    if (i_pair + requires_transpose < list.neighbors.size(1)) {
+        const int ni = thrust::max(i, j);
+        const int nj = thrust::min(i, j);
+        const scalar_t delta_sign = (ni == i) ? scalar_t(1.0) : scalar_t(-1.0);
+        const scalar_t distance = sqrt_(distance2);
+        list.neighbors[0][i_pair] = ni;
+        list.neighbors[1][i_pair] = nj;
+        list.deltas[i_pair][0] = delta_sign * delta.x;
+        list.deltas[i_pair][1] = delta_sign * delta.y;
+        list.deltas[i_pair][2] = delta_sign * delta.z;
+        list.distances[i_pair] = distance;
+        if (requires_transpose) {
+            list.neighbors[0][i_pair + 1] = nj;
+            list.neighbors[1][i_pair + 1] = ni;
+            list.deltas[i_pair + 1][0] = -delta_sign * delta.x;
+            list.deltas[i_pair + 1][1] = -delta_sign * delta.y;
+            list.deltas[i_pair + 1][2] = -delta_sign * delta.z;
+            list.distances[i_pair + 1] = distance;
+        }
+    }
+}
+
+/*
+ * @brief Add to the pair list all neighbors of particle i_atom in cell j_cell
+ * @param i_atom The Information of the particle for which we are adding neighbors
+ * @param j_cell The index of the cell in which we are looking for neighbors
+ * @param cl The cell list
+ * @param box_size The box size
+ * @param list The pair list
+ */
+template <class scalar_t>
+__device__ void addNeighborsForCell(const Particle<scalar_t>& i_atom, int j_cell,
+                                    const CellListAccessor<scalar_t>& cl,
+                                    scalar3<scalar_t> box_size, PairListAccessor<scalar_t>& list) {
+
+    const auto first_particle = cl.cell_start[j_cell];
+    if (first_particle != -1) { // Continue only if there are particles in this cell
+        const auto last_particle = cl.cell_end[j_cell];
+        for (int cur_j = first_particle; cur_j < last_particle; cur_j++) {
+            const auto j_batch = cl.sorted_batch[cur_j];
+            // Particles are sorted by batch after cell, so we can break early here
+            if (j_batch > i_atom.batch) {
+                break;
+            }
+            if ((j_batch == i_atom.batch) and
+                ((cur_j < i_atom.index) or (list.loop and cur_j == i_atom.index))) {
+                const auto position_j = fetchPosition(cl.sorted_positions, cur_j);
+                const auto delta = rect::compute_distance<scalar_t>(i_atom.position, position_j,
+                                                                    list.use_periodic, box_size);
+                const scalar_t distance2 =
+                    delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
+                if ((distance2 < i_atom.cutoff_upper2 and distance2 >= i_atom.cutoff_lower2) or
+                    (list.loop and cur_j == i_atom.index)) {
+                    const int orj = cl.original_indices[cur_j];
+                    addNeighborPair(list, i_atom.original_index, orj, distance2, delta);
+                } // endif
+            }     // endif
+        }         // endfor
+    }             // endif
+}
+
 // Traverse the cell list for each atom and find the neighbors
 template <typename scalar_t>
-__global__ void
-forward_kernel(const Accessor<scalar_t, 2> sorted_positions,
-               const Accessor<int32_t, 1> original_index, const Accessor<int64_t, 1> batch,
-               const Accessor<int32_t, 1> cell_start, const Accessor<int32_t, 1> cell_end,
-               Accessor<int32_t, 2> neighbors, Accessor<scalar_t, 2> deltas,
-               Accessor<scalar_t, 1> distances, Accessor<int32_t, 1> i_curr_pair, int num_atoms,
-               int num_pairs, bool use_periodic, scalar3<scalar_t> box_size, scalar_t cutoff_lower,
-               scalar_t cutoff_upper, bool loop, bool include_transpose) {
+__global__ void traverseCellList(const CellListAccessor<scalar_t> cell_list,
+                                 PairListAccessor<scalar_t> list, int num_atoms,
+                                 scalar3<scalar_t> box_size, scalar_t cutoff_lower,
+                                 scalar_t cutoff_upper) {
     // Each atom traverses the cells around it and finds the neighbors
     // Atoms for all batches are placed in the same cell list, but other batches are ignored while
     // traversing
-    const int32_t i_atom = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i_atom >= num_atoms)
+    Particle<scalar_t> i_atom;
+    i_atom.index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i_atom.index >= num_atoms) {
         return;
-    const int ori = original_index[i_atom];
-    const auto i_batch = batch[ori];
-    const scalar3<scalar_t> pi = {sorted_positions[i_atom][0], sorted_positions[i_atom][1],
-                                  sorted_positions[i_atom][2]};
-    const int3 cell_i = getCell(pi, box_size, cutoff_upper);
+    }
+    i_atom.original_index = cell_list.original_indices[i_atom.index];
+    i_atom.batch = cell_list.sorted_batch[i_atom.index];
+    i_atom.position = fetchPosition(cell_list.sorted_positions, i_atom.index);
+    i_atom.cutoff_lower2 = cutoff_lower * cutoff_lower;
+    i_atom.cutoff_upper2 = cutoff_upper * cutoff_upper;
+    const int3 cell_i = getCell(i_atom.position, box_size, cutoff_upper);
     const int3 cell_dim = getCellDimensions(box_size, cutoff_upper);
     // Loop over the 27 cells around the current cell
     for (int i = 0; i < 27; i++) {
-        int icellj = getNeighborCellIndex(cell_i, i, cell_dim);
-        const int firstParticle = cell_start[icellj];
-        if (firstParticle != -1) { // Continue only if there are particles in this cell
-            // Index of the last particle in the cell's list
-            const int lastParticle = cell_end[icellj];
-            const int nincell = lastParticle - firstParticle;
-            for (int j = 0; j < nincell; j++) {
-                const int cur_j = j + firstParticle;
-                const int orj = original_index[cur_j];
-                const auto j_batch = batch[orj];
-                if (j_batch >
-                    i_batch) // Particles are sorted by batch after cell, so we can break early here
-                    break;
-                const bool testPair =
-                    (j_batch == i_batch) and ((orj < ori) or (loop and orj == ori));
-                if (testPair) {
-                    const scalar3<scalar_t> pj = {sorted_positions[cur_j][0],
-                                                  sorted_positions[cur_j][1],
-                                                  sorted_positions[cur_j][2]};
-                    const auto delta =
-                        rect::compute_distance<scalar_t>(pi, pj, use_periodic, box_size);
-                    const scalar_t distance2 =
-                        delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
-                    const scalar_t cutoff_upper2 = cutoff_upper * cutoff_upper;
-                    const scalar_t cutoff_lower2 = cutoff_lower * cutoff_lower;
-                    if ((distance2 < cutoff_upper2 and distance2 >= cutoff_lower2) or
-                        (loop and orj == ori)) {
-                        const bool requires_transpose = include_transpose and (orj != ori);
-                        const int32_t i_pair =
-                            atomicAdd(&i_curr_pair[0], requires_transpose ? 2 : 1);
-                        // We handle too many neighbors outside of the kernel
-                        if (i_pair + requires_transpose < neighbors.size(1)) {
-                            const scalar_t distance = sqrt_(distance2);
-                            neighbors[0][i_pair] = ori;
-                            neighbors[1][i_pair] = orj;
-                            deltas[i_pair][0] = delta.x;
-                            deltas[i_pair][1] = delta.y;
-                            deltas[i_pair][2] = delta.z;
-                            distances[i_pair] = distance;
-                            if (requires_transpose) {
-                                neighbors[0][i_pair + 1] = orj;
-                                neighbors[1][i_pair + 1] = ori;
-                                deltas[i_pair + 1][0] = -delta.x;
-                                deltas[i_pair + 1][1] = -delta.y;
-                                deltas[i_pair + 1][2] = -delta.z;
-                                distances[i_pair + 1] = distance;
-                            }
-                        } // endif
-                    }     // endif
-                }         // endfor
-            }             // endif
-        }                 // endfor
-    }                     // endfor
+        const int neighbor_cell = getNeighborCellIndex(cell_i, i, cell_dim);
+        addNeighborsForCell(i_atom, neighbor_cell, cell_list, box_size, list);
+    }
 }
 
 class Autograd : public Function<Autograd> {
@@ -379,13 +491,9 @@ public:
                                const Tensor& box_size, bool use_periodic,
                                const Scalar& cutoff_lower, const Scalar& cutoff_upper,
                                const Scalar& max_num_pairs, bool loop, bool include_transpose) {
-        // The algorithm for the cell list construction can be summarized in three separate steps:
-        //         1. Hash (label) the particles according to the cell (bin) they lie in.
-        //         2. Sort the particles and hashes using the hashes as the ordering label
-        //         (technically this is known as sorting by key). So that particles with positions
-        //         lying in the same cell become contiguous in memory.
-        //         3. Identify where each cell starts and ends in the sorted particle positions
-        //         array.
+        // This module computes the pair list for a given set of particles, which may be in multiple
+        // batches. The strategy is to first compute a cell list for all particles, and then
+        // traverse the cell list for each particle to construct a pair list.
         checkInput(positions, batch);
         TORCH_CHECK(box_size.dim() == 2, "Expected \"box_size\" to have two dimensions");
         TORCH_CHECK(box_size.size(0) == 3 && box_size.size(1) == 3,
@@ -397,19 +505,8 @@ public:
         const auto max_num_pairs_ = max_num_pairs.toInt();
         TORCH_CHECK(max_num_pairs_ > 0, "Expected \"max_num_neighbors\" to be positive");
         const int num_atoms = positions.size(0);
-        const TensorOptions options = positions.options();
-        // Steps 1 and 2
-        Tensor sorted_positions, hash_values;
-        std::tie(sorted_positions, hash_values) =
-            sortPositionsByHash(positions, batch, box_size, cutoff_upper);
-        Tensor cell_start, cell_end;
-        // Step 3
-        std::tie(cell_start, cell_end) =
-            fillCellOffsets(sorted_positions, hash_values, batch, box_size, cutoff_upper);
-        const Tensor neighbors = full({2, max_num_pairs_}, -1, options.dtype(kInt32));
-        const Tensor deltas = empty({max_num_pairs_, 3}, options);
-        const Tensor distances = full(max_num_pairs_, 0, options);
-        const Tensor i_curr_pair = zeros(1, options.dtype(kInt32));
+        const auto cell_list = constructCellList(positions, batch, box_size, cutoff_upper);
+        PairList list(max_num_pairs_, positions.options(), loop, include_transpose, use_periodic);
         const auto stream = getCurrentCUDAStream(positions.get_device());
         { // Traverse the cell list to find the neighbors
             const CUDAStreamGuard guard(stream);
@@ -420,24 +517,21 @@ public:
                 const scalar3<scalar_t> box_size_ = {box_size[0][0].item<scalar_t>(),
                                                      box_size[1][1].item<scalar_t>(),
                                                      box_size[2][2].item<scalar_t>()};
-                const int threads = 128;
+                PairListAccessor<scalar_t> list_accessor(list);
+                CellListAccessor<scalar_t> cell_list_accessor(cell_list);
+                const int threads = 256;
                 const int blocks = (num_atoms + threads - 1) / threads;
-                forward_kernel<<<blocks, threads, 0, stream>>>(
-                    get_accessor<scalar_t, 2>(sorted_positions),
-                    get_accessor<int32_t, 1>(hash_values), get_accessor<int64_t, 1>(batch),
-                    get_accessor<int32_t, 1>(cell_start), get_accessor<int32_t, 1>(cell_end),
-                    get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
-                    get_accessor<scalar_t, 1>(distances), get_accessor<int32_t, 1>(i_curr_pair),
-                    num_atoms, max_num_pairs_, use_periodic, box_size_, cutoff_lower_,
-                    cutoff_upper_, loop, include_transpose);
+                traverseCellList<<<blocks, threads, 0, stream>>>(cell_list_accessor, list_accessor,
+                                                                 num_atoms, box_size_,
+                                                                 cutoff_lower_, cutoff_upper_);
             });
         }
-        ctx->save_for_backward({neighbors, deltas, distances});
+        ctx->save_for_backward({list.neighbors, list.deltas, list.distances});
         ctx->saved_data["num_atoms"] = num_atoms;
-        return {neighbors, deltas, distances, i_curr_pair};
+        return {list.neighbors, list.deltas, list.distances, list.i_curr_pair};
     }
 
-    static tensor_list backward(AutogradContext* ctx, tensor_list grad_inputs) {
+    static tensor_list backward(AutogradContext* ctx, const tensor_list& grad_inputs) {
         return common_backward(ctx, grad_inputs);
     }
 };

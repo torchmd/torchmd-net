@@ -237,7 +237,7 @@ public:
         return {neighbors, deltas, distances, i_curr_pair};
     }
 
-    static tensor_list backward(AutogradContext* ctx, tensor_list grad_inputs) {
+    static tensor_list backward(AutogradContext* ctx, const tensor_list &grad_inputs) {
         return common_backward(ctx, grad_inputs);
     }
 };
