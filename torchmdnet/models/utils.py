@@ -97,6 +97,7 @@ class DistanceCellList(torch.nn.Module):
         """ Compute the neighbor list for a given cutoff.
         This operation can be placed inside a CUDA graph in some cases.
         In particular, resize_to_fit and check_errors must be False.
+        Note that this module returns neighbors such that distance(i,j) >= cutoff_lower and distance(i,j) < cutoff_upper.
         Parameters
         ----------
         cutoff_lower : float
