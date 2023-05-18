@@ -1,21 +1,12 @@
 /* Raul P. Pelaez 2023. Batched cell list neighbor list implementation for CUDA.
 
  */
+#ifndef NEIGHBOR_CUDA_CELL_H
+#define NEIGHBOR_CUDA_CELL_H
 #include "common.cuh"
 #include <cub/device/device_radix_sort.cuh>
 #include <thrust/device_malloc_allocator.h>
 #include <thrust/device_vector.h>
-
-/*
- * @brief Get the position of the i'th particle
- * @param positions The positions tensor
- * @param i The index of the particle
- * @return The position of the i'th particle
- */
-template <class scalar_t>
-__device__ scalar3<scalar_t> fetchPosition(const Accessor<scalar_t, 2> positions, const int i) {
-    return {positions[i][0], positions[i][1], positions[i][2]};
-}
 
 /*
  * @brief Encodes an unsigned integer lower than 1024 as a 32 bit integer by filling every third
@@ -317,21 +308,6 @@ struct CellList {
     Tensor sorted_positions, sorted_batch;
 };
 
-struct PairList {
-    Tensor i_curr_pair;
-    Tensor neighbors;
-    Tensor deltas;
-    Tensor distances;
-    const bool loop, include_transpose, use_periodic;
-    PairList(int max_num_pairs, TensorOptions options, bool loop, bool include_transpose,
-             bool use_periodic)
-        : i_curr_pair(zeros({1}, options.dtype(torch::kInt))),
-          neighbors(full({2, max_num_pairs}, -1, options.dtype(torch::kInt))),
-          deltas(empty({max_num_pairs, 3}, options)), distances(full({max_num_pairs}, 0, options)),
-          loop(loop), include_transpose(include_transpose), use_periodic(use_periodic) {
-    }
-};
-
 CellList constructCellList(const Tensor& positions, const Tensor& batch, const Tensor& box_size,
                            const Scalar& cutoff) {
     // The algorithm for the cell list construction can be summarized in three separate steps:
@@ -358,27 +334,12 @@ template <class scalar_t> struct CellListAccessor {
     Accessor<scalar_t, 2> sorted_positions;
     Accessor<int64_t, 1> sorted_batch;
 
-    CellListAccessor(const CellList& cl)
+    explicit CellListAccessor(const CellList& cl)
         : cell_start(get_accessor<int32_t, 1>(cl.cell_start)),
           cell_end(get_accessor<int32_t, 1>(cl.cell_end)),
           original_indices(get_accessor<int32_t, 1>(cl.original_indices)),
           sorted_positions(get_accessor<scalar_t, 2>(cl.sorted_positions)),
           sorted_batch(get_accessor<int64_t, 1>(cl.sorted_batch)) {
-    }
-};
-
-template <class scalar_t> struct PairListAccessor {
-    Accessor<int32_t, 1> i_curr_pair;
-    Accessor<int32_t, 2> neighbors;
-    Accessor<scalar_t, 2> deltas;
-    Accessor<scalar_t, 1> distances;
-    bool loop, include_transpose, use_periodic;
-    PairListAccessor(const PairList& pl)
-        : i_curr_pair(get_accessor<int32_t, 1>(pl.i_curr_pair)),
-          neighbors(get_accessor<int32_t, 2>(pl.neighbors)),
-          deltas(get_accessor<scalar_t, 2>(pl.deltas)),
-          distances(get_accessor<scalar_t, 1>(pl.distances)), loop(pl.loop),
-          include_transpose(pl.include_transpose), use_periodic(pl.use_periodic) {
     }
 };
 
@@ -392,30 +353,14 @@ template <class scalar_t> struct PairListAccessor {
  */
 template <class scalar_t>
 __device__ void addNeighborPair(PairListAccessor<scalar_t>& list, const int i, const int j,
-                                scalar_t distance2, const scalar3<scalar_t> delta) {
+                                scalar_t distance2, scalar3<scalar_t> delta) {
     const bool requires_transpose = list.include_transpose and (j != i);
-    const int32_t i_pair = atomicAdd(&list.i_curr_pair[0], requires_transpose ? 2 : 1);
-    // We handle too many neighbors outside of the kernel
-    if (i_pair + requires_transpose < list.neighbors.size(1)) {
-        const int ni = thrust::max(i, j);
-        const int nj = thrust::min(i, j);
-        const scalar_t delta_sign = (ni == i) ? scalar_t(1.0) : scalar_t(-1.0);
-        const scalar_t distance = sqrt_(distance2);
-        list.neighbors[0][i_pair] = ni;
-        list.neighbors[1][i_pair] = nj;
-        list.deltas[i_pair][0] = delta_sign * delta.x;
-        list.deltas[i_pair][1] = delta_sign * delta.y;
-        list.deltas[i_pair][2] = delta_sign * delta.z;
-        list.distances[i_pair] = distance;
-        if (requires_transpose) {
-            list.neighbors[0][i_pair + 1] = nj;
-            list.neighbors[1][i_pair + 1] = ni;
-            list.deltas[i_pair + 1][0] = -delta_sign * delta.x;
-            list.deltas[i_pair + 1][1] = -delta_sign * delta.y;
-            list.deltas[i_pair + 1][2] = -delta_sign * delta.z;
-            list.distances[i_pair + 1] = distance;
-        }
-    }
+    const int ni = thrust::max(i, j);
+    const int nj = thrust::min(i, j);
+    const scalar_t delta_sign = (ni == i) ? scalar_t(1.0) : scalar_t(-1.0);
+    const scalar_t distance = sqrt_(distance2);
+    delta = {delta_sign * delta.x, delta_sign * delta.y, delta_sign * delta.z};
+    addAtomPairToList(list, ni, nj, delta, distance, requires_transpose);
 }
 
 /*
@@ -430,7 +375,6 @@ template <class scalar_t>
 __device__ void addNeighborsForCell(const Particle<scalar_t>& i_atom, int j_cell,
                                     const CellListAccessor<scalar_t>& cl,
                                     scalar3<scalar_t> box_size, PairListAccessor<scalar_t>& list) {
-
     const auto first_particle = cl.cell_start[j_cell];
     if (first_particle != -1) { // Continue only if there are particles in this cell
         const auto last_particle = cl.cell_end[j_cell];
@@ -485,7 +429,7 @@ __global__ void traverseCellList(const CellListAccessor<scalar_t> cell_list,
     }
 }
 
-class Autograd : public Function<Autograd> {
+class AutogradCellCUDA : public Function<AutogradCellCUDA> {
 public:
     static tensor_list forward(AutogradContext* ctx, const Tensor& positions, const Tensor& batch,
                                const Tensor& box_size, bool use_periodic,
@@ -519,7 +463,7 @@ public:
                                                      box_size[2][2].item<scalar_t>()};
                 PairListAccessor<scalar_t> list_accessor(list);
                 CellListAccessor<scalar_t> cell_list_accessor(cell_list);
-                const int threads = 256;
+                const int threads = 64;
                 const int blocks = (num_atoms + threads - 1) / threads;
                 traverseCellList<<<blocks, threads, 0, stream>>>(cell_list_accessor, list_accessor,
                                                                  num_atoms, box_size_,
@@ -535,15 +479,4 @@ public:
         return common_backward(ctx, grad_inputs);
     }
 };
-
-TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
-    m.impl("get_neighbor_pairs_cell",
-           [](const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
-              bool use_periodic, const Scalar& cutoff_lower, const Scalar& cutoff_upper,
-              const Scalar& max_num_pairs, bool loop, bool include_transpose) {
-               const tensor_list results =
-                   Autograd::apply(positions, batch, box_vectors, use_periodic, cutoff_lower,
-                                   cutoff_upper, max_num_pairs, loop, include_transpose);
-               return std::make_tuple(results[0], results[1], results[2], results[3]);
-           });
-}
+#endif

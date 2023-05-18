@@ -50,6 +50,72 @@ template <> struct vec3<double> {
 
 template <typename scalar_t> using scalar3 = typename vec3<scalar_t>::type;
 
+/*
+ * @brief Get the position of the i'th particle
+ * @param positions The positions tensor
+ * @param i The index of the particle
+ * @return The position of the i'th particle
+ */
+template <class scalar_t>
+__device__ scalar3<scalar_t> fetchPosition(const Accessor<scalar_t, 2> positions, const int i) {
+    return {positions[i][0], positions[i][1], positions[i][2]};
+}
+
+struct PairList {
+    Tensor i_curr_pair;
+    Tensor neighbors;
+    Tensor deltas;
+    Tensor distances;
+    const bool loop, include_transpose, use_periodic;
+    PairList(int max_num_pairs, TensorOptions options, bool loop, bool include_transpose,
+             bool use_periodic)
+        : i_curr_pair(zeros({1}, options.dtype(torch::kInt))),
+          neighbors(full({2, max_num_pairs}, -1, options.dtype(torch::kInt))),
+          deltas(empty({max_num_pairs, 3}, options)), distances(full({max_num_pairs}, 0, options)),
+          loop(loop), include_transpose(include_transpose), use_periodic(use_periodic) {
+    }
+};
+
+template <class scalar_t> struct PairListAccessor {
+    Accessor<int32_t, 1> i_curr_pair;
+    Accessor<int32_t, 2> neighbors;
+    Accessor<scalar_t, 2> deltas;
+    Accessor<scalar_t, 1> distances;
+    bool loop, include_transpose, use_periodic;
+    explicit PairListAccessor(const PairList& pl)
+        : i_curr_pair(get_accessor<int32_t, 1>(pl.i_curr_pair)),
+          neighbors(get_accessor<int32_t, 2>(pl.neighbors)),
+          deltas(get_accessor<scalar_t, 2>(pl.deltas)),
+          distances(get_accessor<scalar_t, 1>(pl.distances)), loop(pl.loop),
+          include_transpose(pl.include_transpose), use_periodic(pl.use_periodic) {
+    }
+};
+
+template <typename scalar_t>
+__device__ void writeAtomPair(PairListAccessor<scalar_t>& list, int i, int j,
+			      scalar3<scalar_t> delta, scalar_t distance, int i_pair) {
+  list.neighbors[0][i_pair] = i;
+  list.neighbors[1][i_pair] = j;
+  list.deltas[i_pair][0] = delta.x;
+  list.deltas[i_pair][1] = delta.y;
+  list.deltas[i_pair][2] = delta.z;
+  list.distances[i_pair] = distance;
+}
+
+template <typename scalar_t>
+__device__ void addAtomPairToList(PairListAccessor<scalar_t>& list, int i, int j,
+                                  scalar3<scalar_t> delta, scalar_t distance,
+                                  bool add_transpose) {
+  const int32_t i_pair = atomicAdd(&list.i_curr_pair[0], add_transpose ? 2 : 1);
+  // Neighbors after the max number of pairs are ignored, although the pair is counted
+  if (i_pair + add_transpose < list.neighbors.size(1)) {
+    writeAtomPair(list, i, j, delta, distance, i_pair);
+    if (add_transpose) {
+      writeAtomPair(list, j, i, {-delta.x, -delta.y, -delta.z}, distance, i_pair + 1);
+    }
+  }
+}
+
 static void checkInput(const Tensor& positions, const Tensor& batch) {
     TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
     TORCH_CHECK(positions.size(0) > 0,
@@ -144,5 +210,5 @@ __device__ auto compute_distance(scalar3<scalar_t> pos_i, scalar3<scalar_t> pos_
  * Backward pass for the CUDA neighbor list operation.
  * Computes the gradient of the positions with respect to the distances and deltas.
  */
-tensor_list common_backward(AutogradContext* ctx, const tensor_list &grad_inputs);
+tensor_list common_backward(AutogradContext* ctx, const tensor_list& grad_inputs);
 #endif
