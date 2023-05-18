@@ -6,6 +6,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch_cluster import radius_graph
+import torchmdnet.neighbors as neighbors
 import warnings
 
 
@@ -77,7 +78,7 @@ class NeighborEmbedding(MessagePassing):
     def message(self, x_j, W):
         return x_j * W
 
-import torchmdnet.neighbors as neighbors
+
 class DistanceCellList(torch.nn.Module):
 
     def __init__(
