@@ -3,7 +3,7 @@ import pytest
 import torch
 import torch.jit
 import numpy as np
-from torchmdnet.models.utils import Distance, DistanceCellList
+from torchmdnet.models.utils import Distance, OptimizedDistance
 
 
 def sort_neighbors(neighbors, deltas, distances):
@@ -106,7 +106,7 @@ def test_neighbors(
         pos, batch, loop, include_transpose, cutoff, box
     )
     max_num_pairs = ref_neighbors.shape[1]
-    nl = DistanceCellList(
+    nl = OptimizedDistance(
         cutoff_lower=0.0,
         loop=loop,
         cutoff_upper=cutoff,
@@ -178,7 +178,7 @@ def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop, dty
 
     max_num_pairs = ref_neighbors.shape[1]
     box = None
-    nl = DistanceCellList(
+    nl = OptimizedDistance(
         cutoff_lower=0.0,
         loop=loop,
         cutoff_upper=cutoff,
@@ -242,7 +242,7 @@ def test_large_size(strategy, n_batches):
 
     # Must check without PBC since Distance does not support it
     box = None
-    nl = DistanceCellList(
+    nl = OptimizedDistance(
         cutoff_lower=0.0,
         loop=loop,
         cutoff_upper=cutoff,
@@ -330,7 +330,7 @@ def test_neighbor_grads(
         ref_distances = torch.linalg.norm(ref_deltas, dim=-1)
     max_num_pairs = max(ref_neighbors.shape[1], 1)
     positions.requires_grad_(True)
-    nl = DistanceCellList(
+    nl = OptimizedDistance(
         cutoff_upper=cutoff,
         max_num_pairs=max_num_pairs,
         strategy=strategy,
@@ -414,7 +414,7 @@ def test_jit_script_compatible(
         pos, batch, loop, include_transpose, cutoff, box
     )
     max_num_pairs = ref_neighbors.shape[1]
-    nl = DistanceCellList(
+    nl = OptimizedDistance(
         cutoff_lower=0.0,
         loop=loop,
         cutoff_upper=cutoff,
@@ -482,7 +482,7 @@ def test_cuda_graph_compatible(
         pos, batch, loop, include_transpose, cutoff, box
     )
     max_num_pairs = ref_neighbors.shape[1]
-    nl = DistanceCellList(
+    nl = OptimizedDistance(
         cutoff_lower=0.0,
         loop=loop,
         cutoff_upper=cutoff,

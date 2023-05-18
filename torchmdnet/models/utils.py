@@ -79,7 +79,7 @@ class NeighborEmbedding(MessagePassing):
         return x_j * W
 
 
-class DistanceCellList(torch.nn.Module):
+class OptimizedDistance(torch.nn.Module):
 
     def __init__(
         self,
@@ -94,7 +94,7 @@ class DistanceCellList(torch.nn.Module):
         check_errors=True,
         box=None,
     ):
-        super(DistanceCellList, self).__init__()
+        super(OptimizedDistance, self).__init__()
         """ Compute the neighbor list for a given cutoff.
         This operation can be placed inside a CUDA graph in some cases.
         In particular, resize_to_fit and check_errors must be False.

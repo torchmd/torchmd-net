@@ -1,7 +1,7 @@
 import os
 import torch
 import numpy as np
-from torchmdnet.models.utils import Distance, DistanceCellList
+from torchmdnet.models.utils import Distance, OptimizedDistance
 
 
 def benchmark_neighbors(
@@ -58,7 +58,7 @@ def benchmark_neighbors(
     if strategy != "distance":
         max_num_pairs = (expected_num_neighbors * n_atoms_per_batch.sum()).item() * 2
         box = torch.eye(3, device=device) * lbox
-        nl = DistanceCellList(
+        nl = OptimizedDistance(
             cutoff_upper=cutoff,
             max_num_pairs=max_num_pairs,
             strategy=strategy,
