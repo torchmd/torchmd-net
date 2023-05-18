@@ -106,7 +106,8 @@ class OptimizedDistance(torch.nn.Module):
         cutoff_upper : float
             Upper cutoff for the neighbor list.
         max_num_pairs : int
-            Maximum number of pairs to store.
+            Maximum number of pairs to store, if the number of pairs found is less than this, the list is padded with (-1,-1) pairs up to max_num_pairs unless resize_to_fit is True, in which case the list is resized to the actual number of pairs found.
+            If the number of pairs found is larger than this, the pairs are randomly sampled. When check_errors is True, an exception is raised in this case.
             If negative, it is interpreted as (minus) the maximum number of neighbors per atom.
         strategy : str
             Strategy to use for computing the neighbor list. Can be one of
