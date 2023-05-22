@@ -5,7 +5,7 @@ import logging
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.loggers import CSVLogger
+from pytorch_lightning.loggers import CSVLogger, WandbLogger
 from pytorch_lightning.strategies.ddp import DDPStrategy
 from torchmdnet.module import LNNP
 from torchmdnet import datasets, priors, models
@@ -91,6 +91,11 @@ def get_args():
     parser.add_argument('--max-num-neighbors', type=int, default=32, help='Maximum number of neighbors to consider in the network')
     parser.add_argument('--standardize', type=bool, default=False, help='If true, multiply prediction by dataset std and add mean')
     parser.add_argument('--reduce-op', type=str, default='add', choices=['add', 'mean'], help='Reduce operation to apply to atomic predictions')
+    parser.add_argument('--wandb-use', default=False, type=bool, help='Defines if wandb is used or not')
+    parser.add_argument('--wandb-name', default='training', type=str, help='Give a name to your wandb run')
+    parser.add_argument('--wandb-project', default='training_', type=str, help='Define what wandb Project to log to')
+    parser.add_argument('--tensorboard-use', default=False, type=bool, help='Defines if tensor board is used or not')
+
     # fmt: on
 
     args = parser.parse_args()
@@ -134,10 +139,17 @@ def main():
     )
     early_stopping = EarlyStopping("val_loss", patience=args.early_stopping_patience)
 
-    tb_logger = pl.loggers.TensorBoardLogger(
-        args.log_dir, name="tensorbord", version="", default_hp_metric=False
-    )
     csv_logger = CSVLogger(args.log_dir, name="", version="")
+    _logger=[csv_logger]
+    if args.wandb_use:
+        wandb_logger=WandbLogger(project=args.wandb_project,name=args.wandb_name,save_dir=args.log_dir)
+        _logger.append(wandb_logger)
+
+    if args.tensorboard_use:
+        tb_logger = pl.loggers.TensorBoardLogger(
+            args.log_dir, name="tensorbord", version="", default_hp_metric=False
+        )
+        _logger.append(tb_logger)
 
     trainer = pl.Trainer(
         strategy=DDPStrategy(find_unused_parameters=False),
@@ -148,7 +160,7 @@ def main():
         auto_lr_find=False,
         resume_from_checkpoint=None if args.reset_trainer else args.load_model,
         callbacks=[early_stopping, checkpoint_callback],
-        logger=[tb_logger, csv_logger],
+        logger=_logger,
         precision=args.precision,
     )
 
@@ -156,7 +168,7 @@ def main():
 
     # run test set after completing the fit
     model = LNNP.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
-    trainer = pl.Trainer(logger=[tb_logger, csv_logger])
+    trainer = pl.Trainer(logger=_logger)
     trainer.test(model, data)
 
 
