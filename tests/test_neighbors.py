@@ -96,9 +96,15 @@ def test_neighbors(
     pos.requires_grad = True
     if box_type is None:
         box = None
-    else:
+    elif box_type == "rectangular":
         box = (
             torch.tensor([[lbox, 0.0, 0.0], [0.0, lbox, 0.0], [0.0, 0.0, lbox]])
+            .to(pos.dtype)
+            .to(device)
+        )
+    elif box_type == "triclinic":
+        box = (
+            torch.tensor([[lbox, 0.0, 0.0], [0.1, lbox, 0.0], [0.3, 0.2, lbox]])
             .to(pos.dtype)
             .to(device)
         )
