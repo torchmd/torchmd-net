@@ -99,6 +99,20 @@ class OptimizedDistance(torch.nn.Module):
         This operation can be placed inside a CUDA graph in some cases.
         In particular, resize_to_fit and check_errors must be False.
         Note that this module returns neighbors such that distance(i,j) >= cutoff_lower and distance(i,j) < cutoff_upper.
+        This function optionally supports periodic boundary conditions with
+        arbitrary triclinic boxes.  The box vectors `a`, `b`, and `c` must satisfy
+        certain requirements:
+
+        `a[1] = a[2] = b[2] = 0`
+        `a[0] >= 2*cutoff, b[1] >= 2*cutoff, c[2] >= 2*cutoff`
+        `a[0] >= 2*b[0]`
+        `a[0] >= 2*c[0]`
+        `b[1] >= 2*c[1]`
+
+        These requirements correspond to a particular rotation of the system and
+        reduced form of the vectors, as well as the requirement that the cutoff be
+        no larger than half the box width.
+
         Parameters
         ----------
         cutoff_lower : float
@@ -115,20 +129,26 @@ class OptimizedDistance(torch.nn.Module):
             Shared: An O(N^2) algorithm that leverages CUDA shared memory, best for large number of particles.
             Brute: A brute force O(N^2) algorithm, best for small number of particles.
             Cell:  A cell list algorithm, best for large number of particles, low cutoffs and low batch size.
-        box : Optional[torch.Tensor]
-            Size of the box, shape (3,3) or None.
-            If strategy is "cell", the box must be diagonal.
-        loop : bool
+        box : torch.Tensor, optional
+            The vectors defining the periodic box.  This must have shape `(3, 3)`,
+            where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
+            If this is omitted, periodic boundary conditions are not applied.
+        loop : bool, optional
             Whether to include self-interactions.
-        include_transpose : bool
+            Default: False
+        include_transpose : bool, optional
             Whether to include the transpose of the neighbor list.
-        resize_to_fit : bool
+            Default: True
+        resize_to_fit : bool, optional
             Whether to resize the neighbor list to the actual number of pairs found. When False, the list is padded with (-1,-1) pairs up to max_num_pairs
+            Default: True
             If this is True the operation is not CUDA graph compatible.
-        check_errors : bool
+        check_errors : bool, optional
             Whether to check for too many pairs. If this is True the operation is not CUDA graph compatible.
-        return_vecs : bool
+            Default: True
+        return_vecs : bool, optional
             Whether to return the distance vectors.
+            Default: False
         """
         self.cutoff_upper = cutoff_upper
         self.cutoff_lower = cutoff_lower
