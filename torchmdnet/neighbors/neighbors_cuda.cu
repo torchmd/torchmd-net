@@ -2,11 +2,12 @@
    Connection between the neighbor CUDA implementations and the torch extension.
    See neighbors.cpp for the definition of the torch extension functions.
  */
+#include <torch/extension.h>
 #include "neighbors_cuda_brute.cuh"
 #include "neighbors_cuda_cell.cuh"
 #include "neighbors_cuda_shared.cuh"
 
-TORCH_LIBRARY_IMPL(neighbors, AutogradCUDA, m) {
+TORCH_LIBRARY_IMPL(torchmdnet_neighbors, AutogradCUDA, m) {
     m.impl("get_neighbor_pairs_brute",
            [](const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
               bool use_periodic, const Scalar& cutoff_lower, const Scalar& cutoff_upper,

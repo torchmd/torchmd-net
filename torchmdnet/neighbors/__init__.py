@@ -11,14 +11,14 @@ def compile_extension():
         else []
     )
     sources = [os.path.join(src_dir, name) for name in sources]
-    cpp_extension.load(name="neighbors", sources=sources, is_python_module=False)
+    cpp_extension.load(name="torchmdnet_neighbors", sources=sources, is_python_module=False, verbose=True)
 
 
 def get_backends():
     compile_extension()
-    get_neighbor_pairs_brute = pt.ops.neighbors.get_neighbor_pairs_brute
-    get_neighbor_pairs_shared = pt.ops.neighbors.get_neighbor_pairs_shared
-    get_neighbor_pairs_cell = pt.ops.neighbors.get_neighbor_pairs_cell
+    get_neighbor_pairs_brute = pt.ops.torchmdnet_neighbors.get_neighbor_pairs_brute
+    get_neighbor_pairs_shared = pt.ops.torchmdnet_neighbors.get_neighbor_pairs_shared
+    get_neighbor_pairs_cell = pt.ops.torchmdnet_neighbors.get_neighbor_pairs_cell
     return {
         "brute": get_neighbor_pairs_brute,
         "cell": get_neighbor_pairs_cell,
