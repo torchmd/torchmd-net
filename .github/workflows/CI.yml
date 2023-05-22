@@ -21,15 +21,6 @@ jobs:
       - name: Check out
         uses: actions/checkout@v2
 
-      - name: Cache conda packages
-        uses: actions/cache@v1
-        with:
-          path: ~/conda_pkgs_dir
-          key: ${{ runner.os }}-${{ env.CACHE_NUMBER }}-${{ hashFiles('environment.yml') }}
-        env:
-          # Increase this value to reset cache if environment.yml has not changed
-          CACHE_NUMBER: 2
-
       - name: Create a conda environment
         uses: conda-incubator/setup-miniconda@v2
         with:
