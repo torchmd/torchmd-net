@@ -5,9 +5,7 @@
 #define NEIGHBOR_CUDA_CELL_H
 #include "common.cuh"
 #include <cub/device/device_radix_sort.cuh>
-#include <thrust/device_malloc_allocator.h>
-#include <thrust/device_vector.h>
-
+#include <thrust/extrema.h>
 /*
  * @brief Encodes an unsigned integer lower than 1024 as a 32 bit integer by filling every third
  * bit.
