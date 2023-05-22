@@ -124,8 +124,8 @@ __global__ void assignHash(const Accessor<scalar_t, 2> positions, uint64_t* hash
         return;
     const uint32_t i_batch = batch[i_atom];
     // Move to the unit cell
-    scalar3<scalar_t> pi = {positions[i_atom][0], positions[i_atom][1], positions[i_atom][2]};
-    auto ci = getCell(pi, box_size, cutoff);
+    const auto  pi = fetchPosition(positions, i_atom);
+    const auto ci = getCell(pi, box_size, cutoff);
     // Calculate the hash
     const uint32_t hash = hashMorton(ci);
     // Create a hash combining the Morton hash and the batch index, so that atoms in the same cell
