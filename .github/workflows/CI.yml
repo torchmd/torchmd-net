@@ -25,11 +25,9 @@ jobs:
         uses: conda-incubator/setup-miniconda@v2
         with:
           activate-environment: torchmd-net
-          channels: conda-forge,defaults # Need for Mamba
           environment-file: environment.yml
-          uses-mamba: true
           miniforge-variant: Mambaforge
-          use-only-tar-bz2: true # IMPORTANT: This needs to be set for caching to work properly!
+          use-mamba: true
 
       - name: Install the package
         run: pip install .
