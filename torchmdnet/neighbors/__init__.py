@@ -11,7 +11,7 @@ def compile_extension():
         else []
     )
     sources = [os.path.join(src_dir, name) for name in sources]
-    cpp_extension.load(name="torchmdnet_neighbors", sources=sources, is_python_module=False, verbose=True)
+    cpp_extension.load(name="torchmdnet_neighbors", sources=sources, is_python_module=False)
 
 
 def get_backends():
