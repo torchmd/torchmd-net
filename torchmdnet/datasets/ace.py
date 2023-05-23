@@ -162,7 +162,7 @@ class Ace(Dataset):
                 mols = list(h5.values())[0].items()
                 load_confs = self._load_confs_2_0
             else:
-                raise RuntimeError(f"Unsuported layout verions: {version}")
+                raise RuntimeError(f"Unsupported layout version: {version}")
 
             # Iterate over the molecules
             for i_mol, (mol_id, mol) in tqdm(
