@@ -4,32 +4,7 @@
 #ifndef NEIGHBOR_CUDA_CELL_H
 #define NEIGHBOR_CUDA_CELL_H
 #include "common.cuh"
-#include <cub/device/device_radix_sort.cuh>
 #include <thrust/extrema.h>
-/*
- * @brief Encodes an unsigned integer lower than 1024 as a 32 bit integer by filling every third
- * bit.
- * @param i The integer to encode
- * @return The encoded integer
- */
-inline __host__ __device__ uint encodeMorton(const uint& i) {
-    uint x = i;
-    x &= 0x3ff;
-    x = (x | x << 16) & 0x30000ff;
-    x = (x | x << 8) & 0x300f00f;
-    x = (x | x << 4) & 0x30c30c3;
-    x = (x | x << 2) & 0x9249249;
-    return x;
-}
-
-/*
- * @brief Interleave three 10 bit numbers in 32 bits, producing a Z order Morton hash
- * @param ci The cell index
- * @return The Morton hash
- */
-inline __host__ __device__ int hashMorton(int3 ci, int3 cell_dim) {
-    return encodeMorton(ci.x) | (encodeMorton(ci.y) << 1) | (encodeMorton(ci.z) << 2);
-}
 
 /*
  * @brief Calculates the cell dimensions for a given box size and cutoff
@@ -111,19 +86,17 @@ __device__ int3 getPeriodicCell(int3 cell, int3 cell_dim) {
     return periodic_cell;
 }
 
-// Assign a hash to each atom based on its position and batch.
-// This hash is such that atoms in the same cell and batch have the same hash.
+// Assign a hash to each atom based on its position.
+// This hash is such that atoms in the same cell have the same hash.
 template <typename scalar_t>
 __global__ void assignHash(const Accessor<scalar_t, 2> positions, Accessor<int32_t, 1> hash_keys,
                            scalar3<scalar_t> box_size, scalar_t cutoff, int32_t num_atoms) {
     const int32_t i_atom = blockIdx.x * blockDim.x + threadIdx.x;
     if (i_atom >= num_atoms)
         return;
-    // Move to the unit cell
     const auto pi = fetchPosition(positions, i_atom);
     const auto ci = getCell(pi, box_size, cutoff);
-    // Calculate the hash
-    const int32_t hash = hashMorton(ci, getCellDimensions(box_size, cutoff));
+    const int32_t hash = getCellIndex(ci, getCellDimensions(box_size, cutoff));
     hash_keys[i_atom] = hash;
 }
 
