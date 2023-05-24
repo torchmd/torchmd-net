@@ -27,7 +27,7 @@ inline __host__ __device__ uint encodeMorton(const uint& i) {
  * @param ci The cell index
  * @return The Morton hash
  */
-inline __host__ __device__ uint hashMorton(int3 ci) {
+inline __host__ __device__ int hashMorton(int3 ci, int3 cell_dim) {
     return encodeMorton(ci.x) | (encodeMorton(ci.y) << 1) | (encodeMorton(ci.z) << 2);
 }
 
@@ -114,46 +114,18 @@ __device__ int3 getPeriodicCell(int3 cell, int3 cell_dim) {
 // Assign a hash to each atom based on its position and batch.
 // This hash is such that atoms in the same cell and batch have the same hash.
 template <typename scalar_t>
-__global__ void assignHash(const Accessor<scalar_t, 2> positions, uint64_t* hash_keys,
-                           Accessor<int32_t, 1> hash_values, const Accessor<int64_t, 1> batch,
+__global__ void assignHash(const Accessor<scalar_t, 2> positions, Accessor<int32_t, 1> hash_keys,
                            scalar3<scalar_t> box_size, scalar_t cutoff, int32_t num_atoms) {
     const int32_t i_atom = blockIdx.x * blockDim.x + threadIdx.x;
     if (i_atom >= num_atoms)
         return;
-    const uint32_t i_batch = batch[i_atom];
     // Move to the unit cell
-    const auto  pi = fetchPosition(positions, i_atom);
+    const auto pi = fetchPosition(positions, i_atom);
     const auto ci = getCell(pi, box_size, cutoff);
     // Calculate the hash
-    const uint32_t hash = hashMorton(ci);
-    // Create a hash combining the Morton hash and the batch index, so that atoms in the same cell
-    // are contiguous
-    const uint64_t hash_final = (static_cast<uint64_t>(hash) << 32) | i_batch;
-    hash_keys[i_atom] = hash_final;
-    hash_values[i_atom] = i_atom;
+    const int32_t hash = hashMorton(ci, getCellDimensions(box_size, cutoff));
+    hash_keys[i_atom] = hash;
 }
-
-/*
- * @brief A buffer that is allocated and deallocated using the CUDA caching allocator from torch
- */
-template <class T> struct CachedBuffer {
-    explicit CachedBuffer(size_t size) : size_(size) {
-        ptr_ = static_cast<T*>(at::cuda::CUDACachingAllocator::raw_alloc(size * sizeof(T)));
-    }
-    ~CachedBuffer() {
-        at::cuda::CUDACachingAllocator::raw_delete(ptr_);
-    }
-    T* get() {
-        return ptr_;
-    }
-    size_t size() {
-        return size_;
-    }
-
-private:
-    T* ptr_;
-    size_t size_;
-};
 
 /*
  * @brief Sort the positions by hash, first by the cell assigned to each position and the batch
@@ -168,8 +140,7 @@ private:
 static auto sortPositionsByHash(const Tensor& positions, const Tensor& batch,
                                 const Tensor& box_size, const Scalar& cutoff) {
     const int num_atoms = positions.size(0);
-    auto hash_keys = CachedBuffer<uint64_t>(num_atoms);
-    Tensor hash_values = empty({num_atoms}, positions.options().dtype(torch::kInt32));
+    Tensor hash_keys = empty({num_atoms}, positions.options().dtype(torch::kInt32));
     const int threads = 128;
     const int blocks = (num_atoms + threads - 1) / threads;
     auto stream = at::cuda::getCurrentCUDAStream();
@@ -178,28 +149,17 @@ static auto sortPositionsByHash(const Tensor& positions, const Tensor& batch,
         scalar3<scalar_t> box_size_ = {box_size[0][0].item<scalar_t>(),
                                        box_size[1][1].item<scalar_t>(),
                                        box_size[2][2].item<scalar_t>()};
-        assignHash<<<blocks, threads, 0, stream>>>(
-            get_accessor<scalar_t, 2>(positions), hash_keys.get(),
-            get_accessor<int32_t, 1>(hash_values), get_accessor<int64_t, 1>(batch), box_size_,
-            cutoff_, num_atoms);
+        assignHash<<<blocks, threads, 0, stream>>>(get_accessor<scalar_t, 2>(positions),
+                                                   get_accessor<int32_t, 1>(hash_keys), box_size_,
+                                                   cutoff_, num_atoms);
     });
-    // I have to use cub directly because thrust::sort_by_key is not compatible with graphs
-    //  and torch::lexsort does not support uint64_t
-    size_t tmp_storage_bytes = 0;
-    auto d_keys_out = CachedBuffer<uint64_t>(num_atoms);
-    auto d_values_out = CachedBuffer<int32_t>(num_atoms);
-    auto* hash_values_ptr = hash_values.data_ptr<int32_t>();
-    cub::DeviceRadixSort::SortPairs(nullptr, tmp_storage_bytes, hash_keys.get(), d_keys_out.get(),
-                                    hash_values_ptr, d_values_out.get(), num_atoms, 0, 64, stream);
-    auto tmp_storage = CachedBuffer<char>(tmp_storage_bytes);
-    cub::DeviceRadixSort::SortPairs(tmp_storage.get(), tmp_storage_bytes, hash_keys.get(),
-                                    d_keys_out.get(), hash_values_ptr, d_values_out.get(),
-                                    num_atoms, 0, 64, stream);
-    cudaMemcpyAsync(hash_values_ptr, d_values_out.get(), num_atoms * sizeof(int32_t),
-                    cudaMemcpyDeviceToDevice, stream);
-    Tensor sorted_positions = positions.index_select(0, hash_values);
-    Tensor sorted_batch = batch.index_select(0, hash_values);
-    return std::make_tuple(sorted_positions, sorted_batch, hash_values);
+    // Sort the hash values by the hash keys
+    torch::Tensor sorted_hash_values;
+    torch::Tensor sorted_hash_keys;
+    std::tie(sorted_hash_keys, sorted_hash_values) = torch::sort(hash_keys);
+    Tensor sorted_positions = positions.index_select(0, sorted_hash_values);
+    Tensor sorted_batch = batch.index_select(0, sorted_hash_values);
+    return std::make_tuple(sorted_positions, sorted_batch, sorted_hash_values.to(torch::kInt32));
 }
 
 template <typename scalar_t>
@@ -378,10 +338,6 @@ __device__ void addNeighborsForCell(const Particle<scalar_t>& i_atom, int j_cell
         const auto last_particle = cl.cell_end[j_cell];
         for (int cur_j = first_particle; cur_j < last_particle; cur_j++) {
             const auto j_batch = cl.sorted_batch[cur_j];
-            // Particles are sorted by batch after cell, so we can break early here
-            if (j_batch > i_atom.batch) {
-                break;
-            }
             if ((j_batch == i_atom.batch) and
                 ((cur_j < i_atom.index) or (list.loop and cur_j == i_atom.index))) {
                 const auto position_j = fetchPosition(cl.sorted_positions, cur_j);
@@ -461,7 +417,7 @@ public:
                                                      box_size[2][2].item<scalar_t>()};
                 PairListAccessor<scalar_t> list_accessor(list);
                 CellListAccessor<scalar_t> cell_list_accessor(cell_list);
-                const int threads = 64;
+                const int threads = 128;
                 const int blocks = (num_atoms + threads - 1) / threads;
                 traverseCellList<<<blocks, threads, 0, stream>>>(cell_list_accessor, list_accessor,
                                                                  num_atoms, box_size_,
