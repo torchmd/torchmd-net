@@ -110,7 +110,7 @@ def benchmark_neighbors(
 if __name__ == "__main__":
     n_particles = 32767
     mean_num_neighbors = min(n_particles, 64)
-    density = 0.5
+    density = 0.8
     print(
         "Benchmarking neighbor list generation for {} particles with {} neighbors on average".format(
             n_particles, mean_num_neighbors
