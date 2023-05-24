@@ -8,7 +8,7 @@ dependencies:
   - pip
   - pytorch==2.0.*
   - pytorch_cluster==1.6.1
-  - pytorch_geometric==2.0.3
+  - pytorch_geometric==2.3.1
   - pytorch_scatter==2.1.1
   - pytorch_sparse==0.6.17
   - pytorch-lightning==1.6.3
