@@ -162,10 +162,12 @@ __device__ auto compute_distance(scalar3<scalar_t> pos_i, scalar3<scalar_t> pos_
 namespace triclinic {
 template <typename scalar_t> struct Box {
     scalar_t size[3][3];
-    Box(const Tensor& box_vectors) {
-        for (int i = 0; i < 3; i++) {
-            for (int j = 0; j < 3; j++) {
-                size[i][j] = box_vectors[i][j].item<scalar_t>();
+    Box(const Tensor& box_vectors, bool use_periodic) {
+        if (use_periodic) {
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    size[i][j] = box_vectors[i][j].item<scalar_t>();
+                }
             }
         }
     }

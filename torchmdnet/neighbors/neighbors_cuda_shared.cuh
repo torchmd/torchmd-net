@@ -93,7 +93,7 @@ public:
             positions.scalar_type(), "get_neighbor_pairs_shared_forward", [&]() {
                 const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
                 const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();
-                triclinic::Box<scalar_t> box(box_vectors);
+                triclinic::Box<scalar_t> box(box_vectors, use_periodic);
                 TORCH_CHECK(cutoff_upper_ > 0, "Expected \"cutoff\" to be positive");
                 constexpr int BLOCKSIZE = 64;
                 const int num_blocks = std::max((num_atoms + BLOCKSIZE - 1) / BLOCKSIZE, 1);
