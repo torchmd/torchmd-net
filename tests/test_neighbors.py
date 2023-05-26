@@ -89,7 +89,7 @@ def test_neighbors(
     ).to(device)
     cumsum = np.cumsum(np.concatenate([[0], n_atoms_per_batch]))
     lbox = 10.0
-    pos = torch.rand(cumsum[-1], 3, device=device, dtype=dtype) * lbox
+    pos = torch.rand(cumsum[-1], 3, device=device, dtype=dtype) * lbox - 10.0*lbox
     # Ensure there is at least one pair
     pos[0, :] = torch.zeros(3)
     pos[1, :] = torch.zeros(3)
