@@ -4,7 +4,6 @@
 #ifndef NEIGHBOR_CUDA_CELL_H
 #define NEIGHBOR_CUDA_CELL_H
 #include "common.cuh"
-#include <thrust/extrema.h>
 
 /*
  * @brief Calculates the cell dimensions for a given box size and cutoff
@@ -16,9 +15,9 @@ template <typename scalar_t>
 __host__ __device__ int3 getCellDimensions(scalar3<scalar_t> box_size, scalar_t cutoff) {
     int3 cell_dim = make_int3(box_size.x / cutoff, box_size.y / cutoff, box_size.z / cutoff);
     // Minimum 3 cells in each dimension
-    cell_dim.x = thrust::max(cell_dim.x, 3);
-    cell_dim.y = thrust::max(cell_dim.y, 3);
-    cell_dim.z = thrust::max(cell_dim.z, 3);
+    cell_dim.x = max(cell_dim.x, 3);
+    cell_dim.y = max(cell_dim.y, 3);
+    cell_dim.z = max(cell_dim.z, 3);
 // In the host, throw if there are more than 1024 cells in any dimension
 #ifndef __CUDA_ARCH__
     if (cell_dim.x > 1024 || cell_dim.y > 1024 || cell_dim.z > 1024) {
@@ -286,8 +285,8 @@ template <class scalar_t>
 __device__ void addNeighborPair(PairListAccessor<scalar_t>& list, const int i, const int j,
                                 scalar_t distance2, scalar3<scalar_t> delta) {
     const bool requires_transpose = list.include_transpose and (j != i);
-    const int ni = thrust::max(i, j);
-    const int nj = thrust::min(i, j);
+    const int ni = max(i, j);
+    const int nj = min(i, j);
     const scalar_t delta_sign = (ni == i) ? scalar_t(1.0) : scalar_t(-1.0);
     const scalar_t distance = sqrt_(distance2);
     delta = {delta_sign * delta.x, delta_sign * delta.y, delta_sign * delta.z};

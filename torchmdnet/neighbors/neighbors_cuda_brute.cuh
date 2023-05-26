@@ -8,7 +8,6 @@
 #define NEIGHBORS_BRUTE_CUH
 #include "common.cuh"
 #include <algorithm>
-#include <thrust/extrema.h>
 #include <torch/extension.h>
 
 __device__ uint32_t get_row(uint32_t index) {
@@ -50,7 +49,7 @@ __global__ void add_self_kernel(const int num_atoms, Accessor<scalar_t, 2> posit
     if (threadIdx.x == 0) { // Each block adds blockDim.x pairs to the list.
         // Handle the last block, so that only num_atoms are added in total
         i_pair = atomicAdd(&list.i_curr_pair[0],
-                           thrust::min(blockDim.x, num_atoms - blockIdx.x * blockDim.x));
+                           min(blockDim.x, num_atoms - blockIdx.x * blockDim.x));
     }
     __syncthreads();
     scalar3<scalar_t> delta{};

@@ -8,7 +8,6 @@
 #define NEIGHBORS_SHARED_CUH
 #include "common.cuh"
 #include <algorithm>
-#include <thrust/extrema.h>
 #include <torch/extension.h>
 
 template <int BLOCKSIZE, typename scalar_t>
