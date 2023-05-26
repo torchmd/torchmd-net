@@ -36,20 +36,10 @@ __host__ __device__ int3 getCellDimensions(scalar3<scalar_t> box_size, scalar_t 
  */
 template <typename scalar_t>
 __device__ int3 getCell(scalar3<scalar_t> p, scalar3<scalar_t> box_size, scalar_t cutoff) {
-    p = rect::apply_pbc<scalar_t>(p, box_size);
-    // Take to the [0, box_size] range and divide by cutoff (which is the cell size)
-    int cx = floorf((p.x + scalar_t(0.5) * box_size.x) / cutoff);
-    int cy = floorf((p.y + scalar_t(0.5) * box_size.y) / cutoff);
-    int cz = floorf((p.z + scalar_t(0.5) * box_size.z) / cutoff);
-    int3 cell_dim = getCellDimensions(box_size, cutoff);
-    // Wrap around. If the position of a particle is exactly box_size, it will be in the last cell,
-    // which results in an illegal access down the line.
-    if (cx == cell_dim.x)
-        cx = 0;
-    if (cy == cell_dim.y)
-        cy = 0;
-    if (cz == cell_dim.z)
-        cz = 0;
+    const int3 cell_dim = getCellDimensions(box_size, cutoff);
+    const int cx = fmodf(floorf((p.x + scalar_t(0.5) * box_size.x) / cutoff), cell_dim.x);
+    const int cy = fmodf(floorf((p.y + scalar_t(0.5) * box_size.y) / cutoff), cell_dim.y);
+    const int cz = fmodf(floorf((p.z + scalar_t(0.5) * box_size.z) / cutoff), cell_dim.z);
     return make_int3(cx, cy, cz);
 }
 
