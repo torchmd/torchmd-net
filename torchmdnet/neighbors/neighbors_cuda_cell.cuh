@@ -140,14 +140,13 @@ __global__ void fillCellOffsetsD(const Accessor<scalar_t, 2> sorted_positions,
     const int icell = getCellIndex(getCell(pi, box_size, cutoff), cell_dim);
     int im1_cell;
     if (i_atom > 0) {
-        int im1 = i_atom - 1;
+        const int im1 = i_atom - 1;
         const auto pim1 = fetchPosition(sorted_positions, im1);
         im1_cell = getCellIndex(getCell(pim1, box_size, cutoff), cell_dim);
     } else {
         im1_cell = 0;
     }
     if (icell != im1_cell || i_atom == 0) {
-        int n_cells = cell_start.size(0);
         cell_start[icell] = i_atom;
         if (i_atom > 0) {
             cell_end[im1_cell] = i_atom;
@@ -210,7 +209,7 @@ __device__ int getNeighborCellIndex(int3 cell_i, int i, int3 cell_dim) {
     cell_j.y += (i / 3) % 3 - 1;
     cell_j.z += i / 9 - 1;
     cell_j = getPeriodicCell(cell_j, cell_dim);
-    int icellj = getCellIndex(cell_j, cell_dim);
+    const int icellj = getCellIndex(cell_j, cell_dim);
     return icellj;
 }
 
