@@ -35,8 +35,8 @@ __host__ __device__ int3 getCellDimensions(scalar3<scalar_t> box_size, scalar_t 
  * @return The cell index
  */
 template <typename scalar_t>
-__device__ int3 getCell(scalar3<scalar_t> p, scalar3<scalar_t> box_size, scalar_t cutoff) {
-    const int3 cell_dim = getCellDimensions(box_size, cutoff);
+__device__ int3 getCell(scalar3<scalar_t> p, scalar3<scalar_t> box_size, scalar_t cutoff,
+                        int3 cell_dim) {
     const int cx = fmodf(floorf((p.x + scalar_t(0.5) * box_size.x) / cutoff), cell_dim.x);
     const int cy = fmodf(floorf((p.y + scalar_t(0.5) * box_size.y) / cutoff), cell_dim.y);
     const int cz = fmodf(floorf((p.z + scalar_t(0.5) * box_size.z) / cutoff), cell_dim.z);
@@ -75,34 +75,31 @@ __device__ int3 getPeriodicCell(int3 cell, int3 cell_dim) {
     return periodic_cell;
 }
 
-// Assign a hash to each atom based on its position.
-// This hash is such that atoms in the same cell have the same hash.
+// Computes and stores the cell index of each atom.
 template <typename scalar_t>
-__global__ void assignHash(const Accessor<scalar_t, 2> positions, Accessor<int32_t, 1> hash_keys,
-                           scalar3<scalar_t> box_size, scalar_t cutoff, int32_t num_atoms) {
+__global__ void assignCellIndex(const Accessor<scalar_t, 2> positions,
+                                Accessor<int32_t, 1> cell_indices, scalar3<scalar_t> box_size,
+                                scalar_t cutoff) {
     const int32_t i_atom = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i_atom >= num_atoms)
+    if (i_atom >= positions.size(0))
         return;
     const auto pi = fetchPosition(positions, i_atom);
-    const auto ci = getCell(pi, box_size, cutoff);
-    const int32_t hash = getCellIndex(ci, getCellDimensions(box_size, cutoff));
-    hash_keys[i_atom] = hash;
+    const auto cell_dim = getCellDimensions(box_size, cutoff);
+    const auto ci = getCell(pi, box_size, cutoff, cell_dim);
+    cell_indices[i_atom] = getCellIndex(ci, cell_dim);
 }
 
 /*
- * @brief Sort the positions by hash, first by the cell assigned to each position and the batch
- * index
+ * @brief Sort the positions by cell index
  * @param positions The positions of the atoms
- * @param batch The batch index of each atom
  * @param box_size The box vectors
  * @param cutoff The cutoff
- * @return A tuple of the sorted positions, sorted batch indices and the original indices of each
- * atom in the sorted list
+ * @return A tuple of the sorted indices and cell indices
  */
-static auto sortPositionsByHash(const Tensor& positions, const Tensor& batch,
-                                const Tensor& box_size, const Scalar& cutoff) {
+static auto sortAtomsByCellIndex(const Tensor& positions, const Tensor& box_size,
+                                 const Scalar& cutoff) {
     const int num_atoms = positions.size(0);
-    Tensor hash_keys = empty({num_atoms}, positions.options().dtype(torch::kInt32));
+    Tensor cell_index = empty({num_atoms}, positions.options().dtype(torch::kInt32));
     const int threads = 128;
     const int blocks = (num_atoms + threads - 1) / threads;
     auto stream = at::cuda::getCurrentCUDAStream();
@@ -111,38 +108,30 @@ static auto sortPositionsByHash(const Tensor& positions, const Tensor& batch,
         scalar3<scalar_t> box_size_ = {box_size[0][0].item<scalar_t>(),
                                        box_size[1][1].item<scalar_t>(),
                                        box_size[2][2].item<scalar_t>()};
-        assignHash<<<blocks, threads, 0, stream>>>(get_accessor<scalar_t, 2>(positions),
-                                                   get_accessor<int32_t, 1>(hash_keys), box_size_,
-                                                   cutoff_, num_atoms);
+        assignCellIndex<<<blocks, threads, 0, stream>>>(get_accessor<scalar_t, 2>(positions),
+                                                        get_accessor<int32_t, 1>(cell_index),
+                                                        box_size_, cutoff_);
     });
-    // Sort the hash values by the hash keys
-    torch::Tensor sorted_hash_values;
-    torch::Tensor sorted_hash_keys;
-    std::tie(sorted_hash_keys, sorted_hash_values) = torch::sort(hash_keys);
-    Tensor sorted_positions = positions.index_select(0, sorted_hash_values);
-    Tensor sorted_batch = batch.index_select(0, sorted_hash_values);
-    return std::make_tuple(sorted_positions, sorted_batch, sorted_hash_values.to(torch::kInt32));
+    // Sort the atom indices by cell index
+    Tensor sorted_atom_index;
+    Tensor sorted_cell_index;
+    std::tie(sorted_cell_index, sorted_atom_index) = torch::sort(cell_index);
+    return std::make_tuple(sorted_atom_index.to(torch::kInt32), sorted_cell_index);
 }
 
-template <typename scalar_t>
-__global__ void fillCellOffsetsD(const Accessor<scalar_t, 2> sorted_positions,
-                                 const Accessor<int32_t, 1> sorted_indices,
-                                 Accessor<int32_t, 1> cell_start, Accessor<int32_t, 1> cell_end,
-                                 scalar3<scalar_t> box_size, scalar_t cutoff) {
+__global__ void fillCellOffsetsD(const Accessor<int32_t, 1> sorted_cell_indices,
+                                 Accessor<int32_t, 1> cell_start, Accessor<int32_t, 1> cell_end) {
     // Since positions are sorted by cell, for a given atom, if the previous atom is in a different
     // cell, then the current atom is the first atom in its cell We use this fact to fill the
     // cell_start and cell_end arrays
     const int32_t i_atom = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i_atom >= sorted_positions.size(0))
+    if (i_atom >= sorted_cell_indices.size(0))
         return;
-    const auto pi = fetchPosition(sorted_positions, i_atom);
-    const int3 cell_dim = getCellDimensions(box_size, cutoff);
-    const int icell = getCellIndex(getCell(pi, box_size, cutoff), cell_dim);
+    const int icell = sorted_cell_indices[i_atom];
     int im1_cell;
     if (i_atom > 0) {
         const int im1 = i_atom - 1;
-        const auto pim1 = fetchPosition(sorted_positions, im1);
-        im1_cell = getCellIndex(getCell(pim1, box_size, cutoff), cell_dim);
+        im1_cell = sorted_cell_indices[im1];
     } else {
         im1_cell = 0;
     }
@@ -152,47 +141,28 @@ __global__ void fillCellOffsetsD(const Accessor<scalar_t, 2> sorted_positions,
             cell_end[im1_cell] = i_atom;
         }
     }
-    if (i_atom == sorted_positions.size(0) - 1) {
+    if (i_atom == sorted_cell_indices.size(0) - 1) {
         cell_end[icell] = i_atom + 1;
     }
 }
 
 /*
   @brief Fills the cell_start and cell_end arrays, identifying the first and last atom in each cell
-  @param sorted_positions The positions sorted by cell
-  @param sorted_indices The original indices of the sorted positions
-  @param batch The batch index of each position
-  @param box_size The box vectors
-  @param cutoff The cutoff distance
+  @param sorted_cell_indices The cell indices of each position
+  @param cell_dim The dimensions of the cell grid
   @return A tuple of cell_start and cell_end arrays
 */
-static auto fillCellOffsets(const Tensor& sorted_positions, const Tensor& sorted_indices,
-                            const Tensor& box_size, const Scalar& cutoff) {
-    const TensorOptions options = sorted_positions.options();
-    int3 cell_dim;
-    AT_DISPATCH_FLOATING_TYPES(sorted_positions.scalar_type(), "fillCellOffsets", [&] {
-        scalar_t cutoff_ = cutoff.to<scalar_t>();
-        scalar3<scalar_t> box_size_ = {box_size[0][0].item<scalar_t>(),
-                                       box_size[1][1].item<scalar_t>(),
-                                       box_size[2][2].item<scalar_t>()};
-        cell_dim = getCellDimensions(box_size_, cutoff_);
-    });
+static auto fillCellOffsets(const Tensor& sorted_cell_indices, int3 cell_dim) {
+    const TensorOptions options = sorted_cell_indices.options();
     const int num_cells = cell_dim.x * cell_dim.y * cell_dim.z;
     const Tensor cell_start = full({num_cells}, -1, options.dtype(torch::kInt));
     const Tensor cell_end = empty({num_cells}, options.dtype(torch::kInt));
     const int threads = 128;
-    const int blocks = (sorted_positions.size(0) + threads - 1) / threads;
-    AT_DISPATCH_FLOATING_TYPES(sorted_positions.scalar_type(), "fillCellOffsets", [&] {
-        auto stream = at::cuda::getCurrentCUDAStream();
-        scalar_t cutoff_ = cutoff.to<scalar_t>();
-        scalar3<scalar_t> box_size_ = {box_size[0][0].item<scalar_t>(),
-                                       box_size[1][1].item<scalar_t>(),
-                                       box_size[2][2].item<scalar_t>()};
-        fillCellOffsetsD<<<blocks, threads, 0, stream>>>(
-            get_accessor<scalar_t, 2>(sorted_positions), get_accessor<int32_t, 1>(sorted_indices),
-            get_accessor<int32_t, 1>(cell_start), get_accessor<int32_t, 1>(cell_end), box_size_,
-            cutoff_);
-    });
+    const int blocks = (sorted_cell_indices.size(0) + threads - 1) / threads;
+    auto stream = at::cuda::getCurrentCUDAStream();
+    fillCellOffsetsD<<<blocks, threads, 0, stream>>>(get_accessor<int32_t, 1>(sorted_cell_indices),
+                                                     get_accessor<int32_t, 1>(cell_start),
+                                                     get_accessor<int32_t, 1>(cell_end));
     return std::make_tuple(cell_start, cell_end);
 }
 
@@ -223,40 +193,50 @@ template <class scalar_t> struct Particle {
 
 struct CellList {
     Tensor cell_start, cell_end;
-    Tensor original_indices;
+    Tensor sorted_indices;
     Tensor sorted_positions, sorted_batch;
 };
 
 CellList constructCellList(const Tensor& positions, const Tensor& batch, const Tensor& box_size,
                            const Scalar& cutoff) {
     // The algorithm for the cell list construction can be summarized in three separate steps:
-    //         1. Hash (label) the particles according to the cell (bin) they lie in.
-    //         2. Sort the particles and hashes using the hashes as the ordering label
+    //         1. Label the particles according to the cell (bin) they lie in.
+    //         2. Sort the particles using the cell index as the ordering label
     //         (technically this is known as sorting by key). So that particles with positions
     //         lying in the same cell become contiguous in memory.
     //         3. Identify where each cell starts and ends in the sorted particle positions
     //         array.
     const TensorOptions options = positions.options();
     CellList cl;
+    Tensor sorted_cell_indices;
     // Steps 1 and 2
-    std::tie(cl.sorted_positions, cl.sorted_batch, cl.original_indices) =
-        sortPositionsByHash(positions, batch, box_size, cutoff);
+    std::tie(cl.sorted_indices, sorted_cell_indices) =
+        sortAtomsByCellIndex(positions, box_size, cutoff);
+    cl.sorted_positions = positions.index_select(0, cl.sorted_indices);
+    cl.sorted_batch = batch.index_select(0, cl.sorted_indices);
     // Step 3
-    std::tie(cl.cell_start, cl.cell_end) =
-        fillCellOffsets(cl.sorted_positions, cl.original_indices, box_size, cutoff);
+    int3 cell_dim;
+    AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "computeCellDim", [&] {
+        scalar_t cutoff_ = cutoff.to<scalar_t>();
+        scalar3<scalar_t> box_size_ = {box_size[0][0].item<scalar_t>(),
+                                       box_size[1][1].item<scalar_t>(),
+                                       box_size[2][2].item<scalar_t>()};
+        cell_dim = getCellDimensions(box_size_, cutoff_);
+    });
+    std::tie(cl.cell_start, cl.cell_end) = fillCellOffsets(sorted_cell_indices, cell_dim);
     return cl;
 }
 
 template <class scalar_t> struct CellListAccessor {
     Accessor<int32_t, 1> cell_start, cell_end;
-    Accessor<int32_t, 1> original_indices;
+    Accessor<int32_t, 1> sorted_indices;
     Accessor<scalar_t, 2> sorted_positions;
     Accessor<int64_t, 1> sorted_batch;
 
     explicit CellListAccessor(const CellList& cl)
         : cell_start(get_accessor<int32_t, 1>(cl.cell_start)),
           cell_end(get_accessor<int32_t, 1>(cl.cell_end)),
-          original_indices(get_accessor<int32_t, 1>(cl.original_indices)),
+          sorted_indices(get_accessor<int32_t, 1>(cl.sorted_indices)),
           sorted_positions(get_accessor<scalar_t, 2>(cl.sorted_positions)),
           sorted_batch(get_accessor<int64_t, 1>(cl.sorted_batch)) {
     }
@@ -308,7 +288,7 @@ __device__ void addNeighborsForCell(const Particle<scalar_t>& i_atom, int j_cell
                     delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
                 if ((distance2 < i_atom.cutoff_upper2 and distance2 >= i_atom.cutoff_lower2) or
                     (list.loop and cur_j == i_atom.index)) {
-                    const int orj = cl.original_indices[cur_j];
+                    const int orj = cl.sorted_indices[cur_j];
                     addNeighborPair(list, i_atom.original_index, orj, distance2, delta);
                 } // endif
             }     // endif
@@ -330,13 +310,13 @@ __global__ void traverseCellList(const CellListAccessor<scalar_t> cell_list,
     if (i_atom.index >= num_atoms) {
         return;
     }
-    i_atom.original_index = cell_list.original_indices[i_atom.index];
+    i_atom.original_index = cell_list.sorted_indices[i_atom.index];
     i_atom.batch = cell_list.sorted_batch[i_atom.index];
     i_atom.position = fetchPosition(cell_list.sorted_positions, i_atom.index);
     i_atom.cutoff_lower2 = cutoff_lower * cutoff_lower;
     i_atom.cutoff_upper2 = cutoff_upper * cutoff_upper;
-    const int3 cell_i = getCell(i_atom.position, box_size, cutoff_upper);
     const int3 cell_dim = getCellDimensions(box_size, cutoff_upper);
+    const int3 cell_i = getCell(i_atom.position, box_size, cutoff_upper, cell_dim);
     // Loop over the 27 cells around the current cell
     for (int i = 0; i < 27; i++) {
         const int neighbor_cell = getNeighborCellIndex(cell_i, i, cell_dim);
