@@ -28,11 +28,12 @@ __host__ __device__ int3 getCellDimensions(scalar3<scalar_t> box_size, scalar_t 
 }
 
 /*
- * @brief Get the cell index of a point
+ * @brief Get the cell coordinates of a point
  * @param p The point position
  * @param box_size The size of the box in each dimension
  * @param cutoff The cutoff
- * @return The cell index
+ * @param cell_dim The number of cells in each dimension
+ * @return The cell coordinates
  */
 template <typename scalar_t>
 __device__ int3 getCell(scalar3<scalar_t> p, scalar3<scalar_t> box_size, scalar_t cutoff,
