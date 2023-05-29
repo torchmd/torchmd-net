@@ -210,27 +210,3 @@ if __name__ == "__main__":
                     results["distance", n_particles],
                 )
             )
-
-    # # Print a second table showing time per atom, show in ns
-    # print("\n")
-    # print("Time per atom")
-    # print(
-    #     "{:<10} {:<10} {:<10} {:<10} {:<10}".format(
-    #         "Batch size", "Shared(ns)", "Brute(ns)", "Cell(ns)", "Distance(ns)"
-    #     )
-    # )
-    # print(
-    #     "{:<10} {:<10} {:<10} {:<10} {:<10}".format(
-    #         "----------", "---------", "---------", "---------", "---------"
-    #     )
-    # )
-    # for n_batches in batch_sizes:
-    #     print(
-    #         "{:<10} {:<10.2f} {:<10.2f} {:<10.2f} {:<10.2f}".format(
-    #             n_batches,
-    #             results["shared", n_batches] / n_particles * 1e6,
-    #             results["brute", n_batches] / n_particles * 1e6,
-    #             results["cell", n_batches] / n_particles * 1e6,
-    #             results["distance", n_batches] / n_particles * 1e6,
-    #         )
-    #     )
