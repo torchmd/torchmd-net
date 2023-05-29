@@ -1,10 +1,12 @@
 import math
-from typing import Optional
+from typing import Optional, Tuple
 import torch
+from torch import Tensor
 from torch import nn
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch_cluster import radius_graph
+import torchmdnet.neighbors as neighbors
 import warnings
 
 
@@ -75,6 +77,164 @@ class NeighborEmbedding(MessagePassing):
 
     def message(self, x_j, W):
         return x_j * W
+
+
+class OptimizedDistance(torch.nn.Module):
+
+    def __init__(
+        self,
+        cutoff_lower=0.0,
+        cutoff_upper=5.0,
+        max_num_pairs=-32,
+        return_vecs=False,
+        loop=False,
+        strategy="brute",
+        include_transpose=True,
+        resize_to_fit=True,
+        check_errors=True,
+        box=None,
+    ):
+        super(OptimizedDistance, self).__init__()
+        """ Compute the neighbor list for a given cutoff.
+        This operation can be placed inside a CUDA graph in some cases.
+        In particular, resize_to_fit and check_errors must be False.
+        Note that this module returns neighbors such that distance(i,j) >= cutoff_lower and distance(i,j) < cutoff_upper.
+        This function optionally supports periodic boundary conditions with
+        arbitrary triclinic boxes.  The box vectors `a`, `b`, and `c` must satisfy
+        certain requirements:
+
+        `a[1] = a[2] = b[2] = 0`
+        `a[0] >= 2*cutoff, b[1] >= 2*cutoff, c[2] >= 2*cutoff`
+        `a[0] >= 2*b[0]`
+        `a[0] >= 2*c[0]`
+        `b[1] >= 2*c[1]`
+
+        These requirements correspond to a particular rotation of the system and
+        reduced form of the vectors, as well as the requirement that the cutoff be
+        no larger than half the box width.
+
+        Parameters
+        ----------
+        cutoff_lower : float
+            Lower cutoff for the neighbor list.
+        cutoff_upper : float
+            Upper cutoff for the neighbor list.
+        max_num_pairs : int
+            Maximum number of pairs to store, if the number of pairs found is less than this, the list is padded with (-1,-1) pairs up to max_num_pairs unless resize_to_fit is True, in which case the list is resized to the actual number of pairs found.
+            If the number of pairs found is larger than this, the pairs are randomly sampled. When check_errors is True, an exception is raised in this case.
+            If negative, it is interpreted as (minus) the maximum number of neighbors per atom.
+        strategy : str
+            Strategy to use for computing the neighbor list. Can be one of
+            ["shared", "brute", "cell"].
+            Shared: An O(N^2) algorithm that leverages CUDA shared memory, best for large number of particles.
+            Brute: A brute force O(N^2) algorithm, best for small number of particles.
+            Cell:  A cell list algorithm, best for large number of particles, low cutoffs and low batch size.
+        box : torch.Tensor, optional
+            The vectors defining the periodic box.  This must have shape `(3, 3)`,
+            where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
+            If this is omitted, periodic boundary conditions are not applied.
+        loop : bool, optional
+            Whether to include self-interactions.
+            Default: False
+        include_transpose : bool, optional
+            Whether to include the transpose of the neighbor list.
+            Default: True
+        resize_to_fit : bool, optional
+            Whether to resize the neighbor list to the actual number of pairs found. When False, the list is padded with (-1,-1) pairs up to max_num_pairs
+            Default: True
+            If this is True the operation is not CUDA graph compatible.
+        check_errors : bool, optional
+            Whether to check for too many pairs. If this is True the operation is not CUDA graph compatible.
+            Default: True
+        return_vecs : bool, optional
+            Whether to return the distance vectors.
+            Default: False
+        """
+        self.cutoff_upper = cutoff_upper
+        self.cutoff_lower = cutoff_lower
+        self.max_num_pairs = max_num_pairs
+        self.strategy = strategy
+        self.box: Optional[Tensor] = box
+        self.loop = loop
+        self.return_vecs = return_vecs
+        self.include_transpose = include_transpose
+        self.resize_to_fit = resize_to_fit
+        self.use_periodic = True
+        if self.box is None:
+            self.use_periodic = False
+            self.box = torch.empty((0, 0))
+            if self.strategy == "cell":
+                # Default the box to 3 times the cutoff, really inefficient for the cell list
+                lbox = cutoff_upper * 3.0
+                self.box = torch.tensor([[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]])
+        self.box = self.box.cpu()  # All strategies expect the box to be in CPU memory
+        self._backends = neighbors.get_backends()
+        self.kernel = self._backends[self.strategy]
+        if self.kernel is None:
+            raise ValueError("Unknown strategy: {}".format(self.strategy))
+        self.check_errors = check_errors
+
+    def forward(
+        self, pos: Tensor, batch: Optional[Tensor] = None
+    ) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
+        """Compute the neighbor list for a given cutoff.
+        Parameters
+        ----------
+        pos : torch.Tensor
+            shape (N, 3)
+        batch : torch.Tensor or None
+            shape (N,)
+        Returns
+        -------
+        neighbors : torch.Tensor
+          List of neighbors for each atom in the batch.
+        shape (2, num_found_pairs or max_num_pairs)
+        distances : torch.Tensor
+            List of distances for each atom in the batch.
+        shape (num_found_pairs or max_num_pairs,)
+        distance_vecs : torch.Tensor
+            List of distance vectors for each atom in the batch.
+        shape (num_found_pairs or max_num_pairs, 3)
+
+        If resize_to_fit is True, the tensors will be trimmed to the actual number of pairs found.
+        otherwise the tensors will have size max_num_pairs, with neighbor pairs (-1, -1) at the end.
+
+        """
+        self.box = self.box.to(pos.dtype)
+        max_pairs = self.max_num_pairs
+        if self.max_num_pairs < 0:
+            max_pairs = -self.max_num_pairs * pos.shape[0]
+        if batch is None:
+            batch = torch.zeros(pos.shape[0], dtype=torch.long, device=pos.device)
+        neighbors, distance_vecs, distances, num_pairs = self.kernel(
+            pos,
+            cutoff_lower=self.cutoff_lower,
+            cutoff_upper=self.cutoff_upper,
+            loop=self.loop,
+            batch=batch,
+            max_num_pairs=max_pairs,
+            include_transpose=self.include_transpose,
+            box_vectors=self.box,
+            use_periodic=self.use_periodic,
+        )
+        if self.check_errors:
+            if num_pairs[0] > max_pairs:
+                raise RuntimeError(
+                    "Found num_pairs({}) > max_num_pairs({})".format(
+                        num_pairs[0], max_pairs
+                    )
+                )
+        # Remove (-1,-1)  pairs
+        if self.resize_to_fit:
+            mask = neighbors[0] != -1
+            neighbors = neighbors[:, mask]
+            distances = distances[mask]
+            distance_vecs = distance_vecs[mask, :]
+        neighbors = neighbors.to(torch.long)
+        if self.return_vecs:
+            return neighbors, distances, distance_vecs
+        else:
+            return neighbors, distances, None
 
 
 class GaussianSmearing(nn.Module):

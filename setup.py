@@ -15,5 +15,7 @@ setup(
     name="torchmd-net",
     version=version,
     packages=find_packages(),
+    package_data={"torchmdnet": ["neighbors/neighbors*", "neighbors/*.cu*"]},
+    include_package_data=True,
     entry_points={"console_scripts": ["torchmd-train = torchmdnet.scripts.train:main"]},
 )
