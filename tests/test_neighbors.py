@@ -162,8 +162,10 @@ def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop, dty
     pos[0, :] = torch.zeros(3)
     pos[1, :] = torch.zeros(3)
     pos.requires_grad = True
+    ref_pos = pos.clone().detach()
+    ref_pos.requires_grad = True
     ref_neighbors, ref_distance_vecs, ref_distances = compute_ref_neighbors(
-        pos, batch, loop, True, cutoff, None
+        ref_pos, batch, loop, True, cutoff, None
     )
     # Find the particle appearing in the most pairs
     max_num_neighbors = torch.max(torch.bincount(torch.tensor(ref_neighbors[0, :])))
@@ -174,13 +176,9 @@ def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop, dty
         max_num_neighbors=max_num_neighbors,
         return_vecs=True,
     )
-    ref_neighbors, ref_distances, ref_distance_vecs = d(pos, batch)
-    ref_neighbors = ref_neighbors.cpu().detach().numpy()
-    ref_distance_vecs = ref_distance_vecs.cpu().detach().numpy()
-    ref_distances = ref_distances.cpu().detach().numpy()
-    ref_neighbors, ref_distance_vecs, ref_distances = sort_neighbors(
-        ref_neighbors, ref_distance_vecs, ref_distances
-    )
+    ref_pos = pos.clone().detach()
+    ref_pos.requires_grad = True
+    ref_neighbors, ref_distances, ref_distance_vecs = d(ref_pos, batch)
 
     max_num_pairs = ref_neighbors.shape[1]
     box = None
@@ -195,6 +193,24 @@ def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop, dty
         include_transpose=True,
     )
     neighbors, distances, distance_vecs = nl(pos, batch)
+
+    (ref_distance_vecs.sum() + ref_distances.sum()).backward()
+    (distance_vecs.sum() + distances.sum()).backward()
+    ref_pos_grad_sorted = ref_pos.grad.cpu().detach().numpy()
+    pos_grad_sorted = pos.grad.cpu().detach().numpy()
+    if dtype == torch.float32:
+        assert np.allclose(ref_pos_grad_sorted, pos_grad_sorted, atol=1e-2, rtol=1e-2)
+    else:
+        assert np.allclose(ref_pos_grad_sorted, pos_grad_sorted, atol=1e-8, rtol=1e-5)
+
+
+    ref_neighbors = ref_neighbors.cpu().detach().numpy()
+    ref_distance_vecs = ref_distance_vecs.cpu().detach().numpy()
+    ref_distances = ref_distances.cpu().detach().numpy()
+    ref_neighbors, ref_distance_vecs, ref_distances = sort_neighbors(
+        ref_neighbors, ref_distance_vecs, ref_distances
+    )
+
     neighbors = neighbors.cpu().detach().numpy()
     distance_vecs = distance_vecs.cpu().detach().numpy()
     distances = distances.cpu().detach().numpy()
@@ -204,6 +220,7 @@ def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop, dty
     assert np.allclose(neighbors, ref_neighbors)
     assert np.allclose(distances, ref_distances)
     assert np.allclose(distance_vecs, ref_distance_vecs)
+
 
 
 @pytest.mark.parametrize("strategy", ["brute", "cell", "shared"])
