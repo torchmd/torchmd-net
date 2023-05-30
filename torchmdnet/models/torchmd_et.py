@@ -107,8 +107,7 @@ class TorchMD_ET(nn.Module):
             cutoff_upper,
             max_num_pairs=-max_num_neighbors,
             return_vecs=True,
-            loop=True,
-            check_errors=False
+            loop=True
         )
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
