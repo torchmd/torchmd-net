@@ -21,7 +21,8 @@ backward_kernel(const Accessor<int32_t, 2> neighbors, const Accessor<scalar_t, 2
     }
     const scalar_t grad_deltas_ = grad_deltas[i_pair][i_comp];
     const scalar_t dist = distances[i_pair];
-    const scalar_t grad_distances_ = deltas[i_pair][i_comp] / dist * grad_distances[i_pair];
+    const scalar_t grad_distances_ = dist==0?scalar_t(1.0):(deltas[i_pair][i_comp] / dist * grad_distances[i_pair]);
+
     // Handle self interaction
     const scalar_t grad =
         (i_dir ? -1 : 1) *
