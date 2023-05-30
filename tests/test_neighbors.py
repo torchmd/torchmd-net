@@ -144,7 +144,8 @@ def test_neighbors(
 @pytest.mark.parametrize("cutoff", [0.1, 1.0, 1000.0])
 @pytest.mark.parametrize("loop", [True, False])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop, dtype):
+@pytest.mark.parametrize("grad", ["deltas", "distances", "combined"])
+def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop, dtype, grad):
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA not available")
     if device == "cpu" and strategy != "brute":
@@ -194,15 +195,24 @@ def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop, dty
     )
     neighbors, distances, distance_vecs = nl(pos, batch)
 
-    (ref_distance_vecs.sum() + ref_distances.sum()).backward()
-    (distance_vecs.sum() + distances.sum()).backward()
+    # Compute gradients
+    if grad == "deltas":
+        ref_distance_vecs.sum().backward()
+        distances.sum().backward()
+    elif grad == "distances":
+        ref_distances.sum().backward()
+        distances.sum().backward()
+    elif grad == "combined":
+        (ref_distance_vecs.sum() + ref_distances.sum()).backward()
+        (distance_vecs.sum() + distances.sum()).backward()
+    else:
+        raise ValueError("grad")
     ref_pos_grad_sorted = ref_pos.grad.cpu().detach().numpy()
     pos_grad_sorted = pos.grad.cpu().detach().numpy()
     if dtype == torch.float32:
         assert np.allclose(ref_pos_grad_sorted, pos_grad_sorted, atol=1e-2, rtol=1e-2)
     else:
         assert np.allclose(ref_pos_grad_sorted, pos_grad_sorted, atol=1e-8, rtol=1e-5)
-
 
     ref_neighbors = ref_neighbors.cpu().detach().numpy()
     ref_distance_vecs = ref_distance_vecs.cpu().detach().numpy()
