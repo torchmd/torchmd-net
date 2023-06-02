@@ -247,6 +247,53 @@ def test_neighbor_grads(
         assert np.allclose(ref_pos_grad_sorted, pos_grad_sorted, atol=1e-8, rtol=1e-5)
 
 @pytest.mark.parametrize(("device", "strategy"), [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")])
+@pytest.mark.parametrize("loop", [True, False])
+@pytest.mark.parametrize("include_transpose", [True, False])
+@pytest.mark.parametrize("num_atoms", [1, 2, 100])
+@pytest.mark.parametrize("box_type", [None, "triclinic", "rectangular"])
+def test_neighbor_autograds(
+    device, strategy, loop, include_transpose, num_atoms, box_type
+):
+    if not torch.cuda.is_available() and device == "cuda":
+        pytest.skip("No GPU")
+    if device == "cpu" and strategy != "brute":
+        pytest.skip("Only brute force supported on CPU")
+    if box_type == "triclinic" and strategy == "cell":
+        pytest.skip("Triclinic only supported for brute force")
+    dtype = torch.float64
+    cutoff = 4.999999
+    lbox = 10.0
+    torch.random.manual_seed(1234)
+    np.random.seed(123456)
+    # Generate random positions
+    if box_type is None:
+        box = None
+    else:
+        box = (
+            torch.tensor([[lbox, 0.0, 0.0], [0.0, lbox, 0.0], [0.0, 0.0, lbox]])
+            .to(dtype)
+            .to(device)
+        )
+    nl = OptimizedDistance(
+        cutoff_upper=cutoff,
+        max_num_pairs=num_atoms * (num_atoms),
+        strategy=strategy,
+        loop=loop,
+        include_transpose=include_transpose,
+        return_vecs=True,
+        resize_to_fit=True,
+        box=box,
+    )
+    positions = 0.25 * lbox * torch.rand(num_atoms, 3, device=device, dtype=dtype)
+    positions.requires_grad_(True)
+    batch = torch.zeros((num_atoms,), dtype=torch.long, device=device)
+    neighbors, distances, deltas = nl(positions, batch)
+    # Lambda that returns only the distances and deltas
+    lambda_dist = lambda x, y: nl(x, y)[1:]
+    torch.autograd.gradcheck(lambda_dist, (positions, batch), eps=1e-4, atol=1e-4, rtol=1e-4)
+    torch.autograd.gradgradcheck(lambda_dist, (positions, batch), eps=1e-4, atol=1e-4, rtol=1e-4)
+
+@pytest.mark.parametrize(("device", "strategy"), [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")])
 @pytest.mark.parametrize("n_batches", [1, 2, 3, 4])
 @pytest.mark.parametrize("cutoff", [0.1, 1.0, 1000.0])
 @pytest.mark.parametrize("loop", [True, False])

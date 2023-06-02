@@ -173,7 +173,6 @@ class OptimizedDistance(torch.nn.Module):
         if self.kernel is None:
             raise ValueError("Unknown strategy: {}".format(self.strategy))
         self.check_errors = check_errors
-
     def forward(
         self, pos: Tensor, batch: Optional[Tensor] = None
     ) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
@@ -206,35 +205,30 @@ class OptimizedDistance(torch.nn.Module):
             max_pairs = -self.max_num_pairs * pos.shape[0]
         if batch is None:
             batch = torch.zeros(pos.shape[0], dtype=torch.long, device=pos.device)
-        neighbors, distance_vecs, distances, num_pairs = self.kernel(
+        edge_index, edge_vec, edge_weight, num_pairs = NeighborKernel.apply(
+            self.kernel,
             pos,
-            cutoff_lower=self.cutoff_lower,
-            cutoff_upper=self.cutoff_upper,
-            loop=self.loop,
-            batch=batch,
-            max_num_pairs=max_pairs,
-            include_transpose=self.include_transpose,
-            box_vectors=self.box,
-            use_periodic=self.use_periodic,
+            batch,
+            max_pairs,
+            self.cutoff_lower,
+            self.cutoff_upper,
+            self.loop,
+            self.include_transpose,
+            self.box,
+            self.use_periodic,
+            self.check_errors,
         )
-        if self.check_errors:
-            if num_pairs[0] > max_pairs:
-                raise RuntimeError(
-                    "Found num_pairs({}) > max_num_pairs({})".format(
-                        num_pairs[0], max_pairs
-                    )
-                )
-        # Remove (-1,-1)  pairs
+                # Remove (-1,-1)  pairs
         if self.resize_to_fit:
-            mask = neighbors[0] != -1
-            neighbors = neighbors[:, mask]
-            distances = distances[mask]
-            distance_vecs = distance_vecs[mask, :]
-        neighbors = neighbors.to(torch.long)
+            mask = edge_index[0] != -1
+            edge_index = edge_index[:, mask]
+            edge_weight = edge_weight[mask]
+            edge_vec = edge_vec[mask, :]
+
         if self.return_vecs:
-            return neighbors, distances, distance_vecs
+            return edge_index, edge_weight, edge_vec
         else:
-            return neighbors, distances, None
+            return edge_index, edge_weight, None
 
 
 class GaussianSmearing(nn.Module):
