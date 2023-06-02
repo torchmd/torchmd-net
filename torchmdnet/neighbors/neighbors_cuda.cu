@@ -7,7 +7,7 @@
 #include "neighbors_cuda_cell.cuh"
 #include "neighbors_cuda_shared.cuh"
 
-TORCH_LIBRARY_IMPL(torchmdnet_neighbors, AutogradCUDA, m) {
+TORCH_LIBRARY_IMPL(torchmdnet_neighbors, CUDA, m) {
     m.impl("get_neighbor_pairs_brute",
            [](const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
               bool use_periodic, const Scalar& cutoff_lower, const Scalar& cutoff_upper,
@@ -15,11 +15,11 @@ TORCH_LIBRARY_IMPL(torchmdnet_neighbors, AutogradCUDA, m) {
                tensor_list results;
                if (positions.size(0) >= 32768) {
                    // Revert to shared if there are too many particles, which brute can't handle
-                   results = AutogradSharedCUDA::apply(positions, batch, cutoff_lower, cutoff_upper,
+                   results = forward_shared(positions, batch, cutoff_lower, cutoff_upper,
                                                        box_vectors, use_periodic, max_num_pairs,
                                                        loop, include_transpose);
                } else {
-                   results = AutogradBruteCUDA::apply(positions, batch, cutoff_lower, cutoff_upper,
+                   results = forward_brute(positions, batch, cutoff_lower, cutoff_upper,
                                                       box_vectors, use_periodic, max_num_pairs,
                                                       loop, include_transpose);
                }
@@ -29,7 +29,7 @@ TORCH_LIBRARY_IMPL(torchmdnet_neighbors, AutogradCUDA, m) {
            [](const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
               bool use_periodic, const Scalar& cutoff_lower, const Scalar& cutoff_upper,
               const Scalar& max_num_pairs, bool loop, bool include_transpose) {
-               const tensor_list results = AutogradSharedCUDA::apply(
+               const tensor_list results = forward_shared(
                    positions, batch, cutoff_lower, cutoff_upper, box_vectors, use_periodic,
                    max_num_pairs, loop, include_transpose);
                return std::make_tuple(results[0], results[1], results[2], results[3]);
@@ -38,7 +38,7 @@ TORCH_LIBRARY_IMPL(torchmdnet_neighbors, AutogradCUDA, m) {
            [](const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
               bool use_periodic, const Scalar& cutoff_lower, const Scalar& cutoff_upper,
               const Scalar& max_num_pairs, bool loop, bool include_transpose) {
-               const tensor_list results = AutogradCellCUDA::apply(
+               const tensor_list results = forward_cell(
                    positions, batch, box_vectors, use_periodic, cutoff_lower, cutoff_upper,
                    max_num_pairs, loop, include_transpose);
                return std::make_tuple(results[0], results[1], results[2], results[3]);

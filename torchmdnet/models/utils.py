@@ -78,7 +78,7 @@ class NeighborEmbedding(MessagePassing):
     def message(self, x_j, W):
         return x_j * W
 
-
+from torchmdnet.neighbors import NeighborKernel
 class OptimizedDistance(torch.nn.Module):
 
     def __init__(

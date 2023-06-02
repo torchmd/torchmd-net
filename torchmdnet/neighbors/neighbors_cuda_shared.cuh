@@ -68,9 +68,7 @@ __global__ void forward_kernel_shared(uint32_t num_atoms, const Accessor<scalar_
     }
 }
 
-class AutogradSharedCUDA : public Function<AutogradSharedCUDA> {
-public:
-    static tensor_list forward(AutogradContext* ctx, const Tensor& positions, const Tensor& batch,
+tensor_list forward_shared(const Tensor& positions, const Tensor& batch,
                                const Scalar& cutoff_lower, const Scalar& cutoff_upper,
                                const Tensor& box_vectors, bool use_periodic,
                                const Scalar& max_num_pairs, bool loop, bool include_transpose) {
@@ -105,14 +103,7 @@ public:
                     get_accessor<int64_t, 1>(batch), cutoff_lower_ * cutoff_lower_,
                     cutoff_upper_ * cutoff_upper_, list_accessor, num_tiles, box);
             });
-        ctx->save_for_backward({list.neighbors, list.deltas, list.distances});
-        ctx->saved_data["num_atoms"] = num_atoms;
         return {list.neighbors, list.deltas, list.distances, list.i_curr_pair};
     }
-
-    static tensor_list backward(AutogradContext* ctx, const tensor_list& grad_inputs) {
-        return common_backward(ctx, grad_inputs);
-    }
-};
 
 #endif

@@ -335,9 +335,7 @@ __global__ void traverseCellList(const CellListAccessor<scalar_t> cell_list,
     }
 }
 
-class AutogradCellCUDA : public Function<AutogradCellCUDA> {
-public:
-    static tensor_list forward(AutogradContext* ctx, const Tensor& positions, const Tensor& batch,
+tensor_list forward_cell(const Tensor& positions, const Tensor& batch,
                                const Tensor& box_size, bool use_periodic,
                                const Scalar& cutoff_lower, const Scalar& cutoff_upper,
                                const Scalar& max_num_pairs, bool loop, bool include_transpose) {
@@ -376,13 +374,7 @@ public:
                                                                  cutoff_lower_, cutoff_upper_);
             });
         }
-        ctx->save_for_backward({list.neighbors, list.deltas, list.distances});
-        ctx->saved_data["num_atoms"] = num_atoms;
         return {list.neighbors, list.deltas, list.distances, list.i_curr_pair};
     }
 
-    static tensor_list backward(AutogradContext* ctx, const tensor_list& grad_inputs) {
-        return common_backward(ctx, grad_inputs);
-    }
-};
 #endif
