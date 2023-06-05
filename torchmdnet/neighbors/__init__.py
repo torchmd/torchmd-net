@@ -29,7 +29,6 @@ def get_neighbor_pairs(
     use_periodic: bool,
     check_errors: bool,
 ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
-#    edge_index, edge_vec, edge_weight, num_pairs = NeighborKernel.apply(
     edge_index, edge_vec, edge_weight, num_pairs = get_neighbor_pairs_kernel(
         strategy,
         positions,
