@@ -42,8 +42,7 @@ public:
         auto num_atoms = ctx->saved_data["num_atoms"].toInt();
         auto grad_edge_vec = grad_outputs[1];
         auto grad_edge_weight = grad_outputs[2];
-        auto r0 = (edge_weight != 0).nonzero().squeeze(-1);
-        auto self_edge = (edge_index[0] == edge_index[1]).nonzero().squeeze(-1);
+        auto r0 = edge_weight.nonzero().squeeze(-1);
         auto grad_positions = torch::zeros({num_atoms, 3}, edge_vec.options());
         auto grad_distances_ =
             (edge_vec.index_select(0, r0) / edge_weight.index_select(0, r0).unsqueeze(-1)) *
@@ -68,8 +67,8 @@ TORCH_LIBRARY_IMPL(torchmdnet_neighbors, AutogradCUDA, m) {
                    strategy = "shared";
                }
                auto result = NeighborAutograd::apply(strategy, positions, batch, box_vectors,
-                                                   use_periodic, cutoff_lower, cutoff_upper,
-                                                   max_num_pairs, loop, include_transpose);
+                                                     use_periodic, cutoff_lower, cutoff_upper,
+                                                     max_num_pairs, loop, include_transpose);
                return std::make_tuple(result[0], result[1], result[2], result[3]);
            });
 }
