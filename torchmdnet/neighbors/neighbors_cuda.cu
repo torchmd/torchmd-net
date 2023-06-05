@@ -45,16 +45,11 @@ public:
         auto r0 = (edge_weight != 0).nonzero().squeeze(-1);
         auto self_edge = (edge_index[0] == edge_index[1]).nonzero().squeeze(-1);
         auto grad_positions = torch::zeros({num_atoms, 3}, edge_vec.options());
-        auto grad_edge_vec_ = grad_edge_vec.clone();
-        grad_edge_vec_.index_fill_(0, self_edge, 0);
-        auto grad_distances_ = torch::ones(edge_vec.sizes(), edge_vec.options());
-        auto result =
+        auto grad_distances_ =
             (edge_vec.index_select(0, r0) / edge_weight.index_select(0, r0).unsqueeze(-1)) *
             grad_edge_weight.index_select(0, r0).unsqueeze(-1);
-        grad_distances_.index_copy_(0, r0, result);
-        grad_distances_.index_fill_(0, self_edge, 0);
         auto edge_index_no_r0 = edge_index.index_select(1, r0);
-        result = grad_edge_vec_.index_select(0, r0) + grad_distances_.index_select(0, r0);
+        auto result = grad_edge_vec.index_select(0, r0) + grad_distances_;
         grad_positions.index_add_(0, edge_index_no_r0[0], result);
         grad_positions.index_add_(0, edge_index_no_r0[1], -result);
         Tensor ignore;
