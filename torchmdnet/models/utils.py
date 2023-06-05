@@ -6,7 +6,6 @@ from torch import nn
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch_cluster import radius_graph
-import torchmdnet.neighbors as neighbors
 import warnings
 
 
@@ -78,7 +77,7 @@ class NeighborEmbedding(MessagePassing):
     def message(self, x_j, W):
         return x_j * W
 
-from torchmdnet.neighbors import NeighborKernel
+from torchmdnet.neighbors import get_neighbor_pairs_kernel
 class OptimizedDistance(torch.nn.Module):
 
     def __init__(
@@ -168,11 +167,8 @@ class OptimizedDistance(torch.nn.Module):
                 lbox = cutoff_upper * 3.0
                 self.box = torch.tensor([[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]])
         self.box = self.box.cpu()  # All strategies expect the box to be in CPU memory
-        self._backends = neighbors.get_backends()
-        self.kernel = self._backends[self.strategy]
-        if self.kernel is None:
-            raise ValueError("Unknown strategy: {}".format(self.strategy))
         self.check_errors = check_errors
+
     def forward(
         self, pos: Tensor, batch: Optional[Tensor] = None
     ) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
@@ -205,20 +201,27 @@ class OptimizedDistance(torch.nn.Module):
             max_pairs = -self.max_num_pairs * pos.shape[0]
         if batch is None:
             batch = torch.zeros(pos.shape[0], dtype=torch.long, device=pos.device)
-        edge_index, edge_vec, edge_weight, num_pairs = NeighborKernel.apply(
-            self.kernel,
-            pos,
-            batch,
-            max_pairs,
-            self.cutoff_lower,
-            self.cutoff_upper,
-            self.loop,
-            self.include_transpose,
-            self.box,
-            self.use_periodic,
-            self.check_errors,
+        edge_index, edge_vec, edge_weight, num_pairs = get_neighbor_pairs_kernel(
+            strategy=self.strategy,
+            positions=pos,
+            batch=batch,
+            max_num_pairs=max_pairs,
+            cutoff_lower=self.cutoff_lower,
+            cutoff_upper=self.cutoff_upper,
+            loop=self.loop,
+            include_transpose=self.include_transpose,
+            box_vectors=self.box,
+            use_periodic=self.use_periodic,
         )
-                # Remove (-1,-1)  pairs
+        if self.check_errors:
+            if num_pairs[0] > max_pairs:
+                raise RuntimeError(
+                    "Found num_pairs({}) > max_num_pairs({})".format(
+                        num_pairs[0], max_pairs
+                    )
+                )
+        edge_index = edge_index.to(torch.long)
+        # Remove (-1,-1)  pairs
         if self.resize_to_fit:
             mask = edge_index[0] != -1
             edge_index = edge_index[:, mask]

@@ -58,10 +58,10 @@ __global__ void add_self_kernel(const int num_atoms, Accessor<scalar_t, 2> posit
     writeAtomPair(list, i_atom, i_atom, delta, distance, i_pair + threadIdx.x);
 }
 
-tensor_list forward_brute(const Tensor& positions, const Tensor& batch,
-                    const Scalar& cutoff_lower, const Scalar& cutoff_upper,
-                    const Tensor& box_vectors, bool use_periodic, const Scalar& max_num_pairs,
-                    bool loop, bool include_transpose) {
+static std::tuple<Tensor, Tensor, Tensor, Tensor>
+forward_brute(const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
+              bool use_periodic, const Scalar& cutoff_lower, const Scalar& cutoff_upper,
+              const Scalar& max_num_pairs, bool loop, bool include_transpose) {
     checkInput(positions, batch);
     const auto max_num_pairs_ = max_num_pairs.toLong();
     TORCH_CHECK(max_num_pairs_ > 0, "Expected \"max_num_neighbors\" to be positive");

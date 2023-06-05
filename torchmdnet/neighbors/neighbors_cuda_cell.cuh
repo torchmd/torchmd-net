@@ -335,46 +335,46 @@ __global__ void traverseCellList(const CellListAccessor<scalar_t> cell_list,
     }
 }
 
-tensor_list forward_cell(const Tensor& positions, const Tensor& batch,
-                               const Tensor& box_size, bool use_periodic,
-                               const Scalar& cutoff_lower, const Scalar& cutoff_upper,
-                               const Scalar& max_num_pairs, bool loop, bool include_transpose) {
-        // This module computes the pair list for a given set of particles, which may be in multiple
-        // batches. The strategy is to first compute a cell list for all particles, and then
-        // traverse the cell list for each particle to construct a pair list.
-        checkInput(positions, batch);
-        TORCH_CHECK(box_size.dim() == 2, "Expected \"box_size\" to have two dimensions");
-        TORCH_CHECK(box_size.size(0) == 3 && box_size.size(1) == 3,
-                    "Expected \"box_size\" to have shape (3, 3)");
-        TORCH_CHECK(box_size[0][1].item<double>() == 0 && box_size[0][2].item<double>() == 0 &&
-                        box_size[1][0].item<double>() == 0 && box_size[1][2].item<double>() == 0 &&
-                        box_size[2][0].item<double>() == 0 && box_size[2][1].item<double>() == 0,
-                    "Expected \"box_size\" to be diagonal");
-        const auto max_num_pairs_ = max_num_pairs.toInt();
-        TORCH_CHECK(max_num_pairs_ > 0, "Expected \"max_num_neighbors\" to be positive");
-        const int num_atoms = positions.size(0);
-        const auto cell_list = constructCellList(positions, batch, box_size, cutoff_upper);
-        PairList list(max_num_pairs_, positions.options(), loop, include_transpose, use_periodic);
-        const auto stream = getCurrentCUDAStream(positions.get_device());
-        { // Traverse the cell list to find the neighbors
-            const CUDAStreamGuard guard(stream);
-            AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "forward", [&] {
-                const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
-                TORCH_CHECK(cutoff_upper_ > 0, "Expected cutoff_upper to be positive");
-                const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();
-                const scalar3<scalar_t> box_size_ = {box_size[0][0].item<scalar_t>(),
-                                                     box_size[1][1].item<scalar_t>(),
-                                                     box_size[2][2].item<scalar_t>()};
-                PairListAccessor<scalar_t> list_accessor(list);
-                CellListAccessor<scalar_t> cell_list_accessor(cell_list);
-                const int threads = 128;
-                const int blocks = (num_atoms + threads - 1) / threads;
-                traverseCellList<<<blocks, threads, 0, stream>>>(cell_list_accessor, list_accessor,
-                                                                 num_atoms, box_size_,
-                                                                 cutoff_lower_, cutoff_upper_);
-            });
-        }
-        return {list.neighbors, list.deltas, list.distances, list.i_curr_pair};
+static std::tuple<Tensor, Tensor, Tensor, Tensor>
+forward_cell(const Tensor& positions, const Tensor& batch, const Tensor& box_size,
+             bool use_periodic, const Scalar& cutoff_lower, const Scalar& cutoff_upper,
+             const Scalar& max_num_pairs, bool loop, bool include_transpose) {
+    // This module computes the pair list for a given set of particles, which may be in multiple
+    // batches. The strategy is to first compute a cell list for all particles, and then
+    // traverse the cell list for each particle to construct a pair list.
+    checkInput(positions, batch);
+    TORCH_CHECK(box_size.dim() == 2, "Expected \"box_size\" to have two dimensions");
+    TORCH_CHECK(box_size.size(0) == 3 && box_size.size(1) == 3,
+                "Expected \"box_size\" to have shape (3, 3)");
+    TORCH_CHECK(box_size[0][1].item<double>() == 0 && box_size[0][2].item<double>() == 0 &&
+                    box_size[1][0].item<double>() == 0 && box_size[1][2].item<double>() == 0 &&
+                    box_size[2][0].item<double>() == 0 && box_size[2][1].item<double>() == 0,
+                "Expected \"box_size\" to be diagonal");
+    const auto max_num_pairs_ = max_num_pairs.toInt();
+    TORCH_CHECK(max_num_pairs_ > 0, "Expected \"max_num_neighbors\" to be positive");
+    const int num_atoms = positions.size(0);
+    const auto cell_list = constructCellList(positions, batch, box_size, cutoff_upper);
+    PairList list(max_num_pairs_, positions.options(), loop, include_transpose, use_periodic);
+    const auto stream = getCurrentCUDAStream(positions.get_device());
+    { // Traverse the cell list to find the neighbors
+        const CUDAStreamGuard guard(stream);
+        AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "forward", [&] {
+            const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
+            TORCH_CHECK(cutoff_upper_ > 0, "Expected cutoff_upper to be positive");
+            const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();
+            const scalar3<scalar_t> box_size_ = {box_size[0][0].item<scalar_t>(),
+                                                 box_size[1][1].item<scalar_t>(),
+                                                 box_size[2][2].item<scalar_t>()};
+            PairListAccessor<scalar_t> list_accessor(list);
+            CellListAccessor<scalar_t> cell_list_accessor(cell_list);
+            const int threads = 128;
+            const int blocks = (num_atoms + threads - 1) / threads;
+            traverseCellList<<<blocks, threads, 0, stream>>>(cell_list_accessor, list_accessor,
+                                                             num_atoms, box_size_, cutoff_lower_,
+                                                             cutoff_upper_);
+        });
     }
+    return {list.neighbors, list.deltas, list.distances, list.i_curr_pair};
+}
 
 #endif
