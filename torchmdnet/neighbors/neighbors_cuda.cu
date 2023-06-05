@@ -18,6 +18,10 @@ template <class... T> auto call_forward_kernel(const std::string& kernel_name, c
     }
 }
 
+// This is the autograd function that is called when the user calls get_neighbor_pairs.
+// It dispatches the required strategy for the forward function and implements the backward
+// function. The backward function is written in full pytorch so that it can be differentiated a
+// second time automatically via Autograd.
 class NeighborAutograd : public torch::autograd::Function<NeighborAutograd> {
 public:
     static tensor_list forward(AutogradContext* ctx, const std::string& strategy,
@@ -44,6 +48,8 @@ public:
         auto grad_edge_weight = grad_outputs[2];
         auto r0 = edge_weight.nonzero().squeeze(-1);
         auto grad_positions = torch::zeros({num_atoms, 3}, edge_vec.options());
+        // We need to avoid dividing by 0. Otherwise Autograd fills the gradient with NaNs in the
+        // case of a double backwards. This is why we index_select like this.
         auto grad_distances_ =
             (edge_vec.index_select(0, r0) / edge_weight.index_select(0, r0).unsqueeze(-1)) *
             grad_edge_weight.index_select(0, r0).unsqueeze(-1);
