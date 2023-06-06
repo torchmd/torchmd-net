@@ -1,8 +1,7 @@
 import os
 import torch
 from torch.utils import cpp_extension
-from torch import Tensor
-from typing import Tuple
+
 def compile_extension():
     src_dir = os.path.dirname(__file__)
     sources = ["neighbors.cpp", "neighbors_cpu.cpp"] + (
