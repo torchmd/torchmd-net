@@ -54,6 +54,14 @@ def create_model(args, prior_model=None, mean=None, std=None):
             distance_influence=args["distance_influence"],
             **shared_args,
         )
+    elif args["model"] == "tensornet":
+        from torchmdnet.models.tensornet import TensorNet
+        
+        is_equivariant = False
+        representation_model = TensorNet(
+	    equivariance_invariance_group=args["equivariance_invariance_group"],
+            **shared_args,
+        )
     else:
         raise ValueError(f'Unknown architecture: {args["model"]}')
 
