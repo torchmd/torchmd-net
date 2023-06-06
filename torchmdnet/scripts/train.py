@@ -66,7 +66,7 @@ def get_args():
     parser.add_argument('--prior-model', type=str, default=None, choices=priors.__all__, help='Which prior model to use')
 
     # architectural args
-    parser.add_argument('--dtype', type=str, default="float", choices=list(dtype_mapping.keys()), help='Floating point precision. Can be float or float64')
+    parser.add_argument('--dtype', type=str, default="float32", choices=list(dtype_mapping.keys()), help='Floating point precision. Can be float or float64')
     parser.add_argument('--charge', type=bool, default=False, help='Model needs a total charge')
     parser.add_argument('--spin', type=bool, default=False, help='Model needs a spin state')
     parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
