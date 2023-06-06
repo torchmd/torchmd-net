@@ -4,17 +4,18 @@ channels:
 dependencies:
   - h5py
   - matplotlib
-  - nnpops==0.2
+  - nnpops==0.5
   - pip
-  - pytorch==1.11.0
-  - pytorch_cluster==1.5.9
-  - pytorch_geometric==2.0.3
-  - pytorch_scatter==2.0.8
-  - pytorch_sparse==0.6.10
+  - pytorch==2.0.*
+  - pytorch_cluster==1.6.1
+  - pytorch_geometric==2.3.1
+  - pytorch_scatter==2.1.1
+  - pytorch_sparse==0.6.17
   - pytorch-lightning==1.6.3
-  - torchmetrics==0.8.2
+  - torchmetrics==0.11.4
   - tqdm
   # Dev tools
   - flake8
   - pytest
   - psutil
+  - ninja
