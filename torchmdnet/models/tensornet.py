@@ -50,7 +50,6 @@ class TensorNet(nn.Module):
         num_rbf=32,
         activation="silu",
         rbf_type = 'expnorm',
-        neighbor_embedding = False,
         cutoff_lower=0,
         cutoff_upper=4.5,
         max_num_neighbors=64,
