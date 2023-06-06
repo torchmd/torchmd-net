@@ -15,31 +15,3 @@ def compile_extension():
 
 compile_extension()
 get_neighbor_pairs_kernel = torch.ops.torchmdnet_neighbors.get_neighbor_pairs
-
-def get_neighbor_pairs(
-    strategy: str,
-    positions: Tensor,
-    batch: Tensor,
-    max_num_pairs: int,
-    cutoff_lower: float,
-    cutoff_upper: float,
-    loop: bool,
-    include_transpose: bool,
-    box: Tensor,
-    use_periodic: bool,
-    check_errors: bool,
-) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
-    edge_index, edge_vec, edge_weight, num_pairs = get_neighbor_pairs_kernel(
-        strategy,
-        positions,
-        batch,
-        max_num_pairs,
-        cutoff_lower,
-        cutoff_upper,
-        loop,
-        include_transpose,
-        box,
-        use_periodic,
-        check_errors,
-    )
-    return edge_index, edge_vec, edge_weight, num_pairs
