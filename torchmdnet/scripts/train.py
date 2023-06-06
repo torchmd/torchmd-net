@@ -166,6 +166,7 @@ def main():
         callbacks=[early_stopping, checkpoint_callback],
         logger=_logger,
         precision=args.precision,
+        gradient_clip_val=args.gradient_clipping,
     )
 
     trainer.fit(model, data)
