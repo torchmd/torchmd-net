@@ -5,7 +5,7 @@ from os.path import exists, dirname, join
 import torch
 import pytorch_lightning as pl
 from torchmdnet import models
-from torchmdnet.models.model import create_model
+from torchmdnet.models.model import create_model, load_model
 from torchmdnet.models import output_modules
 
 from utils import load_example_args, create_example_batch
@@ -60,7 +60,7 @@ def test_seed(model_name):
     output_modules.__all__,
 )
 def test_forward_output(model_name, output_model, overwrite_reference=False):
-    pl.seed_everything(1234)
+    pl.seed_everynthing(1234)
 
     # create model and sample batch
     derivative = output_model in ["Scalar", "EquivariantScalar"]
@@ -101,3 +101,27 @@ def test_forward_output(model_name, output_model, overwrite_reference=False):
         torch.testing.assert_allclose(
             deriv, expected[model_name][output_model]["deriv"]
         )
+
+@mark.parametrize("model_name", models.__all__)
+@mark.parametrize(
+    "output_model",
+    output_modules.__all__,
+)
+def test_gradients(model_name, output_model):
+    pl.seed_everything(1234)
+    if model_name != "equivariant-transformer":
+        pytest.skip("Gradients are not implemented for this model.")
+    # create model and sample batch
+    derivative = output_model in ["Scalar", "EquivariantScalar"]
+    args = load_example_args(
+        model_name,
+        remove_prior=True,
+        output_model=output_model,
+        derivative=derivative,
+    )
+    model = create_model(args).to(torch.float64)
+    print(model)
+    z, pos, batch = create_example_batch(n_atoms=5)
+    pos.requires_grad = True
+    pos.to(torch.float64)
+    torch.autograd.gradcheck(model, (z, pos, batch), eps=1e-4, atol=1e-3, rtol=1e-2, nondet_tol=1e-3)
