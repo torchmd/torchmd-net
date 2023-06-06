@@ -14,9 +14,11 @@ from utils import load_example_args, create_example_batch
 @mark.parametrize("model_name", models.__all__)
 @mark.parametrize("use_batch", [True, False])
 @mark.parametrize("explicit_q_s", [True, False])
-def test_forward(model_name, use_batch, explicit_q_s):
+@mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_forward(model_name, use_batch, explicit_q_s, dtype):
     z, pos, batch = create_example_batch()
-    model = create_model(load_example_args(model_name, prior_model=None))
+    pos = pos.to(dtype=dtype)
+    model = create_model(load_example_args(model_name, prior_model=None, dtype=dtype))
     batch = batch if use_batch else None
     if explicit_q_s:
         model(z, pos, batch=batch, q=None, s=None)
@@ -60,7 +62,7 @@ def test_seed(model_name):
     output_modules.__all__,
 )
 def test_forward_output(model_name, output_model, overwrite_reference=False):
-    pl.seed_everynthing(1234)
+    pl.seed_everything(1234)
 
     # create model and sample batch
     derivative = output_model in ["Scalar", "EquivariantScalar"]
@@ -103,14 +105,10 @@ def test_forward_output(model_name, output_model, overwrite_reference=False):
         )
 
 @mark.parametrize("model_name", models.__all__)
-@mark.parametrize(
-    "output_model",
-    output_modules.__all__,
-)
-def test_gradients(model_name, output_model):
+def test_gradients(model_name):
     pl.seed_everything(1234)
-    if model_name != "equivariant-transformer":
-        pytest.skip("Gradients are not implemented for this model.")
+    dtype = torch.float64
+    output_model = "Scalar"
     # create model and sample batch
     derivative = output_model in ["Scalar", "EquivariantScalar"]
     args = load_example_args(
@@ -118,10 +116,12 @@ def test_gradients(model_name, output_model):
         remove_prior=True,
         output_model=output_model,
         derivative=derivative,
+        dtype=dtype,
     )
-    model = create_model(args).to(torch.float64)
-    print(model)
+    model = create_model(args)
     z, pos, batch = create_example_batch(n_atoms=5)
-    pos.requires_grad = True
-    pos.to(torch.float64)
-    torch.autograd.gradcheck(model, (z, pos, batch), eps=1e-4, atol=1e-3, rtol=1e-2, nondet_tol=1e-3)
+    pos.requires_grad_(True)
+    pos = pos.to(dtype)
+    torch.autograd.gradcheck(
+        model, (z, pos, batch), eps=1e-4, atol=1e-3, rtol=1e-2, nondet_tol=1e-3
+    )
