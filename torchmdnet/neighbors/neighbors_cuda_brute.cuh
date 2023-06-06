@@ -2,7 +2,8 @@
 
    A brute force approach that assigns a thread per each possible pair of particles in the system.
    Based on an implementation by Raimondas Galvelis.
-   Works fantastically for small (less than 10K atoms) systems, but cannot handle more than 32K atoms.
+   Works fantastically for small (less than 10K atoms) systems, but cannot handle more than 32K
+   atoms.
  */
 #ifndef NEIGHBORS_BRUTE_CUH
 #define NEIGHBORS_BRUTE_CUH
@@ -48,8 +49,8 @@ __global__ void add_self_kernel(const int num_atoms, Accessor<scalar_t, 2> posit
     __shared__ int i_pair;
     if (threadIdx.x == 0) { // Each block adds blockDim.x pairs to the list.
         // Handle the last block, so that only num_atoms are added in total
-        i_pair = atomicAdd(&list.i_curr_pair[0],
-                           min(blockDim.x, num_atoms - blockIdx.x * blockDim.x));
+        i_pair =
+            atomicAdd(&list.i_curr_pair[0], min(blockDim.x, num_atoms - blockIdx.x * blockDim.x));
     }
     __syncthreads();
     scalar3<scalar_t> delta{};
@@ -57,58 +58,46 @@ __global__ void add_self_kernel(const int num_atoms, Accessor<scalar_t, 2> posit
     writeAtomPair(list, i_atom, i_atom, delta, distance, i_pair + threadIdx.x);
 }
 
-class AutogradBruteCUDA : public Function<AutogradBruteCUDA> {
-public:
-    static tensor_list forward(AutogradContext* ctx, const Tensor& positions, const Tensor& batch,
-                               const Scalar& cutoff_lower, const Scalar& cutoff_upper,
-                               const Tensor& box_vectors, bool use_periodic,
-                               const Scalar& max_num_pairs, bool loop, bool include_transpose) {
-        checkInput(positions, batch);
-        const auto max_num_pairs_ = max_num_pairs.toLong();
-        TORCH_CHECK(max_num_pairs_ > 0, "Expected \"max_num_neighbors\" to be positive");
-        if (use_periodic) {
-            TORCH_CHECK(box_vectors.dim() == 2, "Expected \"box_vectors\" to have two dimensions");
-            TORCH_CHECK(box_vectors.size(0) == 3 && box_vectors.size(1) == 3,
-                        "Expected \"box_vectors\" to have shape (3, 3)");
+static std::tuple<Tensor, Tensor, Tensor, Tensor>
+forward_brute(const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
+              bool use_periodic, const Scalar& cutoff_lower, const Scalar& cutoff_upper,
+              const Scalar& max_num_pairs, bool loop, bool include_transpose) {
+    checkInput(positions, batch);
+    const auto max_num_pairs_ = max_num_pairs.toLong();
+    TORCH_CHECK(max_num_pairs_ > 0, "Expected \"max_num_neighbors\" to be positive");
+    if (use_periodic) {
+        TORCH_CHECK(box_vectors.dim() == 2, "Expected \"box_vectors\" to have two dimensions");
+        TORCH_CHECK(box_vectors.size(0) == 3 && box_vectors.size(1) == 3,
+                    "Expected \"box_vectors\" to have shape (3, 3)");
+    }
+    TORCH_CHECK(box_vectors.device() == torch::kCPU, "Expected \"box_vectors\" to be on CPU");
+    const int num_atoms = positions.size(0);
+    TORCH_CHECK(num_atoms < 32768, "The brute strategy fails with \"num_atoms\" larger than 32768");
+    const int num_pairs = max_num_pairs_;
+    const TensorOptions options = positions.options();
+    const auto stream = getCurrentCUDAStream(positions.get_device());
+    PairList list(num_pairs, positions.options(), loop, include_transpose, use_periodic);
+    const CUDAStreamGuard guard(stream);
+    const uint64_t num_all_pairs = num_atoms * (num_atoms - 1UL) / 2UL;
+    const uint64_t num_threads = 128;
+    const uint64_t num_blocks = std::max((num_all_pairs + num_threads - 1UL) / num_threads, 1UL);
+    AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "get_neighbor_pairs_forward", [&]() {
+        PairListAccessor<scalar_t> list_accessor(list);
+        triclinic::Box<scalar_t> box(box_vectors, use_periodic);
+        const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
+        const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();
+        TORCH_CHECK(cutoff_upper_ > 0, "Expected \"cutoff\" to be positive");
+        forward_kernel_brute<<<num_blocks, num_threads, 0, stream>>>(
+            num_all_pairs, get_accessor<scalar_t, 2>(positions), get_accessor<int64_t, 1>(batch),
+            cutoff_lower_ * cutoff_lower_, cutoff_upper_ * cutoff_upper_, list_accessor, box);
+        if (loop) {
+            const uint32_t num_threads = 256;
+            const uint32_t num_blocks = std::max((num_atoms + num_threads - 1U) / num_threads, 1U);
+            add_self_kernel<<<num_blocks, num_threads, 0, stream>>>(
+                num_atoms, get_accessor<scalar_t, 2>(positions), list_accessor);
         }
-        TORCH_CHECK(box_vectors.device() == torch::kCPU, "Expected \"box_vectors\" to be on CPU");
-        const int num_atoms = positions.size(0);
-        TORCH_CHECK(num_atoms < 32768,
-                    "The brute strategy fails with \"num_atoms\" larger than 32768");
-        const int num_pairs = max_num_pairs_;
-        const TensorOptions options = positions.options();
-        const auto stream = getCurrentCUDAStream(positions.get_device());
-        PairList list(num_pairs, positions.options(), loop, include_transpose, use_periodic);
-        const CUDAStreamGuard guard(stream);
-        const uint64_t num_all_pairs = num_atoms * (num_atoms - 1UL) / 2UL;
-        const uint64_t num_threads = 128;
-        const uint64_t num_blocks =
-            std::max((num_all_pairs + num_threads - 1UL) / num_threads, 1UL);
-        AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "get_neighbor_pairs_forward", [&]() {
-            PairListAccessor<scalar_t> list_accessor(list);
-            triclinic::Box<scalar_t> box(box_vectors, use_periodic);
-            const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
-            const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();
-            TORCH_CHECK(cutoff_upper_ > 0, "Expected \"cutoff\" to be positive");
-            forward_kernel_brute<<<num_blocks, num_threads, 0, stream>>>(
-                num_all_pairs, get_accessor<scalar_t, 2>(positions),
-                get_accessor<int64_t, 1>(batch), cutoff_lower_ * cutoff_lower_,
-                cutoff_upper_ * cutoff_upper_, list_accessor, box);
-            if (loop) {
-                const uint32_t num_threads = 256;
-                const uint32_t num_blocks =
-                    std::max((num_atoms + num_threads - 1U) / num_threads, 1U);
-                add_self_kernel<<<num_blocks, num_threads, 0, stream>>>(
-                    num_atoms, get_accessor<scalar_t, 2>(positions), list_accessor);
-            }
-        });
-        ctx->save_for_backward({list.neighbors, list.deltas, list.distances});
-        ctx->saved_data["num_atoms"] = num_atoms;
-        return {list.neighbors, list.deltas, list.distances, list.i_curr_pair};
-    }
+    });
+    return {list.neighbors, list.deltas, list.distances, list.i_curr_pair};
+}
 
-    static tensor_list backward(AutogradContext* ctx, const tensor_list& grad_inputs) {
-        return common_backward(ctx, grad_inputs);
-    }
-};
 #endif

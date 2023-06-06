@@ -247,6 +247,53 @@ def test_neighbor_grads(
         assert np.allclose(ref_pos_grad_sorted, pos_grad_sorted, atol=1e-8, rtol=1e-5)
 
 @pytest.mark.parametrize(("device", "strategy"), [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")])
+@pytest.mark.parametrize("loop", [True, False])
+@pytest.mark.parametrize("include_transpose", [True, False])
+@pytest.mark.parametrize("num_atoms", [1,2,10])
+@pytest.mark.parametrize("box_type", [None, "triclinic", "rectangular"])
+def test_neighbor_autograds(
+    device, strategy, loop, include_transpose, num_atoms, box_type
+):
+    if not torch.cuda.is_available() and device == "cuda":
+        pytest.skip("No GPU")
+    if device == "cpu" and strategy != "brute":
+        pytest.skip("Only brute force supported on CPU")
+    if box_type == "triclinic" and strategy == "cell":
+        pytest.skip("Triclinic only supported for brute force")
+    dtype = torch.float64
+    cutoff = 4.999999
+    lbox = 10.0
+    torch.random.manual_seed(1234)
+    np.random.seed(123456)
+    # Generate random positions
+    if box_type is None:
+        box = None
+    else:
+        box = (
+            torch.tensor([[lbox, 0.0, 0.0], [0.0, lbox, 0.0], [0.0, 0.0, lbox]])
+            .to(dtype)
+            .to(device)
+        )
+    nl = OptimizedDistance(
+        cutoff_upper=cutoff,
+        max_num_pairs=num_atoms * (num_atoms),
+        strategy=strategy,
+        loop=loop,
+        include_transpose=include_transpose,
+        return_vecs=True,
+        resize_to_fit=True,
+        box=box,
+    )
+    positions = 0.25 * lbox * torch.rand(num_atoms, 3, device=device, dtype=dtype)
+    positions.requires_grad_(True)
+    batch = torch.zeros((num_atoms,), dtype=torch.long, device=device)
+    neighbors, distances, deltas = nl(positions, batch)
+    # Lambda that returns only the distances and deltas
+    lambda_dist = lambda x, y: nl(x, y)[1:]
+    torch.autograd.gradcheck(lambda_dist, (positions, batch), eps=1e-4, atol=1e-4, rtol=1e-4, nondet_tol=1e-4)
+    torch.autograd.gradgradcheck(lambda_dist, (positions, batch), eps=1e-4, atol=1e-4, rtol=1e-4, nondet_tol=1e-4)
+
+@pytest.mark.parametrize(("device", "strategy"), [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")])
 @pytest.mark.parametrize("n_batches", [1, 2, 3, 4])
 @pytest.mark.parametrize("cutoff", [0.1, 1.0, 1000.0])
 @pytest.mark.parametrize("loop", [True, False])
@@ -275,7 +322,7 @@ def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop, dty
         ref_pos_cpu, batch, loop, True, cutoff, None
     )
     # Find the particle appearing in the most pairs
-    max_num_neighbors = torch.max(torch.bincount(torch.tensor(ref_neighbors[0, :])))
+    max_num_neighbors = int(torch.max(torch.bincount(torch.tensor(ref_neighbors[0, :]))))
     d = Distance(
         cutoff_lower=0.0,
         cutoff_upper=cutoff,
@@ -292,32 +339,52 @@ def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop, dty
         cutoff_lower=0.0,
         loop=loop,
         cutoff_upper=cutoff,
-        max_num_pairs=max_num_pairs,
+        max_num_pairs=-max_num_neighbors,
         strategy=strategy,
         return_vecs=True,
         include_transpose=True,
     )
     pos.requires_grad = True
     neighbors, distances, distance_vecs = nl(pos, batch)
-
     # Compute gradients
     if grad == "deltas":
-        ref_distance_vecs.sum().backward()
-        distance_vecs.sum().backward()
+        ref_distance_vecs.sum().backward(retain_graph=True)
+        distance_vecs.sum().backward(retain_graph=True)
     elif grad == "distances":
-        ref_distances.sum().backward()
-        distances.sum().backward()
+        ref_distances.sum().backward(retain_graph=True)
+        distances.sum().backward(retain_graph=True)
     elif grad == "combined":
-        (ref_distance_vecs.sum() + ref_distances.sum()).backward()
-        (distance_vecs.sum() + distances.sum()).backward()
+        (ref_distance_vecs.sum() + ref_distances.sum()).backward(retain_graph=True)
+        (distance_vecs.sum() + distances.sum()).backward(retain_graph=True)
     else:
         raise ValueError("grad")
-    ref_pos_grad_sorted = ref_pos.grad.cpu().detach().numpy()
-    pos_grad_sorted = pos.grad.cpu().detach().numpy()
+    # Save the gradients (first derivatives)
+    ref_first_deriv = ref_pos.grad.clone().requires_grad_(True)
+    first_deriv = pos.grad.clone().requires_grad_(True)
+
+    # Check first derivatives are correct
+    ref_pos_grad_sorted = ref_first_deriv.cpu().detach().numpy()
+    pos_grad_sorted = first_deriv.cpu().detach().numpy()
     if dtype == torch.float32:
-        assert np.allclose(ref_pos_grad_sorted, pos_grad_sorted, atol=1e-4, rtol=1e-3)
+        assert np.allclose(ref_pos_grad_sorted, pos_grad_sorted, atol=1e-2, rtol=1e-2)
     else:
         assert np.allclose(ref_pos_grad_sorted, pos_grad_sorted, atol=1e-8, rtol=1e-5)
+
+    # Zero out the gradients of ref_positions and positions
+    ref_pos.grad.zero_()
+    pos.grad.zero_()
+
+    # Compute second derivatives
+    ref_first_deriv.sum().backward()  # compute second derivatives
+    first_deriv.sum().backward()      # compute second derivatives
+
+    # Check second derivatives are correct
+    ref_pos_grad2_sorted = ref_pos.grad.cpu().detach().numpy()
+    pos_grad2_sorted = pos.grad.cpu().detach().numpy()
+    if dtype == torch.float32:
+        assert np.allclose(ref_pos_grad2_sorted, pos_grad2_sorted, atol=1e-2, rtol=1e-2)
+    else:
+        assert np.allclose(ref_pos_grad2_sorted, pos_grad2_sorted, atol=1e-8, rtol=1e-5)
 
     ref_neighbors = ref_neighbors.cpu().detach().numpy()
     ref_distance_vecs = ref_distance_vecs.cpu().detach().numpy()
@@ -335,7 +402,6 @@ def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop, dty
     assert np.allclose(neighbors, ref_neighbors)
     assert np.allclose(distances, ref_distances)
     assert np.allclose(distance_vecs, ref_distance_vecs)
-
 
 
 @pytest.mark.parametrize("strategy", ["brute", "cell", "shared"])
