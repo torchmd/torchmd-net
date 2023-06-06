@@ -181,9 +181,9 @@ class EquivariantElectronicSpatialExtent(ElectronicSpatialExtent):
 
 
 class EquivariantVectorOutput(EquivariantScalar):
-    def __init__(self, hidden_channels, activation="silu", reduce_op="sum"):
+    def __init__(self, hidden_channels, activation="silu", reduce_op="sum", dtype=torch.float):
         super(EquivariantVectorOutput, self).__init__(
-            hidden_channels, activation, allow_prior_model=False, reduce_op="sum"
+            hidden_channels, activation, allow_prior_model=False, reduce_op="sum", dtype=dtype
         )
 
     def pre_reduce(self, x, v, z, pos, batch):
