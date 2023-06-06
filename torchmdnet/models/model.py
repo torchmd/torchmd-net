@@ -25,6 +25,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
     -------
         nn.Module: An instance of the TorchMD_Net model.
     """
+    args["dtype"] = "float" if "dtype" not in args else args["dtype"]
     #Use mapping if args["dtype"] is a string, else use args["dtype"]
     args["dtype"] = dtype_mapping[args["dtype"]] if isinstance(args["dtype"], str) else args["dtype"]
     shared_args = dict(
