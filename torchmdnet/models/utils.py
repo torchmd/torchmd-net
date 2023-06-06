@@ -238,13 +238,13 @@ class OptimizedDistance(torch.nn.Module):
 
 
 class GaussianSmearing(nn.Module):
-    def __init__(self, cutoff_lower=0.0, cutoff_upper=5.0, num_rbf=50, trainable=True):
+    def __init__(self, cutoff_lower=0.0, cutoff_upper=5.0, num_rbf=50, trainable=True, dtype=torch.float32):
         super(GaussianSmearing, self).__init__()
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         self.num_rbf = num_rbf
         self.trainable = trainable
-
+        self.dtype = dtype
         offset, coeff = self._initial_params()
         if trainable:
             self.register_parameter("coeff", nn.Parameter(coeff))
@@ -254,7 +254,7 @@ class GaussianSmearing(nn.Module):
             self.register_buffer("offset", offset)
 
     def _initial_params(self):
-        offset = torch.linspace(self.cutoff_lower, self.cutoff_upper, self.num_rbf)
+        offset = torch.linspace(self.cutoff_lower, self.cutoff_upper, self.num_rbf, dtype=self.dtype)
         coeff = -0.5 / (offset[1] - offset[0]) ** 2
         return offset, coeff
 
