@@ -6,7 +6,7 @@ from torch_scatter import scatter
 from torchmdnet.models.utils import (
     NeighborEmbedding,
     CosineCutoff,
-    OptimizedDistance,
+    Distance,
     rbf_class_mapping,
     act_class_mapping,
 )
@@ -102,17 +102,13 @@ class TorchMD_ET(nn.Module):
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels)
 
-        self.distance = OptimizedDistance(
+        self.distance = Distance(
             cutoff_lower,
             cutoff_upper,
-            max_num_pairs=-max_num_neighbors,
+            max_num_neighbors=max_num_neighbors,
             return_vecs=True,
             loop=True,
-            check_errors=True,
-            include_transpose=True,
-            resize_to_fit=True,
         )
-
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
         )
@@ -161,7 +157,11 @@ class TorchMD_ET(nn.Module):
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
 
         x = self.embedding(z)
+
         edge_index, edge_weight, edge_vec = self.distance(pos, batch)
+        assert (
+            edge_vec is not None
+        ), "Distance module did not return directional information"
 
         edge_attr = self.distance_expansion(edge_weight)
         mask = edge_index[0] != edge_index[1]
