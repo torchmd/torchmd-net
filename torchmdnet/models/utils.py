@@ -182,13 +182,13 @@ class OptimizedDistance(torch.nn.Module):
             shape (N,)
         Returns
         -------
-        neighbors : torch.Tensor
+        edge_index : torch.Tensor
           List of neighbors for each atom in the batch.
         shape (2, num_found_pairs or max_num_pairs)
-        distances : torch.Tensor
+        edge_weight : torch.Tensor
             List of distances for each atom in the batch.
         shape (num_found_pairs or max_num_pairs,)
-        distance_vecs : torch.Tensor
+        edge_vec : torch.Tensor
             List of distance vectors for each atom in the batch.
         shape (num_found_pairs or max_num_pairs, 3)
 
