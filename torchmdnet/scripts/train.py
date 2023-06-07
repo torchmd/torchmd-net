@@ -84,7 +84,7 @@ def get_args():
     parser.add_argument('--num-heads', type=int, default=8, help='Number of attention heads')
     
     # TensorNet specific
-    parser.add_argument('--equivariance-invariance_group', type=str, default='O(3)', help='Equivariance and invariance group of TensorNet')
+    parser.add_argument('--equivariance-invariance-group', type=str, default='O(3)', help='Equivariance and invariance group of TensorNet')
 
     # other args
     parser.add_argument('--derivative', default=False, type=bool, help='If true, take the derivative of the prediction w.r.t coordinates')
