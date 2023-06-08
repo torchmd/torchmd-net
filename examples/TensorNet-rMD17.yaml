@@ -34,7 +34,6 @@ max_z: 128
 model: tensornet
 ngpus: 1
 num_epochs: 10000
-num_heads: 8
 num_layers: 2
 num_nodes: 1
 num_rbf: 32
