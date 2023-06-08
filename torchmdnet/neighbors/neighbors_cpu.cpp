@@ -90,7 +90,7 @@ forward(const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
 }
 
 TORCH_LIBRARY_IMPL(torchmdnet_neighbors, CPU, m) {
-  m.impl("get_neighbor_pairs", [](std::string strategy,  const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
+  m.impl("get_neighbor_pairs", [](const std::string &strategy,  const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
 				    bool use_periodic, const Scalar& cutoff_lower, const Scalar& cutoff_upper,
               const Scalar& max_num_pairs, bool loop, bool include_transpose) {
       return forward(positions, batch, box_vectors, use_periodic, cutoff_lower, cutoff_upper, max_num_pairs, loop, include_transpose);
