@@ -34,8 +34,6 @@ model: tensornet
 ngpus: -1
 num_epochs: 500
 num_layers: 2
-num_linears_scalar: 2
-num_linears_tensor: 2
 num_nodes: 1
 num_rbf: 32
 num_workers: 4
