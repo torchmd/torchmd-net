@@ -7,7 +7,7 @@ cutoff_lower: 0.0
 cutoff_upper: 4.5
 dataset: MD17
 dataset_arg:
-  molecules: revised aspirin 
+  molecules: revised_aspirin 
 dataset_root: ~/data
 derivative: true
 early_stopping_patience: 300

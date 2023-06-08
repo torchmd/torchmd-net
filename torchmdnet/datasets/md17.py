@@ -24,28 +24,28 @@ class MD17(InMemoryDataset):
         'uracil': 'md17_uracil.npz',
         'naphtalene': 'md17_naphthalene.npz',
         'aspirin': 'md17_aspirin.npz',
-        'salicylic acid': 'md17_salicylic.npz',
+        'salicylic_acid': 'md17_salicylic.npz',
         'malonaldehyde': 'md17_malonaldehyde.npz',
         'ethanol': 'md17_ethanol.npz',
         'toluene': 'md17_toluene.npz',
         'paracetamol': 'paracetamol_dft.npz',
         'azobenzene': 'azobenzene_dft.npz',
-        'revised benzene': 'rmd17_benzene.npz',
-        'revised uracil': 'rmd17_uracil.npz',
-        'revised naphthalene': 'rmd17_naphthalene.npz',
-        'revised aspirin': 'rmd17_aspirin.npz',
-        'revised salicylic acid': 'rmd17_salicylic.npz',
-        'revised malonaldehyde': 'rmd17_malonaldehyde.npz',
-        'revised ethanol': 'rmd17_ethanol.npz',
-        'revised toluene': 'rmd17_toluene.npz',
-        'revised paracetamol': 'rmd17_paracetamol.npz',
-        'revised azobenzene': 'rmd17_azobenzene.npz',
-        'benzene CCSD(T)': 'benzene_ccsd_t.zip',
-        'aspirin CCSD': 'aspirin_ccsd.zip',
-        'malonaldehyde CCSD(T)': 'malonaldehyde_ccsd_t.zip',
-        'ethanol CCSD(T)': 'ethanol_ccsd_t.zip',
-        'toluene CCSD(T)': 'toluene_ccsd_t.zip',
-        'benzene FHI-aims': 'benzene2018_dft.npz',
+        'revised_benzene': 'rmd17_benzene.npz',
+        'revised_uracil': 'rmd17_uracil.npz',
+        'revised_naphthalene': 'rmd17_naphthalene.npz',
+        'revised_aspirin': 'rmd17_aspirin.npz',
+        'revised_salicylic_acid': 'rmd17_salicylic.npz',
+        'revised_malonaldehyde': 'rmd17_malonaldehyde.npz',
+        'revised_ethanol': 'rmd17_ethanol.npz',
+        'revised_toluene': 'rmd17_toluene.npz',
+        'revised_paracetamol': 'rmd17_paracetamol.npz',
+        'revised_azobenzene': 'rmd17_azobenzene.npz',
+        'benzene_CCSD_T': 'benzene_ccsd_t.zip',
+        'aspirin_CCSD': 'aspirin_ccsd.zip',
+        'malonaldehyde_CCSD_T': 'malonaldehyde_ccsd_t.zip',
+        'ethanol_CCSD_T': 'ethanol_ccsd_t.zip',
+        'toluene_CCSD_T': 'toluene_ccsd_t.zip',
+        'benzene_FHI-aims': 'benzene2018_dft.npz',
     }
 
     def __init__(
@@ -90,7 +90,7 @@ class MD17(InMemoryDataset):
 
     @property
     def processed_dir(self) -> str:
-        return osp.join(self.root, self.name, 'processed')
+        return osp.join(self.root, 'processed', self.name)
 
     @property
     def raw_file_names(self) -> str:
