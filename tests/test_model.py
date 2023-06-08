@@ -28,18 +28,20 @@ def test_forward(model_name, use_batch, explicit_q_s, dtype):
 
 @mark.parametrize("model_name", models.__all__)
 @mark.parametrize("output_model", output_modules.__all__)
-def test_forward_output_modules(model_name, output_model):
+@mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_forward_output_modules(model_name, output_model, dtype):
     z, pos, batch = create_example_batch()
-    args = load_example_args(model_name, remove_prior=True, output_model=output_model)
+    args = load_example_args(model_name, remove_prior=True, output_model=output_model, dtype=dtype)
     model = create_model(args)
     model(z, pos, batch=batch)
 
 
 @mark.parametrize("model_name", models.__all__)
-def test_forward_torchscript(model_name):
+@mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_forward_torchscript(model_name, dtype):
     z, pos, batch = create_example_batch()
     model = torch.jit.script(
-        create_model(load_example_args(model_name, remove_prior=True, derivative=True))
+        create_model(load_example_args(model_name, remove_prior=True, derivative=True, dtype=dtype))
     )
     model(z, pos, batch=batch)
 
