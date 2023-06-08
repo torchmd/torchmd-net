@@ -5,7 +5,7 @@ from os.path import exists, dirname, join
 import torch
 import pytorch_lightning as pl
 from torchmdnet import models
-from torchmdnet.models.model import create_model, load_model
+from torchmdnet.models.model import create_model
 from torchmdnet.models import output_modules
 
 from utils import load_example_args, create_example_batch
