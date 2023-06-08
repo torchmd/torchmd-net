@@ -177,7 +177,7 @@ class TorchMD_Net(nn.Module):
         dtype=torch.float32,
     ):
         super(TorchMD_Net, self).__init__()
-        self.representation_model = representation_model
+        self.representation_model = representation_model.to(dtype=dtype)
         self.output_model = output_model.to(dtype=dtype)
 
         if not output_model.allow_prior_model and prior_model is not None:
