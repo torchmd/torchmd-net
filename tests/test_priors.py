@@ -63,12 +63,13 @@ def test_zbl():
             expected += compute_interaction(pos[i], pos[j], atomic_number[types[i]], atomic_number[types[j]])
     torch.testing.assert_allclose(expected, energy)
 
-def test_multiple_priors():
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_multiple_priors(dtype):
     # Create a model from a config file.
 
     dataset = DummyDataset(has_atomref=True)
     config_file = join(dirname(__file__), 'priors.yaml')
-    args = load_example_args('equivariant-transformer', config_file=config_file)
+    args = load_example_args('equivariant-transformer', config_file=config_file, dtype=dtype)
     prior_models = create_prior_models(args, dataset)
     args['prior_args'] = [p.get_init_args() for p in prior_models]
     model = LNNP(args, prior_model=prior_models)
