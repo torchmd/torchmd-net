@@ -63,9 +63,10 @@ def test_zbl():
             expected += compute_interaction(pos[i], pos[j], atomic_number[types[i]], atomic_number[types[j]])
     torch.testing.assert_allclose(expected, energy)
 
-def test_coulomb():
-    pos = torch.tensor([[0.5, 0.0, 0.0], [1.5, 0.0, 0.0], [0.8, 0.8, 0.0], [0.0, 0.0, -0.4]], dtype=torch.float32)  # Atom positions in nm
-    charge = torch.tensor([0.2, -0.1, 0.8, -0.9], dtype=torch.float32)  # Partial charges
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_coulomb(dtype):
+    pos = torch.tensor([[0.5, 0.0, 0.0], [1.5, 0.0, 0.0], [0.8, 0.8, 0.0], [0.0, 0.0, -0.4]], dtype=dtype)  # Atom positions in nm
+    charge = torch.tensor([0.2, -0.1, 0.8, -0.9], dtype=dtype)  # Partial charges
     types = torch.tensor([0, 1, 2, 1], dtype=torch.long)  # Atom types
     distance_scale = 1e-9  # Convert nm to meters
     energy_scale = 1000.0/6.02214076e23  # Convert kJ/mol to Joules
