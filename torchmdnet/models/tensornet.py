@@ -126,7 +126,6 @@ class TensorNet(nn.Module):
         self.tensor_embedding.reset_parameters()
         for i in range(self.num_layers):
             self.layers[i].reset_parameters()
-        self.linear.reset_parameters()
 
     def forward(
         self,
