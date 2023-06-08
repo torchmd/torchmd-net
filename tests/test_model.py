@@ -104,6 +104,7 @@ def test_forward_output(model_name, output_model, overwrite_reference=False):
             deriv, expected[model_name][output_model]["deriv"]
         )
 
+
 @mark.parametrize("model_name", models.__all__)
 def test_gradients(model_name):
     pl.seed_everything(1234)
