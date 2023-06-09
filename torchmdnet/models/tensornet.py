@@ -126,6 +126,8 @@ class TensorNet(nn.Module):
         self.tensor_embedding.reset_parameters()
         for i in range(self.num_layers):
             self.layers[i].reset_parameters()
+        self.linear.reset_parameters()
+        self.out_norm.reset_parameters()
 
     def forward(
         self,
@@ -193,14 +195,16 @@ class TensorEmbedding(MessagePassing):
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.emb.reset_parameters()
         self.distance_proj1.reset_parameters()
         self.distance_proj2.reset_parameters()
+        self.distance_proj3.reset_parameters()
+        self.emb.reset_parameters()
         self.emb2.reset_parameters()
         for linear in self.linears_tensor:
             linear.reset_parameters()
         for linear in self.linears_scalar:
             linear.reset_parameters()
+        self.init_norm.reset_parameters()
 
     def forward(
         self,
@@ -308,11 +312,12 @@ class Interaction(MessagePassing):
         self.linears_tensor.append(nn.Linear(hidden_channels, hidden_channels, bias=False))
         self.act = activation()
         self.equivariance_invariance_group = equivariance_invariance_group
+        self.reset_parameters()
         
     def reset_parameters(self):
-        for linear in self.linears_tensor:
-            linear.reset_parameters()
         for linear in self.linears_scalar:
+            linear.reset_parameters()
+        for linear in self.linears_tensor:
             linear.reset_parameters()       
     
     def forward(self, X, edge_index, edge_weight, edge_attr):
