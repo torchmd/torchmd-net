@@ -18,6 +18,128 @@ template <class... T> auto call_forward_kernel(const std::string& kernel_name, c
     }
 }
 
+template <typename scalar_t>
+__global__ void
+forward_kernel(const Accessor<int32_t, 2> neighbors, const Accessor<scalar_t, 2> deltas,
+               const Accessor<scalar_t, 2> grad_deltas, const Accessor<scalar_t, 1> distances,
+               const Accessor<scalar_t, 1> grad_distances, Accessor<scalar_t, 2> grad_positions) {
+    const int32_t i_pair = blockIdx.x * blockDim.x + threadIdx.x;
+    const int32_t num_pairs = neighbors.size(1);
+    if (i_pair >= num_pairs) {
+        return;
+    }
+    const int32_t i_dir = blockIdx.y;
+    const int32_t i_atom = neighbors[i_dir][i_pair];
+    const int32_t i_comp = blockIdx.z;
+    if (i_atom < 0) {
+        return;
+    }
+    const scalar_t grad_deltas_ = grad_deltas[i_pair][i_comp];
+    const scalar_t dist = distances[i_pair];
+    const scalar_t grad_distances_ =
+        dist == 0 ? scalar_t(1.0) : (deltas[i_pair][i_comp] / dist * grad_distances[i_pair]);
+
+    // Handle self interaction
+    const scalar_t grad =
+        (i_dir ? -1 : 1) *
+        (i_atom == neighbors[1 - i_dir][i_pair] ? scalar_t(0.0) : (grad_deltas_ + grad_distances_));
+    atomicAdd(&grad_positions[i_atom][i_comp], grad);
+}
+template <typename scalar_t>
+__global__ void
+backward_kernel(const Accessor<int32_t, 2> neighbors, const Accessor<scalar_t, 2> deltas,
+                const Accessor<scalar_t, 2> grad_deltas, const Accessor<scalar_t, 1> distances,
+                const Accessor<scalar_t, 1> grad_distances, Accessor<scalar_t, 2> grad_positions,
+                Accessor<scalar_t, 2> grad_edge_vec, Accessor<scalar_t, 1> grad_edge_weight) {
+    const int32_t i_pair = blockIdx.x * blockDim.x + threadIdx.x;
+    const int32_t num_pairs = neighbors.size(1);
+    if (i_pair >= num_pairs) {
+        return;
+    }
+    const int32_t i_dir = blockIdx.y;
+    const int32_t i_atom = neighbors[i_dir][i_pair];
+    const int32_t i_comp = blockIdx.z;
+    if (i_atom < 0) {
+        return;
+    }
+
+    scalar_t grad = grad_positions[i_atom][i_comp];
+    if (distances[i_pair] != 0) {
+        grad_edge_vec[i_pair][i_comp] = grad_distances[i_pair] * grad / distances[i_pair];
+    }
+    grad_edge_weight[i_pair] = grad_deltas[i_pair][i_comp] * grad;
+}
+
+class EdgeOperation : public torch::autograd::Function<EdgeOperation> {
+public:
+    static tensor_list forward(AutogradContext* ctx, const Tensor& edge_index,
+                               const Tensor& edge_vec, const Tensor& edge_weight,
+                               const Tensor& grad_edge_vec, const Tensor& grad_edge_weight) {
+        ctx->save_for_backward(
+            {edge_index, edge_vec, edge_weight, grad_edge_vec, grad_edge_weight});
+        const Tensor& grad_deltas = grad_edge_vec;
+        const Tensor& grad_distances = grad_edge_weight;
+        const int num_atoms = ctx->saved_data["num_atoms"].toInt();
+        const int num_pairs = grad_distances.size(0);
+        const int num_threads = 128;
+        const int num_blocks_x = std::max((num_pairs + num_threads - 1) / num_threads, 1);
+        const dim3 blocks(num_blocks_x, 2, 3);
+        const auto stream = getCurrentCUDAStream(grad_distances.get_device());
+
+        const tensor_list data = ctx->get_saved_variables();
+        const Tensor& neighbors = data[0];
+        const Tensor& deltas = data[1];
+        const Tensor& distances = data[2];
+        const Tensor grad_positions = zeros({num_atoms, 3}, grad_distances.options());
+
+        AT_DISPATCH_FLOATING_TYPES(
+            grad_distances.scalar_type(), "getNeighborPairs::backward", [&]() {
+                const CUDAStreamGuard guard(stream);
+                forward_kernel<<<blocks, num_threads, 0, stream>>>(
+                    get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
+                    get_accessor<scalar_t, 2>(grad_deltas), get_accessor<scalar_t, 1>(distances),
+                    get_accessor<scalar_t, 1>(grad_distances),
+                    get_accessor<scalar_t, 2>(grad_positions));
+            });
+
+        return {grad_positions, Tensor(), Tensor(), Tensor(), Tensor(),
+                Tensor(),       Tensor(), Tensor(), Tensor(), Tensor()};
+    }
+    static tensor_list backward(AutogradContext* ctx, const tensor_list& grad_outputs) {
+        const tensor_list data = ctx->get_saved_variables();
+        const Tensor& neighbors = data[0];
+        const Tensor& deltas = data[1];
+        const Tensor& distances = data[2];
+        const Tensor& grad_positions = grad_outputs[0];
+        const Tensor& grad_deltas = data[3];
+        const Tensor& grad_distances = data[4];
+
+        const int num_atoms = ctx->saved_data["num_atoms"].toInt();
+        const int num_pairs = grad_distances.size(0);
+        const int num_threads = 128;
+        const int num_blocks_x = std::max((num_pairs + num_threads - 1) / num_threads, 1);
+        const dim3 blocks(num_blocks_x, 2, 3);
+        const auto stream = getCurrentCUDAStream(grad_distances.get_device());
+
+        Tensor grad_grad_edge_vec = zeros_like(deltas);
+        Tensor grad_grad_edge_weight = zeros_like(distances);
+
+        AT_DISPATCH_FLOATING_TYPES(
+            grad_positions.scalar_type(), "getNeighborPairs::backward", [&]() {
+                const CUDAStreamGuard guard(stream);
+                backward_kernel<<<blocks, num_threads, 0, stream>>>(
+                    get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
+                    get_accessor<scalar_t, 2>(grad_deltas), get_accessor<scalar_t, 1>(distances),
+		    get_accessor<scalar_t, 1>(grad_distances),
+                    get_accessor<scalar_t, 2>(grad_positions),
+                    get_accessor<scalar_t, 2>(grad_grad_edge_vec),
+                    get_accessor<scalar_t, 1>(grad_grad_edge_weight));
+            });
+
+        return {Tensor(), Tensor(), Tensor(), grad_grad_edge_vec, grad_grad_edge_weight};
+    }
+};
+
 // This is the autograd function that is called when the user calls get_neighbor_pairs.
 // It dispatches the required strategy for the forward function and implements the backward
 // function. The backward function is written in full pytorch so that it can be differentiated a
@@ -46,17 +168,9 @@ public:
         auto num_atoms = ctx->saved_data["num_atoms"].toInt();
         auto grad_edge_vec = grad_outputs[1];
         auto grad_edge_weight = grad_outputs[2];
-        auto r0 = edge_weight.nonzero().squeeze(-1);
-        auto grad_positions = torch::zeros({num_atoms, 3}, edge_vec.options());
-        // We need to avoid dividing by 0. Otherwise Autograd fills the gradient with NaNs in the
-        // case of a double backwards. This is why we index_select like this.
-        auto grad_distances_ =
-            (edge_vec.index_select(0, r0) / edge_weight.index_select(0, r0).unsqueeze(-1)) *
-            grad_edge_weight.index_select(0, r0).unsqueeze(-1);
-        auto edge_index_no_r0 = edge_index.index_select(1, r0);
-        auto result = grad_edge_vec.index_select(0, r0) + grad_distances_;
-        grad_positions.index_add_(0, edge_index_no_r0[0], result);
-        grad_positions.index_add_(0, edge_index_no_r0[1], -result);
+        auto result = EdgeOperation::apply(edge_index, edge_vec, edge_weight, grad_edge_vec,
+                                              grad_edge_weight);
+        auto grad_positions = result[0];
         Tensor ignore;
         return {ignore, grad_positions, ignore, ignore, ignore, ignore,
                 ignore, ignore,         ignore, ignore, ignore};
