@@ -55,20 +55,52 @@ def tensor_norm(tensor):
 
 
 class TensorNet(nn.Module):
+    r"""TensorNet's architecture.
+
+    Args:
+        hidden_channels (int, optional): Hidden embedding size.
+            (default: :obj:`128`)
+        num_layers (int, optional): The number of interaction layers.
+            (default: :obj:`6`)
+        num_rbf (int, optional): The number of radial basis functions :math:`\mu`.
+            (default: :obj:`50`)
+        rbf_type (string, optional): The type of radial basis function to use.
+            (default: :obj:`"expnorm"`)
+        trainable_rbf (bool, optional): Whether to train RBF parameters with
+            backpropagation. (default: :obj:`True`)
+        activation (string, optional): The type of activation function to use.
+            (default: :obj:`"silu"`)
+        cutoff_lower (float, optional): Lower cutoff distance for interatomic interactions.
+            (default: :obj:`0.0`)
+        cutoff_upper (float, optional): Upper cutoff distance for interatomic interactions.
+            (default: :obj:`5.0`)
+        max_z (int, optional): Maximum atomic number. Used for initializing embeddings.
+            (default: :obj:`100`)
+        max_num_neighbors (int, optional): Maximum number of neighbors to return for a
+            given node/atom when constructing the molecular graph during forward passes.
+            This attribute is passed to the torch_cluster radius_graph routine keyword
+            max_num_neighbors, which normally defaults to 32. Users should set this to
+            higher values if they are using higher upper distance cutoffs and expect more
+            than 32 neighbors per node/atom.
+            (default: :obj:`32`)
+        equivariance_invariance_group (string, optional): Group under whose action on input
+            positions internal tensor features will be equivariant and scalar predictions
+            will be invariant. O(3) or SO(3).
+            (default :obj:`"O(3)"`)
+    """
+    
     def __init__(
         self,
         hidden_channels=128,
         num_layers=2,
         num_rbf=32,
-        activation="silu",
         rbf_type="expnorm",
+        trainable_rbf=False,
+        activation="silu",
         cutoff_lower=0,
         cutoff_upper=4.5,
-        max_num_neighbors=64,
-        return_vecs=True,
-        loop=True,
-        trainable_rbf=False,
         max_z=128,
+        max_num_neighbors=64,
         equivariance_invariance_group="O(3)",
     ):
         super(TensorNet, self).__init__()
@@ -94,7 +126,7 @@ class TensorNet(nn.Module):
         self.cutoff_upper = cutoff_upper
         act_class = act_class_mapping[activation]
         self.distance = Distance(
-            cutoff_lower, cutoff_upper, max_num_neighbors, return_vecs, loop=True
+            cutoff_lower, cutoff_upper, max_num_neighbors, return_vecs=True, loop=True
         )
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
@@ -161,7 +193,7 @@ class TensorEmbedding(MessagePassing):
         cutoff_lower,
         cutoff_upper,
         trainable_rbf=False,
-        max_z=100,
+        max_z=128,
     ):
         super(TensorEmbedding, self).__init__(aggr="add", node_dim=0)
 
