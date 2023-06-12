@@ -15,8 +15,21 @@ from torchmdnet.models.utils import (
 def vector_to_skewtensor(vector):
     batch_size = vector.size(0)
     zero = torch.zeros(batch_size, device=vector.device, dtype=vector.dtype)
-    tensor = torch.stack((zero, -vector[:,2], vector[:,1], vector[:,2], zero, -vector[:,0], -vector[:,1], vector[:,0], zero), dim=1)
-    tensor = tensor.view(-1,3,3)
+    tensor = torch.stack(
+        (
+            zero,
+            -vector[:, 2],
+            vector[:, 1],
+            vector[:, 2],
+            zero,
+            -vector[:, 0],
+            -vector[:, 1],
+            vector[:, 0],
+            zero,
+        ),
+        dim=1,
+    )
+    tensor = tensor.view(-1, 3, 3)
     return tensor.squeeze(0)
 
 
@@ -217,15 +230,10 @@ class TensorEmbedding(MessagePassing):
         self.emb2 = nn.Linear(2 * hidden_channels, hidden_channels)
         self.act = activation()
         self.linears_tensor = nn.ModuleList()
-        self.linears_tensor.append(
-            nn.Linear(hidden_channels, hidden_channels, bias=False)
-        )
-        self.linears_tensor.append(
-            nn.Linear(hidden_channels, hidden_channels, bias=False)
-        )
-        self.linears_tensor.append(
-            nn.Linear(hidden_channels, hidden_channels, bias=False)
-        )
+        for _ in range(3):
+            self.linears_tensor.append(
+                nn.Linear(hidden_channels, hidden_channels, bias=False)
+            )
         self.linears_scalar = nn.ModuleList()
         self.linears_scalar.append(
             nn.Linear(hidden_channels, 2 * hidden_channels, bias=True)
@@ -259,13 +267,15 @@ class TensorEmbedding(MessagePassing):
 
         Z = self.emb(z)
         C = self.cutoff(edge_weight)
-        W1 = (self.distance_proj1(edge_attr)) * C.view(-1, 1)
-        W2 = (self.distance_proj2(edge_attr)) * C.view(-1, 1)
-        W3 = (self.distance_proj3(edge_attr)) * C.view(-1, 1)
+        W1 = self.distance_proj1(edge_attr) * C.view(-1, 1)
+        W2 = self.distance_proj2(edge_attr) * C.view(-1, 1)
+        W3 = self.distance_proj3(edge_attr) * C.view(-1, 1)
         mask = edge_index[0] != edge_index[1]
         edge_vec[mask] = edge_vec[mask] / torch.norm(edge_vec[mask], dim=1).unsqueeze(1)
         Iij, Aij, Sij = new_radial_tensor(
-            torch.eye(3, 3, device=edge_vec.device)[None, None, :, :],
+            torch.eye(3, 3, device=edge_vec.device, dtype=edge_vec.dtype)[
+                None, None, :, :
+            ],
             vector_to_skewtensor(edge_vec)[..., None, :, :],
             vector_to_symtensor(edge_vec)[..., None, :, :],
             W1,
@@ -280,11 +290,11 @@ class TensorEmbedding(MessagePassing):
         A = self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         for index, linear_scalar in enumerate(self.linears_scalar):
-            # norm = self.act(self.linears_scalar[j](norm))
             norm = self.act(linear_scalar(norm))
         norm = norm.reshape(norm.shape[0], self.hidden_channels, 3)
         I, A, S = new_radial_tensor(I, A, S, norm[..., 0], norm[..., 1], norm[..., 2])
         X = I + A + S
+
         return X
 
     def message(self, Z_i, Z_j, I, A, S):
@@ -341,24 +351,10 @@ class Interaction(MessagePassing):
             nn.Linear(2 * hidden_channels, 3 * hidden_channels, bias=True)
         )
         self.linears_tensor = nn.ModuleList()
-        self.linears_tensor.append(
-            nn.Linear(hidden_channels, hidden_channels, bias=False)
-        )
-        self.linears_tensor.append(
-            nn.Linear(hidden_channels, hidden_channels, bias=False)
-        )
-        self.linears_tensor.append(
-            nn.Linear(hidden_channels, hidden_channels, bias=False)
-        )
-        self.linears_tensor.append(
-            nn.Linear(hidden_channels, hidden_channels, bias=False)
-        )
-        self.linears_tensor.append(
-            nn.Linear(hidden_channels, hidden_channels, bias=False)
-        )
-        self.linears_tensor.append(
-            nn.Linear(hidden_channels, hidden_channels, bias=False)
-        )
+        for i in range(6):
+            self.linears_tensor.append(
+                nn.Linear(hidden_channels, hidden_channels, bias=False)
+            )
         self.act = activation()
         self.equivariance_invariance_group = equivariance_invariance_group
         self.reset_parameters()
@@ -372,7 +368,7 @@ class Interaction(MessagePassing):
     def forward(self, X, edge_index, edge_weight, edge_attr):
 
         C = self.cutoff(edge_weight)
-        for indec, linear_scalar in enumerate(self.linears_scalar):
+        for i, linear_scalar in enumerate(self.linears_scalar):
             edge_attr = self.act(linear_scalar(edge_attr))
         edge_attr = (edge_attr * C.view(-1, 1)).reshape(
             edge_attr.shape[0], self.hidden_channels, 3
