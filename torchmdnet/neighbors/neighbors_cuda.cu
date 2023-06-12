@@ -19,124 +19,82 @@ template <class... T> auto call_forward_kernel(const std::string& kernel_name, c
 }
 
 template <typename scalar_t>
-__global__ void
-forward_kernel(const Accessor<int32_t, 2> neighbors, const Accessor<scalar_t, 2> deltas,
-               const Accessor<scalar_t, 2> grad_deltas, const Accessor<scalar_t, 1> distances,
-               const Accessor<scalar_t, 1> grad_distances, Accessor<scalar_t, 2> grad_positions) {
-    const int32_t i_pair = blockIdx.x * blockDim.x + threadIdx.x;
-    const int32_t num_pairs = neighbors.size(1);
-    if (i_pair >= num_pairs) {
-        return;
+__global__ void masked_index_add_cuda_forward(const Accessor<scalar_t, 2> values,
+                                              const Accessor<int, 1> index,
+                                              Accessor<scalar_t, 2> output) {
+    const auto i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < index.size(0)) {
+        const auto k = index[i];
+        if (k >= 0) {
+            for (int j = 0; j < values.size(1); ++j) {
+                atomicAdd(&output[k][j], values[i][j]);
+            }
+        }
     }
-    const int32_t i_dir = blockIdx.y;
-    const int32_t i_atom = neighbors[i_dir][i_pair];
-    const int32_t i_comp = blockIdx.z;
-    if (i_atom < 0) {
-        return;
-    }
-    const scalar_t grad_deltas_ = grad_deltas[i_pair][i_comp];
-    const scalar_t dist = distances[i_pair];
-    const scalar_t grad_distances_ =
-        dist == 0 ? scalar_t(1.0) : (deltas[i_pair][i_comp] / dist * grad_distances[i_pair]);
-
-    // Handle self interaction
-    const scalar_t grad =
-        (i_dir ? -1 : 1) *
-        (i_atom == neighbors[1 - i_dir][i_pair] ? scalar_t(0.0) : (grad_deltas_ + grad_distances_));
-    atomicAdd(&grad_positions[i_atom][i_comp], grad);
 }
+
 template <typename scalar_t>
-__global__ void
-backward_kernel(const Accessor<int32_t, 2> neighbors, const Accessor<scalar_t, 2> deltas,
-                const Accessor<scalar_t, 2> grad_deltas, const Accessor<scalar_t, 1> distances,
-                const Accessor<scalar_t, 1> grad_distances, Accessor<scalar_t, 2> grad_positions,
-                Accessor<scalar_t, 2> grad_edge_vec, Accessor<scalar_t, 1> grad_edge_weight) {
-    const int32_t i_pair = blockIdx.x * blockDim.x + threadIdx.x;
-    const int32_t num_pairs = neighbors.size(1);
-    if (i_pair >= num_pairs) {
-        return;
+__global__ void masked_index_add_cuda_backward(Accessor<scalar_t, 2> grad_input,
+                                               const Accessor<int, 1> index,
+                                               const Accessor<scalar_t, 2> values,
+                                               const Accessor<scalar_t, 2> grad_output) {
+    const auto i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < index.size(0)) {
+        const auto k = index[i];
+        if (k >= 0) {
+            for (int j = 0; j < grad_input.size(1); ++j) {
+                // Gradients must be accmulated for the output and the values
+                atomicAdd(&grad_input[i][j], grad_output[k][j]);
+            }
+        }
     }
-    const int32_t i_dir = blockIdx.y;
-    const int32_t i_atom = neighbors[i_dir][i_pair];
-    const int32_t i_comp = blockIdx.z;
-    if (i_atom < 0) {
-        return;
-    }
-
-    scalar_t grad = grad_positions[i_atom][i_comp];
-    if (distances[i_pair] != 0) {
-        grad_edge_vec[i_pair][i_comp] = grad_distances[i_pair] * grad / distances[i_pair];
-    }
-    grad_edge_weight[i_pair] = grad_deltas[i_pair][i_comp] * grad;
 }
 
-class EdgeOperation : public torch::autograd::Function<EdgeOperation> {
+/*
+ *The MaskedIndexAdd operation works similarly as index_add from pytorch, but it only adds the
+ *elements of the values tensor to the input if the index is positive.
+ */
+class MaskedIndexAddFunction : public torch::autograd::Function<MaskedIndexAddFunction> {
 public:
-    static tensor_list forward(AutogradContext* ctx, const Tensor& edge_index,
-                               const Tensor& edge_vec, const Tensor& edge_weight,
-                               const Tensor& grad_edge_vec, const Tensor& grad_edge_weight) {
-        ctx->save_for_backward(
-            {edge_index, edge_vec, edge_weight, grad_edge_vec, grad_edge_weight});
-        const Tensor& grad_deltas = grad_edge_vec;
-        const Tensor& grad_distances = grad_edge_weight;
-        const int num_atoms = ctx->saved_data["num_atoms"].toInt();
-        const int num_pairs = grad_distances.size(0);
-        const int num_threads = 128;
-        const int num_blocks_x = std::max((num_pairs + num_threads - 1) / num_threads, 1);
-        const dim3 blocks(num_blocks_x, 2, 3);
-        const auto stream = getCurrentCUDAStream(grad_distances.get_device());
-
-        const tensor_list data = ctx->get_saved_variables();
-        const Tensor& neighbors = data[0];
-        const Tensor& deltas = data[1];
-        const Tensor& distances = data[2];
-        const Tensor grad_positions = zeros({num_atoms, 3}, grad_distances.options());
-
+    static tensor_list forward(AutogradContext* ctx, const Tensor &input,const  Tensor &index,const  Tensor& values) {
+        ctx->save_for_backward({index, values});
+        ctx->saved_data["input_size"] = input.size(0);
+        auto stream = at::cuda::getCurrentCUDAStream();
+        const CUDAStreamGuard guard(stream);
+        auto output = input.clone();
+        const int threads = 128;
+        const dim3 blocks((index.numel() + threads - 1) / threads);
         AT_DISPATCH_FLOATING_TYPES(
-            grad_distances.scalar_type(), "getNeighborPairs::backward", [&]() {
-                const CUDAStreamGuard guard(stream);
-                forward_kernel<<<blocks, num_threads, 0, stream>>>(
-                    get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
-                    get_accessor<scalar_t, 2>(grad_deltas), get_accessor<scalar_t, 1>(distances),
-                    get_accessor<scalar_t, 1>(grad_distances),
-                    get_accessor<scalar_t, 2>(grad_positions));
-            });
-
-        return {grad_positions, Tensor(), Tensor(), Tensor(), Tensor(),
-                Tensor(),       Tensor(), Tensor(), Tensor(), Tensor()};
+            input.scalar_type(), "masked_index_add_forward_cuda", ([&] {
+                masked_index_add_cuda_forward<scalar_t><<<blocks, threads, 0, stream>>>(
+                    get_accessor<scalar_t, 2>(values), get_accessor<int, 1>(index),
+                    get_accessor<scalar_t, 2>(output));
+            }));
+        return {output};
     }
-    static tensor_list backward(AutogradContext* ctx, const tensor_list& grad_outputs) {
-        const tensor_list data = ctx->get_saved_variables();
-        const Tensor& neighbors = data[0];
-        const Tensor& deltas = data[1];
-        const Tensor& distances = data[2];
-        const Tensor& grad_positions = grad_outputs[0];
-        const Tensor& grad_deltas = data[3];
-        const Tensor& grad_distances = data[4];
 
-        const int num_atoms = ctx->saved_data["num_atoms"].toInt();
-        const int num_pairs = grad_distances.size(0);
-        const int num_threads = 128;
-        const int num_blocks_x = std::max((num_pairs + num_threads - 1) / num_threads, 1);
-        const dim3 blocks(num_blocks_x, 2, 3);
-        const auto stream = getCurrentCUDAStream(grad_distances.get_device());
-
-        Tensor grad_grad_edge_vec = zeros_like(deltas);
-        Tensor grad_grad_edge_weight = zeros_like(distances);
-
+    static tensor_list backward(AutogradContext* ctx, const tensor_list & grad_outputs) {
+        auto saved = ctx->get_saved_variables();
+        auto index = saved[0];
+        auto values = saved[1];
+        auto input_size = ctx->saved_data["input_size"].toInt();
+        auto grad_output = grad_outputs[0];
+        auto grad_input = torch::rand_like(grad_output);
+	  //zeros_like(grad_output);
+        auto stream = at::cuda::getCurrentCUDAStream();
+        const CUDAStreamGuard guard(stream);
+        const int threads = 128;
+        const dim3 blocks((index.numel() + threads - 1) / threads);
+	std::cout << "grad_input before: " << grad_input << std::endl;
         AT_DISPATCH_FLOATING_TYPES(
-            grad_positions.scalar_type(), "getNeighborPairs::backward", [&]() {
-                const CUDAStreamGuard guard(stream);
-                backward_kernel<<<blocks, num_threads, 0, stream>>>(
-                    get_accessor<int32_t, 2>(neighbors), get_accessor<scalar_t, 2>(deltas),
-                    get_accessor<scalar_t, 2>(grad_deltas), get_accessor<scalar_t, 1>(distances),
-		    get_accessor<scalar_t, 1>(grad_distances),
-                    get_accessor<scalar_t, 2>(grad_positions),
-                    get_accessor<scalar_t, 2>(grad_grad_edge_vec),
-                    get_accessor<scalar_t, 1>(grad_grad_edge_weight));
-            });
-
-        return {Tensor(), Tensor(), Tensor(), grad_grad_edge_vec, grad_grad_edge_weight};
+            grad_output.scalar_type(), "masked_index_add_backward_cuda", ([&] {
+                masked_index_add_cuda_backward<scalar_t><<<blocks, threads, 0, stream>>>(
+                    get_accessor<scalar_t, 2>(grad_input), get_accessor<int, 1>(index),
+                    get_accessor<scalar_t, 2>(values), get_accessor<scalar_t, 2>(grad_output));
+            }));
+	std::cout << "grad_input after: " << grad_input << std::endl;
+	std::cout << "grad_output: " << grad_output << std::endl;
+        return {grad_input, Tensor(), Tensor()};
     }
 };
 
@@ -168,9 +126,14 @@ public:
         auto num_atoms = ctx->saved_data["num_atoms"].toInt();
         auto grad_edge_vec = grad_outputs[1];
         auto grad_edge_weight = grad_outputs[2];
-        auto result = EdgeOperation::apply(edge_index, edge_vec, edge_weight, grad_edge_vec,
-                                              grad_edge_weight);
-        auto grad_positions = result[0];
+        auto grad_positions = torch::zeros({num_atoms, 3}, edge_vec.options());
+        auto r0 = edge_weight.eq(0);
+        auto edge_weight_ = edge_weight.masked_fill(r0, 1);
+        auto grad_distances_ = (edge_vec / edge_weight_.unsqueeze(-1).expand_as(edge_vec)) *
+                               grad_edge_weight.unsqueeze(-1).expand_as(edge_vec);
+        auto result = grad_edge_vec + grad_distances_;
+        grad_positions = MaskedIndexAddFunction::apply(grad_positions, edge_index[0], result)[0];
+        grad_positions = MaskedIndexAddFunction::apply(grad_positions, edge_index[1], -result)[0];
         Tensor ignore;
         return {ignore, grad_positions, ignore, ignore, ignore, ignore,
                 ignore, ignore,         ignore, ignore, ignore};
