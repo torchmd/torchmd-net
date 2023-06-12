@@ -362,13 +362,12 @@ class Interaction(MessagePassing):
         )
         self.act = activation()
         self.equivariance_invariance_group = equivariance_invariance_group
+        self.reset_parameters()
 
     def reset_parameters(self):
         for linear in self.linears_scalar:
             linear.reset_parameters()
         for linear in self.linears_tensor:
-            linear.reset_parameters()
-        for linear in self.linears_scalar:
             linear.reset_parameters()
 
     def forward(self, X, edge_index, edge_weight, edge_attr):
