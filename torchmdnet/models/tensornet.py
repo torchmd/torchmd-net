@@ -168,8 +168,7 @@ class TensorNet(nn.Module):
     def forward(
         self,
         z: Tensor,
-        pos,
-        Tensor,
+        pos: Tensor,
         batch: Tensor,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
