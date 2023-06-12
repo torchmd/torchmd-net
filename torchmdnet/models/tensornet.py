@@ -177,25 +177,17 @@ class TensorNet(nn.Module):
 
         # Obtain graph, with distances and relative position vectors
         edge_index, edge_weight, edge_vec = self.distance(pos, batch)
-
         # Expand distances with radial basis functions
         edge_attr = self.distance_expansion(edge_weight)
-
         # Embedding from edge-wise tensors to node-wise tensors
         X = self.tensor_embedding(z, edge_index, edge_weight, edge_vec, edge_attr)
-
         # Interaction layers
         for i in range(self.num_layers):
             X = self.layers[i](X, edge_index, edge_weight, edge_attr)
-
         I, A, S = decompose_tensor(X)
-
         x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
-
         x = self.out_norm(x)
-
         x = self.act(self.linear((x)))
-
         return x, None, z, pos, batch
 
 
@@ -263,16 +255,12 @@ class TensorEmbedding(MessagePassing):
     ):
 
         Z = self.emb(z)
-
         C = self.cutoff(edge_weight)
-
         W1 = (self.distance_proj1(edge_attr)) * C.view(-1, 1)
         W2 = (self.distance_proj2(edge_attr)) * C.view(-1, 1)
         W3 = (self.distance_proj3(edge_attr)) * C.view(-1, 1)
-
         mask = edge_index[0] != edge_index[1]
         edge_vec[mask] = edge_vec[mask] / torch.norm(edge_vec[mask], dim=1).unsqueeze(1)
-
         Iij, Aij, Sij = new_radial_tensor(
             torch.eye(3, 3, device=edge_vec.device)[None, None, :, :],
             vector_to_skewtensor(edge_vec)[..., None, :, :],
@@ -281,28 +269,19 @@ class TensorEmbedding(MessagePassing):
             W2,
             W3,
         )
-
         # propagate_type: (Z: Tensor, I: Tensor, A: Tensor, S: Tensor)
         I, A, S = self.propagate(edge_index, Z=Z, I=Iij, A=Aij, S=Sij, size=None)
-
         norm = tensor_norm(I + A + S)
-
         norm = self.init_norm(norm)
-
         I = self.linears_tensor[0](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         A = self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-
         for index, linear_scalar in enumerate(self.linears_scalar):
             # norm = self.act(self.linears_scalar[j](norm))
             norm = self.act(linear_scalar(norm))
-
         norm = norm.reshape(norm.shape[0], self.hidden_channels, 3)
-
         I, A, S = new_radial_tensor(I, A, S, norm[..., 0], norm[..., 1], norm[..., 2])
-
         X = I + A + S
-
         return X
 
     def message(self, Z_i, Z_j, I, A, S):
@@ -391,30 +370,22 @@ class Interaction(MessagePassing):
     def forward(self, X, edge_index, edge_weight, edge_attr):
 
         C = self.cutoff(edge_weight)
-
         for indec, linear_scalar in enumerate(self.linears_scalar):
             edge_attr = self.act(linear_scalar(edge_attr))
         edge_attr = (edge_attr * C.view(-1, 1)).reshape(
             edge_attr.shape[0], self.hidden_channels, 3
         )
-
         X = X / (tensor_norm(X) + 1)[..., None, None]
-
         I, A, S = decompose_tensor(X)
-
         I = self.linears_tensor[0](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         A = self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-
         Y = I + A + S
-
         # propagate_type: (I: Tensor, A: Tensor, S: Tensor, edge_attr: Tensor)
         Im, Am, Sm = self.propagate(
             edge_index, I=I, A=A, S=S, edge_attr=edge_attr, size=None
         )
-
         msg = Im + Am + Sm
-
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(msg, Y)
             B = torch.matmul(Y, msg)
@@ -422,23 +393,16 @@ class Interaction(MessagePassing):
         if self.equivariance_invariance_group == "SO(3)":
             B = torch.matmul(Y, msg)
             I, A, S = decompose_tensor(2 * B)
-
         norm = tensor_norm(I + A + S)
-
         I = I / (norm + 1)[..., None, None]
         A = A / (norm + 1)[..., None, None]
         S = S / (norm + 1)[..., None, None]
-
         I = self.linears_tensor[3](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-
         dX = I + A + S
-
         dX = dX + torch.matmul(dX, dX)
-
         X = X + dX
-
         return X
 
     def message(self, I_j, A_j, S_j, edge_attr):
@@ -446,7 +410,6 @@ class Interaction(MessagePassing):
         I, A, S = new_radial_tensor(
             I_j, A_j, S_j, edge_attr[..., 0], edge_attr[..., 1], edge_attr[..., 2]
         )
-
         return I, A, S
 
     def aggregate(
@@ -461,7 +424,6 @@ class Interaction(MessagePassing):
         I = scatter(I, index, dim=self.node_dim, dim_size=dim_size)
         A = scatter(A, index, dim=self.node_dim, dim_size=dim_size)
         S = scatter(S, index, dim=self.node_dim, dim_size=dim_size)
-
         return I, A, S
 
     def update(
