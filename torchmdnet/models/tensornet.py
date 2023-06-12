@@ -14,12 +14,11 @@ from torchmdnet.models.utils import (
 # Creates a skew-symmetric tensor from a vector
 def vector_to_skewtensor(vector):
     batch_size = vector.size(0)
-    eye_tensor = (
-        torch.eye(3, device=vector.device).unsqueeze(0).expand(batch_size, -1, -1)
-    )
-    vector_tensor = vector.unsqueeze(-1).expand(-1, -1, 3)
-    tensor = torch.cross(vector_tensor, eye_tensor.transpose(-2, -1))
-    return tensor
+    zero = torch.zeros(batch_size, device=vector.device, dtype=vector.dtype)
+    tensor = torch.stack((zero, -vector[:,2], vector[:,1], vector[:,2], zero, -vector[:,0], -vector[:,1], vector[:,0], zero), dim=1)
+    tensor = tensor.view(-1,3,3)
+    return tensor.squeeze(0)
+
 
 # Creates a symmetric traceless tensor from the outer product of a vector with itself
 def vector_to_symtensor(vector):
