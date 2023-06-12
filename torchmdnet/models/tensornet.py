@@ -186,8 +186,8 @@ class TensorNet(nn.Module):
         # Embedding from edge-wise tensors to node-wise tensors
         X = self.tensor_embedding(z, edge_index, edge_weight, edge_vec, edge_attr)
         # Interaction layers
-        for i in range(self.num_layers):
-            X = self.layers[i](X, edge_index, edge_weight, edge_attr)
+        for i, layer in enumerate(self.layers):
+            X = layer(X, edge_index, edge_weight, edge_attr)
         I, A, S = decompose_tensor(X)
         x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
         x = self.out_norm(x)
