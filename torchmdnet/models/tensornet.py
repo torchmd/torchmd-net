@@ -176,6 +176,11 @@ class TensorNet(nn.Module):
 
         # Obtain graph, with distances and relative position vectors
         edge_index, edge_weight, edge_vec = self.distance(pos, batch)
+        # This assert convinces TorchScript that edge_vec is a Tensor and not an Optional[Tensor]
+        assert (
+            edge_vec is not None
+        ), "Distance module did not return directional information"
+
         # Expand distances with radial basis functions
         edge_attr = self.distance_expansion(edge_weight)
         # Embedding from edge-wise tensors to node-wise tensors
