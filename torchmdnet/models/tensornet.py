@@ -391,16 +391,13 @@ class Interaction(MessagePassing):
         if self.equivariance_invariance_group == "SO(3)":
             B = torch.matmul(Y, msg)
             I, A, S = decompose_tensor(2 * B)
-        norm = tensor_norm(I + A + S)
-        I = I / (norm + 1)[..., None, None]
-        A = A / (norm + 1)[..., None, None]
-        S = S / (norm + 1)[..., None, None]
+        normp1 = (tensor_norm(I + A + S) + 1)[..., None, None]
+        I, A, S = I / normp1, A / normp1, S / normp1
         I = self.linears_tensor[3](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         dX = I + A + S
-        dX = dX + torch.matmul(dX, dX)
-        X = X + dX
+        X = X + dX + dX**2
         return X
 
     def message(self, I_j, A_j, S_j, edge_attr):
