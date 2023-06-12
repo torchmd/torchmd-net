@@ -64,9 +64,10 @@ def vector_to_skewtensor_naive(vector):
     )
     return tensor.squeeze(0)
 
+@torch.jit.script
 def vector_to_skewtensor(vector):
     batch_size = vector.size(0)
-    zero = torch.zeros(batch_size, device=vector.device)
+    zero = torch.zeros(batch_size, device=vector.device, dtype=vector.dtype)
     tensor = torch.stack((zero, -vector[:,2], vector[:,1], vector[:,2], zero, -vector[:,0], -vector[:,1], vector[:,0], zero), dim=1)
     tensor = tensor.view(-1,3,3)
     return tensor.squeeze(0)
