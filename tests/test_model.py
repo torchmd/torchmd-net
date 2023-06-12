@@ -39,8 +39,17 @@ def test_forward_torchscript(model_name):
     model = torch.jit.script(
         create_model(load_example_args(model_name, remove_prior=True, derivative=True))
     )
-    model(z, pos, batch=batch)
+    y, neg_dy = model(z, pos, batch=batch)
+    grad_outputs = [torch.ones_like(y)]
+    dy = torch.autograd.grad(
+        [y],
+        [pos],
+        grad_outputs=grad_outputs,
+        create_graph=True,
+        retain_graph=True,
+    )[0]
 
+    assert torch.allclose(neg_dy, -dy)
 
 @mark.parametrize("model_name", models.__all__)
 def test_seed(model_name):
