@@ -1,6 +1,7 @@
 from torchmdnet.priors.base import BasePrior
+from typing import Optional, Dict
 import torch
-from torch import nn
+from torch import nn, Tensor
 from pytorch_lightning.utilities import rank_zero_warn
 
 
@@ -37,5 +38,5 @@ class Atomref(BasePrior):
     def get_init_args(self):
         return dict(max_z=self.initial_atomref.size(0))
 
-    def pre_reduce(self, x, z, pos, batch, extra_args):
+    def pre_reduce(self, x: Tensor, z: Tensor, pos: Tensor, batch: Tensor, extra_args: Optional[Dict[str, Tensor]]):
         return x + self.atomref(z)
