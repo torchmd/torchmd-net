@@ -54,6 +54,35 @@ def test_seed(model_name):
         assert (p1 == p2).all(), "Parameters don't match although using the same seed."
 
 
+
+# Creates a skew-symmetric tensor from a vector
+def vector_to_skewtensor_naive(vector):
+    tensor = torch.cross(
+        *torch.broadcast_tensors(
+            vector[..., None], torch.eye(3, 3, device=vector.device)[None, None]
+        )
+    )
+    return tensor.squeeze(0)
+
+def vector_to_skewtensor(vector):
+    batch_size = vector.size(0)
+    zero = torch.zeros(batch_size, device=vector.device)
+    tensor = torch.stack((zero, -vector[:,2], vector[:,1], vector[:,2], zero, -vector[:,0], -vector[:,1], vector[:,0], zero), dim=1)
+    tensor = tensor.view(-1,3,3)
+    return tensor.squeeze(0)
+
+def test_skewtensor():
+    vec = torch.rand(4, 3)
+    skew = vector_to_skewtensor(vec)
+    skew_naive = vector_to_skewtensor_naive(vec)
+    print("Vector")
+    print(vec)
+    print("Naive")
+    print(skew_naive)
+    print("Optimized")
+    print(skew)
+    assert torch.allclose(skew, skew_naive)
+
 @mark.parametrize("model_name", models.__all__)
 @mark.parametrize(
     "output_model",
