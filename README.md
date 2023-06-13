@@ -32,13 +32,13 @@ TorchMD-NET provides state-of-the-art neural networks potentials (NNPs) and a me
     ```
 
 ## Usage
-Specifying training arguments can either be done via a configuration yaml file or through command line arguments directly. Several examples can be found in [examples/](https://github.com/torchmd/torchmd-net/tree/main/examples). Note that if a parameter is present both in the yaml file and the command line, the command line version takes precedence.
+Specifying training arguments can either be done via a configuration yaml file or through command line arguments directly. Several examples of architectural and training specifications for some models and datasets can be found in [examples/](https://github.com/torchmd/torchmd-net/tree/main/examples). Note that if a parameter is present both in the yaml file and the command line, the command line version takes precedence.
 GPUs can be selected by setting the `CUDA_VISIBLE_DEVICES` environment variable. Otherwise, the argument `--ngpus` can be used to select the number of GPUs to train on (-1, the default, uses all available GPUs or the ones specified in `CUDA_VISIBLE_DEVICES`).
+For example, to train the Equivariant Transformer on the QM9 dataset with the architectural and training hyperparameters described in the paper, one can run:
 ```
 mkdir output
 CUDA_VISIBLE_DEVICES=0 torchmd-train --conf torchmd-net/examples/ET-QM9.yaml --log-dir output/
-```
-
+``` 
 Run `torchmd-train --help` to see all available options and their descriptions.
 
 ## Pretrained models
@@ -49,7 +49,7 @@ If you want to train on custom data, first have a look at `torchmdnet.datasets.C
 loading a NumPy dataset consisting of atom types and coordinates, as well as energies, forces or both as the labels.
 Alternatively, you can implement a custom class according to the torch-geometric way of implementing a dataset. That is, 
 derive the `Dataset` or `InMemoryDataset` class and implement the necessary functions (more info [here](https://pytorch-geometric.readthedocs.io/en/latest/notes/create_dataset.html#creating-your-own-datasets)). The dataset must return torch-geometric `Data` 
-objects, containing at least the keys `z` (atom types) and `pos` (atomic coordinates), as well as `y` (label), `dy` (derivative of the label w.r.t atom coordinates) or both.
+objects, containing at least the keys `z` (atom types) and `pos` (atomic coordinates), as well as `y` (label), `neg_dy` (negative derivative of the label w.r.t atom coordinates) or both.
 
 ### Custom prior models
 In addition to implementing a custom dataset class, it is also possible to add a custom prior model to the model. This can be
