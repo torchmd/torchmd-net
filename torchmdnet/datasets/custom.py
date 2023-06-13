@@ -11,12 +11,19 @@ class Custom(Dataset):
     must be given as targets.
 
     Args:
-        coordglob (string): Glob path for coordinate files.
-        embedglob (string): Glob path for embedding index files.
-        energyglob (string, optional): Glob path for energy files.
+        coordglob (string): Glob path for coordinate files. Exposed as "pos".
+        embedglob (string): Glob path for embedding index files. Exposed as "z" (atomic number).
+        energyglob (string, optional): Glob path for energy files. Exposed as "y".
             (default: :obj:`None`)
-        forceglob (string, optional): Glob path for force files.
+        forceglob (string, optional): Glob path for force files. Exposed as "neg_dy".
             (default: :obj:`None`)
+    Example:
+      >>> data = Custom(coordglob="coords_files*", embedglob="embed_files*")
+      >>> assert len(data) == num_samples * num_files, "Number of samples does not match"
+      >>> sample = data[0]
+      >>> assert hasattr(sample, "pos"), "Sample doesn't contain coords"
+      >>> assert hasattr(sample, "z"), "Sample doesn't contain atom numbers"
+
     """
 
     def __init__(self, coordglob, embedglob, energyglob=None, forceglob=None):
