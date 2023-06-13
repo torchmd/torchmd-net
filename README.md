@@ -1,3 +1,6 @@
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![CI](https://github.com/torchmd/torchmd-net/actions/workflows/CI.yml/badge.svg)](https://github.com/torchmd/torchmd-net/actions/workflows/CI.yml)
+
 # TorchMD-NET
 
 TorchMD-NET provides state-of-the-art neural networks potentials (NNPs) and a mechanism to train them. It offers efficient and fast implementations if several NNPs and it is integrated in GPU-accelerated molecular dynamics code like [ACEMD](https://www.acellera.com/products/molecular-dynamics-software-gpu-acemd/), [OpenMM](https://www.openmm.org) and [TorchMD](https://github.com/torchmd/torchmd). TorchMD-NET exposes its NNPs as [PyTorch](https://pytorch.org) modules.
@@ -30,6 +33,8 @@ TorchMD-NET provides state-of-the-art neural networks potentials (NNPs) and a me
     ```
     pip install -e .
     ```
+This will install TorchMD-NET in editable mode, so that changes to the source code are immediately available.
+Besides making all python utilities available environment-wide, this will also install the `torchmd-train` command line utility.
 
 ## Usage
 Specifying training arguments can either be done via a configuration yaml file or through command line arguments directly. Several examples of architectural and training specifications for some models and datasets can be found in [examples/](https://github.com/torchmd/torchmd-net/tree/main/examples). Note that if a parameter is present both in the yaml file and the command line, the command line version takes precedence.
@@ -121,3 +126,70 @@ url={https://openreview.net/forum?id=zNHzqZ9wrRB}
       primaryClass={cs.LG}
 }
 ```
+
+## Developer guide
+
+### Implementing a new architecture
+
+To implement a new architecture, you need to follow these steps:
+ 1. Create a new class in `torchmdnet.models` that inherits from `torch.nn.Model`. Follow TorchMD_ET as a template. This is a minimum implementation of a model:
+```python 
+class MyModule(nn.Module):
+  def __init__(self, parameter1, parameter2):
+	super(MyModule, self).__init__()
+	# Define your model here
+	self.layer1 = nn.Linear(10, 10)
+	...
+	# Initialize your model parameters here
+	self.reset_parameters()
+
+    def reset_parameters(self):
+      # Initialize your model parameters here
+	  nn.init.xavier_uniform_(self.layer1.weight)
+	...
+	
+  def forward(self, self,
+        z: Tensor, # Atomic numbers
+        pos: Tensor, # Atomic positions
+        batch: Tensor, # Batch vector
+        q: Optional[Tensor] = None, # Atomic charges
+        s: Optional[Tensor] = None, # Atomic spins
+    ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+	# Define your forward pass here
+	scalar_features = ...
+	vector_features = ...
+	# Return the scalar and vector features, as well as the atomic numbers, positions and batch vector
+	return scalar_features, vector_features, z, pos, batch
+```
+ 2. Add the model to the `__all__` list in `torchmdnet.models.__init__.py`. This will make the tests pick your model up.
+ 3. Tell models.model.create_model how to initialize your module by adding a new entry, for instance:
+ ```python
+     elif args["model"] == "mymodule":
+        from torchmdnet.models.torchmd_mymodule import MyModule
+        is_equivariant = False # Set to True if your model is equivariant
+        representation_model = MyModule(
+            parameter1=args["parameter1"],
+            parameter2=args["parameter2"],
+            **shared_args, # Arguments typically shared by all models
+        )
+	```
+ 4. Add any new parameters required to initialize your module to scripts.train.get_args. For instance:
+ ```python
+   parser.add_argument('--parameter1', type=int, default=32, help='Parameter1 required by MyModule')
+   ...
+ ```
+ 5. Add an example configuration file to `torchmd-net/examples` that uses your model.
+ 6. Make tests use your configuration file by adding a case to tests.utils.load_example_args. For instance:
+ ```python
+ if model_name == "mymodule":
+        config_file = join(dirname(dirname(__file__)), "examples", "MyModule-QM9.yaml")
+ ```
+
+### Code style
+
+We use [black](https://https://black.readthedocs.io/en/stable/). Please run `black` on your modified files before committing.
+
+### Testing
+
+To run the tests, install the package and run `pytest` in the root directory of the repository. Tests are a good source of knowledge on how to use the different components of the package.
+
