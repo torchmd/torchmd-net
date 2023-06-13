@@ -1,6 +1,14 @@
 # TorchMD-NET
 
-TorchMD-NET provides state-of-the-art graph neural networks and equivariant transformer neural networks potentials for learning molecular potentials. It offers an efficient and fast implementation and it is integrated in GPU-accelerated molecular dynamics code like [ACEMD](https://www.acellera.com/products/molecular-dynamics-software-gpu-acemd/) and [OpenMM](https://www.openmm.org). See the full paper at https://arxiv.org/abs/2202.02541.
+TorchMD-NET provides state-of-the-art neural networks potentials (NNPs) and a mechanism to train them. It offers efficient and fast implementations if several NNPs and it is integrated in GPU-accelerated molecular dynamics code like [ACEMD](https://www.acellera.com/products/molecular-dynamics-software-gpu-acemd/), [OpenMM](https://www.openmm.org) and [TorchMD](https://github.com/torchmd/torchmd). TorchMD-NET exposes its NNPs as [PyTorch](https://pytorch.org) modules.
+
+## Available architectures
+
+- [Equivariant Transformer (ET)](https://arxiv.org/abs/2202.02541)
+- [Transformer (T)](https://arxiv.org/abs/2202.02541)
+- [Graph Neural Network (GN)](https://arxiv.org/abs/2212.07492)
+- [TensorNet](https://arxiv.org/abs/2306.06482)
+
 
 ## Installation
 
@@ -10,7 +18,7 @@ TorchMD-NET provides state-of-the-art graph neural networks and equivariant tran
     cd torchmd-net
     ```
 
-2. Install Mambaforge (https://github.com/conda-forge/miniforge/#mambaforge). It is recommended to use `mamba` rather than `conda`. `conda` is known to produce broken enviroments with PyTorch.
+2. Install Mambaforge (https://github.com/conda-forge/miniforge/#mambaforge). We recommend to use `mamba` rather than `conda`.
 
 3. Create an environment and activate it:
     ```
@@ -23,28 +31,18 @@ TorchMD-NET provides state-of-the-art graph neural networks and equivariant tran
     pip install -e .
     ```
 
-## Cite
-```
-@inproceedings{
-tholke2021equivariant,
-title={Equivariant Transformers for Neural Network based Molecular Potentials},
-author={Philipp Th{\"o}lke and Gianni De Fabritiis},
-booktitle={International Conference on Learning Representations},
-year={2022},
-url={https://openreview.net/forum?id=zNHzqZ9wrRB}
-}
-```
-
-
 ## Usage
-Specifying training arguments can either be done via a configuration yaml file or through command line arguments directly. An example configuration file for a TorchMD Graph Network can be found in [examples/](https://github.com/compsciencelab/torchmd-net/blob/main/examples). For an example on how to train the network on the QM9 dataset, see [examples/](https://github.com/compsciencelab/torchmd-net/blob/main/examples). GPUs can be selected by their index by listing the device IDs (coming from `nvidia-smi`) in the `CUDA_VISIBLE_DEVICES` environment variable. Otherwise, the argument `--ngpus` can be used to select the number of GPUs to train on (-1 uses all available GPUs or the ones specified in `CUDA_VISIBLE_DEVICES`).
+Specifying training arguments can either be done via a configuration yaml file or through command line arguments directly. Several examples can be found in [examples/](https://github.com/torchmd/torchmd-net/tree/main/examples). Note that if a parameter is present both in the yaml file and the command line, the command line version takes precedence.
+GPUs can be selected by setting the `CUDA_VISIBLE_DEVICES` environment variable. Otherwise, the argument `--ngpus` can be used to select the number of GPUs to train on (-1, the default, uses all available GPUs or the ones specified in `CUDA_VISIBLE_DEVICES`).
 ```
 mkdir output
 CUDA_VISIBLE_DEVICES=0 torchmd-train --conf torchmd-net/examples/ET-QM9.yaml --log-dir output/
 ```
 
+Run `torchmd-train --help` to see all available options and their descriptions.
+
 ## Pretrained models
-Pretrained models are available at https://github.com/torchmd/torchmd-net/tree/main/examples.
+See [here](https://github.com/torchmd/torchmd-net/tree/main/examples#loading-checkpoints) for instructions on how to load pretrained models.
 
 ## Creating a new dataset
 If you want to train on custom data, first have a look at `torchmdnet.datasets.Custom`, which provides functionalities for 
@@ -77,6 +75,49 @@ CUDA_VISIBLE_DEVICES=0,1 torchmd-train --conf torchmd-net/examples/ET-QM9.yaml.y
 - `MASTER_ADDR` : Hostname or IP address of the main node. The same for all involved nodes.
 - `MASTER_PORT` : A free network port for communication between nodes. PyTorch Lightning suggests port `12910` as a default.
 
+
 ### Known Limitations
 - Due to the way PyTorch Lightning calculates the number of required DDP processes, all nodes must use the same number of GPUs. Otherwise training will not start or crash.
 - We observe a 50x decrease in performance when mixing nodes with different GPU architectures (tested with RTX 2080 Ti and RTX 3090).
+
+
+## Cite
+If you use TorchMD-NET in your research, please cite the following papers:
+
+### Main reference
+```
+@inproceedings{
+tholke2021equivariant,
+title={Equivariant Transformers for Neural Network based Molecular Potentials},
+author={Philipp Th{\"o}lke and Gianni De Fabritiis},
+booktitle={International Conference on Learning Representations},
+year={2022},
+url={https://openreview.net/forum?id=zNHzqZ9wrRB}
+}
+```
+
+### Graph Network 
+
+```
+@misc{majewski2022machine,
+      title={Machine Learning Coarse-Grained Potentials of Protein Thermodynamics}, 
+      author={Maciej Majewski and Adrià Pérez and Philipp Thölke and Stefan Doerr and Nicholas E. Charron and Toni Giorgino and Brooke E. Husic and Cecilia Clementi and Frank Noé and Gianni De Fabritiis},
+      year={2022},
+      eprint={2212.07492},
+      archivePrefix={arXiv},
+      primaryClass={q-bio.BM}
+}
+```
+
+### TensorNet
+
+```
+@misc{simeon2023tensornet,
+      title={TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials}, 
+      author={Guillem Simeon and Gianni de Fabritiis},
+      year={2023},
+      eprint={2306.06482},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
+```
