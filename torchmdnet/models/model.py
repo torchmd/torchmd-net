@@ -160,6 +160,15 @@ def create_prior_models(args, dataset=None):
 
 
 class TorchMD_Net(nn.Module):
+    """The  TorchMD_Net class  combines a  given representation  model
+    (such as  the equivariant transformer),  an output model  (such as
+    the scalar output  module) and a prior model (such  as the atomref
+    prior), producing a  Module that takes as input a  series of atoms
+    features  and  outputs  a  scalar   value  (i.e  energy  for  each
+    batch/molecule) and,  derivative is True, the  negative of  its derivative
+    with respect to the positions (i.e forces for each atom).
+
+    """
     def __init__(
         self,
         representation_model,
@@ -210,6 +219,15 @@ class TorchMD_Net(nn.Module):
         s: Optional[Tensor] = None,
         extra_args: Optional[Dict[str, Tensor]] = None
     ) -> Tuple[Tensor, Optional[Tensor]]:
+        """Compute the output of the model.
+        Args:
+            z (Tensor): Atomic numbers of the atoms in the molecule. Shape (N,).
+            pos (Tensor): Atomic positions in the molecule. Shape (N, 3).
+            batch (Tensor, optional): Batch indices for the atoms in the molecule. Shape (N,).
+            q (Tensor, optional): Atomic charges in the molecule. Shape (N,).
+            s (Tensor, optional): Atomic spins in the molecule. Shape (N,).
+            extra_args (Dict[str, Tensor], optional): Extra arguments to pass to the prior model.
+        """
 
         assert z.dim() == 1 and z.dtype == torch.long
         batch = torch.zeros_like(z) if batch is None else batch
