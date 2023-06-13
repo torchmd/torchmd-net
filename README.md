@@ -84,7 +84,7 @@ CUDA_VISIBLE_DEVICES=0,1 torchmd-train --conf torchmd-net/examples/ET-QM9.yaml.y
 ## Cite
 If you use TorchMD-NET in your research, please cite the following papers:
 
-### Main reference
+#### Main reference
 ```
 @inproceedings{
 tholke2021equivariant,
@@ -96,7 +96,7 @@ url={https://openreview.net/forum?id=zNHzqZ9wrRB}
 }
 ```
 
-### Graph Network 
+#### Graph Network 
 
 ```
 @misc{majewski2022machine,
@@ -109,7 +109,7 @@ url={https://openreview.net/forum?id=zNHzqZ9wrRB}
 }
 ```
 
-### TensorNet
+#### TensorNet
 
 ```
 @misc{simeon2023tensornet,
