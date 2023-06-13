@@ -28,8 +28,6 @@ class Custom(Dataset):
               - "pos" is an array of shape (n_atoms, 3)
               - "z" is an array of shape (n_atoms,).
               - If present, "y" is an array of shape (1,) and "neg_dy" has shape (n_atoms, 3)
-
-
     """
 
     def __init__(self, coordglob, embedglob, energyglob=None, forceglob=None):
