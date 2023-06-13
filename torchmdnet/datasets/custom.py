@@ -18,11 +18,17 @@ class Custom(Dataset):
         forceglob (string, optional): Glob path for force files. Exposed as "neg_dy".
             (default: :obj:`None`)
     Example:
-      >>> data = Custom(coordglob="coords_files*", embedglob="embed_files*")
-      >>> assert len(data) == num_samples * num_files, "Number of samples does not match"
-      >>> sample = data[0]
-      >>> assert hasattr(sample, "pos"), "Sample doesn't contain coords"
-      >>> assert hasattr(sample, "z"), "Sample doesn't contain atom numbers"
+        >>> data = Custom(coordglob="coords_files*npy", embedglob="embed_files*npy")
+        >>> sample = data[0]
+        >>> assert hasattr(sample, "pos"), "Sample doesn't contain coords"
+        >>> assert hasattr(sample, "z"), "Sample doesn't contain atom numbers"
+
+    Notes:
+        For each sample in the data:
+              - "pos" is an array of shape (n_atoms, 3)
+              - "z" is an array of shape (n_atoms,).
+              - If present, "y" is an array of shape (1,) and "neg_dy" has shape (n_atoms, 3)
+
 
     """
 
