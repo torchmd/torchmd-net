@@ -132,7 +132,7 @@ url={https://openreview.net/forum?id=zNHzqZ9wrRB}
 ### Implementing a new architecture
 
 To implement a new architecture, you need to follow these steps:
- 1. Create a new class in `torchmdnet.models` that inherits from `torch.nn.Model`. Follow TorchMD_ET as a template. This is a minimum implementation of a model:
+ **1.** Create a new class in `torchmdnet.models` that inherits from `torch.nn.Model`. Follow TorchMD_ET as a template. This is a minimum implementation of a model:
 ```python 
 class MyModule(nn.Module):
   def __init__(self, parameter1, parameter2):
@@ -149,11 +149,11 @@ class MyModule(nn.Module):
 	...
 	
   def forward(self, self,
-        z: Tensor, # Atomic numbers
-        pos: Tensor, # Atomic positions
-        batch: Tensor, # Batch vector
-        q: Optional[Tensor] = None, # Atomic charges
-        s: Optional[Tensor] = None, # Atomic spins
+        z: Tensor, # Atomic numbers, shape (n_atoms, 1)
+        pos: Tensor, # Atomic positions, shape (n_atoms, 3)
+        batch: Tensor, # Batch vector, shape (n_atoms, 1). All atoms in the same molecule have the same value and are contiguous.
+        q: Optional[Tensor] = None, # Atomic charges, shape (n_atoms, 1)
+        s: Optional[Tensor] = None, # Atomic spins, shape (n_atoms, 1)
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
 	# Define your forward pass here
 	scalar_features = ...
@@ -161,8 +161,8 @@ class MyModule(nn.Module):
 	# Return the scalar and vector features, as well as the atomic numbers, positions and batch vector
 	return scalar_features, vector_features, z, pos, batch
 ```
- 2. Add the model to the `__all__` list in `torchmdnet.models.__init__.py`. This will make the tests pick your model up.
- 3. Tell models.model.create_model how to initialize your module by adding a new entry, for instance:
+ **2.** Add the model to the `__all__` list in `torchmdnet.models.__init__.py`. This will make the tests pick your model up.
+ **3.** Tell models.model.create_model how to initialize your module by adding a new entry, for instance:
  ```python
      elif args["model"] == "mymodule":
         from torchmdnet.models.torchmd_mymodule import MyModule
@@ -172,18 +172,21 @@ class MyModule(nn.Module):
             parameter2=args["parameter2"],
             **shared_args, # Arguments typically shared by all models
         )
-	```
- 4. Add any new parameters required to initialize your module to scripts.train.get_args. For instance:
+ ```
+ 
+ **4.** Add any new parameters required to initialize your module to scripts.train.get_args. For instance:
  ```python
    parser.add_argument('--parameter1', type=int, default=32, help='Parameter1 required by MyModule')
    ...
  ```
- 5. Add an example configuration file to `torchmd-net/examples` that uses your model.
- 6. Make tests use your configuration file by adding a case to tests.utils.load_example_args. For instance:
+ **5.** Add an example configuration file to `torchmd-net/examples` that uses your model.
+ **6.** Make tests use your configuration file by adding a case to tests.utils.load_example_args. For instance:
  ```python
  if model_name == "mymodule":
         config_file = join(dirname(dirname(__file__)), "examples", "MyModule-QM9.yaml")
  ```
+
+At this point, if your module is missing some feature the tests will let you know, and you can add it. If you add a new feature to the package, please add a test for it.
 
 ### Code style
 
