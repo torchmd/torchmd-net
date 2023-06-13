@@ -131,8 +131,8 @@ url={https://openreview.net/forum?id=zNHzqZ9wrRB}
 
 ### Implementing a new architecture
 
-To implement a new architecture, you need to follow these steps:
- **1.** Create a new class in `torchmdnet.models` that inherits from `torch.nn.Model`. Follow TorchMD_ET as a template. This is a minimum implementation of a model:
+To implement a new architecture, you need to follow these steps:  
+ **1.** Create a new class in `torchmdnet.models` that inherits from `torch.nn.Model`. Follow TorchMD_ET as a template. This is a minimum implementation of a model:  
 ```python 
 class MyModule(nn.Module):
   def __init__(self, parameter1, parameter2):
@@ -161,8 +161,8 @@ class MyModule(nn.Module):
 	# Return the scalar and vector features, as well as the atomic numbers, positions and batch vector
 	return scalar_features, vector_features, z, pos, batch
 ```
- **2.** Add the model to the `__all__` list in `torchmdnet.models.__init__.py`. This will make the tests pick your model up.
- **3.** Tell models.model.create_model how to initialize your module by adding a new entry, for instance:
+ **2.** Add the model to the `__all__` list in `torchmdnet.models.__init__.py`. This will make the tests pick your model up.  
+ **3.** Tell models.model.create_model how to initialize your module by adding a new entry, for instance:  
  ```python
      elif args["model"] == "mymodule":
         from torchmdnet.models.torchmd_mymodule import MyModule
@@ -174,25 +174,25 @@ class MyModule(nn.Module):
         )
  ```
  
- **4.** Add any new parameters required to initialize your module to scripts.train.get_args. For instance:
+ **4.** Add any new parameters required to initialize your module to scripts.train.get_args. For instance:  
  ```python
    parser.add_argument('--parameter1', type=int, default=32, help='Parameter1 required by MyModule')
    ...
  ```
- **5.** Add an example configuration file to `torchmd-net/examples` that uses your model.
- **6.** Make tests use your configuration file by adding a case to tests.utils.load_example_args. For instance:
+ **5.** Add an example configuration file to `torchmd-net/examples` that uses your model.  
+ **6.** Make tests use your configuration file by adding a case to tests.utils.load_example_args. For instance:  
  ```python
  if model_name == "mymodule":
         config_file = join(dirname(dirname(__file__)), "examples", "MyModule-QM9.yaml")
  ```
 
-At this point, if your module is missing some feature the tests will let you know, and you can add it. If you add a new feature to the package, please add a test for it.
+At this point, if your module is missing some feature the tests will let you know, and you can add it. If you add a new feature to the package, please add a test for it.  
 
 ### Code style
 
-We use [black](https://https://black.readthedocs.io/en/stable/). Please run `black` on your modified files before committing.
+We use [black](https://https://black.readthedocs.io/en/stable/). Please run `black` on your modified files before committing.  
 
 ### Testing
 
-To run the tests, install the package and run `pytest` in the root directory of the repository. Tests are a good source of knowledge on how to use the different components of the package.
+To run the tests, install the package and run `pytest` in the root directory of the repository. Tests are a good source of knowledge on how to use the different components of the package.  
 
