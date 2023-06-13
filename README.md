@@ -148,7 +148,7 @@ class MyModule(nn.Module):
 	  nn.init.xavier_uniform_(self.layer1.weight)
 	...
 	
-  def forward(self, self,
+  def forward(self,
         z: Tensor, # Atomic numbers, shape (n_atoms, 1)
         pos: Tensor, # Atomic positions, shape (n_atoms, 3)
         batch: Tensor, # Batch vector, shape (n_atoms, 1). All atoms in the same molecule have the same value and are contiguous.
