@@ -21,7 +21,7 @@ TorchMD-NET provides state-of-the-art neural networks potentials (NNPs) and a me
     cd torchmd-net
     ```
 
-2. Install Mambaforge (https://github.com/conda-forge/miniforge/#mambaforge). We recommend to use `mamba` rather than `conda`.
+2. Install [Mambaforge](https://github.com/conda-forge/miniforge/#mambaforge). We recommend to use `mamba` rather than `conda`.
 
 3. Create an environment and activate it:
     ```
