@@ -16,7 +16,7 @@ TorchMD-NET provides state-of-the-art neural networks potentials (NNPs) and a me
 ## Installation
 
 1. Clone the repository:
-    ```
+    ```shell
     git clone https://github.com/torchmd/torchmd-net.git
     cd torchmd-net
     ```
@@ -24,13 +24,13 @@ TorchMD-NET provides state-of-the-art neural networks potentials (NNPs) and a me
 2. Install [Mambaforge](https://github.com/conda-forge/miniforge/#mambaforge). We recommend to use `mamba` rather than `conda`.
 
 3. Create an environment and activate it:
-    ```
+    ```shell
     mamba env create -f environment.yml
     mamba activate torchmd-net
     ```
 
 4. Install TorchMD-NET into the environment:
-    ```
+    ```shell
     pip install -e .
     ```
 This will install TorchMD-NET in editable mode, so that changes to the source code are immediately available.
@@ -38,9 +38,9 @@ Besides making all python utilities available environment-wide, this will also i
 
 ## Usage
 Specifying training arguments can either be done via a configuration yaml file or through command line arguments directly. Several examples of architectural and training specifications for some models and datasets can be found in [examples/](https://github.com/torchmd/torchmd-net/tree/main/examples). Note that if a parameter is present both in the yaml file and the command line, the command line version takes precedence.
-GPUs can be selected by setting the `CUDA_VISIBLE_DEVICES` environment variable. Otherwise, the argument `--ngpus` can be used to select the number of GPUs to train on (-1, the default, uses all available GPUs or the ones specified in `CUDA_VISIBLE_DEVICES`).
+GPUs can be selected by setting the `CUDA_VISIBLE_DEVICES` environment variable. Otherwise, the argument `--ngpus` can be used to select the number of GPUs to train on (-1, the default, uses all available GPUs or the ones specified in `CUDA_VISIBLE_DEVICES`). Keep in mind that the [GPU ID reported by nvidia-smi might not be the same as the one `CUDA_VISIBLE_DEVICES` uses](https://stackoverflow.com/questions/26123252/inconsistency-of-ids-between-nvidia-smi-l-and-cudevicegetname).  
 For example, to train the Equivariant Transformer on the QM9 dataset with the architectural and training hyperparameters described in the paper, one can run:
-```
+```shell
 mkdir output
 CUDA_VISIBLE_DEVICES=0 torchmd-train --conf torchmd-net/examples/ET-QM9.yaml --log-dir output/
 ``` 
@@ -67,7 +67,7 @@ In order to train models on multiple nodes some environment variables have to be
 
 In addition to the environment variables the argument `--num-nodes` has to be specified with the number of nodes involved during training.
 
-```
+```shell
 export NODE_RANK=0
 export MASTER_ADDR=hostname1
 export MASTER_PORT=12910
