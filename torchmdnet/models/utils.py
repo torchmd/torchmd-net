@@ -42,6 +42,20 @@ def visualize_basis(basis_type, num_rbf=50, cutoff_lower=0, cutoff_upper=5):
 
 
 class NeighborEmbedding(MessagePassing):
+    """
+    The ET architecture assigns two  learned vectors to each atom type
+    zi. One  is used to  encode information  specific to an  atom, the
+    other (this  class) takes  the role  of a  neighborhood embedding.
+    The neighborhood embedding, which is  an embedding of the types of
+    neighboring atoms, is multiplied by a distance filter.
+
+
+    This embedding allows  the network to store  information about the
+    interaction of atom pairs.
+
+    See eq. 3 in https://arxiv.org/pdf/2202.02541.pdf for more details.
+    """
+
     def __init__(self, hidden_channels, num_rbf, cutoff_lower, cutoff_upper, max_z=100):
         super(NeighborEmbedding, self).__init__(aggr="add")
         self.embedding = nn.Embedding(max_z, hidden_channels)
@@ -58,7 +72,24 @@ class NeighborEmbedding(MessagePassing):
         self.distance_proj.bias.data.fill_(0)
         self.combine.bias.data.fill_(0)
 
-    def forward(self, z, x, edge_index, edge_weight, edge_attr):
+    def forward(
+        self,
+        z: Tensor,
+        x: Tensor,
+        edge_index: Tensor,
+        edge_weight: Tensor,
+        edge_attr: Tensor,
+    ):
+        """
+        Args:
+            z (Tensor): Atomic numbers of shape :obj:`[num_nodes]`
+            x (Tensor): Node feature matrix (atom positions) of shape :obj:`[num_nodes, 3]`
+            edge_index (Tensor): Graph connectivity (list of neighbor pairs) with shape :obj:`[2, num_edges]`
+            edge_weight (Tensor): Edge weight vector of shape :obj:`[num_edges]`
+            edge_attr (Tensor): Edge attribute matrix of shape :obj:`[num_edges, 3]`
+        Returns:
+            x_neighbors (Tensor): The embedding of the neighbors of each atom of shape :obj:`[num_nodes, hidden_channels]`
+        """
         # remove self loops
         mask = edge_index[0] != edge_index[1]
         if not mask.all():
@@ -80,7 +111,6 @@ class NeighborEmbedding(MessagePassing):
 
 
 class OptimizedDistance(torch.nn.Module):
-
     def __init__(
         self,
         cutoff_lower=0.0,
@@ -393,7 +423,9 @@ class Distance(nn.Module):
             # the norm of 0 produces NaN gradients
             # NOTE: might influence force predictions as self loop gradients are ignored
             mask = edge_index[0] != edge_index[1]
-            edge_weight = torch.zeros(edge_vec.size(0), device=edge_vec.device, dtype=edge_vec.dtype)
+            edge_weight = torch.zeros(
+                edge_vec.size(0), device=edge_vec.device, dtype=edge_vec.dtype
+            )
             edge_weight[mask] = torch.norm(edge_vec[mask], dim=-1)
         else:
             edge_weight = torch.norm(edge_vec, dim=-1)
