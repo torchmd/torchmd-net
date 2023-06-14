@@ -68,51 +68,41 @@ __global__ void forward_kernel_shared(uint32_t num_atoms, const Accessor<scalar_
     }
 }
 
-class AutogradSharedCUDA : public Function<AutogradSharedCUDA> {
-public:
-    static tensor_list forward(AutogradContext* ctx, const Tensor& positions, const Tensor& batch,
-                               const Scalar& cutoff_lower, const Scalar& cutoff_upper,
-                               const Tensor& box_vectors, bool use_periodic,
-                               const Scalar& max_num_pairs, bool loop, bool include_transpose) {
-        checkInput(positions, batch);
-        const auto max_num_pairs_ = max_num_pairs.toLong();
-        TORCH_CHECK(max_num_pairs_ > 0, "Expected \"max_num_neighbors\" to be positive");
-        if (use_periodic) {
-            TORCH_CHECK(box_vectors.dim() == 2, "Expected \"box_vectors\" to have two dimensions");
-            TORCH_CHECK(box_vectors.size(0) == 3 && box_vectors.size(1) == 3,
-                        "Expected \"box_vectors\" to have shape (3, 3)");
-        }
-        TORCH_CHECK(box_vectors.device() == torch::kCPU, "Expected \"box_vectors\" to be on CPU");
-        const int num_atoms = positions.size(0);
-        const int num_pairs = max_num_pairs_;
-        const TensorOptions options = positions.options();
-        const auto stream = getCurrentCUDAStream(positions.get_device());
-        PairList list(num_pairs, positions.options(), loop, include_transpose, use_periodic);
-        const CUDAStreamGuard guard(stream);
-        AT_DISPATCH_FLOATING_TYPES(
-            positions.scalar_type(), "get_neighbor_pairs_shared_forward", [&]() {
-                const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
-                const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();
-                triclinic::Box<scalar_t> box(box_vectors, use_periodic);
-                TORCH_CHECK(cutoff_upper_ > 0, "Expected \"cutoff\" to be positive");
-                constexpr int BLOCKSIZE = 64;
-                const int num_blocks = std::max((num_atoms + BLOCKSIZE - 1) / BLOCKSIZE, 1);
-                const int num_threads = BLOCKSIZE;
-                const int num_tiles = num_blocks;
-                PairListAccessor<scalar_t> list_accessor(list);
-                forward_kernel_shared<BLOCKSIZE><<<num_blocks, num_threads, 0, stream>>>(
-                    num_atoms, get_accessor<scalar_t, 2>(positions),
-                    get_accessor<int64_t, 1>(batch), cutoff_lower_ * cutoff_lower_,
-                    cutoff_upper_ * cutoff_upper_, list_accessor, num_tiles, box);
-            });
-        ctx->save_for_backward({list.neighbors, list.deltas, list.distances});
-        ctx->saved_data["num_atoms"] = num_atoms;
-        return {list.neighbors, list.deltas, list.distances, list.i_curr_pair};
+static std::tuple<Tensor, Tensor, Tensor, Tensor>
+forward_shared(const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
+               bool use_periodic, const Scalar& cutoff_lower, const Scalar& cutoff_upper,
+               const Scalar& max_num_pairs, bool loop, bool include_transpose) {
+    checkInput(positions, batch);
+    const auto max_num_pairs_ = max_num_pairs.toLong();
+    TORCH_CHECK(max_num_pairs_ > 0, "Expected \"max_num_neighbors\" to be positive");
+    if (use_periodic) {
+        TORCH_CHECK(box_vectors.dim() == 2, "Expected \"box_vectors\" to have two dimensions");
+        TORCH_CHECK(box_vectors.size(0) == 3 && box_vectors.size(1) == 3,
+                    "Expected \"box_vectors\" to have shape (3, 3)");
     }
-
-    static tensor_list backward(AutogradContext* ctx, const tensor_list& grad_inputs) {
-        return common_backward(ctx, grad_inputs);
-    }
-};
+    TORCH_CHECK(box_vectors.device() == torch::kCPU, "Expected \"box_vectors\" to be on CPU");
+    const int num_atoms = positions.size(0);
+    const int num_pairs = max_num_pairs_;
+    const TensorOptions options = positions.options();
+    const auto stream = getCurrentCUDAStream(positions.get_device());
+    PairList list(num_pairs, positions.options(), loop, include_transpose, use_periodic);
+    const CUDAStreamGuard guard(stream);
+    AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "get_neighbor_pairs_shared_forward", [&]() {
+        const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
+        const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();
+        triclinic::Box<scalar_t> box(box_vectors, use_periodic);
+        TORCH_CHECK(cutoff_upper_ > 0, "Expected \"cutoff\" to be positive");
+        constexpr int BLOCKSIZE = 64;
+        const int num_blocks = std::max((num_atoms + BLOCKSIZE - 1) / BLOCKSIZE, 1);
+        const int num_threads = BLOCKSIZE;
+        const int num_tiles = num_blocks;
+        PairListAccessor<scalar_t> list_accessor(list);
+        forward_kernel_shared<BLOCKSIZE><<<num_blocks, num_threads, 0, stream>>>(
+            num_atoms, get_accessor<scalar_t, 2>(positions), get_accessor<int64_t, 1>(batch),
+            cutoff_lower_ * cutoff_lower_, cutoff_upper_ * cutoff_upper_, list_accessor, num_tiles,
+            box);
+    });
+    return {list.neighbors, list.deltas, list.distances, list.i_curr_pair};
+}
 
 #endif

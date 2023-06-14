@@ -6,7 +6,6 @@ from torch import nn
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch_cluster import radius_graph
-import torchmdnet.neighbors as neighbors
 import warnings
 
 
@@ -77,7 +76,6 @@ class NeighborEmbedding(MessagePassing):
 
     def message(self, x_j, W):
         return x_j * W
-
 
 class OptimizedDistance(torch.nn.Module):
 
@@ -168,11 +166,9 @@ class OptimizedDistance(torch.nn.Module):
                 lbox = cutoff_upper * 3.0
                 self.box = torch.tensor([[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]])
         self.box = self.box.cpu()  # All strategies expect the box to be in CPU memory
-        self._backends = neighbors.get_backends()
-        self.kernel = self._backends[self.strategy]
-        if self.kernel is None:
-            raise ValueError("Unknown strategy: {}".format(self.strategy))
         self.check_errors = check_errors
+        from torchmdnet.neighbors import get_neighbor_pairs_kernel
+        self.kernel = get_neighbor_pairs_kernel;
 
     def forward(
         self, pos: Tensor, batch: Optional[Tensor] = None
@@ -186,13 +182,13 @@ class OptimizedDistance(torch.nn.Module):
             shape (N,)
         Returns
         -------
-        neighbors : torch.Tensor
+        edge_index : torch.Tensor
           List of neighbors for each atom in the batch.
         shape (2, num_found_pairs or max_num_pairs)
-        distances : torch.Tensor
+        edge_weight : torch.Tensor
             List of distances for each atom in the batch.
         shape (num_found_pairs or max_num_pairs,)
-        distance_vecs : torch.Tensor
+        edge_vec : torch.Tensor
             List of distance vectors for each atom in the batch.
         shape (num_found_pairs or max_num_pairs, 3)
 
@@ -206,13 +202,14 @@ class OptimizedDistance(torch.nn.Module):
             max_pairs = -self.max_num_pairs * pos.shape[0]
         if batch is None:
             batch = torch.zeros(pos.shape[0], dtype=torch.long, device=pos.device)
-        neighbors, distance_vecs, distances, num_pairs = self.kernel(
-            pos,
+        edge_index, edge_vec, edge_weight, num_pairs = self.kernel(
+            strategy=self.strategy,
+            positions=pos,
+            batch=batch,
+            max_num_pairs=max_pairs,
             cutoff_lower=self.cutoff_lower,
             cutoff_upper=self.cutoff_upper,
             loop=self.loop,
-            batch=batch,
-            max_num_pairs=max_pairs,
             include_transpose=self.include_transpose,
             box_vectors=self.box,
             use_periodic=self.use_periodic,
@@ -224,17 +221,18 @@ class OptimizedDistance(torch.nn.Module):
                         num_pairs[0], max_pairs
                     )
                 )
+        edge_index = edge_index.to(torch.long)
         # Remove (-1,-1)  pairs
         if self.resize_to_fit:
-            mask = neighbors[0] != -1
-            neighbors = neighbors[:, mask]
-            distances = distances[mask]
-            distance_vecs = distance_vecs[mask, :]
-        neighbors = neighbors.to(torch.long)
+            mask = edge_index[0] != -1
+            edge_index = edge_index[:, mask]
+            edge_weight = edge_weight[mask]
+            edge_vec = edge_vec[mask, :]
+
         if self.return_vecs:
-            return neighbors, distances, distance_vecs
+            return edge_index, edge_weight, edge_vec
         else:
-            return neighbors, distances, None
+            return edge_index, edge_weight, None
 
 
 class GaussianSmearing(nn.Module):
