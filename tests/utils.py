@@ -13,7 +13,7 @@ def load_example_args(model_name, remove_prior=False, config_file=None, **kwargs
     with open(config_file, "r") as f:
         args = yaml.load(f, Loader=yaml.FullLoader)
     if "dtype" not in args:
-        args["dtype"] = torch.float32
+        args["dtype"] = "float"
     args["model"] = model_name
     args["seed"] = 1234
     if remove_prior:
