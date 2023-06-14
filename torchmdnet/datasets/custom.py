@@ -11,11 +11,11 @@ class Custom(Dataset):
     must be given as targets.
 
     Args:
-        coordglob (string): Glob path for coordinate files. Exposed as "pos".
-        embedglob (string): Glob path for embedding index files. Exposed as "z" (atomic number).
-        energyglob (string, optional): Glob path for energy files. Exposed as "y".
+        coordglob (string): Glob path for coordinate files. Stored as "pos".
+        embedglob (string): Glob path for embedding index files. Stored as "z" (atomic number).
+        energyglob (string, optional): Glob path for energy files. Stored as "y".
             (default: :obj:`None`)
-        forceglob (string, optional): Glob path for force files. Exposed as "neg_dy".
+        forceglob (string, optional): Glob path for force files. Stored as "neg_dy".
             (default: :obj:`None`)
     Example:
         >>> data = Custom(coordglob="coords_files*npy", embedglob="embed_files*npy")
