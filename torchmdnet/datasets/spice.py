@@ -120,17 +120,17 @@ class SPICE(Dataset):
             if i_mol % self.subsample_molecules != 0:
                 continue
 
-            z = pt.tensor(mol["atomic_numbers"], dtype=pt.long)
+            z = pt.tensor(np.array(mol["atomic_numbers"]), dtype=pt.long)
             all_pos = (
-                pt.tensor(mol["conformations"], dtype=pt.float32)
+                pt.tensor(np.array(mol["conformations"]), dtype=pt.float32)
                 * self.BORH_TO_ANGSTROM
             )
             all_y = (
-                pt.tensor(mol["formation_energy"], dtype=pt.float64)
+                pt.tensor(np.array(mol["formation_energy"]), dtype=pt.float64)
                 * self.HARTREE_TO_EV
             )
             all_neg_dy = (
-                -pt.tensor(mol["dft_total_gradient"], dtype=pt.float32)
+                -pt.tensor(np.array(mol["dft_total_gradient"]), dtype=pt.float32)
                 * self.HARTREE_TO_EV
                 / self.BORH_TO_ANGSTROM
             )

@@ -1,105 +1,151 @@
-import torch
-from torch_geometric.data import InMemoryDataset, download_url, Data
-from pytorch_lightning.utilities import rank_zero_warn
+import os
+import os.path as osp
+from typing import Callable, List, Optional
 import numpy as np
+import torch
+from torch_geometric.data import (
+    Data,
+    InMemoryDataset,
+    download_url,
+    extract_tar,
+    extract_zip,
+)
 
+# extracted from PyG MD17 dataset class
 
 class MD17(InMemoryDataset):
-    """Machine learning of accurate energy-conserving molecular force fields (Chmiela et al. 2017)
-    This class provides functionality for loading MD trajectories from the original dataset, not the revised versions.
-    See http://www.quantum-machine.org/gdml/#datasets for details.
-    """
 
-    raw_url = "http://www.quantum-machine.org/gdml/data/npz/"
+    gdml_url = 'http://quantum-machine.org/gdml/data/npz'
+    revised_url = ('https://archive.materialscloud.org/record/'
+                   'file?filename=rmd17.tar.bz2&record_id=466')
 
-    molecule_files = dict(
-        aspirin="md17_aspirin.npz",
-        benzene="md17_benzene2017.npz",
-        ethanol="md17_ethanol.npz",
-        malonaldehyde="md17_malonaldehyde.npz",
-        naphthalene="md17_naphthalene.npz",
-        salicylic_acid="md17_salicylic.npz",
-        toluene="md17_toluene.npz",
-        uracil="md17_uracil.npz",
-    )
+    file_names = {
+        'benzene': 'md17_benzene2017.npz',
+        'uracil': 'md17_uracil.npz',
+        'naphtalene': 'md17_naphthalene.npz',
+        'aspirin': 'md17_aspirin.npz',
+        'salicylic_acid': 'md17_salicylic.npz',
+        'malonaldehyde': 'md17_malonaldehyde.npz',
+        'ethanol': 'md17_ethanol.npz',
+        'toluene': 'md17_toluene.npz',
+        'paracetamol': 'paracetamol_dft.npz',
+        'azobenzene': 'azobenzene_dft.npz',
+        'revised_benzene': 'rmd17_benzene.npz',
+        'revised_uracil': 'rmd17_uracil.npz',
+        'revised_naphthalene': 'rmd17_naphthalene.npz',
+        'revised_aspirin': 'rmd17_aspirin.npz',
+        'revised_salicylic_acid': 'rmd17_salicylic.npz',
+        'revised_malonaldehyde': 'rmd17_malonaldehyde.npz',
+        'revised_ethanol': 'rmd17_ethanol.npz',
+        'revised_toluene': 'rmd17_toluene.npz',
+        'revised_paracetamol': 'rmd17_paracetamol.npz',
+        'revised_azobenzene': 'rmd17_azobenzene.npz',
+        'benzene_CCSD_T': 'benzene_ccsd_t.zip',
+        'aspirin_CCSD': 'aspirin_ccsd.zip',
+        'malonaldehyde_CCSD_T': 'malonaldehyde_ccsd_t.zip',
+        'ethanol_CCSD_T': 'ethanol_ccsd_t.zip',
+        'toluene_CCSD_T': 'toluene_ccsd_t.zip',
+        'benzene_FHI-aims': 'benzene2018_dft.npz',
+    }
 
-    available_molecules = list(molecule_files.keys())
+    def __init__(
+        self,
+        root: str,
+        molecules: str,
+        train: Optional[bool] = None,
+        transform: Optional[Callable] = None,
+        pre_transform: Optional[Callable] = None,
+        pre_filter: Optional[Callable] = None,
+    ):
+        name = molecules
+        if name not in self.file_names:
+            raise ValueError(f"Unknown dataset name '{name}'")
 
-    def __init__(self, root, transform=None, pre_transform=None, molecules=None):
-        assert molecules is not None, (
-            "Please provide the desired comma separated molecule(s) through"
-            f"'molecules'. Available molecules are {', '.join(MD17.available_molecules)} "
-            "or 'all' to train on the combined dataset."
-        )
+        self.name = name
+        self.revised = 'revised' in name
+        self.ccsd = 'CCSD' in self.name
 
-        if molecules == "all":
-            molecules = ",".join(MD17.available_molecules)
-        self.molecules = molecules.split(",")
+        super().__init__(root, transform, pre_transform, pre_filter)
 
-        for mol in self.molecules:
-            if mol not in MD17.available_molecules:
-                raise RuntimeError(f"Molecule '{mol}' does not exist in MD17")
+        if len(self.processed_file_names) == 1 and train is not None:
+            raise ValueError(
+                f"'{self.name}' dataset does not provide pre-defined splits "
+                f"but the 'train' argument is set to '{train}'")
+        elif len(self.processed_file_names) == 2 and train is None:
+            raise ValueError(
+                f"'{self.name}' dataset does provide pre-defined splits but "
+                f"the 'train' argument was not specified")
 
-        if len(self.molecules) > 1:
-            rank_zero_warn(
-                "MD17 molecules have different reference energies, "
-                "which is not accounted for during training."
-            )
+        idx = 0 if train is None or train else 1
+        self.data, self.slices = torch.load(self.processed_paths[idx])
 
-        super(MD17, self).__init__(root, transform, pre_transform)
-
-        self.offsets = [0]
-        self.data_all, self.slices_all = [], []
-        for path in self.processed_paths:
-            data, slices = torch.load(path)
-            self.data_all.append(data)
-            self.slices_all.append(slices)
-            self.offsets.append(
-                len(slices[list(slices.keys())[0]]) - 1 + self.offsets[-1]
-            )
-
-    def len(self):
-        return sum(
-            len(slices[list(slices.keys())[0]]) - 1 for slices in self.slices_all
-        )
-
-    def get(self, idx):
-        data_idx = 0
-        while data_idx < len(self.data_all) - 1 and idx >= self.offsets[data_idx + 1]:
-            data_idx += 1
-        self.data = self.data_all[data_idx]
-        self.slices = self.slices_all[data_idx]
-        return super(MD17, self).get(idx - self.offsets[data_idx])
-
-    @property
-    def raw_file_names(self):
-        return [MD17.molecule_files[mol] for mol in self.molecules]
+    def mean(self) -> float:
+        return float(self._data.energy.mean())
 
     @property
-    def processed_file_names(self):
-        return [f"md17-{mol}.pt" for mol in self.molecules]
+    def raw_dir(self) -> str:
+        if self.revised:
+            return osp.join(self.root, 'raw')
+        return osp.join(self.root, self.name, 'raw')
+
+    @property
+    def processed_dir(self) -> str:
+        return osp.join(self.root, 'processed', self.name)
+
+    @property
+    def raw_file_names(self) -> str:
+        name = self.file_names[self.name]
+        if self.revised:
+            return osp.join('rmd17', 'npz_data', name)
+        elif self.ccsd:
+            return name[:-4] + '-train.npz', name[:-4] + '-test.npz'
+        return name
+
+    @property
+    def processed_file_names(self) -> List[str]:
+        if self.ccsd:
+            return ['train.pt', 'test.pt']
+        else:
+            return ['data.pt']
 
     def download(self):
-        for file_name in self.raw_file_names:
-            download_url(MD17.raw_url + file_name, self.raw_dir)
+        if self.revised:
+            path = download_url(self.revised_url, self.raw_dir)
+            extract_tar(path, self.raw_dir, mode='r:bz2')
+            os.unlink(path)
+        else:
+            url = f'{self.gdml_url}/{self.file_names[self.name]}'
+            path = download_url(url, self.raw_dir)
+            if self.ccsd:
+                extract_zip(path, self.raw_dir)
+                os.unlink(path)
 
     def process(self):
-        for raw_path, processed_path in zip(self.raw_paths, self.processed_paths):
-            data_npz = np.load(raw_path)
-            z = torch.from_numpy(data_npz["z"]).long()
-            positions = torch.from_numpy(data_npz["R"]).float()
-            energies = torch.from_numpy(data_npz["E"]).float()
-            forces = torch.from_numpy(data_npz["F"]).float()
+        it = zip(self.raw_paths, self.processed_paths)
+        for raw_path, processed_path in it:
+            raw_data = np.load(raw_path)
 
-            samples = []
-            for pos, y, neg_dy in zip(positions, energies, forces):
-                samples.append(Data(z=z, pos=pos, y=y.unsqueeze(1), neg_dy=neg_dy))
+            if self.revised:
+                z = torch.from_numpy(raw_data['nuclear_charges']).long()
+                pos = torch.from_numpy(raw_data['coords']).float()
+                energy = torch.from_numpy(raw_data['energies']).float()
+                force = torch.from_numpy(raw_data['forces']).float()
+            else:
+                z = torch.from_numpy(raw_data['z']).long()
+                pos = torch.from_numpy(raw_data['R']).float()
+                energy = torch.from_numpy(raw_data['E']).float()
+                force = torch.from_numpy(raw_data['F']).float()
 
-            if self.pre_filter is not None:
-                samples = [data for data in samples if self.pre_filter(data)]
+            data_list = []
+            for i in range(pos.size(0)):
+                data = Data(z=z, pos=pos[i], y=energy[i].unsqueeze(-1), neg_dy=force[i])
+                if self.pre_filter is not None and not self.pre_filter(data):
+                    continue
+                if self.pre_transform is not None:
+                    data = self.pre_transform(data)
+                data_list.append(data)
 
-            if self.pre_transform is not None:
-                samples = [self.pre_transform(data) for data in samples]
+            torch.save(self.collate(data_list), processed_path)
 
-            data, slices = self.collate(samples)
-            torch.save((data, slices), processed_path)
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({len(self)}, name='{self.name}')"

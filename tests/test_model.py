@@ -39,6 +39,8 @@ def test_forward_output_modules(model_name, output_model, dtype):
 @mark.parametrize("model_name", models.__all__)
 @mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_forward_torchscript(model_name, dtype):
+    if model_name == "tensornet":
+        pytest.skip("TensorNet does not support torchscript.")
     z, pos, batch = create_example_batch()
     model = torch.jit.script(
         create_model(load_example_args(model_name, remove_prior=True, derivative=True, dtype=dtype))

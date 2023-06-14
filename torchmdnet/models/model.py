@@ -34,7 +34,6 @@ def create_model(args, prior_model=None, mean=None, std=None):
         rbf_type=args["rbf_type"],
         trainable_rbf=args["trainable_rbf"],
         activation=args["activation"],
-        neighbor_embedding=args["neighbor_embedding"],
         cutoff_lower=args["cutoff_lower"],
         cutoff_upper=args["cutoff_upper"],
         max_z=args["max_z"],
@@ -48,7 +47,10 @@ def create_model(args, prior_model=None, mean=None, std=None):
 
         is_equivariant = False
         representation_model = TorchMD_GN(
-            num_filters=args["embedding_dimension"], aggr=args["aggr"], **shared_args
+            num_filters=args["embedding_dimension"],
+            aggr=args["aggr"],
+            neighbor_embedding=args["neighbor_embedding"],
+            **shared_args
         )
     elif args["model"] == "transformer":
         from torchmdnet.models.torchmd_t import TorchMD_T
@@ -58,6 +60,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
             attn_activation=args["attn_activation"],
             num_heads=args["num_heads"],
             distance_influence=args["distance_influence"],
+            neighbor_embedding=args["neighbor_embedding"],
             **shared_args,
         )
     elif args["model"] == "equivariant-transformer":
@@ -68,6 +71,15 @@ def create_model(args, prior_model=None, mean=None, std=None):
             attn_activation=args["attn_activation"],
             num_heads=args["num_heads"],
             distance_influence=args["distance_influence"],
+            neighbor_embedding=args["neighbor_embedding"],
+            **shared_args,
+        )
+    elif args["model"] == "tensornet":
+        from torchmdnet.models.tensornet import TensorNet
+	# Setting is_equivariant to False to enforce the use of Scalar output module instead of EquivariantScalar
+        is_equivariant = False
+        representation_model = TensorNet(
+	    equivariance_invariance_group=args["equivariance_invariance_group"],
             **shared_args,
         )
     else:
