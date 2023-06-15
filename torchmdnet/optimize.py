@@ -8,6 +8,10 @@ from .models.torchmd_gn import TorchMD_GN
 
 
 class TorchMD_GN_optimized(pt.nn.Module):
+    """This Module is equivalent  to TorchMD_GN, but replaces some of
+    its internal operation by optimized ones from NNPops.
+    """
+
     def __init__(self, model):
 
         if model.rbf_type != "gauss":
@@ -70,7 +74,10 @@ class TorchMD_GN_optimized(pt.nn.Module):
 
 
 def optimize(model):
-
+    """
+    Returns an optimized version for a given TorchMD_Net model.
+    If the model is not supported, a ValueError is raised.
+    """
     assert isinstance(model, TorchMD_Net)
 
     if isinstance(model.representation_model, TorchMD_GN):
