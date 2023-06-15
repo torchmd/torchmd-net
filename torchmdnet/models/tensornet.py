@@ -184,7 +184,7 @@ class TensorNet(nn.Module):
         batch: Tensor,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
-    ):
+    ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
 
         # Obtain graph, with distances and relative position vectors
         edge_index, edge_weight, edge_vec = self.distance(pos, batch)
