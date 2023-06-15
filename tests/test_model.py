@@ -34,11 +34,17 @@ def test_forward_output_modules(model_name, output_model):
 
 
 @mark.parametrize("model_name", models.__all__)
-def test_torchscript(model_name):
+@mark.parametrize("device", ["cpu", "cuda"])
+def test_torchscript(model_name, device):
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
     z, pos, batch = create_example_batch()
+    z = z.to(device)
+    pos = pos.to(device)
+    batch = batch.to(device)
     model = torch.jit.script(
         create_model(load_example_args(model_name, remove_prior=True, derivative=True))
-    )
+    ).to(device=device)
     y, neg_dy = model(z, pos, batch=batch)
     grad_outputs = [torch.ones_like(neg_dy)]
     ddy = torch.autograd.grad(
@@ -47,6 +53,28 @@ def test_torchscript(model_name):
         grad_outputs=grad_outputs,
     )[0]
 
+@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("device", ["cpu", "cuda"])
+def test_torchscript_dynamic_shapes(model_name, device):
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    z, pos, batch = create_example_batch()
+    model = torch.jit.script(
+        create_model(load_example_args(model_name, remove_prior=True, derivative=True))
+    ).to(device=device)
+    #Repeat the input to make it dynamic
+    for rep in range(0, 5):
+        print(rep)
+        zi = z.repeat_interleave(rep+1, dim=0).to(device=device)
+        posi = pos.repeat_interleave(rep+1, dim=0).to(device=device)
+        batchi = torch.randint(0, 10, (zi.shape[0],)).sort()[0].to(device=device)
+        y, neg_dy = model(zi, posi, batch=batchi)
+        grad_outputs = [torch.ones_like(neg_dy)]
+        ddy = torch.autograd.grad(
+            [neg_dy],
+            [posi],
+            grad_outputs=grad_outputs,
+        )[0]
 
 @mark.parametrize("model_name", models.__all__)
 def test_seed(model_name):
