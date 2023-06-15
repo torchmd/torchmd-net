@@ -91,9 +91,9 @@ forward_brute(const Tensor& positions, const Tensor& batch, const Tensor& box_ve
             num_all_pairs, get_accessor<scalar_t, 2>(positions), get_accessor<int64_t, 1>(batch),
             cutoff_lower_ * cutoff_lower_, cutoff_upper_ * cutoff_upper_, list_accessor, box);
         if (loop) {
-            const uint32_t num_threads = 256;
-            const uint32_t num_blocks = std::max((num_atoms + num_threads - 1U) / num_threads, 1U);
-            add_self_kernel<<<num_blocks, num_threads, 0, stream>>>(
+            const uint32_t num_threads_self = 256;
+            const uint32_t num_blocks_self = std::max((num_atoms + num_threads_self - 1U) / num_threads_self, 1U);
+            add_self_kernel<<<num_blocks_self, num_threads_self, 0, stream>>>(
                 num_atoms, get_accessor<scalar_t, 2>(positions), list_accessor);
         }
     });

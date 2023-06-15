@@ -65,14 +65,15 @@ public:
 
 TORCH_LIBRARY_IMPL(torchmdnet_neighbors, AutogradCUDA, m) {
     m.impl("get_neighbor_pairs",
-           [](std::string strategy, const Tensor& positions, const Tensor& batch,
+           [](const std::string& strategy, const Tensor& positions, const Tensor& batch,
               const Tensor& box_vectors, bool use_periodic, const Scalar& cutoff_lower,
               const Scalar& cutoff_upper, const Scalar& max_num_pairs, bool loop,
               bool include_transpose) {
+               auto final_strategy = strategy;
                if (positions.size(0) >= 32768 && strategy == "brute") {
-                   strategy = "shared";
+                   final_strategy = "shared";
                }
-               auto result = NeighborAutograd::apply(strategy, positions, batch, box_vectors,
+               auto result = NeighborAutograd::apply(final_strategy, positions, batch, box_vectors,
                                                      use_periodic, cutoff_lower, cutoff_upper,
                                                      max_num_pairs, loop, include_transpose);
                return std::make_tuple(result[0], result[1], result[2], result[3]);

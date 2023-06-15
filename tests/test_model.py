@@ -35,6 +35,8 @@ def test_forward_output_modules(model_name, output_model):
 
 @mark.parametrize("model_name", models.__all__)
 def test_forward_torchscript(model_name):
+    if model_name == "tensornet":
+        pytest.skip("TensorNet does not support torchscript.")
     z, pos, batch = create_example_batch()
     model = torch.jit.script(
         create_model(load_example_args(model_name, remove_prior=True, derivative=True))
@@ -81,6 +83,10 @@ def test_forward_output(model_name, output_model, overwrite_reference=False):
     assert exists(expected_path), "Couldn't locate reference outputs."
     with open(expected_path, "rb") as f:
         expected = pickle.load(f)
+    if model_name not in expected or output_model not in expected[model_name]:
+        raise ValueError(
+            "Model not found in reference outputs, consider running this test with overwrite_reference=True."
+        )
 
     if overwrite_reference:
         # this overwrites the previous reference outputs and shouldn't be executed during testing

@@ -19,7 +19,6 @@ def create_model(args, prior_model=None, mean=None, std=None):
         rbf_type=args["rbf_type"],
         trainable_rbf=args["trainable_rbf"],
         activation=args["activation"],
-        neighbor_embedding=args["neighbor_embedding"],
         cutoff_lower=args["cutoff_lower"],
         cutoff_upper=args["cutoff_upper"],
         max_z=args["max_z"],
@@ -32,7 +31,10 @@ def create_model(args, prior_model=None, mean=None, std=None):
 
         is_equivariant = False
         representation_model = TorchMD_GN(
-            num_filters=args["embedding_dimension"], aggr=args["aggr"], **shared_args
+            num_filters=args["embedding_dimension"],
+            aggr=args["aggr"],
+            neighbor_embedding=args["neighbor_embedding"],
+            **shared_args
         )
     elif args["model"] == "transformer":
         from torchmdnet.models.torchmd_t import TorchMD_T
@@ -42,6 +44,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
             attn_activation=args["attn_activation"],
             num_heads=args["num_heads"],
             distance_influence=args["distance_influence"],
+            neighbor_embedding=args["neighbor_embedding"],
             **shared_args,
         )
     elif args["model"] == "equivariant-transformer":
@@ -52,6 +55,15 @@ def create_model(args, prior_model=None, mean=None, std=None):
             attn_activation=args["attn_activation"],
             num_heads=args["num_heads"],
             distance_influence=args["distance_influence"],
+            neighbor_embedding=args["neighbor_embedding"],
+            **shared_args,
+        )
+    elif args["model"] == "tensornet":
+        from torchmdnet.models.tensornet import TensorNet
+	# Setting is_equivariant to False to enforce the use of Scalar output module instead of EquivariantScalar
+        is_equivariant = False
+        representation_model = TensorNet(
+	    equivariance_invariance_group=args["equivariance_invariance_group"],
             **shared_args,
         )
     else:
@@ -148,6 +160,15 @@ def create_prior_models(args, dataset=None):
 
 
 class TorchMD_Net(nn.Module):
+    """The  TorchMD_Net class  combines a  given representation  model
+    (such as  the equivariant transformer),  an output model  (such as
+    the scalar output  module) and a prior model (such  as the atomref
+    prior), producing a  Module that takes as input a  series of atoms
+    features  and  outputs  a  scalar   value  (i.e  energy  for  each
+    batch/molecule) and,  derivative is True, the  negative of  its derivative
+    with respect to the positions (i.e forces for each atom).
+
+    """
     def __init__(
         self,
         representation_model,
@@ -198,6 +219,15 @@ class TorchMD_Net(nn.Module):
         s: Optional[Tensor] = None,
         extra_args: Optional[Dict[str, Tensor]] = None
     ) -> Tuple[Tensor, Optional[Tensor]]:
+        """Compute the output of the model.
+        Args:
+            z (Tensor): Atomic numbers of the atoms in the molecule. Shape (N,).
+            pos (Tensor): Atomic positions in the molecule. Shape (N, 3).
+            batch (Tensor, optional): Batch indices for the atoms in the molecule. Shape (N,).
+            q (Tensor, optional): Atomic charges in the molecule. Shape (N,).
+            s (Tensor, optional): Atomic spins in the molecule. Shape (N,).
+            extra_args (Dict[str, Tensor], optional): Extra arguments to pass to the prior model.
+        """
 
         assert z.dim() == 1 and z.dtype == torch.long
         batch = torch.zeros_like(z) if batch is None else batch
