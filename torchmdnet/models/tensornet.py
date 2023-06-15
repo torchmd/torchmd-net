@@ -172,8 +172,8 @@ class TensorNet(nn.Module):
 
     def reset_parameters(self):
         self.tensor_embedding.reset_parameters()
-        for i in range(self.num_layers):
-            self.layers[i].reset_parameters()
+        for layer in self.layers:
+            layer.reset_parameters()
         self.linear.reset_parameters()
         self.out_norm.reset_parameters()
 
@@ -198,7 +198,7 @@ class TensorNet(nn.Module):
         # Embedding from edge-wise tensors to node-wise tensors
         X = self.tensor_embedding(z, edge_index, edge_weight, edge_vec, edge_attr)
         # Interaction layers
-        for _, layer in enumerate(self.layers):
+        for layer in self.layers:
             X = layer(X, edge_index, edge_weight, edge_attr)
         I, A, S = decompose_tensor(X)
         x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
@@ -289,7 +289,7 @@ class TensorEmbedding(MessagePassing):
         I = self.linears_tensor[0](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         A = self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        for _, linear_scalar in enumerate(self.linears_scalar):
+        for linear_scalar in self.linears_scalar:
             norm = self.act(linear_scalar(norm))
         norm = norm.reshape(norm.shape[0], self.hidden_channels, 3)
         I, A, S = new_radial_tensor(I, A, S, norm[..., 0], norm[..., 1], norm[..., 2])
@@ -368,7 +368,7 @@ class Interaction(MessagePassing):
     def forward(self, X, edge_index, edge_weight, edge_attr):
 
         C = self.cutoff(edge_weight)
-        for _, linear_scalar in enumerate(self.linears_scalar):
+        for linear_scalar in self.linears_scalar:
             edge_attr = self.act(linear_scalar(edge_attr))
         edge_attr = (edge_attr * C.view(-1, 1)).reshape(
             edge_attr.shape[0], self.hidden_channels, 3
