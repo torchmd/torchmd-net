@@ -2,14 +2,21 @@ import torch
 import numpy as np
 from typing import Optional, Tuple
 from torch import Tensor, nn
+import torch._dynamo as dynamo
 from torch_scatter import scatter
 from torch_geometric.nn import MessagePassing
+from torchmdnet import neighbors
 from torchmdnet.models.utils import (
     CosineCutoff,
-    Distance,
+    Distance, OptimizedDistance,
     rbf_class_mapping,
     act_class_mapping,
 )
+#torch.set_float32_matmul_precision('high')
+torch.backends.cuda.matmul.allow_tf32 = True
+use_graphs=True
+use_ranges=False
+backend="cudagraphs"
 
 # Creates a skew-symmetric tensor from a vector
 def vector_to_skewtensor(vector):
@@ -136,9 +143,13 @@ class TensorNet(nn.Module):
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         act_class = act_class_mapping[activation]
-        self.distance = Distance(
-            cutoff_lower, cutoff_upper, max_num_neighbors, return_vecs=True, loop=True
+        self.distance = OptimizedDistance(
+            cutoff_lower, cutoff_upper, max_num_pairs=-max_num_neighbors, return_vecs=True, loop=True, check_errors=False, resize_to_fit=False
         )
+        # self.distance = Distance(
+        #     cutoff_lower, cutoff_upper, max_num_neighbors=max_num_neighbors, return_vecs=True, loop=True
+        # )
+
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
         )
@@ -169,6 +180,7 @@ class TensorNet(nn.Module):
         self.out_norm = nn.LayerNorm(3 * hidden_channels)
         self.act = act_class()
         self.reset_parameters()
+        self.graphed = False
 
     def reset_parameters(self):
         self.tensor_embedding.reset_parameters()
@@ -176,7 +188,20 @@ class TensorNet(nn.Module):
             layer.reset_parameters()
         self.linear.reset_parameters()
         self.out_norm.reset_parameters()
-
+    @dynamo.optimize(backend=backend, disable=not use_graphs)
+    def _update_interaction_layers(self, z, edge_index, edge_weight, edge_vec):
+        # Expand distances with radial basis functions
+        edge_attr = self.distance_expansion(edge_weight)
+        mask = (edge_index[0] != edge_index[1])
+        edge_vec = edge_vec/torch.ones_like(edge_weight).masked_scatter(mask, edge_weight).unsqueeze(1)
+        X = self.tensor_embedding(z, edge_index, edge_weight, edge_vec, edge_attr)
+        for layer in self.layers:
+            X = layer(X, edge_index, edge_weight, edge_attr)
+        I, A, S = decompose_tensor(X)
+        x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
+        x = self.out_norm(x)
+        x = self.act(self.linear((x)))
+        return x
     def forward(
         self,
         z: Tensor,
@@ -185,25 +210,26 @@ class TensorNet(nn.Module):
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
-
+        if use_ranges:
+            torch.cuda.nvtx.range_push("TensorNet")
         # Obtain graph, with distances and relative position vectors
         edge_index, edge_weight, edge_vec = self.distance(pos, batch)
         # This assert convinces TorchScript that edge_vec is a Tensor and not an Optional[Tensor]
         assert (
             edge_vec is not None
         ), "Distance module did not return directional information"
+        mask = edge_index[0] >= 0
+        edge_index = edge_index[:, mask]
+        edge_weight = edge_weight[mask]
+        edge_vec = edge_vec[mask]
 
-        # Expand distances with radial basis functions
-        edge_attr = self.distance_expansion(edge_weight)
         # Embedding from edge-wise tensors to node-wise tensors
-        X = self.tensor_embedding(z, edge_index, edge_weight, edge_vec, edge_attr)
-        # Interaction layers
-        for layer in self.layers:
-            X = layer(X, edge_index, edge_weight, edge_attr)
-        I, A, S = decompose_tensor(X)
-        x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
-        x = self.out_norm(x)
-        x = self.act(self.linear((x)))
+        #mask = (edge_index[0] != edge_index[1])
+        # The line below is equivalent to the commented line, but compatible with CUDA graphs
+        #edge_vec[mask] = edge_vec[mask] / edge_weight[mask].unsqueeze(1)
+        x = self._update_interaction_layers(z, edge_index, edge_weight, edge_vec)
+        if use_ranges:
+            torch.cuda.nvtx.range_pop()
         return x, None, z, pos, batch
 
 
@@ -261,23 +287,22 @@ class TensorEmbedding(MessagePassing):
         z: Tensor,
         edge_index: Tensor,
         edge_weight: Tensor,
-        edge_vec: Tensor,
+        edge_vec_norm: Tensor,
         edge_attr: Tensor,
     ):
-
+        if use_ranges:
+            torch.cuda.nvtx.range_push("TensorEmbedding")
         Z = self.emb(z)
         C = self.cutoff(edge_weight)
         W1 = self.distance_proj1(edge_attr) * C.view(-1, 1)
         W2 = self.distance_proj2(edge_attr) * C.view(-1, 1)
         W3 = self.distance_proj3(edge_attr) * C.view(-1, 1)
-        mask = edge_index[0] != edge_index[1]
-        edge_vec[mask] = edge_vec[mask] / torch.norm(edge_vec[mask], dim=1).unsqueeze(1)
         Iij, Aij, Sij = new_radial_tensor(
-            torch.eye(3, 3, device=edge_vec.device, dtype=edge_vec.dtype)[
+            torch.eye(3, 3, device=edge_vec_norm.device, dtype=edge_vec_norm.dtype)[
                 None, None, :, :
             ],
-            vector_to_skewtensor(edge_vec)[..., None, :, :],
-            vector_to_symtensor(edge_vec)[..., None, :, :],
+            vector_to_skewtensor(edge_vec_norm)[..., None, :, :],
+            vector_to_symtensor(edge_vec_norm)[..., None, :, :],
             W1,
             W2,
             W3,
@@ -294,7 +319,8 @@ class TensorEmbedding(MessagePassing):
         norm = norm.reshape(norm.shape[0], self.hidden_channels, 3)
         I, A, S = new_radial_tensor(I, A, S, norm[..., 0], norm[..., 1], norm[..., 2])
         X = I + A + S
-
+        if use_ranges:
+            torch.cuda.nvtx.range_pop()
         return X
 
     def message(self, Z_i, Z_j, I, A, S):
@@ -366,7 +392,8 @@ class Interaction(MessagePassing):
             linear.reset_parameters()
 
     def forward(self, X, edge_index, edge_weight, edge_attr):
-
+        if use_ranges:
+            torch.cuda.nvtx.range_push("Interaction")
         C = self.cutoff(edge_weight)
         for linear_scalar in self.linears_scalar:
             edge_attr = self.act(linear_scalar(edge_attr))
@@ -398,6 +425,8 @@ class Interaction(MessagePassing):
         S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         dX = I + A + S
         X = X + dX + dX**2
+        if use_ranges:
+            torch.cuda.nvtx.range_pop()
         return X
 
     def message(self, I_j, A_j, S_j, edge_attr):
