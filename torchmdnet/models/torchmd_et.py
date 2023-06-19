@@ -11,7 +11,6 @@ from torchmdnet.models.utils import (
     act_class_mapping,
 )
 
-
 class TorchMD_ET(nn.Module):
     r"""The TorchMD equivariant Transformer architecture.
 
@@ -67,6 +66,7 @@ class TorchMD_ET(nn.Module):
         cutoff_upper=5.0,
         max_z=100,
         max_num_neighbors=32,
+        dtype=torch.float32,
     ):
         super(TorchMD_ET, self).__init__()
 
@@ -97,10 +97,11 @@ class TorchMD_ET(nn.Module):
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         self.max_z = max_z
+        self.dtype = dtype
 
         act_class = act_class_mapping[activation]
 
-        self.embedding = nn.Embedding(self.max_z, hidden_channels)
+        self.embedding = nn.Embedding(self.max_z, hidden_channels, dtype=dtype)
 
         self.distance = Distance(
             cutoff_lower,
@@ -114,7 +115,7 @@ class TorchMD_ET(nn.Module):
         )
         self.neighbor_embedding = (
             NeighborEmbedding(
-                hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z
+                hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z, dtype
             ).jittable()
             if neighbor_embedding
             else None
@@ -131,10 +132,11 @@ class TorchMD_ET(nn.Module):
                 attn_activation,
                 cutoff_lower,
                 cutoff_upper,
+                dtype,
             ).jittable()
             self.attention_layers.append(layer)
 
-        self.out_norm = nn.LayerNorm(hidden_channels)
+        self.out_norm = nn.LayerNorm(hidden_channels, dtype=dtype)
 
         self.reset_parameters()
 
@@ -146,6 +148,7 @@ class TorchMD_ET(nn.Module):
         for attn in self.attention_layers:
             attn.reset_parameters()
         self.out_norm.reset_parameters()
+
 
     def forward(
         self,
@@ -159,6 +162,8 @@ class TorchMD_ET(nn.Module):
         x = self.embedding(z)
 
         edge_index, edge_weight, edge_vec = self.distance(pos, batch)
+        # This assert must be here to convince TorchScript that edge_vec is not None
+        # If you remove it TorchScript will complain down below that you cannot use an Optional[Tensor]
         assert (
             edge_vec is not None
         ), "Distance module did not return directional information"
@@ -170,7 +175,7 @@ class TorchMD_ET(nn.Module):
         if self.neighbor_embedding is not None:
             x = self.neighbor_embedding(z, x, edge_index, edge_weight, edge_attr)
 
-        vec = torch.zeros(x.size(0), 3, x.size(1), device=x.device)
+        vec = torch.zeros(x.size(0), 3, x.size(1), device=x.device, dtype=x.dtype)
 
         for attn in self.attention_layers:
             dx, dvec = attn(x, vec, edge_index, edge_weight, edge_attr, edge_vec)
@@ -194,7 +199,8 @@ class TorchMD_ET(nn.Module):
             f"num_heads={self.num_heads}, "
             f"distance_influence={self.distance_influence}, "
             f"cutoff_lower={self.cutoff_lower}, "
-            f"cutoff_upper={self.cutoff_upper})"
+            f"cutoff_upper={self.cutoff_upper}), "
+            f"dtype={self.dtype}"
         )
 
 
@@ -209,6 +215,7 @@ class EquivariantMultiHeadAttention(MessagePassing):
         attn_activation,
         cutoff_lower,
         cutoff_upper,
+        dtype=torch.float32,
     ):
         super(EquivariantMultiHeadAttention, self).__init__(aggr="add", node_dim=0)
         assert hidden_channels % num_heads == 0, (
@@ -221,26 +228,25 @@ class EquivariantMultiHeadAttention(MessagePassing):
         self.num_heads = num_heads
         self.hidden_channels = hidden_channels
         self.head_dim = hidden_channels // num_heads
-
-        self.layernorm = nn.LayerNorm(hidden_channels)
+        self.layernorm = nn.LayerNorm(hidden_channels, dtype=dtype)
         self.act = activation()
         self.attn_activation = act_class_mapping[attn_activation]()
         self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)
 
-        self.q_proj = nn.Linear(hidden_channels, hidden_channels)
-        self.k_proj = nn.Linear(hidden_channels, hidden_channels)
-        self.v_proj = nn.Linear(hidden_channels, hidden_channels * 3)
-        self.o_proj = nn.Linear(hidden_channels, hidden_channels * 3)
+        self.q_proj = nn.Linear(hidden_channels, hidden_channels, dtype=dtype)
+        self.k_proj = nn.Linear(hidden_channels, hidden_channels, dtype=dtype)
+        self.v_proj = nn.Linear(hidden_channels, hidden_channels * 3, dtype=dtype)
+        self.o_proj = nn.Linear(hidden_channels, hidden_channels * 3, dtype=dtype)
 
-        self.vec_proj = nn.Linear(hidden_channels, hidden_channels * 3, bias=False)
+        self.vec_proj = nn.Linear(hidden_channels, hidden_channels * 3, bias=False, dtype=dtype)
 
         self.dk_proj = None
         if distance_influence in ["keys", "both"]:
-            self.dk_proj = nn.Linear(num_rbf, hidden_channels)
+            self.dk_proj = nn.Linear(num_rbf, hidden_channels, dtype=dtype)
 
         self.dv_proj = None
         if distance_influence in ["values", "both"]:
-            self.dv_proj = nn.Linear(num_rbf, hidden_channels * 3)
+            self.dv_proj = nn.Linear(num_rbf, hidden_channels * 3, dtype=dtype)
 
         self.reset_parameters()
 
