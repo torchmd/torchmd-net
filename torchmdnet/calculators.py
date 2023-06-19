@@ -11,7 +11,7 @@ tranforms = {
         energy * 627.509,
         forces * 627.509 / 0.529177,
     ),  # Hartree -> kcal/mol, Hartree/Bohr -> kcal/mol/A
-    "Haetree/A -> kcal/mol/A": lambda energy, forces: (
+    "Hartree/A -> kcal/mol/A": lambda energy, forces: (
         energy * 627.509,
         forces * 627.509,
     ),  # Hartree -> kcal/mol, Hartree/A -> kcal/mol/A
