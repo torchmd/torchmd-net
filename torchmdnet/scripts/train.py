@@ -98,7 +98,7 @@ def get_args():
     parser.add_argument('--wandb-use', default=False, type=bool, help='Defines if wandb is used or not')
     parser.add_argument('--wandb-name', default='training', type=str, help='Give a name to your wandb run')
     parser.add_argument('--wandb-project', default='training_', type=str, help='Define what wandb Project to log to')
-    parser.add_argument('--wandb-resume-from-id', default=None, type=str, help='Resume a wandb run from a given run id, retrieve the run id from the wandb dashboard')
+    parser.add_argument('--wandb-resume-from-id', default=None, type=str, help='Resume a wandb run from a given run id. The id can be retrieved from the wandb dashboard')
     parser.add_argument('--tensorboard-use', default=False, type=bool, help='Defines if tensor board is used or not')
 
     # fmt: on
