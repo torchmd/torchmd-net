@@ -5,10 +5,9 @@ from torch import Tensor, nn
 import torch._dynamo as dynamo
 from torch_scatter import scatter
 from torch_geometric.nn import MessagePassing
-from torchmdnet import neighbors
 from torchmdnet.models.utils import (
     CosineCutoff,
-    Distance, OptimizedDistance,
+    OptimizedDistance,
     rbf_class_mapping,
     act_class_mapping,
 )
@@ -16,7 +15,11 @@ from torchmdnet.models.utils import (
 torch.backends.cuda.matmul.allow_tf32 = True
 use_graphs=True
 use_ranges=False
-backend="cudagraphs"
+
+
+def tensor_compile(foo):
+    return torch.compile(foo, backend="inductor", disable=not use_graphs, mode="reduce-overhead")
+
 
 # Creates a skew-symmetric tensor from a vector
 def vector_to_skewtensor(vector):
@@ -72,6 +75,173 @@ def new_radial_tensor(I, A, S, f_I, f_A, f_S):
 def tensor_norm(tensor):
     return (tensor**2).sum((-2, -1))
 
+class UncapturableTensorNet(nn.Module):
+    def __init__(
+        self,
+        cutoff_lower=0,
+        cutoff_upper=4.5,
+        max_num_neighbors=64,
+    ):
+        super(UncapturableTensorNet, self).__init__()
+        self.distance = OptimizedDistance(
+            cutoff_lower, cutoff_upper, max_num_pairs=-max_num_neighbors, return_vecs=True, loop=True, check_errors=False, resize_to_fit=False
+        )
+
+    def reset_parameters(self):
+        pass
+
+    #@tensor_compile
+    @dynamo.optimize(backend="cudagraphs", disable=not use_graphs)
+    def forward(
+        self,
+        pos: Tensor,
+        batch: Tensor,
+    ) -> Tuple[Tensor, Tensor, Tensor]:
+        # Obtain graph, with distances and relative position vectors
+        edge_index, edge_weight, edge_vec = self.distance(pos, batch)
+        # This assert convinces TorchScript that edge_vec is a Tensor and not an Optional[Tensor]
+        assert (
+            edge_vec is not None
+        ), "Distance module did not return directional information"
+        # mask = (edge_index[0] >= 0)
+        # edge_index = edge_index[:, mask]
+        # edge_weight = edge_weight[mask]
+        # edge_vec = edge_vec[mask]
+        # Embedding from edge-wise tensors to node-wise tensors
+        #mask = (edge_index[0] != edge_index[1])
+        # The line below is equivalent to the commented line, but compatible with CUDA graphs
+        #edge_vec[mask] = edge_vec[mask] / edge_weight[mask].unsqueeze(1)
+        return edge_index, edge_weight, edge_vec
+
+class CapturableTensorNet(nn.Module):
+
+    def __init__(
+        self,
+        hidden_channels=128,
+        num_layers=2,
+        num_rbf=32,
+        rbf_type="expnorm",
+        trainable_rbf=False,
+        activation="silu",
+        cutoff_lower=0,
+        cutoff_upper=4.5,
+        max_z=128,
+        equivariance_invariance_group="O(3)",
+    ):
+        super(CapturableTensorNet, self).__init__()
+
+        assert rbf_type in rbf_class_mapping, (
+            f'Unknown RBF type "{rbf_type}". '
+            f'Choose from {", ".join(rbf_class_mapping.keys())}.'
+        )
+        assert activation in act_class_mapping, (
+            f'Unknown activation function "{activation}". '
+            f'Choose from {", ".join(act_class_mapping.keys())}.'
+        )
+
+        assert equivariance_invariance_group in ["O(3)", "SO(3)"], (
+            f'Unknown group "{equivariance_invariance_group}". '
+            f"Choose O(3) or SO(3)."
+        )
+        self.hidden_channels = hidden_channels
+        self.equivariance_invariance_group = equivariance_invariance_group
+        self.num_layers = num_layers
+        self.num_rbf = num_rbf
+        self.rbf_type = rbf_type
+        self.activation = activation
+        self.cutoff_lower = cutoff_lower
+        self.cutoff_upper = cutoff_upper
+        act_class = act_class_mapping[activation]
+
+        self.distance_expansion = rbf_class_mapping[rbf_type](
+            cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
+        )
+        self.tensor_embedding = TensorEmbedding(
+            hidden_channels,
+            num_rbf,
+            act_class,
+            cutoff_lower,
+            cutoff_upper,
+            trainable_rbf,
+            max_z,
+        ).jittable()
+
+        self.layers = nn.ModuleList()
+        if num_layers != 0:
+            for _ in range(num_layers):
+                self.layers.append(
+                    Interaction(
+                        num_rbf,
+                        hidden_channels,
+                        act_class,
+                        cutoff_lower,
+                        cutoff_upper,
+                        equivariance_invariance_group,
+                    ).jittable()
+                )
+        self.linear = nn.Linear(3 * hidden_channels, hidden_channels)
+        self.out_norm = nn.LayerNorm(3 * hidden_channels)
+        self.act = act_class()
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.tensor_embedding.reset_parameters()
+        for layer in self.layers:
+            layer.reset_parameters()
+        self.linear.reset_parameters()
+        self.out_norm.reset_parameters()
+    @tensor_compile
+    @dynamo.optimize(backend="cudagraphs", disable=not use_graphs)
+    def forward(self, z, edge_index, edge_weight, edge_vec):
+        mask = (edge_index[0] >= 0).unsqueeze(0).expand_as(edge_index)
+        edge_index = edge_index*mask + (~mask)*z.size(0)
+        zp = torch.cat((z, torch.zeros(1, dtype=z.dtype, device=z.device)), dim=0)
+        edge_attr = self.distance_expansion(edge_weight)
+        mask = (edge_index[0] != edge_index[1])
+        edge_vec = edge_vec/torch.ones_like(edge_weight).masked_scatter(mask, edge_weight).unsqueeze(1)
+        X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr)
+        for layer in self.layers:
+            X = layer(X, edge_index, edge_weight, edge_attr)
+        I, A, S = decompose_tensor(X)
+        x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
+        x = self.out_norm(x)
+        x = self.act(self.linear((x)))
+        x = x[:-1]
+        return x
+
+class TensorNetGraph(torch.nn.Module):
+    def __init__(
+        self,
+        hidden_channels=128,
+        num_layers=2,
+        num_rbf=32,
+        rbf_type="expnorm",
+        trainable_rbf=False,
+        activation="silu",
+        cutoff_lower=0,
+        cutoff_upper=4.5,
+        max_z=128,
+        max_num_neighbors=64,
+        equivariance_invariance_group="O(3)",
+    ):
+        super(TensorNetGraph, self).__init__()
+        self.capturable = CapturableTensorNet(hidden_channels, num_layers, num_rbf, rbf_type, trainable_rbf, activation, cutoff_lower, cutoff_upper, max_z, equivariance_invariance_group)
+        self.uncapturable = UncapturableTensorNet(cutoff_lower, cutoff_upper, max_num_neighbors)
+        self.uncapturable =  torch.jit.script(self.uncapturable)
+    def reset_parameters(self):
+        self.capturable.reset_parameters()
+        #self.uncapturable.reset_parameters()
+
+    def forward(self,
+                z: Tensor,
+                pos: Tensor,
+                batch: Tensor,
+                q: Optional[Tensor] = None,
+                s: Optional[Tensor] = None,
+                ):
+        edge_index, edge_weight, edge_vec = self.uncapturable(pos, batch)
+        x = self.capturable(z, edge_index, edge_weight, edge_vec)
+        return x, None, z, pos, batch
 
 class TensorNet(nn.Module):
     r"""TensorNet's architecture, from TensorNet: Cartesian Tensor Representations
@@ -181,6 +351,13 @@ class TensorNet(nn.Module):
         self.act = act_class()
         self.reset_parameters()
         self.graphed = False
+        num_parts = 22
+        z = torch.zeros(num_parts, dtype=torch.long)
+        num_pairs = max_num_neighbors * num_parts
+        edge_index = torch.zeros((2,num_pairs) , dtype=torch.long)
+        edge_weight = torch.zeros(num_pairs, dtype=torch.float32)
+        edge_vec = torch.zeros((num_pairs, 3), dtype=torch.float32)
+        self._use_interaction_layers = torch.cuda.make_graphed_callables(self._update_interaction_layers, (z, edge_index, edge_weight, edge_vec))
 
     def reset_parameters(self):
         self.tensor_embedding.reset_parameters()
@@ -188,7 +365,7 @@ class TensorNet(nn.Module):
             layer.reset_parameters()
         self.linear.reset_parameters()
         self.out_norm.reset_parameters()
-    @dynamo.optimize(backend=backend, disable=not use_graphs)
+#    @dynamo.optimize(backend=backend, disable=not use_graphs)
     def _update_interaction_layers(self, z, edge_index, edge_weight, edge_vec):
         # Expand distances with radial basis functions
         edge_attr = self.distance_expansion(edge_weight)
@@ -210,8 +387,6 @@ class TensorNet(nn.Module):
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
-        if use_ranges:
-            torch.cuda.nvtx.range_push("TensorNet")
         # Obtain graph, with distances and relative position vectors
         edge_index, edge_weight, edge_vec = self.distance(pos, batch)
         # This assert convinces TorchScript that edge_vec is a Tensor and not an Optional[Tensor]
@@ -223,17 +398,45 @@ class TensorNet(nn.Module):
         edge_weight = edge_weight[mask]
         edge_vec = edge_vec[mask]
 
-        # Embedding from edge-wise tensors to node-wise tensors
+        # embedding from edge-wise tensors to node-wise tensors
         #mask = (edge_index[0] != edge_index[1])
         # The line below is equivalent to the commented line, but compatible with CUDA graphs
         #edge_vec[mask] = edge_vec[mask] / edge_weight[mask].unsqueeze(1)
         x = self._update_interaction_layers(z, edge_index, edge_weight, edge_vec)
-        if use_ranges:
-            torch.cuda.nvtx.range_pop()
         return x, None, z, pos, batch
 
 
-class TensorEmbedding(MessagePassing):
+class TensorPassing(MessagePassing):
+
+    def __init__(self):
+        super(TensorPassing, self).__init__(aggr="add", node_dim=0)
+
+
+    def aggregate(
+        self,
+        features: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+        index: torch.Tensor,
+        ptr: Optional[torch.Tensor],
+        dim_size: Optional[int],
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+
+        I, A, S = features
+        I = scatter(I, index, dim=self.node_dim, dim_size=dim_size)
+        A = scatter(A, index, dim=self.node_dim, dim_size=dim_size)
+        S = scatter(S, index, dim=self.node_dim, dim_size=dim_size)
+        # index = index.view(-1, 1, 1, 1)
+        # I.scatter_reduce(0, index, I, reduce="sum")
+        # A.scatter_reduce(0, index, A, reduce="sum")
+        # S.scatter_reduce(0, index, S, reduce="sum")
+        return I, A, S
+
+    def update(
+        self, inputs: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        return inputs
+
+
+class TensorEmbedding(TensorPassing):
     def __init__(
         self,
         hidden_channels,
@@ -244,7 +447,7 @@ class TensorEmbedding(MessagePassing):
         trainable_rbf=False,
         max_z=128,
     ):
-        super(TensorEmbedding, self).__init__(aggr="add", node_dim=0)
+        super(TensorEmbedding, self).__init__()
 
         self.hidden_channels = hidden_channels
         self.distance_proj1 = nn.Linear(num_rbf, hidden_channels)
@@ -290,8 +493,6 @@ class TensorEmbedding(MessagePassing):
         edge_vec_norm: Tensor,
         edge_attr: Tensor,
     ):
-        if use_ranges:
-            torch.cuda.nvtx.range_push("TensorEmbedding")
         Z = self.emb(z)
         C = self.cutoff(edge_weight)
         W1 = self.distance_proj1(edge_attr) * C.view(-1, 1)
@@ -319,8 +520,6 @@ class TensorEmbedding(MessagePassing):
         norm = norm.reshape(norm.shape[0], self.hidden_channels, 3)
         I, A, S = new_radial_tensor(I, A, S, norm[..., 0], norm[..., 1], norm[..., 2])
         X = I + A + S
-        if use_ranges:
-            torch.cuda.nvtx.range_pop()
         return X
 
     def message(self, Z_i, Z_j, I, A, S):
@@ -332,28 +531,10 @@ class TensorEmbedding(MessagePassing):
 
         return I, A, S
 
-    def aggregate(
-        self,
-        features: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
-        index: torch.Tensor,
-        ptr: Optional[torch.Tensor],
-        dim_size: Optional[int],
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-
-        I, A, S = features
-        I = scatter(I, index, dim=self.node_dim, dim_size=dim_size)
-        A = scatter(A, index, dim=self.node_dim, dim_size=dim_size)
-        S = scatter(S, index, dim=self.node_dim, dim_size=dim_size)
-
-        return I, A, S
-
-    def update(
-        self, inputs: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        return inputs
 
 
-class Interaction(MessagePassing):
+
+class Interaction(TensorPassing):
     def __init__(
         self,
         num_rbf,
@@ -363,7 +544,7 @@ class Interaction(MessagePassing):
         cutoff_upper,
         equivariance_invariance_group,
     ):
-        super(Interaction, self).__init__(aggr="add", node_dim=0)
+        super(Interaction, self).__init__()
 
         self.num_rbf = num_rbf
         self.hidden_channels = hidden_channels
@@ -392,8 +573,7 @@ class Interaction(MessagePassing):
             linear.reset_parameters()
 
     def forward(self, X, edge_index, edge_weight, edge_attr):
-        if use_ranges:
-            torch.cuda.nvtx.range_push("Interaction")
+
         C = self.cutoff(edge_weight)
         for linear_scalar in self.linears_scalar:
             edge_attr = self.act(linear_scalar(edge_attr))
@@ -425,8 +605,6 @@ class Interaction(MessagePassing):
         S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         dX = I + A + S
         X = X + dX + dX**2
-        if use_ranges:
-            torch.cuda.nvtx.range_pop()
         return X
 
     def message(self, I_j, A_j, S_j, edge_attr):
@@ -435,22 +613,3 @@ class Interaction(MessagePassing):
             I_j, A_j, S_j, edge_attr[..., 0], edge_attr[..., 1], edge_attr[..., 2]
         )
         return I, A, S
-
-    def aggregate(
-        self,
-        features: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
-        index: torch.Tensor,
-        ptr: Optional[torch.Tensor],
-        dim_size: Optional[int],
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-
-        I, A, S = features
-        I = scatter(I, index, dim=self.node_dim, dim_size=dim_size)
-        A = scatter(A, index, dim=self.node_dim, dim_size=dim_size)
-        S = scatter(S, index, dim=self.node_dim, dim_size=dim_size)
-        return I, A, S
-
-    def update(
-        self, inputs: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        return inputs

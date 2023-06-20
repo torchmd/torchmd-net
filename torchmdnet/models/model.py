@@ -6,6 +6,7 @@ from torch import nn, Tensor
 from torch_scatter import scatter
 from pytorch_lightning.utilities import rank_zero_warn
 from torchmdnet.models import output_modules
+from torchmdnet.models.tensornet import TensorNetGraph
 from torchmdnet.models.wrappers import AtomFilter
 from torchmdnet import priors
 import warnings
@@ -62,7 +63,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         from torchmdnet.models.tensornet import TensorNet
 	# Setting is_equivariant to False to enforce the use of Scalar output module instead of EquivariantScalar
         is_equivariant = False
-        representation_model = TensorNet(
+        representation_model = TensorNetGraph(
 	    equivariance_invariance_group=args["equivariance_invariance_group"],
             **shared_args,
         )
