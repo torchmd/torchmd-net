@@ -424,10 +424,10 @@ class TensorPassing(MessagePassing):
         I = scatter(I, index, dim=self.node_dim, dim_size=dim_size)
         A = scatter(A, index, dim=self.node_dim, dim_size=dim_size)
         S = scatter(S, index, dim=self.node_dim, dim_size=dim_size)
-        # index = index.view(-1, 1, 1, 1)
-        # I.scatter_reduce(0, index, I, reduce="sum")
-        # A.scatter_reduce(0, index, A, reduce="sum")
-        # S.scatter_reduce(0, index, S, reduce="sum")
+        # index_v = index.view(-1, 1, 1, 1)
+        # I.scatter_reduce(0, index_v, I, reduce="sum")
+        # A.scatter_reduce(0, index_v, A, reduce="sum")
+        # S.scatter_reduce(0, index_v, S, reduce="sum")
         return I, A, S
 
     def update(

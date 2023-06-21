@@ -3,6 +3,7 @@ from typing import Optional, Tuple
 import torch
 from torch import Tensor
 from torch import nn
+import torch._dynamo as dynamo
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch_cluster import radius_graph
@@ -107,6 +108,10 @@ class NeighborEmbedding(MessagePassing):
 
     def message(self, x_j, W):
         return x_j * W
+from torchmdnet.neighbors import get_neighbor_pairs_kernel
+
+dynamo.disallow_in_graph(get_neighbor_pairs_kernel)
+dynamo.disallow_in_graph(torch.masked_scatter)
 
 class OptimizedDistance(torch.nn.Module):
     def __init__(
@@ -197,8 +202,7 @@ class OptimizedDistance(torch.nn.Module):
                 self.box = torch.tensor([[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]])
         self.box = self.box.cpu()  # All strategies expect the box to be in CPU memory
         self.check_errors = check_errors
-        from torchmdnet.neighbors import get_neighbor_pairs_kernel
-        self.kernel = get_neighbor_pairs_kernel;
+        self.kernel = get_neighbor_pairs_kernel
 
     def forward(
         self, pos: Tensor, batch: Optional[Tensor] = None
