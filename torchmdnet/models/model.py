@@ -235,12 +235,9 @@ class TorchMD_Net(nn.Module):
 
         if self.derivative:
             pos.requires_grad_(True)
-        torch.cuda.nvtx.range_push("representation")
         # run the potentially wrapped representation model
         x, v, z, pos, batch = self.representation_model(z, pos, batch, q=q, s=s)
-        torch.cuda.nvtx.range_pop()
         # apply the output network
-        torch.cuda.nvtx.range_push("output")
         x = self.output_model.pre_reduce(x, v, z, pos, batch)
 
         # scale by data standard deviation
@@ -266,11 +263,9 @@ class TorchMD_Net(nn.Module):
         if self.prior_model is not None:
             for prior in self.prior_model:
                 y = prior.post_reduce(y, z, pos, batch, extra_args)
-        torch.cuda.nvtx.range_pop()
         # compute gradients with respect to coordinates
 
         if self.derivative:
-            torch.cuda.nvtx.range_push("derivative")
             grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(y)]
             dy = grad(
                 [y],
@@ -279,7 +274,6 @@ class TorchMD_Net(nn.Module):
                 create_graph=True,
                 retain_graph=True,
             )[0]
-            torch.cuda.nvtx.range_pop()
             if dy is None:
                 raise RuntimeError("Autograd returned None for the force prediction.")
             return y, -dy
