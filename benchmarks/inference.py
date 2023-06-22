@@ -1,14 +1,12 @@
+"""
+Benchmark script for inference.
+This script compiles a model using torch.compile and measures the time it takes to run a forward and backward pass for a certain molecule.
+
+"""
 import torch
-import pytest
-from pytest import mark
-import pickle
-from os.path import exists, dirname, join
+from os.path import dirname, join
 import torch
-import pytorch_lightning as pl
-from torchmdnet import models
 from torchmdnet.models.model import create_model
-from torchmdnet.models import output_modules
-import torch._dynamo as dynamo
 import yaml
 from moleculekit.molecule import Molecule
 from moleculekit.periodictable import periodictable
@@ -44,7 +42,6 @@ class GpuTimer:
 
 def benchmark():
     print("Initializing")
-    print(dynamo.list_backends())
     device = "cuda"
     pdb_file = "systems/alanine_dipeptide.pdb"
     molecule = Molecule(pdb_file)
@@ -69,7 +66,6 @@ def benchmark():
         derivative=False,
     )
     model = create_model(args)
-
     z = atomic_numbers
     pos = positions
     batch = torch.zeros_like(z).to("cuda")
@@ -84,7 +80,6 @@ def benchmark():
         pred.sum().backward()
     torch.cuda.synchronize()
     model = torch.compile(model, backend="inductor", mode="max-autotune")
-#    model.compile(z,pos,batch)
     for i in range(10):
         pred, _ = model(z, pos, batch)
         pred.sum().backward()
@@ -92,8 +87,6 @@ def benchmark():
     torch.cuda.nvtx.range_pop()
     torch.cuda.nvtx.range_push("Benchmark")
     print("Benchmark")
-    #Profile with pytorch
-    #with torch.autograd.profiler.profile(use_cuda=True) as prof:
     nbench = 100
     times = np.zeros(nbench)
     stream = torch.cuda.Stream()
@@ -114,8 +107,6 @@ def benchmark():
     torch.cuda.nvtx.range_pop()
 
     print("Time: %f ms, stddev %f" % (timer.interval / nbench, times.std()))
-    #print(prof.key_averages().table(sort_by="cuda_time_total"))
-
 
 if __name__ == "__main__":
     benchmark()
