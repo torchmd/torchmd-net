@@ -55,3 +55,4 @@ train_size: 110000
 trainable_rbf: false
 val_size: 10000
 weight_decay: 0.0
+dtype: float

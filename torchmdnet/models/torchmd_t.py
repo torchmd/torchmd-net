@@ -1,4 +1,5 @@
 from typing import Optional, Tuple
+import torch
 from torch import Tensor, nn
 from torch_geometric.nn import MessagePassing
 from torchmdnet.models.utils import (
@@ -65,6 +66,7 @@ class TorchMD_T(nn.Module):
         cutoff_upper=5.0,
         max_z=100,
         max_num_neighbors=32,
+        dtype=torch.float
     ):
         super(TorchMD_T, self).__init__()
 
@@ -95,17 +97,17 @@ class TorchMD_T(nn.Module):
         act_class = act_class_mapping[activation]
         attn_act_class = act_class_mapping[attn_activation]
 
-        self.embedding = nn.Embedding(self.max_z, hidden_channels)
+        self.embedding = nn.Embedding(self.max_z, hidden_channels, dtype=dtype)
 
         self.distance = Distance(
             cutoff_lower, cutoff_upper, max_num_neighbors=max_num_neighbors, loop=True
         )
         self.distance_expansion = rbf_class_mapping[rbf_type](
-            cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
+            cutoff_lower, cutoff_upper, num_rbf, trainable_rbf, dtype=dtype
         )
         self.neighbor_embedding = (
             NeighborEmbedding(
-                hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z
+                hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z, dtype=dtype
             ).jittable()
             if neighbor_embedding
             else None
@@ -122,10 +124,11 @@ class TorchMD_T(nn.Module):
                 attn_act_class,
                 cutoff_lower,
                 cutoff_upper,
+                dtype=dtype,
             ).jittable()
             self.attention_layers.append(layer)
 
-        self.out_norm = nn.LayerNorm(hidden_channels)
+        self.out_norm = nn.LayerNorm(hidden_channels, dtype=dtype)
 
         self.reset_parameters()
 
@@ -190,6 +193,7 @@ class MultiHeadAttention(MessagePassing):
         attn_activation,
         cutoff_lower,
         cutoff_upper,
+        dtype=torch.float,
     ):
         super(MultiHeadAttention, self).__init__(aggr="add", node_dim=0)
         assert hidden_channels % num_heads == 0, (
@@ -202,23 +206,23 @@ class MultiHeadAttention(MessagePassing):
         self.num_heads = num_heads
         self.head_dim = hidden_channels // num_heads
 
-        self.layernorm = nn.LayerNorm(hidden_channels)
+        self.layernorm = nn.LayerNorm(hidden_channels, dtype=dtype)
         self.act = activation()
         self.attn_activation = attn_activation()
         self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)
 
-        self.q_proj = nn.Linear(hidden_channels, hidden_channels)
-        self.k_proj = nn.Linear(hidden_channels, hidden_channels)
-        self.v_proj = nn.Linear(hidden_channels, hidden_channels)
-        self.o_proj = nn.Linear(hidden_channels, hidden_channels)
+        self.q_proj = nn.Linear(hidden_channels, hidden_channels, dtype=dtype)
+        self.k_proj = nn.Linear(hidden_channels, hidden_channels, dtype=dtype)
+        self.v_proj = nn.Linear(hidden_channels, hidden_channels, dtype=dtype)
+        self.o_proj = nn.Linear(hidden_channels, hidden_channels, dtype=dtype)
 
         self.dk_proj = None
         if distance_influence in ["keys", "both"]:
-            self.dk_proj = nn.Linear(num_rbf, hidden_channels)
+            self.dk_proj = nn.Linear(num_rbf, hidden_channels, dtype=dtype)
 
         self.dv_proj = None
         if distance_influence in ["values", "both"]:
-            self.dv_proj = nn.Linear(num_rbf, hidden_channels)
+            self.dv_proj = nn.Linear(num_rbf, hidden_channels, dtype=dtype)
 
         self.reset_parameters()
 

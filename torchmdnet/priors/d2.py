@@ -103,7 +103,8 @@ class D2(BasePrior):
             [31.74, 1.892],  # 52 Te
             [31.50, 1.892],  # 53 I
             [29.99, 1.881],  # 54 Xe
-        ]
+        ], dtype=pt.float64
+
     )
     C_6_R_r[:, 1] *= 0.1  # Å --> nm
 
@@ -115,17 +116,21 @@ class D2(BasePrior):
         distance_scale=None,
         energy_scale=None,
         dataset=None,
+        dtype=pt.float32,
     ):
         super().__init__()
-        self.cutoff_distance = float(cutoff_distance)
+        one = pt.tensor(1.0, dtype=dtype).item()
+        self.cutoff_distance = cutoff_distance * one
         self.max_num_neighbors = int(max_num_neighbors)
+
+        self.C_6_R_r = self.C_6_R_r.to(dtype=dtype)
         self.atomic_number = list(
             dataset.atomic_number if atomic_number is None else atomic_number
         )
-        self.distance_scale = float(
+        self.distance_scale = one * (
             dataset.distance_scale if distance_scale is None else distance_scale
         )
-        self.energy_scale = float(
+        self.energy_scale = one * (
             dataset.energy_scale if energy_scale is None else energy_scale
         )
 

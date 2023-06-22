@@ -42,25 +42,24 @@ def visualize_basis(basis_type, num_rbf=50, cutoff_lower=0, cutoff_upper=5):
 
 
 class NeighborEmbedding(MessagePassing):
-    """
-    The ET architecture assigns two  learned vectors to each atom type
-    zi. One  is used to  encode information  specific to an  atom, the
-    other (this  class) takes  the role  of a  neighborhood embedding.
-    The neighborhood embedding, which is  an embedding of the types of
-    neighboring atoms, is multiplied by a distance filter.
+    def __init__(self, hidden_channels, num_rbf, cutoff_lower, cutoff_upper, max_z=100, dtype=torch.float32):
+        """
+        The ET architecture assigns two  learned vectors to each atom type
+        zi. One  is used to  encode information  specific to an  atom, the
+        other (this  class) takes  the role  of a  neighborhood embedding.
+        The neighborhood embedding, which is  an embedding of the types of
+        neighboring atoms, is multiplied by a distance filter.
 
 
-    This embedding allows  the network to store  information about the
-    interaction of atom pairs.
+        This embedding allows  the network to store  information about the
+        interaction of atom pairs.
 
-    See eq. 3 in https://arxiv.org/pdf/2202.02541.pdf for more details.
-    """
-
-    def __init__(self, hidden_channels, num_rbf, cutoff_lower, cutoff_upper, max_z=100):
+        See eq. 3 in https://arxiv.org/pdf/2202.02541.pdf for more details.
+        """
         super(NeighborEmbedding, self).__init__(aggr="add")
-        self.embedding = nn.Embedding(max_z, hidden_channels)
-        self.distance_proj = nn.Linear(num_rbf, hidden_channels)
-        self.combine = nn.Linear(hidden_channels * 2, hidden_channels)
+        self.embedding = nn.Embedding(max_z, hidden_channels, dtype=dtype)
+        self.distance_proj = nn.Linear(num_rbf, hidden_channels, dtype=dtype)
+        self.combine = nn.Linear(hidden_channels * 2, hidden_channels, dtype=dtype)
         self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)
 
         self.reset_parameters()
@@ -273,13 +272,13 @@ class OptimizedDistance(torch.nn.Module):
 
 
 class GaussianSmearing(nn.Module):
-    def __init__(self, cutoff_lower=0.0, cutoff_upper=5.0, num_rbf=50, trainable=True):
+    def __init__(self, cutoff_lower=0.0, cutoff_upper=5.0, num_rbf=50, trainable=True, dtype=torch.float32):
         super(GaussianSmearing, self).__init__()
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         self.num_rbf = num_rbf
         self.trainable = trainable
-
+        self.dtype = dtype
         offset, coeff = self._initial_params()
         if trainable:
             self.register_parameter("coeff", nn.Parameter(coeff))
@@ -289,7 +288,7 @@ class GaussianSmearing(nn.Module):
             self.register_buffer("offset", offset)
 
     def _initial_params(self):
-        offset = torch.linspace(self.cutoff_lower, self.cutoff_upper, self.num_rbf)
+        offset = torch.linspace(self.cutoff_lower, self.cutoff_upper, self.num_rbf, dtype=self.dtype)
         coeff = -0.5 / (offset[1] - offset[0]) ** 2
         return offset, coeff
 
@@ -304,13 +303,13 @@ class GaussianSmearing(nn.Module):
 
 
 class ExpNormalSmearing(nn.Module):
-    def __init__(self, cutoff_lower=0.0, cutoff_upper=5.0, num_rbf=50, trainable=True):
+    def __init__(self, cutoff_lower=0.0, cutoff_upper=5.0, num_rbf=50, trainable=True, dtype=torch.float32):
         super(ExpNormalSmearing, self).__init__()
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         self.num_rbf = num_rbf
         self.trainable = trainable
-
+        self.dtype = dtype
         self.cutoff_fn = CosineCutoff(0, cutoff_upper)
         self.alpha = 5.0 / (cutoff_upper - cutoff_lower)
 
@@ -326,11 +325,11 @@ class ExpNormalSmearing(nn.Module):
         # initialize means and betas according to the default values in PhysNet
         # https://pubs.acs.org/doi/10.1021/acs.jctc.9b00181
         start_value = torch.exp(
-            torch.scalar_tensor(-self.cutoff_upper + self.cutoff_lower)
+            torch.scalar_tensor(-self.cutoff_upper + self.cutoff_lower, dtype=self.dtype)
         )
-        means = torch.linspace(start_value, 1, self.num_rbf)
+        means = torch.linspace(start_value, 1, self.num_rbf, dtype=self.dtype)
         betas = torch.tensor(
-            [(2 / self.num_rbf * (1 - start_value)) ** -2] * self.num_rbf
+            [(2 / self.num_rbf * (1 - start_value)) ** -2] * self.num_rbf, dtype=self.dtype
         )
         return means, betas
 
@@ -383,13 +382,13 @@ class CosineCutoff(nn.Module):
                 + 1.0
             )
             # remove contributions below the cutoff radius
-            cutoffs = cutoffs * (distances < self.cutoff_upper).float()
-            cutoffs = cutoffs * (distances > self.cutoff_lower).float()
+            cutoffs = cutoffs * (distances < self.cutoff_upper)
+            cutoffs = cutoffs * (distances > self.cutoff_lower)
             return cutoffs
         else:
             cutoffs = 0.5 * (torch.cos(distances * math.pi / self.cutoff_upper) + 1.0)
             # remove contributions beyond the cutoff radius
-            cutoffs = cutoffs * (distances < self.cutoff_upper).float()
+            cutoffs = cutoffs * (distances < self.cutoff_upper)
             return cutoffs
 
 
@@ -468,6 +467,7 @@ class GatedEquivariantBlock(nn.Module):
         intermediate_channels=None,
         activation="silu",
         scalar_activation=False,
+        dtype=torch.float,
     ):
         super(GatedEquivariantBlock, self).__init__()
         self.out_channels = out_channels
@@ -475,14 +475,14 @@ class GatedEquivariantBlock(nn.Module):
         if intermediate_channels is None:
             intermediate_channels = hidden_channels
 
-        self.vec1_proj = nn.Linear(hidden_channels, hidden_channels, bias=False)
-        self.vec2_proj = nn.Linear(hidden_channels, out_channels, bias=False)
+        self.vec1_proj = nn.Linear(hidden_channels, hidden_channels, bias=False, dtype=dtype)
+        self.vec2_proj = nn.Linear(hidden_channels, out_channels, bias=False, dtype=dtype)
 
         act_class = act_class_mapping[activation]
         self.update_net = nn.Sequential(
-            nn.Linear(hidden_channels * 2, intermediate_channels),
+            nn.Linear(hidden_channels * 2, intermediate_channels, dtype=dtype),
             act_class(),
-            nn.Linear(intermediate_channels, out_channels * 2),
+            nn.Linear(intermediate_channels, out_channels * 2, dtype=dtype),
         )
 
         self.act = act_class() if scalar_activation else None
@@ -500,7 +500,7 @@ class GatedEquivariantBlock(nn.Module):
 
         # detach zero-entries to avoid NaN gradients during force loss backpropagation
         vec1 = torch.zeros(
-            vec1_buffer.size(0), vec1_buffer.size(2), device=vec1_buffer.device
+            vec1_buffer.size(0), vec1_buffer.size(2), device=vec1_buffer.device, dtype=vec1_buffer.dtype
         )
         mask = (vec1_buffer != 0).view(vec1_buffer.size(0), -1).any(dim=1)
         if not mask.all():
@@ -532,3 +532,5 @@ act_class_mapping = {
     "tanh": nn.Tanh,
     "sigmoid": nn.Sigmoid,
 }
+
+dtype_mapping = {"float": torch.float, "double": torch.float64, "float32": torch.float32, "float64": torch.float64}
