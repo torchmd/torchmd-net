@@ -7,11 +7,26 @@ from torch_scatter import scatter
 from pytorch_lightning.utilities import rank_zero_warn
 from torchmdnet.models import output_modules
 from torchmdnet.models.wrappers import AtomFilter
+from torchmdnet.models.utils import dtype_mapping
 from torchmdnet import priors
 import warnings
 
 
 def create_model(args, prior_model=None, mean=None, std=None):
+    """Create a model from the given arguments.
+    See :func:`get_args` in scripts/train.py for a description of the arguments.
+    Parameters
+    ----------
+        args (dict): Arguments for the model.
+        prior_model (nn.Module, optional): Prior model to use. Defaults to None.
+        mean (torch.Tensor, optional): Mean of the training data. Defaults to None.
+        std (torch.Tensor, optional): Standard deviation of the training data. Defaults to None.
+    Returns
+    -------
+        nn.Module: An instance of the TorchMD_Net model.
+    """
+    args["dtype"] = "float32" if "dtype" not in args else args["dtype"]
+    args["dtype"] = dtype_mapping[args["dtype"]] if isinstance(args["dtype"], str) else args["dtype"]
     shared_args = dict(
         hidden_channels=args["embedding_dimension"],
         num_layers=args["num_layers"],
@@ -23,6 +38,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         cutoff_upper=args["cutoff_upper"],
         max_z=args["max_z"],
         max_num_neighbors=args["max_num_neighbors"],
+        dtype=args["dtype"]
     )
 
     # representation network
@@ -86,6 +102,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         args["embedding_dimension"],
         activation=args["activation"],
         reduce_op=args["reduce_op"],
+        dtype=args["dtype"],
     )
 
     # combine representation and output network
@@ -96,6 +113,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         mean=mean,
         std=std,
         derivative=args["derivative"],
+        dtype=args["dtype"],
     )
     return model
 
@@ -160,6 +178,15 @@ def create_prior_models(args, dataset=None):
 
 
 class TorchMD_Net(nn.Module):
+    """The  TorchMD_Net class  combines a  given representation  model
+    (such as  the equivariant transformer),  an output model  (such as
+    the scalar output  module) and a prior model (such  as the atomref
+    prior), producing a  Module that takes as input a  series of atoms
+    features  and  outputs  a  scalar   value  (i.e  energy  for  each
+    batch/molecule) and,  derivative is True, the  negative of  its derivative
+    with respect to the positions (i.e forces for each atom).
+
+    """
     def __init__(
         self,
         representation_model,
@@ -168,10 +195,11 @@ class TorchMD_Net(nn.Module):
         mean=None,
         std=None,
         derivative=False,
+        dtype=torch.float32,
     ):
         super(TorchMD_Net, self).__init__()
-        self.representation_model = representation_model
-        self.output_model = output_model
+        self.representation_model = representation_model.to(dtype=dtype)
+        self.output_model = output_model.to(dtype=dtype)
 
         if not output_model.allow_prior_model and prior_model is not None:
             prior_model = None
@@ -183,14 +211,14 @@ class TorchMD_Net(nn.Module):
             )
         if isinstance(prior_model, priors.base.BasePrior):
             prior_model = [prior_model]
-        self.prior_model = None if prior_model is None else torch.nn.ModuleList(prior_model)
+        self.prior_model = None if prior_model is None else torch.nn.ModuleList(prior_model).to(dtype=dtype)
 
         self.derivative = derivative
 
         mean = torch.scalar_tensor(0) if mean is None else mean
-        self.register_buffer("mean", mean)
+        self.register_buffer("mean", mean.to(dtype=dtype))
         std = torch.scalar_tensor(1) if std is None else std
-        self.register_buffer("std", std)
+        self.register_buffer("std", std.to(dtype=dtype))
 
         self.reset_parameters()
 
@@ -210,6 +238,15 @@ class TorchMD_Net(nn.Module):
         s: Optional[Tensor] = None,
         extra_args: Optional[Dict[str, Tensor]] = None
     ) -> Tuple[Tensor, Optional[Tensor]]:
+        """Compute the output of the model.
+        Args:
+            z (Tensor): Atomic numbers of the atoms in the molecule. Shape (N,).
+            pos (Tensor): Atomic positions in the molecule. Shape (N, 3).
+            batch (Tensor, optional): Batch indices for the atoms in the molecule. Shape (N,).
+            q (Tensor, optional): Atomic charges in the molecule. Shape (N,).
+            s (Tensor, optional): Atomic spins in the molecule. Shape (N,).
+            extra_args (Dict[str, Tensor], optional): Extra arguments to pass to the prior model.
+        """
 
         assert z.dim() == 1 and z.dtype == torch.long
         batch = torch.zeros_like(z) if batch is None else batch
@@ -259,6 +296,7 @@ class TorchMD_Net(nn.Module):
             )[0]
             if dy is None:
                 raise RuntimeError("Autograd returned None for the force prediction.")
+
             return y, -dy
         # TODO: return only `out` once Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
         return y, None

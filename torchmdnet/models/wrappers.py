@@ -27,6 +27,9 @@ class BaseWrapper(nn.Module, metaclass=ABCMeta):
 
 
 class AtomFilter(BaseWrapper):
+    """
+    Remove atoms with Z > remove_threshold from the model's output.
+    """
     def __init__(self, model, remove_threshold):
         super(AtomFilter, self).__init__(model)
         self.remove_threshold = remove_threshold

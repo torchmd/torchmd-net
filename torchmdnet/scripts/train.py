@@ -12,9 +12,9 @@ from torchmdnet import datasets, priors, models
 from torchmdnet.data import DataModule
 from torchmdnet.models import output_modules
 from torchmdnet.models.model import create_prior_models
-from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping
+from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping, dtype_mapping
 from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, number
-
+import torch
 
 def get_args():
     # fmt: off
@@ -67,6 +67,7 @@ def get_args():
     parser.add_argument('--prior-model', type=str, default=None, choices=priors.__all__, help='Which prior model to use')
 
     # architectural args
+    parser.add_argument('--dtype', type=str, default="float32", choices=list(dtype_mapping.keys()), help='Floating point precision. Can be float32 or float64')
     parser.add_argument('--charge', type=bool, default=False, help='Model needs a total charge')
     parser.add_argument('--spin', type=bool, default=False, help='Model needs a spin state')
     parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
@@ -98,6 +99,7 @@ def get_args():
     parser.add_argument('--wandb-use', default=False, type=bool, help='Defines if wandb is used or not')
     parser.add_argument('--wandb-name', default='training', type=str, help='Give a name to your wandb run')
     parser.add_argument('--wandb-project', default='training_', type=str, help='Define what wandb Project to log to')
+    parser.add_argument('--wandb-resume-from-id', default=None, type=str, help='Resume a wandb run from a given run id. The id can be retrieved from the wandb dashboard')
     parser.add_argument('--tensorboard-use', default=False, type=bool, help='Defines if tensor board is used or not')
 
     # fmt: on
@@ -144,9 +146,15 @@ def main():
     early_stopping = EarlyStopping("val_loss", patience=args.early_stopping_patience)
 
     csv_logger = CSVLogger(args.log_dir, name="", version="")
-    _logger=[csv_logger]
+    _logger = [csv_logger]
     if args.wandb_use:
-        wandb_logger=WandbLogger(project=args.wandb_project,name=args.wandb_name,save_dir=args.log_dir)
+        wandb_logger = WandbLogger(
+            project=args.wandb_project,
+            name=args.wandb_name,
+            save_dir=args.log_dir,
+            resume="must" if args.wandb_resume_from_id is not None else None,
+            id=args.wandb_resume_from_id,
+        )
         _logger.append(wandb_logger)
 
     if args.tensorboard_use:

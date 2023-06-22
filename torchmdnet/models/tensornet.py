@@ -38,7 +38,7 @@ def vector_to_symtensor(vector):
     tensor = torch.matmul(vector.unsqueeze(-1), vector.unsqueeze(-2))
     I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)[
         ..., None, None
-    ] * torch.eye(3, 3, device=tensor.device)
+    ] * torch.eye(3, 3, device=tensor.device, dtype=tensor.dtype)
     S = 0.5 * (tensor + tensor.transpose(-2, -1)) - I
     return S
 
@@ -47,7 +47,7 @@ def vector_to_symtensor(vector):
 def decompose_tensor(tensor):
     I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)[
         ..., None, None
-    ] * torch.eye(3, 3, device=tensor.device)
+    ] * torch.eye(3, 3, device=tensor.device, dtype=tensor.dtype)
     A = 0.5 * (tensor - tensor.transpose(-2, -1))
     S = 0.5 * (tensor + tensor.transpose(-2, -1)) - I
     return I, A, S
@@ -111,6 +111,7 @@ class TensorNet(nn.Module):
         max_z=128,
         max_num_neighbors=64,
         equivariance_invariance_group="O(3)",
+        dtype=torch.float32,
     ):
         super(TensorNet, self).__init__()
 
@@ -150,6 +151,7 @@ class TensorNet(nn.Module):
             cutoff_upper,
             trainable_rbf,
             max_z,
+            dtype,
         ).jittable()
 
         self.layers = nn.ModuleList()
@@ -163,10 +165,11 @@ class TensorNet(nn.Module):
                         cutoff_lower,
                         cutoff_upper,
                         equivariance_invariance_group,
+                        dtype,
                     ).jittable()
                 )
-        self.linear = nn.Linear(3 * hidden_channels, hidden_channels)
-        self.out_norm = nn.LayerNorm(3 * hidden_channels)
+        self.linear = nn.Linear(3 * hidden_channels, hidden_channels, dtype=dtype)
+        self.out_norm = nn.LayerNorm(3 * hidden_channels, dtype=dtype)
         self.act = act_class()
         self.reset_parameters()
 
@@ -217,17 +220,18 @@ class TensorEmbedding(MessagePassing):
         cutoff_upper,
         trainable_rbf=False,
         max_z=128,
+        dtype=torch.float32,
     ):
         super(TensorEmbedding, self).__init__(aggr="add", node_dim=0)
 
         self.hidden_channels = hidden_channels
-        self.distance_proj1 = nn.Linear(num_rbf, hidden_channels)
-        self.distance_proj2 = nn.Linear(num_rbf, hidden_channels)
-        self.distance_proj3 = nn.Linear(num_rbf, hidden_channels)
+        self.distance_proj1 = nn.Linear(num_rbf, hidden_channels, dtype=dtype)
+        self.distance_proj2 = nn.Linear(num_rbf, hidden_channels, dtype=dtype)
+        self.distance_proj3 = nn.Linear(num_rbf, hidden_channels, dtype=dtype)
         self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)
         self.max_z = max_z
-        self.emb = torch.nn.Embedding(max_z, hidden_channels)
-        self.emb2 = nn.Linear(2 * hidden_channels, hidden_channels)
+        self.emb = torch.nn.Embedding(max_z, hidden_channels, dtype=dtype)
+        self.emb2 = nn.Linear(2 * hidden_channels, hidden_channels, dtype=dtype)
         self.act = activation()
         self.linears_tensor = nn.ModuleList()
         for _ in range(3):
@@ -236,12 +240,12 @@ class TensorEmbedding(MessagePassing):
             )
         self.linears_scalar = nn.ModuleList()
         self.linears_scalar.append(
-            nn.Linear(hidden_channels, 2 * hidden_channels, bias=True)
+            nn.Linear(hidden_channels, 2 * hidden_channels, bias=True, dtype=dtype)
         )
         self.linears_scalar.append(
-            nn.Linear(2 * hidden_channels, 3 * hidden_channels, bias=True)
+            nn.Linear(2 * hidden_channels, 3 * hidden_channels, bias=True, dtype=dtype)
         )
-        self.init_norm = nn.LayerNorm(hidden_channels)
+        self.init_norm = nn.LayerNorm(hidden_channels, dtype=dtype)
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -336,6 +340,7 @@ class Interaction(MessagePassing):
         cutoff_lower,
         cutoff_upper,
         equivariance_invariance_group,
+        dtype=torch.float32,
     ):
         super(Interaction, self).__init__(aggr="add", node_dim=0)
 
@@ -343,12 +348,12 @@ class Interaction(MessagePassing):
         self.hidden_channels = hidden_channels
         self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)
         self.linears_scalar = nn.ModuleList()
-        self.linears_scalar.append(nn.Linear(num_rbf, hidden_channels, bias=True))
+        self.linears_scalar.append(nn.Linear(num_rbf, hidden_channels, bias=True, dtype=dtype))
         self.linears_scalar.append(
-            nn.Linear(hidden_channels, 2 * hidden_channels, bias=True)
+            nn.Linear(hidden_channels, 2 * hidden_channels, bias=True, dtype=dtype)
         )
         self.linears_scalar.append(
-            nn.Linear(2 * hidden_channels, 3 * hidden_channels, bias=True)
+            nn.Linear(2 * hidden_channels, 3 * hidden_channels, bias=True, dtype=dtype)
         )
         self.linears_tensor = nn.ModuleList()
         for _ in range(6):

@@ -11,12 +11,23 @@ class Custom(Dataset):
     must be given as targets.
 
     Args:
-        coordglob (string): Glob path for coordinate files.
-        embedglob (string): Glob path for embedding index files.
-        energyglob (string, optional): Glob path for energy files.
+        coordglob (string): Glob path for coordinate files. Stored as "pos".
+        embedglob (string): Glob path for embedding index files. Stored as "z" (atomic number).
+        energyglob (string, optional): Glob path for energy files. Stored as "y".
             (default: :obj:`None`)
-        forceglob (string, optional): Glob path for force files.
+        forceglob (string, optional): Glob path for force files. Stored as "neg_dy".
             (default: :obj:`None`)
+    Example:
+        >>> data = Custom(coordglob="coords_files*npy", embedglob="embed_files*npy")
+        >>> sample = data[0]
+        >>> assert hasattr(sample, "pos"), "Sample doesn't contain coords"
+        >>> assert hasattr(sample, "z"), "Sample doesn't contain atom numbers"
+
+    Notes:
+        For each sample in the data:
+              - "pos" is an array of shape (n_atoms, 3)
+              - "z" is an array of shape (n_atoms,).
+              - If present, "y" is an array of shape (1,) and "neg_dy" has shape (n_atoms, 3)
     """
 
     def __init__(self, coordglob, embedglob, energyglob=None, forceglob=None):

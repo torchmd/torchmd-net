@@ -10,6 +10,9 @@ from torchmdnet.models.model import create_model, load_model
 
 
 class LNNP(LightningModule):
+    """
+    Lightning wrapper for the Neural Network Potentials in TorchMD-Net.
+    """
     def __init__(self, hparams, prior_model=None, mean=None, std=None):
         super(LNNP, self).__init__()
 
