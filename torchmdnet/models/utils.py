@@ -111,7 +111,6 @@ class NeighborEmbedding(MessagePassing):
 from torchmdnet.neighbors import get_neighbor_pairs_kernel
 
 dynamo.disallow_in_graph(get_neighbor_pairs_kernel)
-dynamo.disallow_in_graph(torch.masked_scatter)
 
 class OptimizedDistance(torch.nn.Module):
     def __init__(
@@ -126,6 +125,7 @@ class OptimizedDistance(torch.nn.Module):
         resize_to_fit=True,
         check_errors=True,
         box=None,
+        long_edge_index=True
     ):
         super(OptimizedDistance, self).__init__()
         """ Compute the neighbor list for a given cutoff.
@@ -182,6 +182,9 @@ class OptimizedDistance(torch.nn.Module):
         return_vecs : bool, optional
             Whether to return the distance vectors.
             Default: False
+        long_edge_index : bool, optional
+            Whether to return edge_index as int64, otherwise int32.
+            Default: True
         """
         self.cutoff_upper = cutoff_upper
         self.cutoff_lower = cutoff_lower
@@ -202,7 +205,7 @@ class OptimizedDistance(torch.nn.Module):
                 self.box = torch.tensor([[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]])
         self.box = self.box.cpu()  # All strategies expect the box to be in CPU memory
         self.check_errors = check_errors
-        self.kernel = get_neighbor_pairs_kernel
+        self.long_edge_index = long_edge_index
 
     def forward(
         self, pos: Tensor, batch: Optional[Tensor] = None
@@ -236,7 +239,7 @@ class OptimizedDistance(torch.nn.Module):
             max_pairs = -self.max_num_pairs * pos.shape[0]
         if batch is None:
             batch = torch.zeros(pos.shape[0], dtype=torch.long, device=pos.device)
-        edge_index, edge_vec, edge_weight, num_pairs = self.kernel(
+        edge_index, edge_vec, edge_weight, num_pairs = get_neighbor_pairs_kernel(
             strategy=self.strategy,
             positions=pos,
             batch=batch,
@@ -255,14 +258,14 @@ class OptimizedDistance(torch.nn.Module):
                         num_pairs[0], max_pairs
                     )
                 )
-        edge_index = edge_index.to(torch.long)
         # Remove (-1,-1)  pairs
         if self.resize_to_fit:
             mask = edge_index[0] != -1
             edge_index = edge_index[:, mask]
             edge_weight = edge_weight[mask]
             edge_vec = edge_vec[mask, :]
-
+        if self.long_edge_index:
+            edge_index = edge_index.to(torch.long)
         if self.return_vecs:
             return edge_index, edge_weight, edge_vec
         else:
