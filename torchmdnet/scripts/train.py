@@ -12,9 +12,9 @@ from torchmdnet import datasets, priors, models
 from torchmdnet.data import DataModule
 from torchmdnet.models import output_modules
 from torchmdnet.models.model import create_prior_models
-from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping
+from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping, dtype_mapping
 from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, number
-
+import torch
 
 def get_args():
     # fmt: off
@@ -48,6 +48,7 @@ def get_args():
     parser.add_argument('--seed', type=int, default=1, help='random seed (default: 1)')
     parser.add_argument('--num-workers', type=int, default=4, help='Number of workers for data prefetch')
     parser.add_argument('--redirect', type=bool, default=False, help='Redirect stdout and stderr to log_dir/log')
+    parser.add_argument('--gradient-clipping', type=float, default=0.0, help='Gradient clipping norm')
 
     # dataset specific
     parser.add_argument('--dataset', default=None, type=str, choices=datasets.__all__, help='Name of the torch_geometric dataset')
@@ -66,6 +67,7 @@ def get_args():
     parser.add_argument('--prior-model', type=str, default=None, choices=priors.__all__, help='Which prior model to use')
 
     # architectural args
+    parser.add_argument('--dtype', type=str, default="float32", choices=list(dtype_mapping.keys()), help='Floating point precision. Can be float32 or float64')
     parser.add_argument('--charge', type=bool, default=False, help='Model needs a total charge')
     parser.add_argument('--spin', type=bool, default=False, help='Model needs a spin state')
     parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
@@ -81,6 +83,9 @@ def get_args():
     parser.add_argument('--distance-influence', type=str, default='both', choices=['keys', 'values', 'both', 'none'], help='Where distance information is included inside the attention')
     parser.add_argument('--attn-activation', default='silu', choices=list(act_class_mapping.keys()), help='Attention activation function')
     parser.add_argument('--num-heads', type=int, default=8, help='Number of attention heads')
+    
+    # TensorNet specific
+    parser.add_argument('--equivariance-invariance-group', type=str, default='O(3)', help='Equivariance and invariance group of TensorNet')
 
     # other args
     parser.add_argument('--derivative', default=False, type=bool, help='If true, take the derivative of the prediction w.r.t coordinates')
@@ -94,6 +99,7 @@ def get_args():
     parser.add_argument('--wandb-use', default=False, type=bool, help='Defines if wandb is used or not')
     parser.add_argument('--wandb-name', default='training', type=str, help='Give a name to your wandb run')
     parser.add_argument('--wandb-project', default='training_', type=str, help='Define what wandb Project to log to')
+    parser.add_argument('--wandb-resume-from-id', default=None, type=str, help='Resume a wandb run from a given run id. The id can be retrieved from the wandb dashboard')
     parser.add_argument('--tensorboard-use', default=False, type=bool, help='Defines if tensor board is used or not')
 
     # fmt: on
@@ -140,9 +146,15 @@ def main():
     early_stopping = EarlyStopping("val_loss", patience=args.early_stopping_patience)
 
     csv_logger = CSVLogger(args.log_dir, name="", version="")
-    _logger=[csv_logger]
+    _logger = [csv_logger]
     if args.wandb_use:
-        wandb_logger=WandbLogger(project=args.wandb_project,name=args.wandb_name,save_dir=args.log_dir)
+        wandb_logger = WandbLogger(
+            project=args.wandb_project,
+            name=args.wandb_name,
+            save_dir=args.log_dir,
+            resume="must" if args.wandb_resume_from_id is not None else None,
+            id=args.wandb_resume_from_id,
+        )
         _logger.append(wandb_logger)
 
     if args.tensorboard_use:
@@ -162,6 +174,7 @@ def main():
         callbacks=[early_stopping, checkpoint_callback],
         logger=_logger,
         precision=args.precision,
+        gradient_clip_val=args.gradient_clipping,
     )
 
     trainer.fit(model, data)

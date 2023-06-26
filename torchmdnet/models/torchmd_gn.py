@@ -1,4 +1,5 @@
 from typing import Optional, Tuple
+import torch
 from torch import Tensor, nn
 from torch_geometric.nn import MessagePassing
 from torchmdnet.models.utils import (
@@ -71,6 +72,7 @@ class TorchMD_GN(nn.Module):
         max_z=100,
         max_num_neighbors=32,
         aggr="add",
+        dtype=torch.float32
     ):
         super(TorchMD_GN, self).__init__()
 
@@ -103,17 +105,17 @@ class TorchMD_GN(nn.Module):
 
         act_class = act_class_mapping[activation]
 
-        self.embedding = nn.Embedding(self.max_z, hidden_channels)
+        self.embedding = nn.Embedding(self.max_z, hidden_channels, dtype=dtype)
 
         self.distance = Distance(
             cutoff_lower, cutoff_upper, max_num_neighbors=max_num_neighbors
         )
         self.distance_expansion = rbf_class_mapping[rbf_type](
-            cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
+            cutoff_lower, cutoff_upper, num_rbf, trainable_rbf, dtype=dtype
         )
         self.neighbor_embedding = (
             NeighborEmbedding(
-                hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z
+                hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z, dtype=dtype
             ).jittable()
             if neighbor_embedding
             else None
@@ -129,6 +131,7 @@ class TorchMD_GN(nn.Module):
                 cutoff_lower,
                 cutoff_upper,
                 aggr=self.aggr,
+                dtype=dtype
             )
             self.interactions.append(block)
 
@@ -191,12 +194,13 @@ class InteractionBlock(nn.Module):
         cutoff_lower,
         cutoff_upper,
         aggr="add",
+        dtype=torch.float32
     ):
         super(InteractionBlock, self).__init__()
         self.mlp = nn.Sequential(
-            nn.Linear(num_rbf, num_filters),
+            nn.Linear(num_rbf, num_filters, dtype=dtype),
             activation(),
-            nn.Linear(num_filters, num_filters),
+            nn.Linear(num_filters, num_filters, dtype=dtype),
         )
         self.conv = CFConv(
             hidden_channels,
@@ -206,9 +210,10 @@ class InteractionBlock(nn.Module):
             cutoff_lower,
             cutoff_upper,
             aggr=aggr,
+            dtype=dtype
         ).jittable()
         self.act = activation()
-        self.lin = nn.Linear(hidden_channels, hidden_channels)
+        self.lin = nn.Linear(hidden_channels, hidden_channels, dtype=dtype)
 
         self.reset_parameters()
 
@@ -238,10 +243,11 @@ class CFConv(MessagePassing):
         cutoff_lower,
         cutoff_upper,
         aggr="add",
+        dtype=torch.float32
     ):
         super(CFConv, self).__init__(aggr=aggr)
-        self.lin1 = nn.Linear(in_channels, num_filters, bias=False)
-        self.lin2 = nn.Linear(num_filters, out_channels)
+        self.lin1 = nn.Linear(in_channels, num_filters, bias=False, dtype=dtype)
+        self.lin2 = nn.Linear(num_filters, out_channels, bias=True, dtype=dtype)
         self.net = net
         self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)
 
