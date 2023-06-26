@@ -18,86 +18,6 @@ template <class... T> auto call_forward_kernel(const std::string& kernel_name, c
     }
 }
 
-template <typename scalar_t>
-__global__ void masked_index_add_cuda_forward(const Accessor<scalar_t, 2> values,
-                                              const Accessor<int, 1> index,
-                                              Accessor<scalar_t, 2> output) {
-    const auto i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < index.size(0)) {
-        const auto k = index[i];
-        if (k >= 0) {
-            for (int j = 0; j < values.size(1); ++j) {
-                atomicAdd(&output[k][j], values[i][j]);
-            }
-        }
-    }
-}
-
-template <typename scalar_t>
-__global__ void masked_index_add_cuda_backward(Accessor<scalar_t, 2> grad_input,
-                                               const Accessor<int, 1> index,
-                                               const Accessor<scalar_t, 2> values,
-                                               const Accessor<scalar_t, 2> grad_output) {
-    const auto i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < index.size(0)) {
-        const auto k = index[i];
-        if (k >= 0) {
-            for (int j = 0; j < grad_input.size(1); ++j) {
-                // Gradients must be accmulated for the output and the values
-                atomicAdd(&grad_input[i][j], grad_output[k][j]);
-            }
-        }
-    }
-}
-
-/*
- *The MaskedIndexAdd operation works similarly as index_add from pytorch, but it only adds the
- *elements of the values tensor to the input if the index is positive.
- */
-class MaskedIndexAddFunction : public torch::autograd::Function<MaskedIndexAddFunction> {
-public:
-    static tensor_list forward(AutogradContext* ctx, const Tensor &input,const  Tensor &index,const  Tensor& values) {
-        ctx->save_for_backward({index, values});
-        ctx->saved_data["input_size"] = input.size(0);
-        auto stream = at::cuda::getCurrentCUDAStream();
-        const CUDAStreamGuard guard(stream);
-        auto output = input.clone();
-        const int threads = 128;
-        const dim3 blocks((index.numel() + threads - 1) / threads);
-        AT_DISPATCH_FLOATING_TYPES(
-            input.scalar_type(), "masked_index_add_forward_cuda", ([&] {
-                masked_index_add_cuda_forward<scalar_t><<<blocks, threads, 0, stream>>>(
-                    get_accessor<scalar_t, 2>(values), get_accessor<int, 1>(index),
-                    get_accessor<scalar_t, 2>(output));
-            }));
-        return {output};
-    }
-
-    static tensor_list backward(AutogradContext* ctx, const tensor_list & grad_outputs) {
-        auto saved = ctx->get_saved_variables();
-        auto index = saved[0];
-        auto values = saved[1];
-        auto input_size = ctx->saved_data["input_size"].toInt();
-        auto grad_output = grad_outputs[0];
-        auto grad_input = torch::rand_like(grad_output);
-	  //zeros_like(grad_output);
-        auto stream = at::cuda::getCurrentCUDAStream();
-        const CUDAStreamGuard guard(stream);
-        const int threads = 128;
-        const dim3 blocks((index.numel() + threads - 1) / threads);
-	std::cout << "grad_input before: " << grad_input << std::endl;
-        AT_DISPATCH_FLOATING_TYPES(
-            grad_output.scalar_type(), "masked_index_add_backward_cuda", ([&] {
-                masked_index_add_cuda_backward<scalar_t><<<blocks, threads, 0, stream>>>(
-                    get_accessor<scalar_t, 2>(grad_input), get_accessor<int, 1>(index),
-                    get_accessor<scalar_t, 2>(values), get_accessor<scalar_t, 2>(grad_output));
-            }));
-	std::cout << "grad_input after: " << grad_input << std::endl;
-	std::cout << "grad_output: " << grad_output << std::endl;
-        return {grad_input, Tensor(), Tensor()};
-    }
-};
-
 // This is the autograd function that is called when the user calls get_neighbor_pairs.
 // It dispatches the required strategy for the forward function and implements the backward
 // function. The backward function is written in full pytorch so that it can be differentiated a
@@ -118,6 +38,8 @@ public:
         return {neighbors, deltas, distances, i_curr_pair};
     }
 
+    using Slice = torch::indexing::Slice;
+
     static tensor_list backward(AutogradContext* ctx, tensor_list grad_outputs) {
         auto saved = ctx->get_saved_variables();
         auto edge_index = saved[0];
@@ -126,14 +48,23 @@ public:
         auto num_atoms = ctx->saved_data["num_atoms"].toInt();
         auto grad_edge_vec = grad_outputs[1];
         auto grad_edge_weight = grad_outputs[2];
-        auto grad_positions = torch::zeros({num_atoms, 3}, edge_vec.options());
-        auto r0 = edge_weight.eq(0);
-        auto edge_weight_ = edge_weight.masked_fill(r0, 1);
-        auto grad_distances_ = (edge_vec / edge_weight_.unsqueeze(-1).expand_as(edge_vec)) *
-                               grad_edge_weight.unsqueeze(-1).expand_as(edge_vec);
-        auto result = grad_edge_vec + grad_distances_;
-        grad_positions = MaskedIndexAddFunction::apply(grad_positions, edge_index[0], result)[0];
-        grad_positions = MaskedIndexAddFunction::apply(grad_positions, edge_index[1], -result)[0];
+        auto zero_mask = edge_weight == 0;
+        auto zero_mask3 = zero_mask.unsqueeze(-1).expand_as(grad_edge_vec);
+        // We need to avoid dividing by 0. Otherwise Autograd fills the gradient with NaNs in the
+        // case of a double backwards. This is why we index_select like this.
+        auto grad_distances_ = edge_vec / edge_weight.masked_fill(zero_mask, 1).unsqueeze(-1) *
+                               grad_edge_weight.masked_fill(zero_mask, 0).unsqueeze(-1);
+        auto result = grad_edge_vec.masked_fill(zero_mask3, 0) + grad_distances_;
+        // Given that there is no masked_index_add function, in order to make the operation
+        // CUDA-graph compatible I need to transform masked indices into a dummy value (num_atoms)
+        // and then exclude that value from the output.
+	// TODO: replace this once masked_index_add  or masked_scatter_add are available
+        auto grad_positions_ = torch::zeros({num_atoms + 1, 3}, edge_vec.options());
+        auto edge_index_ =
+            edge_index.masked_fill(zero_mask.unsqueeze(0).expand_as(edge_index), num_atoms);
+        grad_positions_.index_add_(0, edge_index_[0], result);
+        grad_positions_.index_add_(0, edge_index_[1], -result);
+        auto grad_positions = grad_positions_.index({Slice(0, num_atoms), Slice()});
         Tensor ignore;
         return {ignore, grad_positions, ignore, ignore, ignore, ignore,
                 ignore, ignore,         ignore, ignore, ignore};
