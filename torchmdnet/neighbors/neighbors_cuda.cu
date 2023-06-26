@@ -38,6 +38,8 @@ public:
         return {neighbors, deltas, distances, i_curr_pair};
     }
 
+    using Slice = torch::indexing::Slice;
+
     static tensor_list backward(AutogradContext* ctx, tensor_list grad_outputs) {
         auto saved = ctx->get_saved_variables();
         auto edge_index = saved[0];
@@ -46,17 +48,23 @@ public:
         auto num_atoms = ctx->saved_data["num_atoms"].toInt();
         auto grad_edge_vec = grad_outputs[1];
         auto grad_edge_weight = grad_outputs[2];
-        auto r0 = edge_weight.nonzero().squeeze(-1);
-        auto grad_positions = torch::zeros({num_atoms, 3}, edge_vec.options());
+        auto zero_mask = edge_weight == 0;
+        auto zero_mask3 = zero_mask.unsqueeze(-1).expand_as(grad_edge_vec);
         // We need to avoid dividing by 0. Otherwise Autograd fills the gradient with NaNs in the
         // case of a double backwards. This is why we index_select like this.
-        auto grad_distances_ =
-            (edge_vec.index_select(0, r0) / edge_weight.index_select(0, r0).unsqueeze(-1)) *
-            grad_edge_weight.index_select(0, r0).unsqueeze(-1);
-        auto edge_index_no_r0 = edge_index.index_select(1, r0);
-        auto result = grad_edge_vec.index_select(0, r0) + grad_distances_;
-        grad_positions.index_add_(0, edge_index_no_r0[0], result);
-        grad_positions.index_add_(0, edge_index_no_r0[1], -result);
+        auto grad_distances_ = edge_vec / edge_weight.masked_fill(zero_mask, 1).unsqueeze(-1) *
+                               grad_edge_weight.masked_fill(zero_mask, 0).unsqueeze(-1);
+        auto result = grad_edge_vec.masked_fill(zero_mask3, 0) + grad_distances_;
+        // Given that there is no masked_index_add function, in order to make the operation
+        // CUDA-graph compatible I need to transform masked indices into a dummy value (num_atoms)
+        // and then exclude that value from the output.
+	// TODO: replace this once masked_index_add  or masked_scatter_add are available
+        auto grad_positions_ = torch::zeros({num_atoms + 1, 3}, edge_vec.options());
+        auto edge_index_ =
+            edge_index.masked_fill(zero_mask.unsqueeze(0).expand_as(edge_index), num_atoms);
+        grad_positions_.index_add_(0, edge_index_[0], result);
+        grad_positions_.index_add_(0, edge_index_[1], -result);
+        auto grad_positions = grad_positions_.index({Slice(0, num_atoms), Slice()});
         Tensor ignore;
         return {ignore, grad_positions, ignore, ignore, ignore, ignore,
                 ignore, ignore,         ignore, ignore, ignore};
