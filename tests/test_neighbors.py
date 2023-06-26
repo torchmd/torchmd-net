@@ -619,41 +619,6 @@ def test_cuda_graph_compatible_forward(
     assert np.allclose(distances, ref_distances)
     assert np.allclose(distance_vecs, ref_distance_vecs)
 
-
-
-class MinModel(torch.autograd.Function):
-
-    @staticmethod
-    def forward(ctx, x):
-        return x
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        return torch.zeros_like(grad_output)
-
-
-def test_simple_graph():
-
-    x = torch.ones(1, device="cuda", dtype=torch.float, requires_grad=True)
-
-    graph = torch.cuda.CUDAGraph()
-    s = torch.cuda.Stream()
-    s.wait_stream(torch.cuda.current_stream())
-    # Warm up
-    with torch.cuda.stream(s):
-        for _ in range(10):
-            y = MinModel.apply(x)
-            y.sum().backward()
-            x.grad.data.zero_()
-    torch.cuda.synchronize()
-    # Capture
-    with torch.cuda.stream(s):
-        with torch.cuda.graph(graph):
-            y = MinModel.apply(x)
-            y.sum().backward()
-            x.grad.data.zero_()
-
-
 @pytest.mark.parametrize("device", ["cuda"])
 @pytest.mark.parametrize("strategy", ["brute", "shared", "cell"])
 @pytest.mark.parametrize("n_batches", [1, 128])
