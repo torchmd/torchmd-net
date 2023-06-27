@@ -2,6 +2,8 @@ import torch
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.functional import mse_loss, l1_loss
+from torch import Tensor
+from typing import Optional, Dict, Tuple
 
 from pytorch_lightning import LightningModule
 from torchmdnet.models.model import create_model, load_model
@@ -55,7 +57,15 @@ class LNNP(LightningModule):
         }
         return [optimizer], [lr_scheduler]
 
-    def forward(self, z, pos, batch=None, q=None, s=None, extra_args=None):
+    def forward(self,
+                z: Tensor,
+                pos: Tensor,
+                batch: Optional[Tensor] = None,
+                q: Optional[Tensor] = None,
+                s: Optional[Tensor] = None,
+                extra_args: Optional[Dict[str, Tensor]] = None
+                ) -> Tuple[Tensor, Optional[Tensor]]:
+
         return self.model(z, pos, batch=batch, q=q, s=s, extra_args=extra_args)
 
     def training_step(self, batch, batch_idx):

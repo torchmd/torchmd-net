@@ -37,16 +37,47 @@ def test_forward_output_modules(model_name, output_model, dtype):
 
 
 @mark.parametrize("model_name", models.__all__)
-@mark.parametrize("dtype", [torch.float32, torch.float64])
-def test_forward_torchscript(model_name, dtype):
-    if model_name == "tensornet":
-        pytest.skip("TensorNet does not support torchscript.")
+@mark.parametrize("device", ["cpu", "cuda"])
+def test_torchscript(model_name, device):
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    z, pos, batch = create_example_batch()
+    z = z.to(device)
+    pos = pos.to(device)
+    batch = batch.to(device)
+    model = torch.jit.script(
+        create_model(load_example_args(model_name, remove_prior=True, derivative=True))
+    ).to(device=device)
+    y, neg_dy = model(z, pos, batch=batch)
+    grad_outputs = [torch.ones_like(neg_dy)]
+    ddy = torch.autograd.grad(
+        [neg_dy],
+        [pos],
+        grad_outputs=grad_outputs,
+    )[0]
+
+@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("device", ["cpu", "cuda"])
+def test_torchscript_dynamic_shapes(model_name, device):
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
     z, pos, batch = create_example_batch()
     model = torch.jit.script(
-        create_model(load_example_args(model_name, remove_prior=True, derivative=True, dtype=dtype))
-    )
-    model(z, pos, batch=batch)
-
+        create_model(load_example_args(model_name, remove_prior=True, derivative=True))
+    ).to(device=device)
+    #Repeat the input to make it dynamic
+    for rep in range(0, 5):
+        print(rep)
+        zi = z.repeat_interleave(rep+1, dim=0).to(device=device)
+        posi = pos.repeat_interleave(rep+1, dim=0).to(device=device)
+        batchi = torch.randint(0, 10, (zi.shape[0],)).sort()[0].to(device=device)
+        y, neg_dy = model(zi, posi, batch=batchi)
+        grad_outputs = [torch.ones_like(neg_dy)]
+        ddy = torch.autograd.grad(
+            [neg_dy],
+            [posi],
+            grad_outputs=grad_outputs,
+        )[0]
 
 @mark.parametrize("model_name", models.__all__)
 def test_seed(model_name):
@@ -58,7 +89,6 @@ def test_seed(model_name):
 
     for p1, p2 in zip(m1.parameters(), m2.parameters()):
         assert (p1 == p2).all(), "Parameters don't match although using the same seed."
-
 
 @mark.parametrize("model_name", models.__all__)
 @mark.parametrize(
