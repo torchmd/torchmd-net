@@ -170,12 +170,20 @@ class TensorNet(nn.Module):
         self.linear = nn.Linear(3 * hidden_channels, hidden_channels, dtype=dtype)
         self.out_norm = nn.LayerNorm(3 * hidden_channels, dtype=dtype)
         self.act = act_class()
-        #Resize to fit set to false ensures Distance returns a statically-shaped tensor of size max_num_pairs=pos.size*max_num_neigbors
-        #negative max_num_pairs argument means "per particle"
-        #long_edge_index set to False saves memory and spares some kernel launches by keeping neighbor indices as int32.
+        # Resize to fit set to false ensures Distance returns a statically-shaped tensor of size max_num_pairs=pos.size*max_num_neigbors
+        # negative max_num_pairs argument means "per particle"
+        # long_edge_index set to False saves memory and spares some kernel launches by keeping neighbor indices as int32.
         self.distance = OptimizedDistance(
-            cutoff_lower, cutoff_upper, max_num_pairs=-max_num_neighbors, return_vecs=True, loop=True, check_errors=False, resize_to_fit=False, long_edge_index=False
+            cutoff_lower,
+            cutoff_upper,
+            max_num_pairs=-max_num_neighbors,
+            return_vecs=True,
+            loop=True,
+            check_errors=False,
+            resize_to_fit=False,
+            long_edge_index=False,
         )
+
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -185,13 +193,14 @@ class TensorNet(nn.Module):
         self.linear.reset_parameters()
         self.out_norm.reset_parameters()
 
-    def forward(self,
-                z: Tensor,
-                pos: Tensor,
-                batch: Tensor,
-                q: Optional[Tensor] = None,
-                s: Optional[Tensor] = None,
-                ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
+    def forward(
+        self,
+        z: Tensor,
+        pos: Tensor,
+        batch: Tensor,
+        q: Optional[Tensor] = None,
+        s: Optional[Tensor] = None,
+    ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
         # Obtain graph, with distances and relative position vectors
         edge_index, edge_weight, edge_vec = self.distance(pos, batch)
         # This assert convinces TorchScript that edge_vec is a Tensor and not an Optional[Tensor]
@@ -203,15 +212,17 @@ class TensorNet(nn.Module):
         mask = (edge_index[0] >= 0).unsqueeze(0).expand_as(edge_index)
         # I trick the model into thinking that the masked edges pertain to a dummy atom at the end of the list
         # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
-        edge_index = edge_index*mask + (~mask)*z.size(0)
+        edge_index = edge_index * mask + (~mask) * z.size(0)
         # This looks like a dynamic shape but it is actually not.
         # I am just copying some values to a tensor called "zp" of size z.size(0)+1
         zp = torch.cat((z, torch.zeros(1, dtype=z.dtype, device=z.device)), dim=0)
         edge_attr = self.distance_expansion(edge_weight)
-        mask = (edge_index[0] != edge_index[1])
+        mask = edge_index[0] != edge_index[1]
         # Normalizing edge vectors by their length can result in NaNs, breaking Autograd.
         # I avoid dividing by zero by setting the weight of non-existing edges and self loops to 1
-        edge_vec = edge_vec/torch.ones_like(edge_weight).masked_scatter(mask, edge_weight).unsqueeze(1)
+        edge_vec = edge_vec / torch.ones_like(edge_weight).masked_scatter(
+            mask, edge_weight
+        ).unsqueeze(1)
         X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr)
         for layer in self.layers:
             X = layer(X, edge_index, edge_weight, edge_attr)
@@ -219,22 +230,21 @@ class TensorNet(nn.Module):
         x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
         x = self.out_norm(x)
         x = self.act(self.linear((x)))
-        x = x[:-1] # Remove dummy atom from the output
+        x = x[:-1]  # Remove dummy atom from the output
         return x, None, z, pos, batch
 
-class TensorPassing(MessagePassing):
 
+class TensorPassing(MessagePassing):
     def __init__(self):
         super(TensorPassing, self).__init__(aggr="add", node_dim=0)
 
-
     def aggregate(
         self,
-        features: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
-        index: torch.Tensor,
-        ptr: Optional[torch.Tensor],
+        features: Tuple[Tensor, Tensor, Tensor],
+        index: Tensor,
+        ptr: Optional[Tensor],
         dim_size: Optional[int],
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[Tensor, Tensor, Tensor]:
 
         I, A, S = features
         I = scatter(I, index, dim=self.node_dim, dim_size=dim_size)
@@ -309,7 +319,7 @@ class TensorEmbedding(TensorPassing):
         edge_weight: Tensor,
         edge_vec_norm: Tensor,
         edge_attr: Tensor,
-    ):
+    ) -> Tensor:
         Z = self.emb(z)
         C = self.cutoff(edge_weight)
         W1 = self.distance_proj1(edge_attr) * C.view(-1, 1)
@@ -340,7 +350,13 @@ class TensorEmbedding(TensorPassing):
 
         return X
 
-    def message(self, Z_i, Z_j, I, A, S):
+    def message(self,
+                Z_i: Tensor,
+                Z_j: Tensor,
+                I: Tensor,
+                A: Tensor,
+                S: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
+
         zij = torch.cat((Z_i, Z_j), dim=-1)
         Zij = self.emb2(zij)
         I = Zij[..., None, None] * I
@@ -366,7 +382,9 @@ class Interaction(TensorPassing):
         self.hidden_channels = hidden_channels
         self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)
         self.linears_scalar = nn.ModuleList()
-        self.linears_scalar.append(nn.Linear(num_rbf, hidden_channels, bias=True, dtype=dtype))
+        self.linears_scalar.append(
+            nn.Linear(num_rbf, hidden_channels, bias=True, dtype=dtype)
+        )
         self.linears_scalar.append(
             nn.Linear(hidden_channels, 2 * hidden_channels, bias=True, dtype=dtype)
         )
@@ -388,7 +406,11 @@ class Interaction(TensorPassing):
         for linear in self.linears_tensor:
             linear.reset_parameters()
 
-    def forward(self, X, edge_index, edge_weight, edge_attr):
+    def forward(self,
+                X: Tensor,
+                edge_index: Tensor,
+                edge_weight: Tensor,
+                edge_attr: Tensor) -> Tensor:
 
         C = self.cutoff(edge_weight)
         for linear_scalar in self.linears_scalar:
