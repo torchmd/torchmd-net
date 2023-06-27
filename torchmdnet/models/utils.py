@@ -367,7 +367,7 @@ class CosineCutoff(nn.Module):
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
 
-    def forward(self, distances):
+    def forward(self, distances: Tensor) -> Tensor:
         if self.cutoff_lower > 0:
             cutoffs = 0.5 * (
                 torch.cos(

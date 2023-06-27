@@ -165,7 +165,7 @@ class TensorNet(nn.Module):
                         cutoff_upper,
                         equivariance_invariance_group,
                         dtype,
-                    ).jittable()
+                    )
                 )
         self.linear = nn.Linear(3 * hidden_channels, hidden_channels, dtype=dtype)
         self.out_norm = nn.LayerNorm(3 * hidden_channels, dtype=dtype)
@@ -256,6 +256,17 @@ class TensorPassing(MessagePassing):
         # S.scatter_reduce(0, index_v, S, reduce="sum")
         return I, A, S
 
+def tensor_message_passing(
+    edge_index: Tensor, edge_attr: Tensor, I: Tensor, A: Tensor, S: Tensor, natoms: int
+) -> Tuple[Tensor, Tensor, Tensor]:
+    I = edge_attr[0] * I
+    A = edge_attr[1] * A
+    S = edge_attr[2] * S
+
+    Im = scatter(I[edge_index[1]], edge_index[0], dim=0, dim_size=natoms)
+    Am = scatter(A[edge_index[1]], edge_index[0], dim=0, dim_size=natoms)
+    Sm = scatter(S[edge_index[1]], edge_index[0], dim=0, dim_size=natoms)
+    return Im, Am, Sm
 
 
 class TensorEmbedding(TensorPassing):
@@ -361,7 +372,8 @@ class TensorEmbedding(TensorPassing):
 
         return I, A, S
 
-class Interaction(TensorPassing):
+
+class Interaction(nn.Module):
     def __init__(
         self,
         num_rbf,
@@ -420,9 +432,8 @@ class Interaction(TensorPassing):
         A = self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         Y = I + A + S
-        # propagate_type: (I: Tensor, A: Tensor, S: Tensor, edge_attr: Tensor)
-        Im, Am, Sm = self.propagate(
-            edge_index, I=I, A=A, S=S, edge_attr=edge_attr, size=None
+        Im, Am, Sm = tensor_message_passing(
+            edge_index, edge_attr[:, :, None], I, A, S, X.shape[0]
         )
         msg = Im + Am + Sm
         if self.equivariance_invariance_group == "O(3)":
@@ -440,10 +451,3 @@ class Interaction(TensorPassing):
         dX = I + A + S
         X = X + dX + dX**2
         return X
-
-    def message(self, I_j, A_j, S_j, edge_attr):
-
-        I, A, S = new_radial_tensor(
-            I_j, A_j, S_j, edge_attr[..., 0], edge_attr[..., 1], edge_attr[..., 2]
-        )
-        return I, A, S
