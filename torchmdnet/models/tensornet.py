@@ -278,7 +278,7 @@ class TensorEmbedding(TensorPassing):
         self.distance_proj3 = nn.Linear(num_rbf, hidden_channels, dtype=dtype)
         self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)
         self.max_z = max_z
-        self.emb = torch.nn.Embedding(max_z, hidden_channels, dtype=dtype)
+        self.emb = nn.Embedding(max_z, hidden_channels, dtype=dtype)
         self.emb2 = nn.Linear(2 * hidden_channels, hidden_channels, dtype=dtype)
         self.act = activation()
         self.linears_tensor = nn.ModuleList()
