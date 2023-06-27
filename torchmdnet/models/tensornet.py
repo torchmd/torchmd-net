@@ -337,6 +337,7 @@ class TensorEmbedding(TensorPassing):
         norm = norm.reshape(norm.shape[0], self.hidden_channels, 3)
         I, A, S = new_radial_tensor(I, A, S, norm[..., 0], norm[..., 1], norm[..., 2])
         X = I + A + S
+
         return X
 
     def message(self, Z_i, Z_j, I, A, S):
@@ -347,9 +348,6 @@ class TensorEmbedding(TensorPassing):
         S = Zij[..., None, None] * S
 
         return I, A, S
-
-
-
 
 class Interaction(TensorPassing):
     def __init__(
