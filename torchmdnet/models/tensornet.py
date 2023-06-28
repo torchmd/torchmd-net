@@ -206,8 +206,7 @@ class TensorNet(nn.Module):
         x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
         x = self.out_norm(x)
         x = self.act(self.linear((x)))
-        x = x[:-1]  # Remove dummy atom from the output
-        return x, (I[:-1], A[:-1], S[:-1]), z, pos, batch
+        return x, (I, A, S), z, pos, batch
 
 
 class TensorEmbedding(MessagePassing):
