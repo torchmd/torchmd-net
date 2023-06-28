@@ -165,7 +165,7 @@ class TensorNet(nn.Module):
                         cutoff_upper,
                         equivariance_invariance_group,
                         dtype,
-                    )
+                    ).jittable()
                 )
         self.linear = nn.Linear(3 * hidden_channels, hidden_channels, dtype=dtype)
         self.out_norm = nn.LayerNorm(3 * hidden_channels, dtype=dtype)
@@ -378,6 +378,7 @@ class TensorEmbedding(TensorPassing):
 
 
 class Interaction(nn.Module):
+class Interaction(TensorPassing):
     def __init__(
         self,
         num_rbf,
@@ -436,8 +437,12 @@ class Interaction(nn.Module):
         A = self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         Y = I + A + S
-        Im, Am, Sm = tensor_message_passing(
-            edge_index, edge_attr, I, A, S, X.shape[0]
+        # Im, Am, Sm = tensor_message_passing(
+        #     edge_index, edge_attr, I, A, S, X.shape[0]
+        # )
+        # propagate_type: (I: Tensor, A: Tensor, S: Tensor, edge_attr: Tensor)
+        Im, Am, Sm = self.propagate(
+            edge_index, I=I, A=A, S=S, edge_attr=edge_attr, size=None
         )
         msg = Im + Am + Sm
         if self.equivariance_invariance_group == "O(3)":
@@ -453,5 +458,12 @@ class Interaction(nn.Module):
         A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         dX = I + A + S
-        X = X + dX + dX**2
+        X = X + dX + torch.matrix_power(dX, 2)
         return X
+
+    def message(self, I_j, A_j, S_j, edge_attr):
+
+        I, A, S = new_radial_tensor(
+            I_j, A_j, S_j, edge_attr[..., 0], edge_attr[..., 1], edge_attr[..., 2]
+        )
+        return I, A, S
