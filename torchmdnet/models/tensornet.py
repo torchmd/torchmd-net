@@ -376,8 +376,6 @@ class TensorEmbedding(TensorPassing):
 
         return I, A, S
 
-
-class Interaction(nn.Module):
 class Interaction(TensorPassing):
     def __init__(
         self,
