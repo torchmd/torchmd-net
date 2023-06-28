@@ -214,7 +214,9 @@ class TorchMD_Net(nn.Module):
         self.prior_model = None if prior_model is None else torch.nn.ModuleList(prior_model).to(dtype=dtype)
 
         self.derivative = derivative
-
+        self.standardize = mean is not None and std is not None
+        if (mean is None and std is not None) or (mean is not None and std is None):
+            raise ValueError("Either both mean and std must be given or none of them.")
         mean = torch.scalar_tensor(0) if mean is None else mean
         self.register_buffer("mean", mean.to(dtype=dtype))
         std = torch.scalar_tensor(1) if std is None else std
@@ -261,7 +263,7 @@ class TorchMD_Net(nn.Module):
         x = self.output_model.pre_reduce(x, v, z, pos, batch)
 
         # scale by data standard deviation
-        if self.std is not None:
+        if self.standardize:
             x = x * self.std
 
         # apply atom-wise prior model
@@ -273,7 +275,7 @@ class TorchMD_Net(nn.Module):
         x = self.output_model.reduce(x, batch)
 
         # shift by data mean
-        if self.mean is not None:
+        if self.standardize:
             x = x + self.mean
 
         # apply output model after reduction

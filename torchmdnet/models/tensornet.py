@@ -187,8 +187,7 @@ class TensorNet(nn.Module):
         batch: Tensor,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
-    ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
-
+    ) -> Tuple[Tensor, Optional[Tuple[Tensor,Tensor,Tensor]], Tensor, Tensor, Tensor]:
         # Obtain graph, with distances and relative position vectors
         edge_index, edge_weight, edge_vec = self.distance(pos, batch)
         # This assert convinces TorchScript that edge_vec is a Tensor and not an Optional[Tensor]
@@ -207,7 +206,8 @@ class TensorNet(nn.Module):
         x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
         x = self.out_norm(x)
         x = self.act(self.linear((x)))
-        return x, None, z, pos, batch
+        x = x[:-1]  # Remove dummy atom from the output
+        return x, (I[:-1], A[:-1], S[:-1]), z, pos, batch
 
 
 class TensorEmbedding(MessagePassing):
