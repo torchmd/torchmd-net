@@ -256,6 +256,11 @@ class TensorPassing(MessagePassing):
         # S.scatter_reduce(0, index_v, S, reduce="sum")
         return I, A, S
 
+    def update(
+        self, inputs: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        return inputs
+
 def tensor_message_passing(
     edge_index: Tensor, edge_attr: Tensor, I: Tensor, A: Tensor, S: Tensor, natoms: int
 ) -> Tuple[Tensor, Tensor, Tensor]:
