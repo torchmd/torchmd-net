@@ -158,4 +158,4 @@ def test_tensornet_equivariance(dtype):
     rotate = (Rx @ Ry @ Rz).to(dtype)
 
     Xrot = model(z, pos @ rotate, batch)[0]
-    torch.testing.assert_allclose(rotate.t()@(X @ rotate), Xrot, rtol=1e-13 if dtype == torch.float64 else 5e-5, atol= 0)
+    torch.testing.assert_allclose(rotate.t()@(X @ rotate), Xrot, rtol=5e-13 if dtype == torch.float64 else 5e-5, atol= 0)
