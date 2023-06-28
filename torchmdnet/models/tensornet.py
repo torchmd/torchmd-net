@@ -264,13 +264,12 @@ class TensorPassing(MessagePassing):
 def tensor_message_passing(
     edge_index: Tensor, edge_attr: Tensor, I: Tensor, A: Tensor, S: Tensor, natoms: int
 ) -> Tuple[Tensor, Tensor, Tensor]:
-    I = edge_attr[0] * I
-    A = edge_attr[1] * A
-    S = edge_attr[2] * S
-
-    Im = scatter(I[edge_index[1]], edge_index[0], dim=0, dim_size=natoms)
-    Am = scatter(A[edge_index[1]], edge_index[0], dim=0, dim_size=natoms)
-    Sm = scatter(S[edge_index[1]], edge_index[0], dim=0, dim_size=natoms)
+    Im = edge_attr[:,:, 0, None, None] * I[edge_index[1]]
+    Am = edge_attr[:,:, 1, None, None] * A[edge_index[1]]
+    Sm = edge_attr[:,:, 2, None, None] * S[edge_index[1]]
+    Im = scatter(Im, edge_index[0], dim=0, dim_size=natoms)
+    Am = scatter(Am, edge_index[0], dim=0, dim_size=natoms)
+    Sm = scatter(Sm, edge_index[0], dim=0, dim_size=natoms)
     return Im, Am, Sm
 
 
@@ -438,7 +437,7 @@ class Interaction(nn.Module):
         S = self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         Y = I + A + S
         Im, Am, Sm = tensor_message_passing(
-            edge_index, edge_attr[:, :, None], I, A, S, X.shape[0]
+            edge_index, edge_attr, I, A, S, X.shape[0]
         )
         msg = Im + Am + Sm
         if self.equivariance_invariance_group == "O(3)":
