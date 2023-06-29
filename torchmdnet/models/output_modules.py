@@ -1,11 +1,11 @@
 from abc import abstractmethod, ABCMeta
 from torch_scatter import scatter
-from typing import Optional
+from typing import Optional, Tuple, Union
 from torchmdnet.models.utils import act_class_mapping, GatedEquivariantBlock
 from torchmdnet.utils import atomic_masses
 from torch_scatter import scatter
 import torch
-from torch import nn
+from torch import nn, Tensor
 
 
 __all__ = ["Scalar", "DipoleMoment", "ElectronicSpatialExtent"]
@@ -29,7 +29,6 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
 
     def post_reduce(self, x):
         return x
-
 
 class Scalar(OutputModel):
     def __init__(
@@ -58,7 +57,7 @@ class Scalar(OutputModel):
         nn.init.xavier_uniform_(self.output_network[2].weight)
         self.output_network[2].bias.data.fill_(0)
 
-    def pre_reduce(self, x, v: Optional[torch.Tensor], z, pos, batch):
+    def pre_reduce(self, x, v:  Union[Tensor, Tuple[Tensor,Tensor,Tensor], None], z, pos, batch):
         return self.output_network(x)
 
 

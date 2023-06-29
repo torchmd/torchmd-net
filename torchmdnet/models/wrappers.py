@@ -50,7 +50,10 @@ class AtomFilter(BaseWrapper):
         atom_mask = z > self.remove_threshold
         x = x[atom_mask]
         if v is not None:
-            v = v[atom_mask]
+            if isinstance(v, tuple):
+                v = tuple(vi[atom_mask] for vi in v)
+            else:
+                v = v[atom_mask]
         z = z[atom_mask]
         pos = pos[atom_mask]
         batch = batch[atom_mask]
