@@ -264,9 +264,9 @@ class TensorPassing(MessagePassing):
 def tensor_message_passing(
     edge_index: Tensor, edge_attr: Tensor, I: Tensor, A: Tensor, S: Tensor, natoms: int
 ) -> Tuple[Tensor, Tensor, Tensor]:
-    Im = edge_attr[:,:, 0, None, None] * I[edge_index[1]]
-    Am = edge_attr[:,:, 1, None, None] * A[edge_index[1]]
-    Sm = edge_attr[:,:, 2, None, None] * S[edge_index[1]]
+    Im = edge_attr[:,:, 0, None, None] * I.index_select(0, edge_index[1])
+    Am = edge_attr[:,:, 1, None, None] * A.index_select(0, edge_index[1])
+    Sm = edge_attr[:,:, 2, None, None] * S.index_select(0, edge_index[1])
     Im = scatter(Im, edge_index[0], dim=0, dim_size=natoms)
     Am = scatter(Am, edge_index[0], dim=0, dim_size=natoms)
     Sm = scatter(Sm, edge_index[0], dim=0, dim_size=natoms)
