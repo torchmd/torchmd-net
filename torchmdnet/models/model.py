@@ -279,13 +279,14 @@ class TorchMD_Net(nn.Module):
             x = x + self.mean
 
         # apply output model after reduction
-        y = self.output_model.post_reduce(x)
+        x = self.output_model.post_reduce(x)
 
         # apply molecular-wise prior model
         if self.prior_model is not None:
             for prior in self.prior_model:
-                y = prior.post_reduce(y, z, pos, batch, extra_args)
-
+		# assuming that x[0] is always the energy
+                y = prior.post_reduce(x, z, pos, batch, extra_args)
+	
         # compute gradients with respect to coordinates
         if self.derivative:
             grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(y)]
