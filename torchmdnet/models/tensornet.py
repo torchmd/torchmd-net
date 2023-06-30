@@ -55,6 +55,14 @@ def decompose_tensor(tensor):
     S = 0.5 * (tensor + tensor.transpose(-2, -1)) - I
     return I, A, S
 
+def decompose_tensor_single(tensor):
+    #Store in a single IAS tensor
+    IAS = torch.zeros(3, tensor.shape[0],tensor.shape[1], 3, 3, device=tensor.device, dtype=tensor.dtype)
+    IAS[0] = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)[..., None, None] * torch.eye(3, 3, device=tensor.device, dtype=tensor.dtype)
+    IAS[1] = 0.5 * (tensor - tensor.transpose(-2, -1))
+    IAS[2] = 0.5 * (tensor + tensor.transpose(-2, -1)) - IAS[0]
+    return IAS
+
 
 # Modifies tensor by multiplying invariant features to irreducible components
 def new_radial_tensor(I, A, S, f_I, f_A, f_S):
@@ -165,7 +173,7 @@ class TensorNet(nn.Module):
                         cutoff_upper,
                         equivariance_invariance_group,
                         dtype,
-                    ).jittable()
+                    )
                 )
         self.linear = nn.Linear(3 * hidden_channels, hidden_channels, dtype=dtype)
         self.out_norm = nn.LayerNorm(3 * hidden_channels, dtype=dtype)
@@ -250,10 +258,6 @@ class TensorPassing(MessagePassing):
         I = scatter(I, index, dim=self.node_dim, dim_size=dim_size)
         A = scatter(A, index, dim=self.node_dim, dim_size=dim_size)
         S = scatter(S, index, dim=self.node_dim, dim_size=dim_size)
-        # index_v = index.view(-1, 1, 1, 1)
-        # I.scatter_reduce(0, index_v, I, reduce="sum")
-        # A.scatter_reduce(0, index_v, A, reduce="sum")
-        # S.scatter_reduce(0, index_v, S, reduce="sum")
         return I, A, S
 
     def update(
@@ -262,15 +266,11 @@ class TensorPassing(MessagePassing):
         return inputs
 
 def tensor_message_passing(
-    edge_index: Tensor, edge_attr: Tensor, I: Tensor, A: Tensor, S: Tensor, natoms: int
-) -> Tuple[Tensor, Tensor, Tensor]:
-    Im = edge_attr[:,:, 0, None, None] * I.index_select(0, edge_index[1])
-    Am = edge_attr[:,:, 1, None, None] * A.index_select(0, edge_index[1])
-    Sm = edge_attr[:,:, 2, None, None] * S.index_select(0, edge_index[1])
-    Im = scatter(Im, edge_index[0], dim=0, dim_size=natoms)
-    Am = scatter(Am, edge_index[0], dim=0, dim_size=natoms)
-    Sm = scatter(Sm, edge_index[0], dim=0, dim_size=natoms)
-    return Im, Am, Sm
+    edge_index: Tensor, edge_attr: Tensor, IAS: Tensor
+) -> Tensor:
+    IASm = edge_attr[None, :, :, None] * IAS.index_select(1, edge_index[1])
+    msg = scatter(IASm, edge_index[0], dim=1, dim_size=IAS.size(1)).sum(0)
+    return msg
 
 
 class TensorEmbedding(TensorPassing):
@@ -348,6 +348,7 @@ class TensorEmbedding(TensorPassing):
         )
         # propagate_type: (Z: Tensor, I: Tensor, A: Tensor, S: Tensor)
         I, A, S = self.propagate(edge_index, Z=Z, I=Iij, A=Aij, S=Sij, size=None)
+        #I, A, S = tensor_message_passing(edge_index, Z[None, None, :, :], Iij, Aij, Sij)
         norm = tensor_norm(I + A + S)
         norm = self.init_norm(norm)
         I = self.linears_tensor[0](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
@@ -376,7 +377,7 @@ class TensorEmbedding(TensorPassing):
 
         return I, A, S
 
-class Interaction(TensorPassing):
+class Interaction(nn.Module):
     def __init__(
         self,
         num_rbf,
@@ -430,38 +431,26 @@ class Interaction(TensorPassing):
             edge_attr.shape[0], self.hidden_channels, 3
         )
         X = X / (tensor_norm(X) + 1)[..., None, None]
-        I, A, S = decompose_tensor(X)
-        I = self.linears_tensor[0](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        A = self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        S = self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        Y = I + A + S
-        # Im, Am, Sm = tensor_message_passing(
-        #     edge_index, edge_attr, I, A, S, X.shape[0]
-        # )
-        # propagate_type: (I: Tensor, A: Tensor, S: Tensor, edge_attr: Tensor)
-        Im, Am, Sm = self.propagate(
-            edge_index, I=I, A=A, S=S, edge_attr=edge_attr, size=None
+        IAS = decompose_tensor_single(X)
+        IAS[0] = self.linears_tensor[0](IAS[0].permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        IAS[1] = self.linears_tensor[1](IAS[1].permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        IAS[2] = self.linears_tensor[2](IAS[2].permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        Y = IAS.sum(dim=0)
+        msg = tensor_message_passing(
+            edge_index, edge_attr, IAS
         )
-        msg = Im + Am + Sm
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(msg, Y)
             B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor(A + B)
+            IAS = decompose_tensor_single(A + B)
         if self.equivariance_invariance_group == "SO(3)":
             B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor(2 * B)
-        normp1 = (tensor_norm(I + A + S) + 1)[..., None, None]
-        I, A, S = I / normp1, A / normp1, S / normp1
-        I = self.linears_tensor[3](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        dX = I + A + S
+            IAS = decompose_tensor_single(2 * B)
+        normp1 = ((IAS.sum(0).squeeze()**2).sum((-2, -1)) + 1)[None,..., None,None]
+        IAS = IAS / normp1
+        IAS[0] = self.linears_tensor[3](IAS[0].permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        IAS[1] = self.linears_tensor[4](IAS[1].permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        IAS[2] = self.linears_tensor[5](IAS[2].permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        dX = IAS.sum(0)
         X = X + dX + torch.matrix_power(dX, 2)
         return X
-
-    def message(self, I_j, A_j, S_j, edge_attr):
-
-        I, A, S = new_radial_tensor(
-            I_j, A_j, S_j, edge_attr[..., 0], edge_attr[..., 1], edge_attr[..., 2]
-        )
-        return I, A, S
