@@ -290,7 +290,7 @@ class TensorEmbedding(MessagePassing):
         mask = edge_index[0] != edge_index[1]
         edge_vec[mask] = edge_vec[mask] / torch.norm(edge_vec[mask], dim=1).unsqueeze(1)
         # Raul: dtype here?
-        Id = torch.eye(4, 4 device=edge_vec.device, dtype=edge_vec.dtype)
+        Id = torch.eye(4, 4, device=edge_vec.device, dtype=edge_vec.dtype)
         Id[3,3] = 0.
         Iij, Aij, Sij = new_radial_tensor(
             Id[None, None, :, :],
