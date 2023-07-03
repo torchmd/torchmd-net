@@ -20,21 +20,26 @@ def vector_to_skewtensor(vector):
             zero,
             -vector[:, 2],
             vector[:, 1],
+            zero
             vector[:, 2],
             zero,
             -vector[:, 0],
+            zero
             -vector[:, 1],
             vector[:, 0],
+            zero,
             zero,
         ),
         dim=1,
     )
-    tensor = tensor.view(-1, 3, 3)
+    tensor = tensor.view(-1, 4, 4)
     return tensor.squeeze(0)
 
 
 # Creates a symmetric traceless tensor from the outer product of a vector with itself
 def vector_to_symtensor(vector):
+    # This can be done in other ways for sure
+    vector = torch.cat((vector, torch.zeros(vector.shape[0],1,device=vector.device)),dim=-1)
     tensor = torch.matmul(vector.unsqueeze(-1), vector.unsqueeze(-2))
     I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)[
         ..., None, None
