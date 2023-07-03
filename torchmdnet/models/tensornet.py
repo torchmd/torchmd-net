@@ -281,10 +281,12 @@ class TensorEmbedding(MessagePassing):
         W3 = self.distance_proj3(edge_attr) * C.view(-1, 1)
         mask = edge_index[0] != edge_index[1]
         edge_vec[mask] = edge_vec[mask] / torch.norm(edge_vec[mask], dim=1).unsqueeze(1)
+        # Raul: dtype here?
+        Id = torch.zeros(4, 1, device=edge_vec.device)
+        Id[:3] = 1.
+        Id = torch.diag_embed(Id)
         Iij, Aij, Sij = new_radial_tensor(
-            torch.eye(3, 3, device=edge_vec.device, dtype=edge_vec.dtype)[
-                None, None, :, :
-            ],
+            Id[None, None, :, :],
             vector_to_skewtensor(edge_vec)[..., None, :, :],
             vector_to_symtensor(edge_vec)[..., None, :, :],
             W1,
