@@ -20,7 +20,7 @@ def vector_to_skewtensor(vector):
             zero,
             -vector[:, 2],
             vector[:, 1],
-            zero
+            zero,
             vector[:, 2],
             zero,
             -vector[:, 0],
