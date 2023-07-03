@@ -29,6 +29,10 @@ def vector_to_skewtensor(vector):
             vector[:, 0],
             zero,
             zero,
+            zero,
+            zero,
+            zero,
+            zero,
         ),
         dim=1,
     )
