@@ -57,7 +57,7 @@ def decompose_tensor(tensor):
 
 def decompose_tensor_single(tensor):
     #Store in a single IAS tensor
-    IAS = torch.zeros(3, tensor.shape[0],tensor.shape[1], 3, 3, device=tensor.device, dtype=tensor.dtype)
+    IAS = torch.empty(3, tensor.shape[0],tensor.shape[1], 3, 3, device=tensor.device, dtype=tensor.dtype)
     IAS[0] = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)[..., None, None] * torch.eye(3, 3, device=tensor.device, dtype=tensor.dtype)
     IAS[1] = 0.5 * (tensor - tensor.transpose(-2, -1))
     IAS[2] = 0.5 * (tensor + tensor.transpose(-2, -1)) - IAS[0]
