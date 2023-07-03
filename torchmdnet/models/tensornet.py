@@ -45,18 +45,22 @@ def vector_to_symtensor(vector):
     # This can be done in other ways for sure
     vector = torch.cat((vector, torch.zeros(vector.shape[0],1,device=vector.device)),dim=-1)
     tensor = torch.matmul(vector.unsqueeze(-1), vector.unsqueeze(-2))
-    I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)[
+    I = torch.eye(4,4, device=tensor.device, dtype=tensor.dtype)
+    I[3,3] = 0.
+    I = (1/3)*(tensor.diagonal(offset=0, dim1=-1, dim2=-2)).sum(-1)[
         ..., None, None
-    ] * torch.eye(3, 3, device=tensor.device, dtype=tensor.dtype)
+    ] * I
     S = 0.5 * (tensor + tensor.transpose(-2, -1)) - I
     return S
 
 
 # Full tensor decomposition into irreducible components
 def decompose_tensor(tensor):
-    I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)[
+    I = torch.eye(4,4, device=tensor.device, dtype=tensor.dtype)
+    I[3,3] = 0.
+    I = (1/3)*(tensor.diagonal(offset=0, dim1=-1, dim2=-2)).sum(-1)[
         ..., None, None
-    ] * torch.eye(3, 3, device=tensor.device, dtype=tensor.dtype)
+    ] * I
     A = 0.5 * (tensor - tensor.transpose(-2, -1))
     S = 0.5 * (tensor + tensor.transpose(-2, -1)) - I
     return I, A, S
