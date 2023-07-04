@@ -11,7 +11,8 @@ from torchmdnet.models.utils import (
     rbf_class_mapping,
     act_class_mapping,
 )
-torch.set_float32_matmul_precision('high')
+
+torch.set_float32_matmul_precision("high")
 torch.backends.cuda.matmul.allow_tf32 = True
 
 # Creates a skew-symmetric tensor from a vector
@@ -67,6 +68,7 @@ def new_radial_tensor(I, A, S, f_I, f_A, f_S):
 # Computes Frobenius norm
 def tensor_norm(tensor):
     return (tensor**2).sum((-2, -1))
+
 
 class TensorNet(nn.Module):
     r"""TensorNet's architecture, from TensorNet: Cartesian Tensor Representations
@@ -151,7 +153,7 @@ class TensorNet(nn.Module):
             trainable_rbf,
             max_z,
             dtype,
-        ).jittable()
+        )
 
         self.layers = nn.ModuleList()
         if num_layers != 0:
@@ -165,7 +167,7 @@ class TensorNet(nn.Module):
                         cutoff_upper,
                         equivariance_invariance_group,
                         dtype,
-                    ).jittable()
+                    )
                 )
         self.linear = nn.Linear(3 * hidden_channels, hidden_channels, dtype=dtype)
         self.out_norm = nn.LayerNorm(3 * hidden_channels, dtype=dtype)
@@ -234,46 +236,13 @@ class TensorNet(nn.Module):
         return x, None, z, pos, batch
 
 
-class TensorPassing(MessagePassing):
-    def __init__(self):
-        super(TensorPassing, self).__init__(aggr="add", node_dim=0)
-
-    def aggregate(
-        self,
-        features: Tuple[Tensor, Tensor, Tensor],
-        index: Tensor,
-        ptr: Optional[Tensor],
-        dim_size: Optional[int],
-    ) -> Tuple[Tensor, Tensor, Tensor]:
-
-        I, A, S = features
-        I = scatter(I, index, dim=self.node_dim, dim_size=dim_size)
-        A = scatter(A, index, dim=self.node_dim, dim_size=dim_size)
-        S = scatter(S, index, dim=self.node_dim, dim_size=dim_size)
-        # index_v = index.view(-1, 1, 1, 1)
-        # I.scatter_reduce(0, index_v, I, reduce="sum")
-        # A.scatter_reduce(0, index_v, A, reduce="sum")
-        # S.scatter_reduce(0, index_v, S, reduce="sum")
-        return I, A, S
-
-    def update(
-        self, inputs: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        return inputs
-
-def tensor_message_passing(
-    edge_index: Tensor, edge_attr: Tensor, I: Tensor, A: Tensor, S: Tensor, natoms: int
-) -> Tuple[Tensor, Tensor, Tensor]:
-    Im = edge_attr[:,:, 0, None, None] * I.index_select(0, edge_index[1])
-    Am = edge_attr[:,:, 1, None, None] * A.index_select(0, edge_index[1])
-    Sm = edge_attr[:,:, 2, None, None] * S.index_select(0, edge_index[1])
-    Im = scatter(Im, edge_index[0], dim=0, dim_size=natoms)
-    Am = scatter(Am, edge_index[0], dim=0, dim_size=natoms)
-    Sm = scatter(Sm, edge_index[0], dim=0, dim_size=natoms)
-    return Im, Am, Sm
+def tensor_message_passing(edge_index: Tensor, factor: Tensor, tensor: Tensor, natoms: int) -> Tensor:
+    msg = factor * tensor.index_select(0, edge_index[1])
+    tensor_m = scatter(msg, edge_index[0], dim=0, dim_size=natoms)
+    return tensor_m
 
 
-class TensorEmbedding(TensorPassing):
+class TensorEmbedding(nn.Module):
     def __init__(
         self,
         hidden_channels,
@@ -331,7 +300,6 @@ class TensorEmbedding(TensorPassing):
         edge_vec_norm: Tensor,
         edge_attr: Tensor,
     ) -> Tensor:
-        Z = self.emb(z)
         C = self.cutoff(edge_weight)
         W1 = self.distance_proj1(edge_attr) * C.view(-1, 1)
         W2 = self.distance_proj2(edge_attr) * C.view(-1, 1)
@@ -346,10 +314,14 @@ class TensorEmbedding(TensorPassing):
             W2,
             W3,
         )
-        # propagate_type: (Z: Tensor, I: Tensor, A: Tensor, S: Tensor)
-        I, A, S = self.propagate(edge_index, Z=Z, I=Iij, A=Aij, S=Sij, size=None)
-        norm = tensor_norm(I + A + S)
-        norm = self.init_norm(norm)
+        Z = self.emb(z)
+        Zij = self.emb2(
+            Z.index_select(0, edge_index.view(-1)).view(-1, self.hidden_channels * 2)
+        )[..., None, None]
+        I = tensor_message_passing(edge_index, Zij, Iij, z.shape[0])
+        A = tensor_message_passing(edge_index, Zij, Aij, z.shape[0])
+        S = tensor_message_passing(edge_index, Zij, Sij, z.shape[0])
+        norm = self.init_norm(tensor_norm(I + A + S))
         I = self.linears_tensor[0](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         A = self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
@@ -361,22 +333,8 @@ class TensorEmbedding(TensorPassing):
 
         return X
 
-    def message(self,
-                Z_i: Tensor,
-                Z_j: Tensor,
-                I: Tensor,
-                A: Tensor,
-                S: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
 
-        zij = torch.cat((Z_i, Z_j), dim=-1)
-        Zij = self.emb2(zij)
-        I = Zij[..., None, None] * I
-        A = Zij[..., None, None] * A
-        S = Zij[..., None, None] * S
-
-        return I, A, S
-
-class Interaction(TensorPassing):
+class Interaction(nn.Module):
     def __init__(
         self,
         num_rbf,
@@ -417,11 +375,9 @@ class Interaction(TensorPassing):
         for linear in self.linears_tensor:
             linear.reset_parameters()
 
-    def forward(self,
-                X: Tensor,
-                edge_index: Tensor,
-                edge_weight: Tensor,
-                edge_attr: Tensor) -> Tensor:
+    def forward(
+        self, X: Tensor, edge_index: Tensor, edge_weight: Tensor, edge_attr: Tensor
+    ) -> Tensor:
 
         C = self.cutoff(edge_weight)
         for linear_scalar in self.linears_scalar:
@@ -435,13 +391,9 @@ class Interaction(TensorPassing):
         A = self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         Y = I + A + S
-        # Im, Am, Sm = tensor_message_passing(
-        #     edge_index, edge_attr, I, A, S, X.shape[0]
-        # )
-        # propagate_type: (I: Tensor, A: Tensor, S: Tensor, edge_attr: Tensor)
-        Im, Am, Sm = self.propagate(
-            edge_index, I=I, A=A, S=S, edge_attr=edge_attr, size=None
-        )
+        Im = tensor_message_passing(edge_index, edge_attr[..., 0, None, None], I, X.shape[0])
+        Am = tensor_message_passing(edge_index, edge_attr[..., 1, None, None], A, X.shape[0])
+        Sm = tensor_message_passing(edge_index, edge_attr[..., 2, None, None], S, X.shape[0])
         msg = Im + Am + Sm
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(msg, Y)
@@ -458,10 +410,3 @@ class Interaction(TensorPassing):
         dX = I + A + S
         X = X + dX + torch.matrix_power(dX, 2)
         return X
-
-    def message(self, I_j, A_j, S_j, edge_attr):
-
-        I, A, S = new_radial_tensor(
-            I_j, A_j, S_j, edge_attr[..., 0], edge_attr[..., 1], edge_attr[..., 2]
-        )
-        return I, A, S
