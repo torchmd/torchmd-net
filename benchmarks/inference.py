@@ -134,6 +134,7 @@ def benchmark_all():
         times = {}
         num_atoms = 0
         for name, kwargs in cases.items():
+            torch.cuda.empty_cache()
             num_atoms, time = benchmark_pdb(os.path.join("systems", pdb_file), **kwargs)
             times[name] = time
         timings[pdb_file] = (num_atoms, times)
