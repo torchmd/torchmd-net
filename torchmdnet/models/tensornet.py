@@ -12,9 +12,6 @@ from torchmdnet.models.utils import (
     act_class_mapping,
 )
 
-torch.set_float32_matmul_precision("high")
-torch.backends.cuda.matmul.allow_tf32 = True
-
 # Creates a skew-symmetric tensor from a vector
 def vector_to_skewtensor(vector):
     batch_size = vector.size(0)
@@ -241,7 +238,6 @@ def tensor_message_passing(edge_index: Tensor, factor: Tensor, tensor: Tensor, n
     tensor_m = scatter(msg, edge_index[0], dim=0, dim_size=natoms)
     return tensor_m
 
-
 class TensorEmbedding(nn.Module):
     def __init__(
         self,
@@ -315,12 +311,16 @@ class TensorEmbedding(nn.Module):
             W3,
         )
         Z = self.emb(z)
-        Zij = self.emb2(
-            Z.index_select(0, edge_index.view(-1)).view(-1, self.hidden_channels * 2)
-        )[..., None, None]
-        I = tensor_message_passing(edge_index, Zij, Iij, z.shape[0])
-        A = tensor_message_passing(edge_index, Zij, Aij, z.shape[0])
-        S = tensor_message_passing(edge_index, Zij, Sij, z.shape[0])
+        # Zij = self.emb2(
+        #     Z.index_select(0, edge_index.view(-1)).view(-1, self.hidden_channels * 2)
+        # )[..., None, None]
+        Z_i = torch.index_select(Z, 0, edge_index[0])
+        Z_j = torch.index_select(Z, 0, edge_index[1])
+        zij = torch.cat((Z_i, Z_j), dim=-1)
+        Zij = self.emb2(zij)[..., None, None]
+        I = scatter(Zij*Iij, edge_index[0], dim=0, dim_size=z.shape[0])
+        A = scatter(Zij*Aij, edge_index[0], dim=0, dim_size=z.shape[0])
+        S = scatter(Zij*Sij, edge_index[0], dim=0, dim_size=z.shape[0])
         norm = self.init_norm(tensor_norm(I + A + S))
         I = self.linears_tensor[0](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         A = self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
