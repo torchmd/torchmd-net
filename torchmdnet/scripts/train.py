@@ -83,10 +83,10 @@ def get_args():
     parser.add_argument('--distance-influence', type=str, default='both', choices=['keys', 'values', 'both', 'none'], help='Where distance information is included inside the attention')
     parser.add_argument('--attn-activation', default='silu', choices=list(act_class_mapping.keys()), help='Attention activation function')
     parser.add_argument('--num-heads', type=int, default=8, help='Number of attention heads')
-    
+
     # TensorNet specific
     parser.add_argument('--equivariance-invariance-group', type=str, default='O(3)', help='Equivariance and invariance group of TensorNet')
-
+    parser.add_argument('--box_vecs', type=str, default=None, help='Box vectors for periodic boundary conditions. Example: [[1,0,0],[0,1,0],[0,0,1]]')
     # other args
     parser.add_argument('--derivative', default=False, type=bool, help='If true, take the derivative of the prediction w.r.t coordinates')
     parser.add_argument('--cutoff-lower', type=float, default=0.0, help='Lower cutoff in model')

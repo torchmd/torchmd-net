@@ -77,9 +77,15 @@ def create_model(args, prior_model=None, mean=None, std=None):
     elif args["model"] == "tensornet":
         from torchmdnet.models.tensornet import TensorNet
 	# Setting is_equivariant to False to enforce the use of Scalar output module instead of EquivariantScalar
+        box_vecs = None
+        if args["box_vecs"] is not None:
+            row_strings = args["box_vecs"][1:-1].split(",")
+            rows = [list(map(int, row_string.split(","))) for row_string in row_strings]
+            box_vecs = torch.tensor(rows, dtype=args["dtype"])
         is_equivariant = False
         representation_model = TensorNet(
 	    equivariance_invariance_group=args["equivariance_invariance_group"],
+            box_vecs=box_vecs,
             **shared_args,
         )
     else:

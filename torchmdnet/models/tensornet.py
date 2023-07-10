@@ -6,7 +6,7 @@ from torch_scatter import scatter
 from torch_geometric.nn import MessagePassing
 from torchmdnet.models.utils import (
     CosineCutoff,
-    Distance,
+    OptimizedDistance,
     rbf_class_mapping,
     act_class_mapping,
 )
@@ -70,6 +70,20 @@ class TensorNet(nn.Module):
     r"""TensorNet's architecture, from TensorNet: Cartesian Tensor Representations
         for Efficient Learning of Molecular Potentials; G. Simeon and G. de Fabritiis.
 
+        This function optionally supports periodic boundary conditions with
+        arbitrary triclinic boxes.  The box vectors `a`, `b`, and `c` must satisfy
+        certain requirements:
+
+        `a[1] = a[2] = b[2] = 0`
+        `a[0] >= 2*cutoff, b[1] >= 2*cutoff, c[2] >= 2*cutoff`
+        `a[0] >= 2*b[0]`
+        `a[0] >= 2*c[0]`
+        `b[1] >= 2*c[1]`
+
+        These requirements correspond to a particular rotation of the system and
+        reduced form of the vectors, as well as the requirement that the cutoff be
+        no larger than half the box width.
+
     Args:
         hidden_channels (int, optional): Hidden embedding size.
             (default: :obj:`128`)
@@ -96,6 +110,11 @@ class TensorNet(nn.Module):
             positions internal tensor features will be equivariant and scalar predictions
             will be invariant. O(3) or SO(3).
             (default :obj:`"O(3)"`)
+        box_vecs (Tensor, optional):
+            The vectors defining the periodic box.  This must have shape `(3, 3)`,
+            where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
+            If this is omitted, periodic boundary conditions are not applied.
+            (default: :obj:`None`)
     """
 
     def __init__(
@@ -112,6 +131,7 @@ class TensorNet(nn.Module):
         max_num_neighbors=64,
         equivariance_invariance_group="O(3)",
         dtype=torch.float32,
+        box_vecs=None,
     ):
         super(TensorNet, self).__init__()
 
@@ -137,8 +157,8 @@ class TensorNet(nn.Module):
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         act_class = act_class_mapping[activation]
-        self.distance = Distance(
-            cutoff_lower, cutoff_upper, max_num_neighbors, return_vecs=True, loop=True
+        self.distance = OptimizedDistance(
+            cutoff_lower, cutoff_upper, max_num_pairs=-max_num_neighbors, return_vecs=True, loop=True, box=box_vecs
         )
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
