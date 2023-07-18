@@ -5,7 +5,7 @@ from torch.utils import cpp_extension
 def compile_extension():
     src_dir = os.path.dirname(__file__)
     sources = ["neighbors.cpp", "neighbors_cpu.cpp"] + (
-        ["neighbors_cuda.cu", "backwards.cu"] if torch.cuda.is_available() else []
+        ["neighbors_cuda.cu"] if torch.cuda.is_available() else []
     )
     sources = [os.path.join(src_dir, name) for name in sources]
     cpp_extension.load(
