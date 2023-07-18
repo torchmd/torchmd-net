@@ -25,7 +25,7 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
         return
 
     def reduce(self, x, batch):
-        return scatter(x, batch, dim=0, reduce=self.reduce_op)
+        return scatter(x, batch, dim=0, reduce=self.reduce_op, dim_size=batch.shape[0])
 
     def post_reduce(self, x):
         return x
