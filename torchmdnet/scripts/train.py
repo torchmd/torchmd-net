@@ -181,6 +181,7 @@ def main():
 
     # run test set after completing the fit
     model = LNNP.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
+    data.save_hyperparameters(model.hparams)
     trainer = pl.Trainer(logger=_logger)
     trainer.test(model, data)
 
