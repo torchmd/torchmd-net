@@ -15,15 +15,17 @@ class Ace(Dataset):
         pre_transform=None,
         pre_filter=None,
         paths=None,
+        atomic_numbers=None,
         max_gradient=None,
         subsample_molecules=1,
     ):
         assert isinstance(paths, (str, list))
 
-        arg_hash = f"{paths}{max_gradient}{subsample_molecules}"
+        arg_hash = f"{paths}{atomic_numbers}{max_gradient}{subsample_molecules}"
         arg_hash = hashlib.md5(arg_hash.encode()).hexdigest()
         self.name = f"{self.__class__.__name__}-{arg_hash}"
         self.paths = paths
+        self.atomic_numbers = atomic_numbers
         self.max_gradient = max_gradient
         self.subsample_molecules = int(subsample_molecules)
         super().__init__(root, transform, pre_transform, pre_filter)
@@ -180,6 +182,11 @@ class Ace(Dataset):
                 fq = pt.tensor(mol["formal_charges"], dtype=pt.long)
                 q = fq.sum()
 
+                # Keep molecules with specific elements
+                if self.atomic_numbers:
+                    if not set(z.numpy()).issubset(self.atomic_numbers):
+                        continue
+
                 for i_conf, (pos, y, neg_dy, pq, dp) in enumerate(load_confs(mol, n_atoms=len(z))):
 
                     # Skip samples with large forces
@@ -220,6 +227,7 @@ class Ace(Dataset):
     def process(self):
 
         print("Arguments")
+        print(f"  atomic_numbers: {self.atomic_numbers}")
         print(f"  max_gradient: {self.max_gradient} eV/A")
         print(f"  subsample_molecules: {self.subsample_molecules}\n")
 
