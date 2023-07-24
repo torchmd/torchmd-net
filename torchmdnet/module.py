@@ -127,8 +127,9 @@ class LNNP(LightningModule):
             if batch.y.ndim == 1:
                 batch.y = batch.y.unsqueeze(1)
 
-            # y loss
-            loss_y = loss_fn(y, batch.y)
+            # y
+            y_dtype = {16: torch.float16, 32: torch.float32, 64: torch.float64}[self.hparams.precision]
+            loss_y = loss_fn(y, batch.y.to(y_dtype))
 
             if stage in ["train", "val"] and self.hparams.ema_alpha_y < 1:
                 if self.ema[stage + "_y"] is None:
