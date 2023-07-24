@@ -317,9 +317,7 @@ class Ace(Dataset):
         atoms = slice(self.idx_mm[idx], self.idx_mm[idx + 1])
         z = pt.tensor(self.z_mm[atoms], dtype=pt.long)
         pos = pt.tensor(self.pos_mm[atoms], dtype=pt.float32)
-        y = pt.tensor(self.y_mm[idx], dtype=pt.float32).view(
-            1, 1
-        )  # It would be better to use float64, but the trainer complaints
+        y = pt.tensor(self.y_mm[idx], dtype=pt.float64).view(1, 1)
         neg_dy = pt.tensor(self.neg_dy_mm[atoms], dtype=pt.float32)
         q = pt.tensor(self.q_mm[idx], dtype=pt.long)
         pq = pt.tensor(self.pq_mm[atoms], dtype=pt.float32)
