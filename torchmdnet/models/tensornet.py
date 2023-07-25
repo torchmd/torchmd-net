@@ -4,7 +4,6 @@ from typing import Optional, Tuple
 from torch import Tensor, nn
 import torch._dynamo as dynamo
 from torch_scatter import scatter
-from torch_geometric.nn import MessagePassing
 from torchmdnet.models.utils import (
     CosineCutoff,
     OptimizedDistance,
