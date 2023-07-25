@@ -179,7 +179,7 @@ class TensorNet(nn.Module):
             loop=True,
             check_errors=False,
             resize_to_fit=False,
-            long_edge_index=False,
+            long_edge_index=True,
         )
 
         self.reset_parameters()
@@ -218,7 +218,7 @@ class TensorNet(nn.Module):
         mask = edge_index[0] != edge_index[1]
         # Normalizing edge vectors by their length can result in NaNs, breaking Autograd.
         # I avoid dividing by zero by setting the weight of non-existing edges and self loops to 1
-        edge_vec = edge_vec / torch.ones_like(edge_weight).masked_scatter(
+        edge_vec = edge_vec / torch.masked_scatter(torch.ones_like(edge_weight),
             mask, edge_weight
         ).unsqueeze(1)
         X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr)
