@@ -11,6 +11,7 @@ from torchmdnet.models.utils import (
     act_class_mapping,
 )
 torch.set_float32_matmul_precision('high')
+torch.backends.cuda.matmul.allow_tf32 = True
 # Creates a skew-symmetric tensor from a vector
 def vector_to_skewtensor(vector):
     batch_size = vector.size(0)
