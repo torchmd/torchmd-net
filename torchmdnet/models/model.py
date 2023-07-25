@@ -269,7 +269,7 @@ class TorchMD_Net(nn.Module):
                 x = prior.pre_reduce(x, z, pos, batch, extra_args)
 
         # aggregate atoms
-        x = self.output_model.reduce(x, batch)
+        x = self.output_model.reduce(x, z, batch)
 
         # shift by data mean
         if self.mean is not None:

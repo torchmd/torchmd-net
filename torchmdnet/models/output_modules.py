@@ -16,7 +16,6 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
         super(OutputModel, self).__init__()
         self.allow_prior_model = allow_prior_model
         self.reduce_op = reduce_op
-
     def reset_parameters(self):
         pass
 
@@ -24,8 +23,8 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
     def pre_reduce(self, x, v, z, pos, batch):
         return
 
-    def reduce(self, x, batch):
-        return scatter(x, batch, dim=0, reduce=self.reduce_op, dim_size=batch.shape[0])
+    def reduce(self, x, z, batch):
+        return scatter(x, batch, dim=0, reduce=self.reduce_op, dim_size=z.shape[0])
 
     def post_reduce(self, x):
         return x
