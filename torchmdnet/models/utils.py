@@ -3,7 +3,6 @@ from typing import Optional, Tuple
 import torch
 from torch import Tensor
 from torch import nn
-import torch._dynamo as dynamo
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch_cluster import radius_graph
@@ -107,9 +106,8 @@ class NeighborEmbedding(MessagePassing):
 
     def message(self, x_j, W):
         return x_j * W
-from torchmdnet.neighbors import get_neighbor_pairs_kernel
 
-dynamo.disallow_in_graph(get_neighbor_pairs_kernel)
+from torchmdnet.neighbors import get_neighbor_pairs_kernel
 
 class OptimizedDistance(torch.nn.Module):
     def __init__(

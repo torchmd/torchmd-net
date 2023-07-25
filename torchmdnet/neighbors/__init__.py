@@ -14,3 +14,6 @@ def compile_extension():
 
 compile_extension()
 get_neighbor_pairs_kernel = torch.ops.torchmdnet_neighbors.get_neighbor_pairs
+if int(torch.__version__.split('.')[0]) >= 2:
+    import torch._dynamo as dynamo
+    dynamo.disallow_in_graph(get_neighbor_pairs_kernel)
