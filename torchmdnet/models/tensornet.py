@@ -2,7 +2,6 @@ import torch
 import numpy as np
 from typing import Optional, Tuple
 from torch import Tensor, nn
-import torch._dynamo as dynamo
 from torch_scatter import scatter
 from torchmdnet.models.utils import (
     CosineCutoff,
