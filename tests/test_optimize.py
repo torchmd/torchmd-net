@@ -39,6 +39,7 @@ def test_gn(device, num_atoms):
         "prior_model": None,
         "output_model": "Scalar",
         "reduce_op": "add",
+        "precision": 32,
     }
     ref_model = create_model(args).to(device)
 
