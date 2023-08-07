@@ -26,7 +26,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         nn.Module: An instance of the TorchMD_Net model.
     """
     args["precision"] = 32 if "precision" not in args else args["precision"]
-    args["dtype"] = dtype_mapping[args["precision"]]
+    dtype = dtype_mapping[args["precision"]]
     shared_args = dict(
         hidden_channels=args["embedding_dimension"],
         num_layers=args["num_layers"],
@@ -38,7 +38,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         cutoff_upper=args["cutoff_upper"],
         max_z=args["max_z"],
         max_num_neighbors=args["max_num_neighbors"],
-        dtype=args["dtype"]
+        dtype=dtype
     )
 
     # representation network
@@ -102,7 +102,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         args["embedding_dimension"],
         activation=args["activation"],
         reduce_op=args["reduce_op"],
-        dtype=args["dtype"],
+        dtype=dtype,
     )
 
     # combine representation and output network
@@ -113,7 +113,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         mean=mean,
         std=std,
         derivative=args["derivative"],
-        dtype=args["dtype"],
+        dtype=dtype,
     )
     return model
 
