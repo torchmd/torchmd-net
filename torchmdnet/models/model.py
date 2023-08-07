@@ -25,7 +25,6 @@ def create_model(args, prior_model=None, mean=None, std=None):
     -------
         nn.Module: An instance of the TorchMD_Net model.
     """
-    args["precision"] = 32 if "precision" not in args else args["precision"]
     dtype = dtype_mapping[args["precision"]]
     shared_args = dict(
         hidden_channels=args["embedding_dimension"],
