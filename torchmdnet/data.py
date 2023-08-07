@@ -10,9 +10,13 @@ from torch_geometric.data import Dataset
 from torchmdnet.utils import make_splits, MissingEnergyException
 from torch_scatter import scatter
 from torchmdnet.models.utils import dtype_mapping
+
+
 class FloatCastDatasetWrapper(Dataset):
     def __init__(self, dataset, dtype=torch.float64):
-        super(FloatCastDatasetWrapper, self).__init__(dataset.root, dataset.transform, dataset.pre_transform, dataset.pre_filter)
+        super(FloatCastDatasetWrapper, self).__init__(
+            dataset.root, dataset.transform, dataset.pre_transform, dataset.pre_filter
+        )
         self.dataset = dataset
         self.dtype = dtype
 
@@ -25,11 +29,15 @@ class FloatCastDatasetWrapper(Dataset):
             if torch.is_tensor(value) and torch.is_floating_point(value):
                 setattr(data, key, value.to(self.dtype))
         return data
+
     def __getattr__(self, name):
         # Check if the attribute exists in the underlying dataset
         if hasattr(self.dataset, name):
             return getattr(self.dataset, name)
-        raise AttributeError(f"'{type(self).__name__}' and its underlying dataset have no attribute '{name}'")
+        raise AttributeError(
+            f"'{type(self).__name__}' and its underlying dataset have no attribute '{name}'"
+        )
+
 
 class DataModule(LightningDataModule):
     def __init__(self, hparams, dataset=None):
@@ -55,8 +63,9 @@ class DataModule(LightningDataModule):
                 self.dataset = getattr(datasets, self.hparams["dataset"])(
                     self.hparams["dataset_root"], **dataset_arg
                 )
-        self.dataset = FloatCastDatasetWrapper(self.dataset, dtype_mapping[self.hparams["precision"]])
-
+        self.dataset = FloatCastDatasetWrapper(
+            self.dataset, dtype_mapping[self.hparams["precision"]]
+        )
 
         self.idx_train, self.idx_val, self.idx_test = make_splits(
             len(self.dataset),
@@ -85,7 +94,7 @@ class DataModule(LightningDataModule):
         loaders = [self._get_dataloader(self.val_dataset, "val")]
         if (
             len(self.test_dataset) > 0
-            and (self.trainer.current_epoch+1) % self.hparams["test_interval"] == 0
+            and (self.trainer.current_epoch + 1) % self.hparams["test_interval"] == 0
         ):
             loaders.append(self._get_dataloader(self.test_dataset, "test"))
         return loaders
