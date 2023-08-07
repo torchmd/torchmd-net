@@ -6,9 +6,25 @@ from torch_geometric.loader import DataLoader
 from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities import rank_zero_warn
 from torchmdnet import datasets
+from torch_geometric.data import Dataset
 from torchmdnet.utils import make_splits, MissingEnergyException
 from torch_scatter import scatter
+from torchmdnet.models.utils import dtype_mapping
+class FloatDataset(Dataset):
+    def __init__(self, dataset, dtype=torch.float64):
+        super(FloatDataset, self).__init__(dataset.root, dataset.transform, dataset.pre_transform, dataset.pre_filter)
+        self.dataset = dataset
+        self.dtype = dtype
 
+    def len(self):
+        return len(self.dataset)
+
+    def get(self, idx):
+        data = self.dataset.get(idx)
+        for key, value in data:
+            if isinstance(value, torch.Tensor) and torch.is_floating_point(value):
+                setattr(data, key, value.to(self.dtype))
+        return data
 
 class DataModule(LightningDataModule):
     def __init__(self, hparams, dataset=None):
@@ -34,6 +50,8 @@ class DataModule(LightningDataModule):
                 self.dataset = getattr(datasets, self.hparams["dataset"])(
                     self.hparams["dataset_root"], **dataset_arg
                 )
+        self.dataset = FloatDataset(self.dataset, dtype_mapping[self.hparams["precision"]])
+
 
         self.idx_train, self.idx_val, self.idx_test = make_splits(
             len(self.dataset),
