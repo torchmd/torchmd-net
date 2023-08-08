@@ -2,11 +2,10 @@ import sys
 import os
 import argparse
 import logging
-import pytorch_lightning as pl
-from pytorch_lightning.callbacks import EarlyStopping
-from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.loggers import CSVLogger, WandbLogger
-from pytorch_lightning.strategies.ddp import DDPStrategy
+import lightning.pytorch as pl
+from lightning.pytorch.strategies import DDPStrategy
+from lightning.pytorch.loggers import WandbLogger, CSVLogger, TensorBoardLogger
+from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
 from torchmdnet.module import LNNP
 from torchmdnet import datasets, priors, models
 from torchmdnet.data import DataModule
@@ -82,7 +81,7 @@ def get_args():
     parser.add_argument('--distance-influence', type=str, default='both', choices=['keys', 'values', 'both', 'none'], help='Where distance information is included inside the attention')
     parser.add_argument('--attn-activation', default='silu', choices=list(act_class_mapping.keys()), help='Attention activation function')
     parser.add_argument('--num-heads', type=int, default=8, help='Number of attention heads')
-    
+
     # TensorNet specific
     parser.add_argument('--equivariance-invariance-group', type=str, default='O(3)', help='Equivariance and invariance group of TensorNet')
 
@@ -157,7 +156,7 @@ def main():
         _logger.append(wandb_logger)
 
     if args.tensorboard_use:
-        tb_logger = pl.loggers.TensorBoardLogger(
+        tb_logger = TensorBoardLogger(
             args.log_dir, name="tensorbord", version="", default_hp_metric=False
         )
         _logger.append(tb_logger)
@@ -165,18 +164,18 @@ def main():
     trainer = pl.Trainer(
         strategy=DDPStrategy(find_unused_parameters=False),
         max_epochs=args.num_epochs,
-        gpus=args.ngpus,
+        accelerator="auto",
+        devices=args.ngpus,
         num_nodes=args.num_nodes,
         default_root_dir=args.log_dir,
-        auto_lr_find=False,
-        resume_from_checkpoint=None if args.reset_trainer else args.load_model,
         callbacks=[early_stopping, checkpoint_callback],
         logger=_logger,
         precision=args.precision,
         gradient_clip_val=args.gradient_clipping,
+        inference_mode=False
     )
 
-    trainer.fit(model, data)
+    trainer.fit(model, data, ckpt_path=None if args.reset_trainer else args.load_model)
 
     # run test set after completing the fit
     model = LNNP.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
