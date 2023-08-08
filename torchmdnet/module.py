@@ -1,7 +1,7 @@
 import torch
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.nn.functional import mse_loss, l1_loss
+from torch.nn.functional import local_response_norm, mse_loss, l1_loss
 from torch import Tensor
 from typing import Optional, Dict, Tuple
 
@@ -35,7 +35,7 @@ class LNNP(LightningModule):
         # initialize loss collection
         self.losses = None
         self._reset_losses_dict()
-        self.training_step_outputs = []
+
     def configure_optimizers(self):
         optimizer = AdamW(
             self.model.parameters(),
@@ -68,10 +68,7 @@ class LNNP(LightningModule):
         return self.model(z, pos, batch=batch, q=q, s=s, extra_args=extra_args)
 
     def training_step(self, batch, batch_idx):
-        # Call the super's training_step and then capture the outputs for on_train_epoch_end
-        loss = super(LNNP, self).training_step(batch, batch_idx)
-        self.training_step_outputs.append(loss)
-        return loss
+        return self.step(batch, mse_loss, "train")
 
     def on_train_epoch_end(self, training_step_outputs=None):
         # Handle the resetting of validation dataloaders
@@ -84,17 +81,12 @@ class LNNP(LightningModule):
             if should_reset:
                 # Using the new way to reset dataloaders in PyTorch Lightning v2.0.0
                 self.trainer.validate_loop.setup_data()
-            # Clear the outputs
-            self.training_step_outputs.clear()
 
     def validation_step(self, batch, batch_idx, *args):
-        if len(args) == 0 or (len(args) > 0 and args[0] == 0):
-            # validation step
-            output = self.step(batch, mse_loss, "val")
-        else:
-            # test step
-            output = self.step(batch, l1_loss, "test")
-        return output
+        is_val = len(args) == 0 or (len(args) > 0 and args[0] == 0)
+        loss_fn = mse_loss if is_val else l1_loss
+        step_type = "val" if is_val else "test"
+        return self.step(batch, loss_fn, step_type)
 
     def on_validation_epoch_end(self):
         if not self.trainer.sanity_checking:
