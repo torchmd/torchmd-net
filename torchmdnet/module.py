@@ -83,39 +83,13 @@ class LNNP(LightningModule):
                 self.trainer.validate_loop.setup_data()
 
     def validation_step(self, batch, batch_idx, *args):
+        # If args is not empty the first (and only) element is the dataloader_idx
+        # We want to test every couple of epochs, but this is not supported by Lightning.
+        # Instead, we trick it by providing two validation dataloaders and interpreting the second one as test.
         is_val = len(args) == 0 or (len(args) > 0 and args[0] == 0)
         loss_fn = mse_loss if is_val else l1_loss
         step_type = "val" if is_val else "test"
         return self.step(batch, loss_fn, step_type)
-
-    def on_validation_epoch_end(self):
-        if not self.trainer.sanity_checking:
-            # construct dict of logged metrics
-            result_dict = {
-                "epoch": float(self.current_epoch),
-                "lr": self.trainer.optimizers[0].param_groups[0]["lr"],
-                "train_loss": torch.stack(self.losses["train"]).mean(),
-                "val_loss": torch.stack(self.losses["val"]).mean(),
-            }
-
-            # add test loss if available
-            if len(self.losses["test"]) > 0:
-                result_dict["test_loss"] = torch.stack(self.losses["test"]).mean()
-
-            # if prediction and derivative are present, also log them separately
-            if len(self.losses["train_y"]) > 0 and len(self.losses["train_neg_dy"]) > 0:
-                result_dict["train_loss_y"] = torch.stack(self.losses["train_y"]).mean()
-                result_dict["train_loss_neg_dy"] = torch.stack(self.losses["train_neg_dy"]).mean()
-                result_dict["val_loss_y"] = torch.stack(self.losses["val_y"]).mean()
-                result_dict["val_loss_neg_dy"] = torch.stack(self.losses["val_neg_dy"]).mean()
-
-                if len(self.losses["test"]) > 0:
-                    result_dict["test_loss_y"] = torch.stack(self.losses["test_y"]).mean()
-                    result_dict["test_loss_neg_dy"] = torch.stack(self.losses["test_neg_dy"]).mean()
-
-            self.log_dict(result_dict, sync_dist=True)
-
-        self._reset_losses_dict()
 
     def test_step(self, batch, batch_idx):
         return self.step(batch, l1_loss, "test")
@@ -202,6 +176,35 @@ class LNNP(LightningModule):
                 pg["lr"] = lr_scale * self.hparams.lr
         super().optimizer_step(*args, **kwargs)
         optimizer.zero_grad()
+
+    def on_validation_epoch_end(self):
+        if not self.trainer.sanity_checking:
+            # construct dict of logged metrics
+            result_dict = {
+                "epoch": float(self.current_epoch),
+                "lr": self.trainer.optimizers[0].param_groups[0]["lr"],
+                "train_loss": torch.stack(self.losses["train"]).mean(),
+                "val_loss": torch.stack(self.losses["val"]).mean(),
+            }
+
+            # add test loss if available
+            if len(self.losses["test"]) > 0:
+                result_dict["test_loss"] = torch.stack(self.losses["test"]).mean()
+
+            # if prediction and derivative are present, also log them separately
+            if len(self.losses["train_y"]) > 0 and len(self.losses["train_neg_dy"]) > 0:
+                result_dict["train_loss_y"] = torch.stack(self.losses["train_y"]).mean()
+                result_dict["train_loss_neg_dy"] = torch.stack(self.losses["train_neg_dy"]).mean()
+                result_dict["val_loss_y"] = torch.stack(self.losses["val_y"]).mean()
+                result_dict["val_loss_neg_dy"] = torch.stack(self.losses["val_neg_dy"]).mean()
+
+                if len(self.losses["test"]) > 0:
+                    result_dict["test_loss_y"] = torch.stack(self.losses["test_y"]).mean()
+                    result_dict["test_loss_neg_dy"] = torch.stack(self.losses["test_neg_dy"]).mean()
+
+            self.log_dict(result_dict, sync_dist=True)
+
+        self._reset_losses_dict()
 
     def _reset_losses_dict(self):
         self.losses = {
