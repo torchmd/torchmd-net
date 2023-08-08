@@ -526,4 +526,4 @@ act_class_mapping = {
     "sigmoid": nn.Sigmoid,
 }
 
-dtype_mapping = {"float": torch.float, "double": torch.float64, "float32": torch.float32, "float64": torch.float64}
+dtype_mapping = {16: torch.float16, 32: torch.float, 64: torch.float64}
