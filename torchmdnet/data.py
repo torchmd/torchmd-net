@@ -3,8 +3,8 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import Subset
 from torch_geometric.loader import DataLoader
-from pytorch_lightning import LightningDataModule
-from pytorch_lightning.utilities import rank_zero_warn
+from lightning import LightningDataModule
+from lightning_utilities.core.rank_zero import rank_zero_warn
 from torchmdnet import datasets
 from torch_geometric.data import Dataset
 from torchmdnet.utils import make_splits, MissingEnergyException

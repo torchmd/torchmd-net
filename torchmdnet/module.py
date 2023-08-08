@@ -5,7 +5,7 @@ from torch.nn.functional import mse_loss, l1_loss
 from torch import Tensor
 from typing import Optional, Dict, Tuple
 
-from pytorch_lightning import LightningModule
+from lightning import LightningModule
 from torchmdnet.models.model import create_model, load_model
 
 
@@ -35,7 +35,7 @@ class LNNP(LightningModule):
         # initialize loss collection
         self.losses = None
         self._reset_losses_dict()
-
+        self.training_step_outputs = []
     def configure_optimizers(self):
         optimizer = AdamW(
             self.model.parameters(),
@@ -65,18 +65,65 @@ class LNNP(LightningModule):
                 s: Optional[Tensor] = None,
                 extra_args: Optional[Dict[str, Tensor]] = None
                 ) -> Tuple[Tensor, Optional[Tensor]]:
-
         return self.model(z, pos, batch=batch, q=q, s=s, extra_args=extra_args)
 
     def training_step(self, batch, batch_idx):
-        return self.step(batch, mse_loss, "train")
+        # Call the super's training_step and then capture the outputs for on_train_epoch_end
+        loss = super(LNNP, self).training_step(batch, batch_idx)
+        self.training_step_outputs.append(loss)
+        return loss
+
+    def on_train_epoch_end(self, training_step_outputs=None):
+        # Handle the resetting of validation dataloaders
+        dm = self.trainer.datamodule
+        if hasattr(dm, "test_dataset") and len(dm.test_dataset) > 0:
+            should_reset = (
+                self.current_epoch % self.hparams.test_interval == 0
+                or (self.current_epoch + 1) % self.hparams.test_interval == 0
+            )
+            if should_reset:
+                # Using the new way to reset dataloaders in PyTorch Lightning v2.0.0
+                self.trainer.validate_loop.setup_data()
+            # Clear the outputs
+            self.training_step_outputs.clear()
 
     def validation_step(self, batch, batch_idx, *args):
         if len(args) == 0 or (len(args) > 0 and args[0] == 0):
             # validation step
-            return self.step(batch, mse_loss, "val")
-        # test step
-        return self.step(batch, l1_loss, "test")
+            output = self.step(batch, mse_loss, "val")
+        else:
+            # test step
+            output = self.step(batch, l1_loss, "test")
+        return output
+
+    def on_validation_epoch_end(self):
+        if not self.trainer.sanity_checking:
+            # construct dict of logged metrics
+            result_dict = {
+                "epoch": float(self.current_epoch),
+                "lr": self.trainer.optimizers[0].param_groups[0]["lr"],
+                "train_loss": torch.stack(self.losses["train"]).mean(),
+                "val_loss": torch.stack(self.losses["val"]).mean(),
+            }
+
+            # add test loss if available
+            if len(self.losses["test"]) > 0:
+                result_dict["test_loss"] = torch.stack(self.losses["test"]).mean()
+
+            # if prediction and derivative are present, also log them separately
+            if len(self.losses["train_y"]) > 0 and len(self.losses["train_neg_dy"]) > 0:
+                result_dict["train_loss_y"] = torch.stack(self.losses["train_y"]).mean()
+                result_dict["train_loss_neg_dy"] = torch.stack(self.losses["train_neg_dy"]).mean()
+                result_dict["val_loss_y"] = torch.stack(self.losses["val_y"]).mean()
+                result_dict["val_loss_neg_dy"] = torch.stack(self.losses["val_neg_dy"]).mean()
+
+                if len(self.losses["test"]) > 0:
+                    result_dict["test_loss_y"] = torch.stack(self.losses["test_y"]).mean()
+                    result_dict["test_loss_neg_dy"] = torch.stack(self.losses["test_neg_dy"]).mean()
+
+            self.log_dict(result_dict, sync_dist=True)
+
+        self._reset_losses_dict()
 
     def test_step(self, batch, batch_idx):
         return self.step(batch, l1_loss, "test")
@@ -97,6 +144,7 @@ class LNNP(LightningModule):
                 s=batch.s if self.hparams.spin else None,
                 extra_args=extra_args
             )
+
 
         loss_y, loss_neg_dy = 0, 0
         if self.hparams.derivative:
@@ -162,52 +210,6 @@ class LNNP(LightningModule):
                 pg["lr"] = lr_scale * self.hparams.lr
         super().optimizer_step(*args, **kwargs)
         optimizer.zero_grad()
-
-    def training_epoch_end(self, training_step_outputs):
-        dm = self.trainer.datamodule
-        if hasattr(dm, "test_dataset") and len(dm.test_dataset) > 0:
-            should_reset = (
-                self.current_epoch % self.hparams.test_interval == 0
-                or (self.current_epoch + 1) % self.hparams.test_interval == 0
-            )
-            if should_reset:
-                # reset validation dataloaders before and after testing epoch, which is faster
-                # than skipping test validation steps by returning None
-                self.trainer.reset_val_dataloader(self)
-
-    def validation_epoch_end(self, validation_step_outputs):
-        if not self.trainer.sanity_checking:
-            # construct dict of logged metrics
-            result_dict = {
-                "epoch": float(self.current_epoch),
-                "lr": self.trainer.optimizers[0].param_groups[0]["lr"],
-                "train_loss": torch.stack(self.losses["train"]).mean(),
-                "val_loss": torch.stack(self.losses["val"]).mean(),
-            }
-
-            # add test loss if available
-            if len(self.losses["test"]) > 0:
-                result_dict["test_loss"] = torch.stack(self.losses["test"]).mean()
-
-            # if prediction and derivative are present, also log them separately
-            if len(self.losses["train_y"]) > 0 and len(self.losses["train_neg_dy"]) > 0:
-                result_dict["train_loss_y"] = torch.stack(self.losses["train_y"]).mean()
-                result_dict["train_loss_neg_dy"] = torch.stack(
-                    self.losses["train_neg_dy"]
-                ).mean()
-                result_dict["val_loss_y"] = torch.stack(self.losses["val_y"]).mean()
-                result_dict["val_loss_neg_dy"] = torch.stack(self.losses["val_neg_dy"]).mean()
-
-                if len(self.losses["test"]) > 0:
-                    result_dict["test_loss_y"] = torch.stack(
-                        self.losses["test_y"]
-                    ).mean()
-                    result_dict["test_loss_neg_dy"] = torch.stack(
-                        self.losses["test_neg_dy"]
-                    ).mean()
-
-            self.log_dict(result_dict, sync_dist=True)
-        self._reset_losses_dict()
 
     def _reset_losses_dict(self):
         self.losses = {

@@ -2,7 +2,7 @@ from torchmdnet.priors.base import BasePrior
 from typing import Optional, Dict
 import torch
 from torch import nn, Tensor
-from pytorch_lightning.utilities import rank_zero_warn
+from lightning_utilities.core.rank_zero import rank_zero_warn
 
 
 class Atomref(BasePrior):
