@@ -80,7 +80,7 @@ class LNNP(LightningModule):
         step_type = (
             {"loss_fn": mse_loss, "stage": "val"}
             if is_val
-            else {"loss_fn": l1_loss, "satage": "test"}
+            else {"loss_fn": l1_loss, "stage": "test"}
         )
         return self.step(batch, **step_type)
 
