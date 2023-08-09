@@ -5,7 +5,11 @@ import logging
 import lightning.pytorch as pl
 from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.loggers import WandbLogger, CSVLogger, TensorBoardLogger
-from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
+from lightning.pytorch.callbacks import (
+    ModelCheckpoint,
+    EarlyStopping,
+    LearningRateMonitor,
+)
 from torchmdnet.module import LNNP
 from torchmdnet import datasets, priors, models
 from torchmdnet.data import DataModule
@@ -14,6 +18,7 @@ from torchmdnet.models.model import create_prior_models
 from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping, dtype_mapping
 from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, number
 import torch
+
 
 def get_args():
     # fmt: off
@@ -161,7 +166,11 @@ def main():
         )
         _logger.append(tb_logger)
     if args.test_interval > 0:
-        print("WARNING: Test set will be evaluated every {} epochs. This will slow down training.".format(args.test_interval))
+        print(
+            "WARNING: Test set will be evaluated every {} epochs. This will slow down training.".format(
+                args.test_interval
+            )
+        )
 
     trainer = pl.Trainer(
         strategy=DDPStrategy(find_unused_parameters=False),
@@ -175,7 +184,9 @@ def main():
         precision=args.precision,
         gradient_clip_val=args.gradient_clipping,
         inference_mode=False,
-        reload_dataloaders_every_n_epochs= 1 if args.test_interval > 0 and args.test_interval < args.num_epochs else -1,
+        reload_dataloaders_every_n_epochs=1
+        if args.test_interval > 0 and args.test_interval < args.num_epochs
+        else -1,
     )
 
     trainer.fit(model, data, ckpt_path=None if args.reset_trainer else args.load_model)
