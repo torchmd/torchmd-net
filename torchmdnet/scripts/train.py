@@ -184,9 +184,8 @@ def main():
         precision=args.precision,
         gradient_clip_val=args.gradient_clipping,
         inference_mode=False,
-        reload_dataloaders_every_n_epochs=1
-        if args.test_interval > 0 and args.test_interval < args.num_epochs
-        else -1,
+        # Test-during-training requires reloading the dataloaders every epoch
+        reload_dataloaders_every_n_epochs=1 if args.test_interval > 0 else -1,
     )
 
     trainer.fit(model, data, ckpt_path=None if args.reset_trainer else args.load_model)
