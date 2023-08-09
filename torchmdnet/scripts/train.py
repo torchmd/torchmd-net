@@ -42,7 +42,7 @@ def get_args():
     parser.add_argument('--train-size', type=number, default=None, help='Percentage/number of samples in training set (None to use all remaining samples)')
     parser.add_argument('--val-size', type=number, default=0.05, help='Percentage/number of samples in validation set (None to use all remaining samples)')
     parser.add_argument('--test-size', type=number, default=0.1, help='Percentage/number of samples in test set (None to use all remaining samples)')
-    parser.add_argument('--test-interval', type=int, default=10, help='Test interval, one test per n epochs (default: 10)')
+    parser.add_argument('--test-interval', type=int, default=-1, help='Test interval, one test per n epochs (default: 10)')
     parser.add_argument('--save-interval', type=int, default=10, help='Save interval, one save per n epochs (default: 10)')
     parser.add_argument('--seed', type=int, default=1, help='random seed (default: 1)')
     parser.add_argument('--num-workers', type=int, default=4, help='Number of workers for data prefetch')
@@ -160,6 +160,8 @@ def main():
             args.log_dir, name="tensorbord", version="", default_hp_metric=False
         )
         _logger.append(tb_logger)
+    if args.test_interval > 0:
+        print("WARNING: Test set will be evaluated every {} epochs. This will slow down training.".format(args.test_interval))
 
     trainer = pl.Trainer(
         strategy=DDPStrategy(find_unused_parameters=False),
