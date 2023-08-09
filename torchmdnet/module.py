@@ -72,12 +72,16 @@ class LNNP(LightningModule):
 
     def validation_step(self, batch, batch_idx, *args):
         # If args is not empty the first (and only) element is the dataloader_idx
-        # We want to test every couple of epochs, but this is not supported by Lightning.
+        # We want to test every number of epochs just for reporting, but this is not supported by Lightning.
         # Instead, we trick it by providing two validation dataloaders and interpreting the second one as test.
+        # The dataloader takes care of sending the two dataloaders only when the second one is needed.
         is_val = len(args) == 0 or (len(args) > 0 and args[0] == 0)
-        loss_fn = mse_loss if is_val else l1_loss
-        step_type = "val" if is_val else "test"
-        return self.step(batch, loss_fn, step_type)
+        step_type = (
+            {"loss_fn": mse_loss, "stage": "val"}
+            if is_val
+            else {"loss_fn": l1_loss, "satage": "test"}
+        )
+        return self.step(batch, **step_type)
 
     def test_step(self, batch, batch_idx):
         return self.step(batch, l1_loss, "test")
@@ -164,18 +168,6 @@ class LNNP(LightningModule):
                 pg["lr"] = lr_scale * self.hparams.lr
         super().optimizer_step(*args, **kwargs)
         optimizer.zero_grad()
-
-    def on_train_epoch_end(self, training_step_outputs=None):
-        # Handle the resetting of validation dataloaders
-        dm = self.trainer.datamodule
-        if hasattr(dm, "test_dataset") and len(dm.test_dataset) > 0:
-            should_reset = (
-                self.current_epoch % self.hparams.test_interval == 0
-                or (self.current_epoch + 1) % self.hparams.test_interval == 0
-            )
-            if should_reset:
-                # Using the new way to reset dataloaders in PyTorch Lightning v2.0.0
-                self.trainer.validate_loop.setup_data()
 
     def on_validation_epoch_end(self):
         if not self.trainer.sanity_checking:
