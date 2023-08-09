@@ -185,7 +185,7 @@ def main():
         gradient_clip_val=args.gradient_clipping,
         inference_mode=False,
         # Test-during-training requires reloading the dataloaders every epoch
-        reload_dataloaders_every_n_epochs=1 if args.test_interval > 0 else -1,
+        reload_dataloaders_every_n_epochs=1 if args.test_interval > 0 else 0,
     )
 
     trainer.fit(model, data, ckpt_path=None if args.reset_trainer else args.load_model)
