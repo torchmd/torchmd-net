@@ -8,7 +8,6 @@ from lightning.pytorch.loggers import WandbLogger, CSVLogger, TensorBoardLogger
 from lightning.pytorch.callbacks import (
     ModelCheckpoint,
     EarlyStopping,
-    LearningRateMonitor,
 )
 from torchmdnet.module import LNNP
 from torchmdnet import datasets, priors, models
@@ -17,7 +16,7 @@ from torchmdnet.models import output_modules
 from torchmdnet.models.model import create_prior_models
 from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping, dtype_mapping
 from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, number
-import torch
+from lightning_utilities.core.rank_zero import rank_zero_warn
 
 
 def get_args():
@@ -166,10 +165,8 @@ def main():
         )
         _logger.append(tb_logger)
     if args.test_interval > 0:
-        print(
-            "WARNING: Test set will be evaluated every {} epochs. This will slow down training.".format(
-                args.test_interval
-            )
+        rank_zero_warn(
+            f"WARNING: Test set will be evaluated every {args.test_interval} epochs. This will slow down training."
         )
 
     trainer = pl.Trainer(
