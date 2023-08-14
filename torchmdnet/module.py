@@ -101,7 +101,9 @@ class LNNP(LightningModule):
         loss_name = loss_fn.__name__
         if self.hparams.derivative and "neg_dy" in batch:
             loss_neg_y = loss_fn(neg_y, batch.neg_dy)
-            loss_neg_y = self._update_loss_with_ema(stage, "neg_dy", loss_name, loss_neg_y)
+            loss_neg_y = self._update_loss_with_ema(
+                stage, "neg_dy", loss_name, loss_neg_y
+            )
         if "y" in batch:
             loss_y = loss_fn(y, batch.y)
             loss_y = self._update_loss_with_ema(stage, "y", loss_name, loss_y)
@@ -115,8 +117,12 @@ class LNNP(LightningModule):
         #   loss_name: name of the loss function
         #   loss: loss value
         alpha = getattr(self.hparams, f"ema_alpha_{type}")
-        if stage in ["train", "val"] and  alpha < 1:
-            ema = self.ema[stage][type][loss_name] if loss_name in self.ema[stage][type] else loss.detach()
+        if stage in ["train", "val"] and alpha < 1:
+            ema = (
+                self.ema[stage][type][loss_name]
+                if loss_name in self.ema[stage][type]
+                else loss.detach()
+            )
             loss = alpha * loss + (1 - alpha) * ema
             self.ema[stage][type][loss_name] = loss.detach()
         return loss
@@ -162,10 +168,17 @@ class LNNP(LightningModule):
             batch.y = batch.y.unsqueeze(1)
         for loss_fn in loss_fn_list:
             step_losses = self._compute_losses(y, neg_dy, batch, loss_fn, stage)
-            total_loss = step_losses["y"] * self.hparams.y_weight + step_losses["neg_dy"] * self.hparams.neg_dy_weight
+            total_loss = (
+                step_losses["y"] * self.hparams.y_weight
+                + step_losses["neg_dy"] * self.hparams.neg_dy_weight
+            )
             loss_name = loss_fn.__name__
-            self._append_to_dict(self.losses[stage]["neg_dy"], loss_name, step_losses["neg_dy"].detach())
-            self._append_to_dict(self.losses[stage]["y"], loss_name, step_losses["y"].detach())
+            self._append_to_dict(
+                self.losses[stage]["neg_dy"], loss_name, step_losses["neg_dy"].detach()
+            )
+            self._append_to_dict(
+                self.losses[stage]["y"], loss_name, step_losses["y"].detach()
+            )
             self._append_to_dict(
                 self.losses[stage]["total"], loss_name, total_loss.detach()
             )
@@ -214,10 +227,10 @@ class LNNP(LightningModule):
             if self.hparams.neg_dy_weight > 0:
                 result_dict |= self._get_mean_loss_dict_for_type("neg_dy")
             # For retro compatibility with previous versions of TorchMD-Net we report some losses twice
-            result_dict ["val_loss"] = result_dict["val_total_mse_loss"]
-            result_dict ["train_loss"] = result_dict["train_total_mse_loss"]
+            result_dict["val_loss"] = result_dict["val_total_mse_loss"]
+            result_dict["train_loss"] = result_dict["train_total_mse_loss"]
             if "test_total_l1_loss" in result_dict:
-                result_dict ["test_loss"] = result_dict["test_total_l1_loss"]
+                result_dict["test_loss"] = result_dict["test_total_l1_loss"]
             self.log_dict(result_dict, sync_dist=True)
 
         self._reset_losses_dict()
