@@ -189,7 +189,7 @@ def main():
 
     # run test set after completing the fit
     model = LNNP.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
-    trainer = pl.Trainer(logger=_logger)
+    trainer = pl.Trainer(logger=_logger, inference_mode=False,)
     trainer.test(model, data)
 
 
