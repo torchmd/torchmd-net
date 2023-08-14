@@ -30,7 +30,7 @@ def get_args():
     parser.add_argument('--inference-batch-size', default=None, type=int, help='Batchsize for validation and tests.')
     parser.add_argument('--lr', default=1e-4, type=float, help='learning rate')
     parser.add_argument('--lr-patience', type=int, default=10, help='Patience for lr-schedule. Patience per eval-interval of validation')
-    parser.add_argument('--lr-metric', type=str, default='val_total_mse_loss', choices=['train_total_mse_loss', 'val_total_mse_loss'], help='Metric to monitor when deciding whether to reduce learning rate')
+    parser.add_argument('--lr-metric', type=str, default='val_loss', choices=['train_loss', 'val_loss'], help='Metric to monitor when deciding whether to reduce learning rate')
     parser.add_argument('--lr-min', type=float, default=1e-6, help='Minimum learning rate before early stop')
     parser.add_argument('--lr-factor', type=float, default=0.8, help='Factor by which to multiply the learning rate when the metric stops improving')
     parser.add_argument('--lr-warmup-steps', type=int, default=0, help='How many steps to warm-up over. Defaults to 0 for no warm-up')
@@ -141,12 +141,12 @@ def main():
 
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.log_dir,
-        monitor="val_total_mse_loss",
+        monitor="val_loss",
         save_top_k=10,  # -1 to save all
         every_n_epochs=args.save_interval,
         filename="{epoch}-{val_loss:.4f}-{test_loss:.4f}",
     )
-    early_stopping = EarlyStopping("val_total_mse_loss", patience=args.early_stopping_patience)
+    early_stopping = EarlyStopping("val_loss", patience=args.early_stopping_patience)
 
     csv_logger = CSVLogger(args.log_dir, name="", version="")
     _logger = [csv_logger]

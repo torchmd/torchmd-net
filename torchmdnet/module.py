@@ -51,7 +51,7 @@ class LNNP(LightningModule):
         )
         lr_scheduler = {
             "scheduler": scheduler,
-            "monitor": getattr(self.hparams, "lr_metric", "val_total_mse_loss"),
+            "monitor": getattr(self.hparams, "lr_metric", "val_loss"),
             "interval": "epoch",
             "frequency": 1,
         }
@@ -75,7 +75,7 @@ class LNNP(LightningModule):
         # If args is not empty the first (and only) element is the dataloader_idx
         # We want to test every number of epochs just for reporting, but this is not supported by Lightning.
         # Instead, we trick it by providing two validation dataloaders and interpreting the second one as test.
-        # The dataloader takes care of sending the two dataloaders only when the second one is needed.
+        # The dataloader takes care of sending the two sets only when the second one is needed.
         is_val = len(args) == 0 or (len(args) > 0 and args[0] == 0)
         step_type = (
             {"loss_fn_list": [l1_loss, mse_loss], "stage": "val"}
@@ -87,7 +87,7 @@ class LNNP(LightningModule):
     def test_step(self, batch, batch_idx):
         return self.step(batch, [l1_loss], "test")
 
-    def _compute_losses(self, y, neg_y, batch, loss_fn):
+    def _compute_losses(self, y, neg_y, batch, loss_fn, stage):
         # Compute the loss for the predicted value and the negative derivative (if available)
         # Args:
         #   y: predicted value
@@ -98,14 +98,17 @@ class LNNP(LightningModule):
         #   loss_y: loss for the predicted value
         #   loss_neg_y: loss for the predicted negative derivative
         loss_y, loss_neg_y = 0.0, 0.0
-        if "y" in batch:
-            loss_y = loss_fn(y, batch.y)
+        loss_name = loss_fn.__name__
         if self.hparams.derivative and "neg_dy" in batch:
             loss_neg_y = loss_fn(neg_y, batch.neg_dy)
+            loss_neg_y = self._update_loss_with_ema(stage, "neg_dy", loss_name, loss_neg_y)
+        if "y" in batch:
+            loss_y = loss_fn(y, batch.y)
+            loss_y = self._update_loss_with_ema(stage, "y", loss_name, loss_y)
         return {"y": loss_y, "neg_dy": loss_neg_y}
 
     def _update_loss_with_ema(self, stage, type, loss_name, loss):
-        # Update the loss with exponential smoothing when applicable
+        # Update the loss using an exponential moving average when applicable
         # Args:
         #   stage: stage of the training (train, val, test)
         #   type: type of loss (y, neg_dy)
@@ -158,14 +161,11 @@ class LNNP(LightningModule):
         if "y" in batch and batch.y.ndim == 1:
             batch.y = batch.y.unsqueeze(1)
         for loss_fn in loss_fn_list:
-            step_losses = self._compute_losses(y, neg_dy, batch, loss_fn)
-            loss_name = loss_fn.__name__
-            for type in "neg_dy", "y":
-                loss = step_losses[type]
-                if getattr(self.hparams, f"{type}_weight") > 0:
-                    loss = self._update_loss_with_ema(stage, type, loss_name, loss)
-                    self._append_to_dict(self.losses[stage][type], loss_name, loss.detach())
+            step_losses = self._compute_losses(y, neg_dy, batch, loss_fn, stage)
             total_loss = step_losses["y"] * self.hparams.y_weight + step_losses["neg_dy"] * self.hparams.neg_dy_weight
+            loss_name = loss_fn.__name__
+            self._append_to_dict(self.losses[stage]["neg_dy"], loss_name, step_losses["neg_dy"].detach())
+            self._append_to_dict(self.losses[stage]["y"], loss_name, step_losses["y"].detach())
             self._append_to_dict(
                 self.losses[stage]["total"], loss_name, total_loss.detach()
             )
@@ -213,6 +213,11 @@ class LNNP(LightningModule):
                 result_dict |= self._get_mean_loss_dict_for_type("y")
             if self.hparams.neg_dy_weight > 0:
                 result_dict |= self._get_mean_loss_dict_for_type("neg_dy")
+            # For retro compatibility with previous versions of TorchMD-Net we report some losses twice
+            result_dict ["val_loss"] = result_dict["val_total_mse_loss"]
+            result_dict ["train_loss"] = result_dict["train_total_mse_loss"]
+            if "test_total_l1_loss" in result_dict:
+                result_dict ["test_loss"] = result_dict["test_total_l1_loss"]
             self.log_dict(result_dict, sync_dist=True)
 
         self._reset_losses_dict()
