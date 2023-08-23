@@ -16,6 +16,7 @@ from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping, dtype_
 from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, number
 import torch
 
+
 def get_args():
     # fmt: off
     parser = argparse.ArgumentParser(description='Training')
@@ -179,9 +180,12 @@ def main():
     trainer.fit(model, data)
 
     # run test set after completing the fit
-    model = LNNP.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
-    data.hparams.update(model.hparams)
+    model = LNNP.load_from_checkpoint(
+        trainer.checkpoint_callback.best_model_path,
+        hparams_file=f"{args.log_dir}/input.yaml",
+    )
     trainer = pl.Trainer(logger=_logger)
+
     trainer.test(model, data)
 
 
