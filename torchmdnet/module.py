@@ -205,13 +205,13 @@ class LNNP(LightningModule):
         # A dict with an entry for each stage (train, val, test) with the mean loss for each loss_fn (e.g. mse_loss)
         # The key for each entry is "stage_type_loss_fn"
         assert self.losses is not None
-        self.mean_losses = {}
+        mean_losses = {}
         for stage in ["train", "val", "test"]:
             for loss_fn_name in self.losses[stage][type].keys():
-                self.mean_losses[stage + "_" + type + "_" + loss_fn_name] = torch.stack(
+                mean_losses[stage + "_" + type + "_" + loss_fn_name] = torch.stack(
                     self.losses[stage][type][loss_fn_name]
                 ).mean()
-        return self.mean_losses
+        return mean_losses
 
     def on_validation_epoch_end(self):
         if not self.trainer.sanity_checking:
