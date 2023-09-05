@@ -77,11 +77,10 @@ class LNNP(LightningModule):
         # Instead, we trick it by providing two validation dataloaders and interpreting the second one as test.
         # The dataloader takes care of sending the two sets only when the second one is needed.
         is_val = len(args) == 0 or (len(args) > 0 and args[0] == 0)
-        step_type = (
-            {"loss_fn_list": [l1_loss, mse_loss], "stage": "val"}
-            if is_val
-            else {"loss_fn_list": [l1_loss], "stage": "test"}
-        )
+        if is_val:
+            step_type = {"loss_fn_list": [l1_loss, mse_loss], "stage": "val"}
+        else:
+            step_type = {"loss_fn_list": [l1_loss], "stage": "test"}
         return self.step(batch, **step_type)
 
     def test_step(self, batch, batch_idx):
