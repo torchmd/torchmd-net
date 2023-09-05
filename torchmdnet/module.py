@@ -168,7 +168,9 @@ class LNNP(LightningModule):
                 + step_losses["neg_dy"] * self.hparams.neg_dy_weight
             )
             loss_name = loss_fn.__name__
-            self.losses[stage]["neg_dy"][loss_name].append(step_losses["neg_dy"].detach())
+            self.losses[stage]["neg_dy"][loss_name].append(
+                step_losses["neg_dy"].detach()
+            )
             self.losses[stage]["y"][loss_name].append(step_losses["y"].detach())
             self.losses[stage]["total"][loss_name].append(total_loss.detach())
         return total_loss
@@ -230,9 +232,7 @@ class LNNP(LightningModule):
             result_dict |= self._get_mean_loss_dict_for_type("y")
             result_dict |= self._get_mean_loss_dict_for_type("neg_dy")
             # Get only test entries
-            result_dict = {
-                k: v for k, v in result_dict.items() if k.startswith("test")
-            }
+            result_dict = {k: v for k, v in result_dict.items() if k.startswith("test")}
             self.log_dict(result_dict, sync_dist=True)
 
     def _reset_losses_dict(self):
