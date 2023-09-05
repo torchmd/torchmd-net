@@ -1,3 +1,4 @@
+from collections import defaultdict
 import torch
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -126,11 +127,6 @@ class LNNP(LightningModule):
             self.ema[stage][type][loss_name] = loss.detach()
         return loss
 
-    def _append_to_dict(self, d, k, v):
-        if k not in d:
-            d[k] = []
-        d[k].append(v)
-
     def step(self, batch, loss_fn_list, stage):
         # Run a forward pass and compute the loss for each loss function
         # If the batch contains the derivative, also compute the loss for the negative derivative
@@ -172,15 +168,9 @@ class LNNP(LightningModule):
                 + step_losses["neg_dy"] * self.hparams.neg_dy_weight
             )
             loss_name = loss_fn.__name__
-            self._append_to_dict(
-                self.losses[stage]["neg_dy"], loss_name, step_losses["neg_dy"].detach()
-            )
-            self._append_to_dict(
-                self.losses[stage]["y"], loss_name, step_losses["y"].detach()
-            )
-            self._append_to_dict(
-                self.losses[stage]["total"], loss_name, total_loss.detach()
-            )
+            self.losses[stage]["neg_dy"][loss_name].append(step_losses["neg_dy"].detach())
+            self.losses[stage]["y"][loss_name].append(step_losses["y"].detach())
+            self.losses[stage]["total"][loss_name].append(total_loss.detach())
         return total_loss
 
     def optimizer_step(self, *args, **kwargs):
@@ -254,7 +244,7 @@ class LNNP(LightningModule):
         for stage in ["train", "val", "test"]:
             self.losses[stage] = {}
             for loss_type in ["total", "y", "neg_dy"]:
-                self.losses[stage][loss_type] = {}
+                self.losses[stage][loss_type] = defaultdict(list)
 
     def _reset_ema_dict(self):
         self.ema = {}
