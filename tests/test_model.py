@@ -3,7 +3,7 @@ from pytest import mark
 import pickle
 from os.path import exists, dirname, join
 import torch
-import lightning.pytorch as pl
+import lightning as pl
 from torchmdnet import models
 from torchmdnet.models.model import create_model
 from torchmdnet.models import output_modules
