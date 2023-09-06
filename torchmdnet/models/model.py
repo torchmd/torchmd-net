@@ -4,11 +4,11 @@ import torch
 from torch.autograd import grad
 from torch import nn, Tensor
 from torch_scatter import scatter
-from pytorch_lightning.utilities import rank_zero_warn
 from torchmdnet.models import output_modules
 from torchmdnet.models.wrappers import AtomFilter
 from torchmdnet.models.utils import dtype_mapping
 from torchmdnet import priors
+from lightning_utilities.core.rank_zero import rank_zero_warn
 import warnings
 
 
