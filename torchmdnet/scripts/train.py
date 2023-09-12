@@ -2,11 +2,13 @@ import sys
 import os
 import argparse
 import logging
-import pytorch_lightning as pl
-from pytorch_lightning.callbacks import EarlyStopping
-from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.loggers import CSVLogger, WandbLogger
-from pytorch_lightning.strategies.ddp import DDPStrategy
+import lightning.pytorch as pl
+from lightning.pytorch.strategies import DDPStrategy
+from lightning.pytorch.loggers import WandbLogger, CSVLogger, TensorBoardLogger
+from lightning.pytorch.callbacks import (
+    ModelCheckpoint,
+    EarlyStopping,
+)
 from torchmdnet.module import LNNP
 from torchmdnet import datasets, priors, models
 from torchmdnet.data import DataModule
@@ -14,7 +16,8 @@ from torchmdnet.models import output_modules
 from torchmdnet.models.model import create_prior_models
 from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping, dtype_mapping
 from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, number
-import torch
+from lightning_utilities.core.rank_zero import rank_zero_warn
+
 
 def get_args():
     # fmt: off
@@ -37,13 +40,13 @@ def get_args():
     parser.add_argument('--ema-alpha-neg-dy', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of dy')
     parser.add_argument('--ngpus', type=int, default=-1, help='Number of GPUs, -1 use all available. Use CUDA_VISIBLE_DEVICES=1, to decide gpus')
     parser.add_argument('--num-nodes', type=int, default=1, help='Number of nodes')
-    parser.add_argument('--precision', type=int, default=32, choices=[16, 32], help='Floating point precision')
+    parser.add_argument('--precision', type=int, default=32, choices=[16, 32, 64], help='Floating point precision')
     parser.add_argument('--log-dir', '-l', default='/tmp/logs', help='log file')
     parser.add_argument('--splits', default=None, help='Npz with splits idx_train, idx_val, idx_test')
     parser.add_argument('--train-size', type=number, default=None, help='Percentage/number of samples in training set (None to use all remaining samples)')
     parser.add_argument('--val-size', type=number, default=0.05, help='Percentage/number of samples in validation set (None to use all remaining samples)')
     parser.add_argument('--test-size', type=number, default=0.1, help='Percentage/number of samples in test set (None to use all remaining samples)')
-    parser.add_argument('--test-interval', type=int, default=10, help='Test interval, one test per n epochs (default: 10)')
+    parser.add_argument('--test-interval', type=int, default=-1, help='Test interval, one test per n epochs (default: 10)')
     parser.add_argument('--save-interval', type=int, default=10, help='Save interval, one save per n epochs (default: 10)')
     parser.add_argument('--seed', type=int, default=1, help='random seed (default: 1)')
     parser.add_argument('--num-workers', type=int, default=4, help='Number of workers for data prefetch')
@@ -67,7 +70,6 @@ def get_args():
     parser.add_argument('--prior-model', type=str, default=None, choices=priors.__all__, help='Which prior model to use')
 
     # architectural args
-    parser.add_argument('--dtype', type=str, default="float32", choices=list(dtype_mapping.keys()), help='Floating point precision. Can be float32 or float64')
     parser.add_argument('--charge', type=bool, default=False, help='Model needs a total charge')
     parser.add_argument('--spin', type=bool, default=False, help='Model needs a spin state')
     parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
@@ -83,7 +85,7 @@ def get_args():
     parser.add_argument('--distance-influence', type=str, default='both', choices=['keys', 'values', 'both', 'none'], help='Where distance information is included inside the attention')
     parser.add_argument('--attn-activation', default='silu', choices=list(act_class_mapping.keys()), help='Attention activation function')
     parser.add_argument('--num-heads', type=int, default=8, help='Number of attention heads')
-    
+
     # TensorNet specific
     parser.add_argument('--equivariance-invariance-group', type=str, default='O(3)', help='Equivariance and invariance group of TensorNet')
 
@@ -158,30 +160,42 @@ def main():
         _logger.append(wandb_logger)
 
     if args.tensorboard_use:
-        tb_logger = pl.loggers.TensorBoardLogger(
+        tb_logger = TensorBoardLogger(
             args.log_dir, name="tensorbord", version="", default_hp_metric=False
         )
         _logger.append(tb_logger)
+    if args.test_interval > 0:
+        rank_zero_warn(
+            f"WARNING: Test set will be evaluated every {args.test_interval} epochs. This will slow down training."
+        )
 
     trainer = pl.Trainer(
         strategy=DDPStrategy(find_unused_parameters=False),
         max_epochs=args.num_epochs,
-        gpus=args.ngpus,
+        accelerator="auto",
+        devices=args.ngpus,
         num_nodes=args.num_nodes,
         default_root_dir=args.log_dir,
-        auto_lr_find=False,
-        resume_from_checkpoint=None if args.reset_trainer else args.load_model,
         callbacks=[early_stopping, checkpoint_callback],
         logger=_logger,
         precision=args.precision,
         gradient_clip_val=args.gradient_clipping,
+        inference_mode=False,
+        # Test-during-training requires reloading the dataloaders every epoch
+        reload_dataloaders_every_n_epochs=1 if args.test_interval > 0 else 0,
     )
 
-    trainer.fit(model, data)
+    trainer.fit(model, data, ckpt_path=None if args.reset_trainer else args.load_model)
 
     # run test set after completing the fit
     model = LNNP.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
-    trainer = pl.Trainer(logger=_logger)
+    trainer = pl.Trainer(
+        logger=_logger,
+        inference_mode=False,
+        accelerator="auto",
+        devices=args.ngpus,
+        num_nodes=args.num_nodes,
+    )
     trainer.test(model, data)
 
 

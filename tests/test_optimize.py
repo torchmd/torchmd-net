@@ -3,7 +3,7 @@ from pytest import mark
 import torch as pt
 from torchmdnet.models.model import create_model
 from torchmdnet.optimize import optimize
-
+from torchmdnet.models.utils import dtype_mapping
 
 @mark.parametrize("device", ["cpu", "cuda"])
 @mark.parametrize("num_atoms", [10, 100])
@@ -39,6 +39,7 @@ def test_gn(device, num_atoms):
         "prior_model": None,
         "output_model": "Scalar",
         "reduce_op": "add",
+        "precision": 32,
     }
     ref_model = create_model(args).to(device)
 
@@ -47,7 +48,7 @@ def test_gn(device, num_atoms):
 
     # Optimize the model
     model = optimize(ref_model).to(device)
-
+    positions.to(dtype_mapping[args["precision"]])
     # Execute the optimize model
     energy, gradient = model(elements, positions)
 

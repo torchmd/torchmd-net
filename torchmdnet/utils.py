@@ -3,7 +3,7 @@ import argparse
 import numpy as np
 import torch
 from os.path import dirname, join, exists
-from pytorch_lightning.utilities import rank_zero_warn
+from lightning_utilities.core.rank_zero import rank_zero_warn
 
 # fmt: off
 # Atomic masses are based on:

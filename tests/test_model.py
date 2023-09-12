@@ -3,10 +3,11 @@ from pytest import mark
 import pickle
 from os.path import exists, dirname, join
 import torch
-import pytorch_lightning as pl
+import lightning as pl
 from torchmdnet import models
 from torchmdnet.models.model import create_model
 from torchmdnet.models import output_modules
+from torchmdnet.models.utils import dtype_mapping
 
 from utils import load_example_args, create_example_batch
 
@@ -14,11 +15,11 @@ from utils import load_example_args, create_example_batch
 @mark.parametrize("model_name", models.__all__)
 @mark.parametrize("use_batch", [True, False])
 @mark.parametrize("explicit_q_s", [True, False])
-@mark.parametrize("dtype", [torch.float32, torch.float64])
-def test_forward(model_name, use_batch, explicit_q_s, dtype):
+@mark.parametrize("precision", [32, 64])
+def test_forward(model_name, use_batch, explicit_q_s, precision):
     z, pos, batch = create_example_batch()
-    pos = pos.to(dtype=dtype)
-    model = create_model(load_example_args(model_name, prior_model=None, dtype=dtype))
+    pos = pos.to(dtype=dtype_mapping[precision])
+    model = create_model(load_example_args(model_name, prior_model=None, precision=precision))
     batch = batch if use_batch else None
     if explicit_q_s:
         model(z, pos, batch=batch, q=None, s=None)
@@ -28,10 +29,10 @@ def test_forward(model_name, use_batch, explicit_q_s, dtype):
 
 @mark.parametrize("model_name", models.__all__)
 @mark.parametrize("output_model", output_modules.__all__)
-@mark.parametrize("dtype", [torch.float32, torch.float64])
-def test_forward_output_modules(model_name, output_model, dtype):
+@mark.parametrize("precision", [32,64])
+def test_forward_output_modules(model_name, output_model, precision):
     z, pos, batch = create_example_batch()
-    args = load_example_args(model_name, remove_prior=True, output_model=output_model, dtype=dtype)
+    args = load_example_args(model_name, remove_prior=True, output_model=output_model, precision=precision)
     model = create_model(args)
     model(z, pos, batch=batch)
 
@@ -148,7 +149,7 @@ def test_forward_output(model_name, output_model, overwrite_reference=False):
 @mark.parametrize("model_name", models.__all__)
 def test_gradients(model_name):
     pl.seed_everything(1234)
-    dtype = torch.float64
+    precision = 64
     output_model = "Scalar"
     # create model and sample batch
     derivative = output_model in ["Scalar", "EquivariantScalar"]
@@ -157,12 +158,12 @@ def test_gradients(model_name):
         remove_prior=True,
         output_model=output_model,
         derivative=derivative,
-        dtype=dtype,
+        precision=precision
     )
     model = create_model(args)
     z, pos, batch = create_example_batch(n_atoms=5)
     pos.requires_grad_(True)
-    pos = pos.to(dtype)
+    pos = pos.to(torch.float64)
     torch.autograd.gradcheck(
         model, (z, pos, batch), eps=1e-4, atol=1e-3, rtol=1e-2, nondet_tol=1e-3
     )
