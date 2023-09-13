@@ -9,6 +9,7 @@ from torchmdnet.models.utils import (
     rbf_class_mapping,
     act_class_mapping,
 )
+
 torch.set_float32_matmul_precision('high')
 torch.backends.cuda.matmul.allow_tf32 = True
 # Creates a skew-symmetric tensor from a vector
@@ -96,6 +97,9 @@ class TensorNet(nn.Module):
             positions internal tensor features will be equivariant and scalar predictions
             will be invariant. O(3) or SO(3).
             (default :obj:`"O(3)"`)
+        static_shapes (bool, optional): Whether to enforce static shapes.
+            Makes the model CUDA-graph compatible.
+            (default: :obj:`True`)
     """
 
     def __init__(
@@ -111,6 +115,7 @@ class TensorNet(nn.Module):
         max_num_neighbors=64,
         max_z=128,
         equivariance_invariance_group="O(3)",
+        static_shapes=True,
         dtype=torch.float32,
     ):
         super(TensorNet, self).__init__()
@@ -171,6 +176,7 @@ class TensorNet(nn.Module):
         # Resize to fit set to false ensures Distance returns a statically-shaped tensor of size max_num_pairs=pos.size*max_num_neigbors
         # negative max_num_pairs argument means "per particle"
         # long_edge_index set to False saves memory and spares some kernel launches by keeping neighbor indices as int32.
+        self.static_shapes = static_shapes
         self.distance = OptimizedDistance(
             cutoff_lower,
             cutoff_upper,
@@ -178,7 +184,7 @@ class TensorNet(nn.Module):
             return_vecs=True,
             loop=True,
             check_errors=False,
-            resize_to_fit=False,
+            resize_to_fit=not self.static_shapes,
             long_edge_index=True,
         )
 
@@ -205,30 +211,28 @@ class TensorNet(nn.Module):
         assert (
             edge_vec is not None
         ), "Distance module did not return directional information"
-        # Distance module returns -1 for non-existing edges, which we replace with the batch size to avoid index out of bounds
-        # This is a trick to avoid having to redimension the tensors based on the number of edges (which can change between calls)
-        mask = (edge_index[0] >= 0).unsqueeze(0).expand_as(edge_index)
-        # I trick the model into thinking that the masked edges pertain to a dummy atom at the end of the list
-        # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
-        edge_index = edge_index * mask + (~mask) * z.size(0)
-        # This looks like a dynamic shape but it is actually not.
-        # I am just copying some values to a tensor called "zp" of size z.size(0)+1
-        zp = torch.cat((z, torch.zeros(1, dtype=z.dtype, device=z.device)), dim=0)
+        # Distance module returns -1 for non-existing edges, to avoid having to resize the tensors when we want to ensure static shapes (for CUDA graphs) we make all non-existing edges pertain to the first atom
+        if self.static_shapes:
+            mask = (edge_index[0] >= 0).unsqueeze(0).expand_as(edge_index)
+            # I trick the model into thinking that the masked edges pertain to the first atom
+            # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
+            edge_index = edge_index * mask
+            edge_weight = edge_weight * mask[0]
+            edge_vec = edge_vec * mask[0].unsqueeze(-1).expand_as(edge_vec)
         edge_attr = self.distance_expansion(edge_weight)
         mask = edge_index[0] != edge_index[1]
         # Normalizing edge vectors by their length can result in NaNs, breaking Autograd.
-        # I avoid dividing by zero by setting the weight of non-existing edges and self loops to 1
+        # I avoid dividing by zero by setting the weight of self edges and self loops to 1
         edge_vec = edge_vec / torch.masked_scatter(torch.ones_like(edge_weight),
             mask, edge_weight
         ).unsqueeze(1)
-        X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr)
+        X = self.tensor_embedding(z, edge_index, edge_weight, edge_vec, edge_attr)
         for layer in self.layers:
             X = layer(X, edge_index, edge_weight, edge_attr)
         I, A, S = decompose_tensor(X)
         x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
         x = self.out_norm(x)
         x = self.act(self.linear((x)))
-        x = x[:-1]  # Remove dummy atom from the output
         return x, None, z, pos, batch
 
 
