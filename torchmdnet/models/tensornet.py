@@ -220,12 +220,10 @@ class TensorNet(nn.Module):
             edge_weight = edge_weight * mask[0]
             edge_vec = edge_vec * mask[0].unsqueeze(-1).expand_as(edge_vec)
         edge_attr = self.distance_expansion(edge_weight)
-        mask = edge_index[0] != edge_index[1]
+        mask = edge_index[0] == edge_index[1]
         # Normalizing edge vectors by their length can result in NaNs, breaking Autograd.
         # I avoid dividing by zero by setting the weight of self edges and self loops to 1
-        edge_vec = edge_vec / torch.masked_scatter(torch.ones_like(edge_weight),
-            mask, edge_weight
-        ).unsqueeze(1)
+        edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
         X = self.tensor_embedding(z, edge_index, edge_weight, edge_vec, edge_attr)
         for layer in self.layers:
             X = layer(X, edge_index, edge_weight, edge_attr)
