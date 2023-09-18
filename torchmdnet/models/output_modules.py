@@ -6,7 +6,7 @@ from torchmdnet.utils import atomic_masses
 from torch_scatter import scatter
 import torch
 from torch import nn
-
+from warnings import warn
 
 __all__ = ["Scalar", "DipoleMoment", "ElectronicSpatialExtent"]
 
