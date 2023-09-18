@@ -16,6 +16,7 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
         super(OutputModel, self).__init__()
         self.allow_prior_model = allow_prior_model
         self.reduce_op = reduce_op
+        self.dim_size = None
 
     def reset_parameters(self):
         pass
@@ -25,7 +26,22 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
         return
 
     def reduce(self, x, batch):
-        return scatter(x, batch, dim=0, reduce=self.reduce_op)
+        is_capturing = (
+            torch.cuda.is_available()
+            and torch.cuda.graphs.is_current_stream_capturing()
+        )
+        if not torch.cuda.is_available() or is_capturing:
+            self.dim_size = batch.max() + 1
+        if is_capturing:
+            assert (
+                self.dim_size is not None
+            ), "Warming up is needed before capturing the model into a CUDA graph"
+            warn(
+                "CUDA graph capture will lock the model to the current number of batches ({}). Chaning this will result in a crash".format(
+                    self.dim_size
+                )
+            )
+        return scatter(x, batch, dim=0, dim_size=self.dim_size, reduce=self.reduce_op)
 
     def post_reduce(self, x):
         return x
