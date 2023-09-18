@@ -30,7 +30,7 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
             torch.cuda.is_available()
             and torch.cuda.graphs.is_current_stream_capturing()
         )
-        if not torch.cuda.is_available() or is_capturing:
+        if not torch.cuda.is_available() or not is_capturing:
             self.dim_size = batch.max() + 1
         if is_capturing:
             assert (
