@@ -62,6 +62,8 @@ def test_torchscript(model_name, device):
 def test_torchscript_dynamic_shapes(model_name, device):
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA not available")
+    if model_name == "tensornet":
+        pytest.skip("TorchScripted TensorNet does not support dynamic shapes.")
     z, pos, batch = create_example_batch()
     model = torch.jit.script(
         create_model(load_example_args(model_name, remove_prior=True, derivative=True))

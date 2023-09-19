@@ -6,7 +6,7 @@ from torch_scatter import scatter
 from torchmdnet.models.utils import (
     NeighborEmbedding,
     CosineCutoff,
-    Distance,
+    OptimizedDistance,
     rbf_class_mapping,
     act_class_mapping,
 )
@@ -103,12 +103,13 @@ class TorchMD_ET(nn.Module):
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels, dtype=dtype)
 
-        self.distance = Distance(
+        self.distance = OptimizedDistance(
             cutoff_lower,
             cutoff_upper,
-            max_num_neighbors=max_num_neighbors,
+            max_num_pairs=-max_num_neighbors,
             return_vecs=True,
             loop=True,
+            long_edge_index=True
         )
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
