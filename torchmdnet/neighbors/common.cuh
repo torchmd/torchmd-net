@@ -71,7 +71,7 @@ struct PairList {
              bool use_periodic)
         : i_curr_pair(zeros({1}, options.dtype(torch::kInt))),
           neighbors(full({2, max_num_pairs}, -1, options.dtype(torch::kInt))),
-          deltas(empty({max_num_pairs, 3}, options)), distances(full({max_num_pairs}, 0, options)),
+          deltas(full({max_num_pairs, 3},0, options)), distances(full({max_num_pairs}, 0, options)),
           loop(loop), include_transpose(include_transpose), use_periodic(use_periodic) {
     }
 };
