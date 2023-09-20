@@ -12,10 +12,11 @@ __all__ = ["Scalar", "DipoleMoment", "ElectronicSpatialExtent"]
 
 
 class OutputModel(nn.Module, metaclass=ABCMeta):
-    def __init__(self, allow_prior_model, reduce_op):
+    def __init__(self, allow_prior_model, reduce_op, num_mols=None):
         super(OutputModel, self).__init__()
         self.allow_prior_model = allow_prior_model
         self.reduce_op = reduce_op
+        self.num_mols = num_mols
 
     def reset_parameters(self):
         pass
@@ -25,7 +26,7 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
         return
 
     def reduce(self, x, batch):
-        return scatter(x, batch, dim=0, reduce=self.reduce_op)
+        return scatter(x, batch, dim=0, dim_size=self.num_mols, reduce=self.reduce_op)
 
     def post_reduce(self, x):
         return x
@@ -38,10 +39,11 @@ class Scalar(OutputModel):
         activation="silu",
         allow_prior_model=True,
         reduce_op="sum",
+        num_mols=None,
         dtype=torch.float
     ):
         super(Scalar, self).__init__(
-            allow_prior_model=allow_prior_model, reduce_op=reduce_op
+            allow_prior_model=allow_prior_model, reduce_op=reduce_op, num_mols=num_mols
         )
         act_class = act_class_mapping[activation]
         self.output_network = nn.Sequential(
@@ -69,10 +71,11 @@ class EquivariantScalar(OutputModel):
         activation="silu",
         allow_prior_model=True,
         reduce_op="sum",
+        num_mols=None,
         dtype=torch.float
     ):
         super(EquivariantScalar, self).__init__(
-            allow_prior_model=allow_prior_model, reduce_op=reduce_op
+            allow_prior_model=allow_prior_model, reduce_op=reduce_op, num_mols=num_mols
         )
         self.output_network = nn.ModuleList(
             [
@@ -101,9 +104,9 @@ class EquivariantScalar(OutputModel):
 
 
 class DipoleMoment(Scalar):
-    def __init__(self, hidden_channels, activation="silu", reduce_op="sum", dtype=torch.float):
+    def __init__(self, hidden_channels, activation="silu", reduce_op="sum", num_mols=None, dtype=torch.float):
         super(DipoleMoment, self).__init__(
-            hidden_channels, activation, allow_prior_model=False, reduce_op=reduce_op, dtype=dtype
+            hidden_channels, activation, allow_prior_model=False, reduce_op=reduce_op, num_mols=num_mols, dtype=dtype
         )
         atomic_mass = torch.from_numpy(atomic_masses).to(dtype)
         self.register_buffer("atomic_mass", atomic_mass)
@@ -122,9 +125,9 @@ class DipoleMoment(Scalar):
 
 
 class EquivariantDipoleMoment(EquivariantScalar):
-    def __init__(self, hidden_channels, activation="silu", reduce_op="sum", dtype=torch.float):
+    def __init__(self, hidden_channels, activation="silu", reduce_op="sum", num_mols=None, dtype=torch.float):
         super(EquivariantDipoleMoment, self).__init__(
-            hidden_channels, activation, allow_prior_model=False, reduce_op=reduce_op, dtype=dtype
+            hidden_channels, activation, allow_prior_model=False, reduce_op=reduce_op, num_mols=num_mols, dtype=dtype
         )
         atomic_mass = torch.from_numpy(atomic_masses).to(dtype)
         self.register_buffer("atomic_mass", atomic_mass)
@@ -144,9 +147,9 @@ class EquivariantDipoleMoment(EquivariantScalar):
 
 
 class ElectronicSpatialExtent(OutputModel):
-    def __init__(self, hidden_channels, activation="silu", reduce_op="sum", dtype=torch.float):
+    def __init__(self, hidden_channels, activation="silu", reduce_op="sum", num_mols=None, dtype=torch.float):
         super(ElectronicSpatialExtent, self).__init__(
-            allow_prior_model=False, reduce_op=reduce_op
+            allow_prior_model=False, reduce_op=reduce_op, num_mols=num_mols
         )
         act_class = act_class_mapping[activation]
         self.output_network = nn.Sequential(
@@ -181,9 +184,9 @@ class EquivariantElectronicSpatialExtent(ElectronicSpatialExtent):
 
 
 class EquivariantVectorOutput(EquivariantScalar):
-    def __init__(self, hidden_channels, activation="silu", reduce_op="sum", dtype=torch.float):
+    def __init__(self, hidden_channels, activation="silu", reduce_op="sum", num_mols=None, dtype=torch.float):
         super(EquivariantVectorOutput, self).__init__(
-            hidden_channels, activation, allow_prior_model=False, reduce_op="sum", dtype=dtype
+            hidden_channels, activation, allow_prior_model=False, reduce_op="sum", num_mols=num_mols, dtype=dtype
         )
 
     def pre_reduce(self, x, v, z, pos, batch):

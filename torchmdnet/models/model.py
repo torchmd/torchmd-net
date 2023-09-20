@@ -102,6 +102,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         args["embedding_dimension"],
         activation=args["activation"],
         reduce_op=args["reduce_op"],
+        num_mols=args.get("num_mols"),
         dtype=dtype,
     )
 
