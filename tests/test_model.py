@@ -82,6 +82,22 @@ def test_torchscript_dynamic_shapes(model_name, device):
             grad_outputs=grad_outputs,
         )[0]
 
+@mark.parametrize("model_name", ["tensornet"])
+def test_cuda_graph_compatible(model_name):
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    z, pos, batch = create_example_batch()
+    model = create_model(load_example_args(model_name, remove_prior=True, derivative=True))
+    z = z.to("cuda")
+    pos = pos.to("cuda")
+    batch = batch.to("cuda")
+    model = torch.jit.script(model).to(device="cuda")
+    y, neg_dy = model(z, pos, batch=batch)
+    model = torch.cuda.make_graphed_callables(model, (z, pos, batch), allow_unused_input=True)
+    y2, neg_dy2 = model(z, pos, batch=batch)
+    assert torch.allclose(y, y2)
+    assert torch.allclose(neg_dy, neg_dy2)
+
 @mark.parametrize("model_name", models.__all__)
 def test_seed(model_name):
     args = load_example_args(model_name, remove_prior=True)
