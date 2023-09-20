@@ -15,16 +15,15 @@ from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension, include_paths, CppExtension
 import torch
 
-# sources are in torchmdnet/neighbors
 neighs = CppExtension(
-    name='neighbors',
+    name='torchmdnet.neighbors.neighbors',
     sources=["torchmdnet/neighbors/neighbors.cpp", "torchmdnet/neighbors/neighbors_cpu.cpp"],
     include_dirs=include_paths(),
     language='c++')
 
 if torch.cuda._is_compiled():
     neighs = CUDAExtension(
-        name='neighbors',
+        name='torchmdnet.neighbors.neighbors',
         sources=["torchmdnet/neighbors/neighbors.cpp", "torchmdnet/neighbors/neighbors_cpu.cpp", "torchmdnet/neighbors/neighbors_cuda.cu"],
         include_dirs=include_paths(),
         language='cuda'
@@ -39,5 +38,6 @@ setup(
         'build_ext': BuildExtension.with_options(no_python_abi_suffix=True)},
     include_package_data=True,
     entry_points={"console_scripts": ["torchmd-train = torchmdnet.scripts.train:main"]},
+    package_data={"torchmdnet": ["neighbors/neighbors.so"]},
 
 )
