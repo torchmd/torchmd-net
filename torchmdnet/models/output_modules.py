@@ -10,6 +10,44 @@ from warnings import warn
 
 __all__ = ["Scalar", "DipoleMoment", "ElectronicSpatialExtent"]
 
+def compile_check_stream_capturing():
+    from torch.utils.cpp_extension import load_inline
+    cpp_source = '''
+    #include <torch/script.h>
+    #include <c10/cuda/CUDAStream.h>
+    #include <cuda_runtime_api.h>
+
+    bool is_stream_capturing() {
+      at::cuda::CUDAStream current_stream = at::cuda::getCurrentCUDAStream();
+      cudaStream_t cuda_stream = current_stream.stream();
+      cudaStreamCaptureStatus capture_status;
+      cudaError_t err = cudaStreamGetCaptureInfo(cuda_stream, &capture_status, nullptr);
+
+      if (err != cudaSuccess) {
+        throw std::runtime_error(cudaGetErrorString(err));
+      }
+
+      return capture_status == cudaStreamCaptureStatus::cudaStreamCaptureStatusActive;
+    }
+    static auto registry =
+      torch::RegisterOperators()
+        .op("torch_extension::is_stream_capturing", &is_stream_capturing);
+    '''
+
+    # Create an inline extension
+    torch_extension = load_inline(
+        "is_stream_capturing",
+        cpp_sources=cpp_source,
+        functions=["is_stream_capturing"],
+        with_cuda=True,
+        verbose=True,
+    )
+
+compile_check_stream_capturing()
+@torch.jit.script
+def check_stream_capturing():
+    return torch.ops.torch_extension.is_stream_capturing()
+
 
 class OutputModel(nn.Module, metaclass=ABCMeta):
     def __init__(self, allow_prior_model, reduce_op):
@@ -28,7 +66,7 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
     def reduce(self, x, batch):
         is_capturing = (
             torch.cuda.is_available()
-            and torch.cuda.graphs.is_current_stream_capturing()
+            and check_stream_capturing()
         )
         if not torch.cuda.is_available() or not is_capturing:
             self.dim_size = batch.max() + 1
