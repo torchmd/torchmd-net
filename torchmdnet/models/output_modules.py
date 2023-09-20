@@ -63,7 +63,7 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
         super(OutputModel, self).__init__()
         self.allow_prior_model = allow_prior_model
         self.reduce_op = reduce_op
-        self.dim_size = None
+        self.dim_size = 0
 
     def reset_parameters(self):
         pass
@@ -78,10 +78,10 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
             and check_stream_capturing()
         )
         if not x.is_cuda or not is_capturing:
-            self.dim_size = batch.max() + 1
+            self.dim_size = int(batch.max().item() + 1)
         if is_capturing:
             assert (
-                self.dim_size is not None
+                self.dim_size == 0
             ), "Warming up is needed before capturing the model into a CUDA graph"
             warn(
                 "CUDA graph capture will lock the model to the current number of batches ({}). Chaning this will result in a crash".format(
