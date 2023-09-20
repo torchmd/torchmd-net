@@ -11,39 +11,40 @@ from warnings import warn
 __all__ = ["Scalar", "DipoleMoment", "ElectronicSpatialExtent"]
 
 def compile_check_stream_capturing():
+    """
+    Compiles the check_stream_capturing function.
+    This is required because the builtin torch function that does this is not scriptable.
+    """
+    # Check if the function is already compiled
+    if hasattr(torch.ops.torch_extension, "is_stream_capturing"):
+        return
     from torch.utils.cpp_extension import load_inline
     cpp_source = '''
 #include <torch/script.h>
-
 #if defined(WITH_CUDA)
 #include <c10/cuda/CUDAStream.h>
 #include <cuda_runtime_api.h>
 #endif
-
 bool is_stream_capturing() {
 #if defined(WITH_CUDA)
-  at::cuda::CUDAStream current_stream = at::cuda::getCurrentCUDAStream();
-  cudaStream_t cuda_stream = current_stream.stream();
+  auto current_stream = at::cuda::getCurrentCUDAStream().stream();
   cudaStreamCaptureStatus capture_status;
-  cudaError_t err = cudaStreamGetCaptureInfo(cuda_stream, &capture_status, nullptr);
-
+  cudaError_t err = cudaStreamGetCaptureInfo(current_stream, &capture_status, nullptr);
   if (err != cudaSuccess) {
     throw std::runtime_error(cudaGetErrorString(err));
   }
-
   return capture_status == cudaStreamCaptureStatus::cudaStreamCaptureStatusActive;
 #else
   return false;
 #endif
 }
 
-static auto registry =
-  torch::RegisterOperators()
+static auto registry = torch::RegisterOperators()
     .op("torch_extension::is_stream_capturing", &is_stream_capturing);
 '''
 
     # Create an inline extension
-    torch_extension = load_inline(
+    load_inline(
         "is_stream_capturing",
         cpp_sources=cpp_source,
         functions=["is_stream_capturing"],
@@ -55,6 +56,12 @@ static auto registry =
 compile_check_stream_capturing()
 @torch.jit.script
 def check_stream_capturing():
+    """
+    Returns True if the current CUDA stream is capturing.
+    Returns False if CUDA is not available or the current stream is not capturing.
+
+    This utility is required because the builtin torch function that does this is not scriptable.
+    """
     return torch.ops.torch_extension.is_stream_capturing()
 
 
