@@ -20,3 +20,4 @@ dependencies:
   - pytest
   - psutil
   - ninja
+  - gxx
