@@ -13,33 +13,42 @@ __all__ = ["Scalar", "DipoleMoment", "ElectronicSpatialExtent"]
 def compile_check_stream_capturing():
     from torch.utils.cpp_extension import load_inline
     cpp_source = '''
-    #include <torch/script.h>
-    #include <c10/cuda/CUDAStream.h>
-    #include <cuda_runtime_api.h>
+#include <torch/script.h>
 
-    bool is_stream_capturing() {
-      at::cuda::CUDAStream current_stream = at::cuda::getCurrentCUDAStream();
-      cudaStream_t cuda_stream = current_stream.stream();
-      cudaStreamCaptureStatus capture_status;
-      cudaError_t err = cudaStreamGetCaptureInfo(cuda_stream, &capture_status, nullptr);
+#if defined(WITH_CUDA)
+#include <c10/cuda/CUDAStream.h>
+#include <cuda_runtime_api.h>
+#endif
 
-      if (err != cudaSuccess) {
-        throw std::runtime_error(cudaGetErrorString(err));
-      }
+bool is_stream_capturing() {
+#if defined(WITH_CUDA)
+  at::cuda::CUDAStream current_stream = at::cuda::getCurrentCUDAStream();
+  cudaStream_t cuda_stream = current_stream.stream();
+  cudaStreamCaptureStatus capture_status;
+  cudaError_t err = cudaStreamGetCaptureInfo(cuda_stream, &capture_status, nullptr);
 
-      return capture_status == cudaStreamCaptureStatus::cudaStreamCaptureStatusActive;
-    }
-    static auto registry =
-      torch::RegisterOperators()
-        .op("torch_extension::is_stream_capturing", &is_stream_capturing);
-    '''
+  if (err != cudaSuccess) {
+    throw std::runtime_error(cudaGetErrorString(err));
+  }
+
+  return capture_status == cudaStreamCaptureStatus::cudaStreamCaptureStatusActive;
+#else
+  return false;
+#endif
+}
+
+static auto registry =
+  torch::RegisterOperators()
+    .op("torch_extension::is_stream_capturing", &is_stream_capturing);
+'''
 
     # Create an inline extension
     torch_extension = load_inline(
         "is_stream_capturing",
         cpp_sources=cpp_source,
         functions=["is_stream_capturing"],
-        with_cuda=True,
+        with_cuda=torch.cuda.is_available(),
+        extra_cflags=["-DWITH_CUDA"] if torch.cuda.is_available() else None,
         verbose=True,
     )
 
@@ -65,10 +74,10 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
 
     def reduce(self, x, batch):
         is_capturing = (
-            torch.cuda.is_available()
+            x.is_cuda
             and check_stream_capturing()
         )
-        if not torch.cuda.is_available() or not is_capturing:
+        if not x.is_cuda or not is_capturing:
             self.dim_size = batch.max() + 1
         if is_capturing:
             assert (
