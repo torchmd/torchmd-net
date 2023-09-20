@@ -1,7 +1,7 @@
 import os.path as osp
 import torch
 import importlib.machinery
-library = "neighbors"
+library = "torchmdnet_neighbors"
 # Find the specification for the library
 spec = importlib.machinery.PathFinder().find_spec(
     library, [osp.dirname(__file__)]
@@ -11,4 +11,4 @@ if spec is not None:
     torch.ops.load_library(spec.origin)
 else:
     raise ImportError(f"Could not find module '{library}' in {osp.dirname(__file__)}")
-get_neighbor_pairs_kernel = torch.ops.neighbors.get_neighbor_pairs
+get_neighbor_pairs_kernel = torch.ops.torchmdnet_neighbors.get_neighbor_pairs
