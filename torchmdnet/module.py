@@ -212,9 +212,9 @@ class LNNP(LightningModule):
                 "epoch": float(self.current_epoch),
                 "lr": self.trainer.optimizers[0].param_groups[0]["lr"],
             }
-            result_dict |= self._get_mean_loss_dict_for_type("total")
-            result_dict |= self._get_mean_loss_dict_for_type("y")
-            result_dict |= self._get_mean_loss_dict_for_type("neg_dy")
+            result_dict.update(self._get_mean_loss_dict_for_type("total"))
+            result_dict.update(self._get_mean_loss_dict_for_type("y"))
+            result_dict.update(self._get_mean_loss_dict_for_type("neg_dy"))
             # For retro compatibility with previous versions of TorchMD-Net we report some losses twice
             result_dict["val_loss"] = result_dict["val_total_mse_loss"]
             result_dict["train_loss"] = result_dict["train_total_mse_loss"]
@@ -228,9 +228,9 @@ class LNNP(LightningModule):
         # Log all test losses
         if not self.trainer.sanity_checking:
             result_dict = {}
-            result_dict |= self._get_mean_loss_dict_for_type("total")
-            result_dict |= self._get_mean_loss_dict_for_type("y")
-            result_dict |= self._get_mean_loss_dict_for_type("neg_dy")
+            result_dict.update(self._get_mean_loss_dict_for_type("total"))
+            result_dict.update(self._get_mean_loss_dict_for_type("y"))
+            result_dict.update(self._get_mean_loss_dict_for_type("neg_dy"))
             # Get only test entries
             result_dict = {k: v for k, v in result_dict.items() if k.startswith("test")}
             self.log_dict(result_dict, sync_dist=True)
