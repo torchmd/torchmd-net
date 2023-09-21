@@ -88,10 +88,10 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
             self.dim_size = int(batch.max().item() + 1)
         if is_capturing:
             assert (
-                self.dim_size == 0
+                self.dim_size > 0
             ), "Warming up is needed before capturing the model into a CUDA graph"
             warn(
-                "CUDA graph capture will lock the model to the current number of batches ({}). Chaning this will result in a crash".format(
+                "CUDA graph capture will lock the batch to the current number of samples ({}). Changing this will result in a crash".format(
                     self.dim_size
                 )
             )
