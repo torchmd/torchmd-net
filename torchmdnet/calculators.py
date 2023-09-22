@@ -53,24 +53,31 @@ class External:
         self.energy = None
         self.forces = None
         self.pos = None
+        self.stream = None
+
+    def _init_cuda_graph(self):
+        self.stream = torch.cuda.Stream()
+        self.cuda_graph = torch.cuda.CUDAGraph()
+        with torch.cuda.stream(self.stream):
+            for _ in range(3):
+                self.energy, self.forces = self.model(self.embeddings, self.pos, self.batch)
+            with torch.cuda.graph(self.cuda_graph):
+                self.energy, self.forces = self.model(self.embeddings, self.pos, self.batch)
+    torch.cuda.make_graphed_callables
     def calculate(self, pos, box):
         pos = pos.to(self.device).type(torch.float32).reshape(-1, 3)
         if self.use_cuda_graph:
             if self.pos is None:
                 self.pos = pos.clone()
+                self.pos.requires_grad_(False)
             self.pos.copy_(pos)
-            self.pos.grad = None
+            self.pos.requires_grad_(pos.requires_grad)
             if self.cuda_graph is None:
-                self.cuda_graph = torch.cuda.CUDAGraph()
-                with torch.cuda.stream(torch.cuda.Stream()):
-                    for _ in range(3):
-                        self.energy, self.forces = self.model(self.embeddings, self.pos, self.batch)
-                    with torch.cuda.graph(self.cuda_graph):
-                        self.energy, self.forces = self.model(self.embeddings, self.pos, self.batch)
-            with torch.cuda.stream(torch.cuda.Stream()):
+                self._init_cuda_graph()
+            with torch.cuda.stream(self.stream):
                 self.cuda_graph.replay()
         else:
             self.energy, self.forces = self.model(self.embeddings, pos, self.batch)
         return self.output_transformer(
-            self.energy.detach(), self.forces.reshape(-1, self.n_atoms, 3).detach()
+            self.energy.clone().detach(), self.forces.clone().reshape(-1, self.n_atoms, 3).detach()
         )
