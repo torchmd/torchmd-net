@@ -27,7 +27,7 @@ class External:
     forces, and return the transformed energy and the transformed forces.
     """
 
-    def __init__(self, netfile, embeddings, device="cpu", output_transform=None):
+    def __init__(self, netfile, embeddings, device="cpu", output_transform=None, use_cuda_graph=False):
         self.model = load_model(netfile, device=device, derivative=True)
         self.device = device
         self.n_atoms = embeddings.size(1)
@@ -46,21 +46,29 @@ class External:
             self.output_transformer = tranforms[output_transform]
         else:
             self.output_transformer = eval(output_transform)
-        self.cuda_graph = torch.cuda.CUDAGraph() if torch.cuda.is_available() else None
+        if not torch.cuda.is_available() and use_cuda_graph:
+            raise ValueError("CUDA graphs are only available if CUDA is")
+        self.use_cuda_graph = use_cuda_graph
+        self.cuda_graph = None
         self.energy = None
         self.forces = None
         self.pos = None
     def calculate(self, pos, box):
         pos = pos.to(self.device).type(torch.float32).reshape(-1, 3)
-        if self.cuda_graph is not None:
+        if self.use_cuda_graph:
             if self.pos is None:
                 self.pos = pos.clone()
             self.pos.copy_(pos)
+            self.pos.grad = None
+            if self.cuda_graph is None:
+                self.cuda_graph = torch.cuda.CUDAGraph()
+                with torch.cuda.stream(torch.cuda.Stream()):
+                    for _ in range(3):
+                        self.energy, self.forces = self.model(self.embeddings, self.pos, self.batch)
+                    with torch.cuda.graph(self.cuda_graph):
+                        self.energy, self.forces = self.model(self.embeddings, self.pos, self.batch)
             with torch.cuda.stream(torch.cuda.Stream()):
-                for _ in range(3):
-                    self.energy, self.forces = self.model(self.embeddings, self.pos, self.batch)
-                with torch.cuda.graph(self.cuda_graph):
-                    self.energy, self.forces = self.model(self.embeddings, self.pos, self.batch)
+                self.cuda_graph.replay()
         else:
             self.energy, self.forces = self.model(self.embeddings, pos, self.batch)
         return self.output_transformer(
