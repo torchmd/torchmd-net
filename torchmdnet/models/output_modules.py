@@ -1,13 +1,12 @@
 from abc import abstractmethod, ABCMeta
 from torch_scatter import scatter
 from typing import Optional
-from torchmdnet.models.utils import act_class_mapping, GatedEquivariantBlock
+from torchmdnet.models.utils import act_class_mapping, GatedEquivariantBlock, check_stream_capturing
 from torchmdnet.utils import atomic_masses
 from torch_scatter import scatter
 import torch
 from torch import nn
 from warnings import warn
-from utils import check_stream_capturing
 __all__ = ["Scalar", "DipoleMoment", "ElectronicSpatialExtent"]
 
 
