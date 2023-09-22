@@ -521,7 +521,7 @@ class GatedEquivariantBlock(nn.Module):
             x = self.act(x)
         return x, v
 
-def compile_check_stream_capturing():
+def _compile_check_stream_capturing():
     """
     Compiles the check_stream_capturing function.
     This is required because the builtin torch function that does this is not scriptable.
@@ -572,7 +572,7 @@ def check_stream_capturing():
 
     This utility is required because the builtin torch function that does this is not scriptable.
     """
-    compile_check_stream_capturing()
+    _compile_check_stream_capturing()
     return torch.ops.torch_extension.is_stream_capturing()
 
 rbf_class_mapping = {"gauss": GaussianSmearing, "expnorm": ExpNormalSmearing}

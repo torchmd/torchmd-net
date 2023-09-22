@@ -7,7 +7,7 @@ from torch_scatter import scatter
 import torch
 from torch import nn
 from warnings import warn
-
+from utils import check_stream_capturing
 __all__ = ["Scalar", "DipoleMoment", "ElectronicSpatialExtent"]
 
 
