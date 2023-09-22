@@ -82,6 +82,48 @@ def test_torchscript_dynamic_shapes(model_name, device):
             grad_outputs=grad_outputs,
         )[0]
 
+#Currently only tensornet is CUDA graph compatible
+@mark.parametrize("model_name", ["tensornet"])
+def test_cuda_graph_compatible(model_name):
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    z, pos, batch = create_example_batch()
+    args = {"model": model_name,
+            "embedding_dimension": 128,
+            "num_layers": 2,
+            "num_rbf": 32,
+            "rbf_type": "expnorm",
+            "trainable_rbf": False,
+            "activation": "silu",
+            "cutoff_lower": 0.0,
+            "cutoff_upper": 5.0,
+            "max_z": 100,
+            "max_num_neighbors": 128,
+            "equivariance_invariance_group": "O(3)",
+            "prior_model": None,
+            "atom_filter": -1,
+            "derivative": True,
+            "output_model": "Scalar",
+            "reduce_op": "sum",
+            "precision": 32 }
+    model = create_model(args).to(device="cuda")
+    z = z.to("cuda")
+    pos = pos.to("cuda").requires_grad_(True)
+    batch = batch.to("cuda")
+    model = torch.jit.script(model).to(device="cuda")
+    #Save and load the model, do not use a file
+    import io
+    buffer = io.BytesIO()
+    torch.jit.save(model, buffer)
+    buffer.seek(0)
+    model = torch.jit.load(buffer)
+    for _ in range(0, 5):
+        y, neg_dy = model(z, pos, batch=batch)
+    model = torch.cuda.make_graphed_callables(model, (z, pos, batch), allow_unused_input=True)
+    y2, neg_dy2 = model(z, pos, batch=batch)
+    assert torch.allclose(y, y2)
+    assert torch.allclose(neg_dy, neg_dy2)
+
 @mark.parametrize("model_name", models.__all__)
 def test_seed(model_name):
     args = load_example_args(model_name, remove_prior=True)
