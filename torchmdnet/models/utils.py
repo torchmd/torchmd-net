@@ -563,7 +563,7 @@ static auto registry = torch::RegisterOperators()
         extra_cflags=["-DWITH_CUDA"] if torch.cuda.is_available() else None,
         verbose=True,
     )
-
+_compile_check_stream_capturing()
 @torch.jit.script
 def check_stream_capturing():
     """
@@ -572,7 +572,6 @@ def check_stream_capturing():
 
     This utility is required because the builtin torch function that does this is not scriptable.
     """
-    _compile_check_stream_capturing()
     return torch.ops.torch_extension.is_stream_capturing()
 
 rbf_class_mapping = {"gauss": GaussianSmearing, "expnorm": ExpNormalSmearing}
