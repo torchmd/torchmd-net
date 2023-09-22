@@ -46,11 +46,23 @@ class External:
             self.output_transformer = tranforms[output_transform]
         else:
             self.output_transformer = eval(output_transform)
-
+        self.cuda_graph = torch.cuda.CUDAGraph() if torch.cuda.is_available() else None
+        self.energy = None
+        self.forces = None
+        self.pos = None
     def calculate(self, pos, box):
         pos = pos.to(self.device).type(torch.float32).reshape(-1, 3)
-        energy, forces = self.model(self.embeddings, pos, self.batch)
-
+        if self.cuda_graph is not None:
+            if self.pos is None:
+                self.pos = pos.clone()
+            self.pos.copy_(pos)
+            with torch.cuda.stream(torch.cuda.Stream()):
+                for _ in range(3):
+                    self.energy, self.forces = self.model(self.embeddings, self.pos, self.batch)
+                with torch.cuda.graph(self.cuda_graph):
+                    self.energy, self.forces = self.model(self.embeddings, self.pos, self.batch)
+        else:
+            self.energy, self.forces = self.model(self.embeddings, pos, self.batch)
         return self.output_transformer(
-            energy.detach(), forces.reshape(-1, self.n_atoms, 3).detach()
+            self.energy.detach(), self.forces.reshape(-1, self.n_atoms, 3).detach()
         )
