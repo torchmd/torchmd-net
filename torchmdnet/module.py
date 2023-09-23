@@ -107,7 +107,10 @@ class LNNP(LightningModule):
         if "y" in batch:
             loss_y = loss_fn(y, batch.y)
             loss_y = self._update_loss_with_ema(stage, "y", loss_name, loss_y)
-        return {"y": loss_y, "neg_dy": loss_neg_y}
+        return {
+            "y": loss_y if torch.is_tensor(loss_y) else torch.zeros(()),
+            "neg_dy": loss_neg_y if torch.is_tensor(loss_neg_y) else torch.zeros(()),
+        }
 
     def _update_loss_with_ema(self, stage, type, loss_name, loss):
         # Update the loss using an exponential moving average when applicable
