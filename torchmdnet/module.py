@@ -221,11 +221,6 @@ class LNNP(LightningModule):
             result_dict.update(self._get_mean_loss_dict_for_type("total"))
             result_dict.update(self._get_mean_loss_dict_for_type("y"))
             result_dict.update(self._get_mean_loss_dict_for_type("neg_dy"))
-            # For retro compatibility with previous versions of TorchMD-Net we report some losses twice
-            result_dict["val_loss"] = result_dict["val_total_mse_loss"]
-            result_dict["train_loss"] = result_dict["train_total_mse_loss"]
-            if "test_total_l1_loss" in result_dict:
-                result_dict["test_loss"] = result_dict["test_total_l1_loss"]
             self.log_dict(result_dict, sync_dist=True)
 
         self._reset_losses_dict()
