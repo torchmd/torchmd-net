@@ -107,10 +107,7 @@ class LNNP(LightningModule):
         if "y" in batch:
             loss_y = loss_fn(y, batch.y)
             loss_y = self._update_loss_with_ema(stage, "y", loss_name, loss_y)
-        return {
-            "y": loss_y if torch.is_tensor(loss_y) else torch.zeros(()),
-            "neg_dy": loss_neg_y if torch.is_tensor(loss_neg_y) else torch.zeros(()),
-        }
+        return {"y": loss_y, "neg_dy": loss_neg_y}
 
     def _update_loss_with_ema(self, stage, type, loss_name, loss):
         # Update the loss using an exponential moving average when applicable
@@ -166,15 +163,21 @@ class LNNP(LightningModule):
             batch.y = batch.y.unsqueeze(1)
         for loss_fn in loss_fn_list:
             step_losses = self._compute_losses(y, neg_dy, batch, loss_fn, stage)
+
+            loss_name = loss_fn.__name__
+
+            if self.hparams.neg_dy_weight > 0:
+                self.losses[stage]["neg_dy"][loss_name].append(
+                    step_losses["neg_dy"].detach()
+                )
+
+            if self.hparams.y_weight > 0:
+                self.losses[stage]["y"][loss_name].append(step_losses["y"].detach())
+
             total_loss = (
                 step_losses["y"] * self.hparams.y_weight
                 + step_losses["neg_dy"] * self.hparams.neg_dy_weight
             )
-            loss_name = loss_fn.__name__
-            self.losses[stage]["neg_dy"][loss_name].append(
-                step_losses["neg_dy"].detach()
-            )
-            self.losses[stage]["y"][loss_name].append(step_losses["y"].detach())
             self.losses[stage]["total"][loss_name].append(total_loss.detach())
         return total_loss
 
