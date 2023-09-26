@@ -17,6 +17,7 @@ tranforms = {
     ),  # Hartree -> kcal/mol, Hartree/A -> kcal/mol/A
 }
 
+
 class External:
     """
     This is an adapter to use TorchMD-Net models in TorchMD.
@@ -38,7 +39,16 @@ class External:
     cuda_graph_warmup_steps : int, optional
         Number of steps to run as warmup before recording the CUDA graph. Default: 12
     """
-    def __init__(self, netfile, embeddings, device="cpu", output_transform=None, use_cuda_graph=False, cuda_graph_warmup_steps=12):
+
+    def __init__(
+        self,
+        netfile,
+        embeddings,
+        device="cpu",
+        output_transform=None,
+        use_cuda_graph=False,
+        cuda_graph_warmup_steps=12,
+    ):
         self.model = load_model(netfile, device=device, derivative=True)
         self.device = device
         self.n_atoms = embeddings.size(1)
@@ -71,14 +81,24 @@ class External:
         self.cuda_graph = torch.cuda.CUDAGraph()
         with torch.cuda.stream(stream):
             for _ in range(self.cuda_graph_warmup_steps):
-                self.energy, self.forces = self.model(self.embeddings, self.pos, self.batch)
+                self.energy, self.forces = self.model(
+                    self.embeddings, self.pos, self.batch
+                )
             with torch.cuda.graph(self.cuda_graph):
-                self.energy, self.forces = self.model(self.embeddings, self.pos, self.batch)
+                self.energy, self.forces = self.model(
+                    self.embeddings, self.pos, self.batch
+                )
+
     def calculate(self, pos, box):
         pos = pos.to(self.device).type(torch.float32).reshape(-1, 3)
         if self.use_cuda_graph:
             if self.pos is None:
-                self.pos = pos.clone().to(self.device).detach().requires_grad_(pos.requires_grad)
+                self.pos = (
+                    pos.clone()
+                    .to(self.device)
+                    .detach()
+                    .requires_grad_(pos.requires_grad)
+                )
             if self.cuda_graph is None:
                 self._init_cuda_graph()
             with torch.no_grad():
@@ -87,5 +107,6 @@ class External:
         else:
             self.energy, self.forces = self.model(self.embeddings, pos, self.batch)
         return self.output_transformer(
-            self.energy.clone().detach(), self.forces.clone().reshape(-1, self.n_atoms, 3).detach()
+            self.energy.clone().detach(),
+            self.forces.clone().reshape(-1, self.n_atoms, 3).detach(),
         )
