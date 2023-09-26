@@ -65,10 +65,9 @@ class External:
         self.energy = None
         self.forces = None
         self.pos = None
-        self.stream = None
 
     def _init_cuda_graph(self):
-        self.stream = torch.cuda.Stream()
+        stream = torch.cuda.Stream()
         self.cuda_graph = torch.cuda.CUDAGraph()
         with torch.cuda.stream(stream):
             for _ in range(self.cuda_graph_warmup_steps):
@@ -80,13 +79,11 @@ class External:
         pos = pos.to(self.device).type(torch.float32).reshape(-1, 3)
         if self.use_cuda_graph:
             if self.pos is None:
-                self.pos = pos.clone()
-                self.pos.requires_grad_(False)
-            self.pos.copy_(pos)
-            self.pos.requires_grad_(pos.requires_grad)
+                self.pos = pos.clone().to(self.device).detach().requires_grad_(pos.requires_grad)
             if self.cuda_graph is None:
                 self._init_cuda_graph()
-            with torch.cuda.stream(self.stream):
+            with torch.no_grad():
+                self.pos.copy_(pos)
                 self.cuda_graph.replay()
         else:
             self.energy, self.forces = self.model(self.embeddings, pos, self.batch)
