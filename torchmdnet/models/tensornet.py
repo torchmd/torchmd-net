@@ -12,8 +12,9 @@ from torchmdnet.models.utils import (
 
 torch.set_float32_matmul_precision('high')
 torch.backends.cuda.matmul.allow_tf32 = True
-# Creates a skew-symmetric tensor from a vector
-def vector_to_skewtensor(vector):
+
+def _vector_to_skewtensor(vector):
+    """Creates a skew-symmetric tensor from a vector."""
     batch_size = vector.size(0)
     zero = torch.zeros(batch_size, device=vector.device, dtype=vector.dtype)
     tensor = torch.stack(
@@ -33,9 +34,8 @@ def vector_to_skewtensor(vector):
     tensor = tensor.view(-1, 3, 3)
     return tensor.squeeze(0)
 
-
-# Creates a symmetric traceless tensor from the outer product of a vector with itself
-def vector_to_symtensor(vector):
+def _vector_to_symtensor(vector):
+    """Creates a symmetric traceless tensor from the outer product of a vector with itself."""
     tensor = torch.matmul(vector.unsqueeze(-1), vector.unsqueeze(-2))
     I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)[
         ..., None, None
@@ -43,9 +43,8 @@ def vector_to_symtensor(vector):
     S = 0.5 * (tensor + tensor.transpose(-2, -1)) - I
     return S
 
-
-# Full tensor decomposition into irreducible components
-def decompose_tensor(tensor):
+def _decompose_tensor(tensor):
+    """Full tensor decomposition into irreducible components."""
     I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)[
         ..., None, None
     ] * torch.eye(3, 3, device=tensor.device, dtype=tensor.dtype)
@@ -53,23 +52,20 @@ def decompose_tensor(tensor):
     S = 0.5 * (tensor + tensor.transpose(-2, -1)) - I
     return I, A, S
 
-
-# Modifies tensor by multiplying invariant features to irreducible components
-def new_radial_tensor(I, A, S, f_I, f_A, f_S):
+def _new_radial_tensor(I, A, S, f_I, f_A, f_S):
+    """Creates new tensors by multiplying invariant features to irreducible components."""
     I = f_I[..., None, None] * I
     A = f_A[..., None, None] * A
     S = f_S[..., None, None] * S
     return I, A, S
 
-
-# Computes Frobenius norm
-def tensor_norm(tensor):
+def _tensor_norm(tensor):
+    """Computes Frobenius norm."""
     return (tensor**2).sum((-2, -1))
 
-
 class TensorNet(nn.Module):
-    r"""TensorNet's architecture, from TensorNet: Cartesian Tensor Representations
-        for Efficient Learning of Molecular Potentials; G. Simeon and G. de Fabritiis.
+    r"""TensorNet's architecture.
+    From TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials; G. Simeon and G. de Fabritiis.
 
     Args:
         hidden_channels (int, optional): Hidden embedding size.
@@ -145,7 +141,7 @@ class TensorNet(nn.Module):
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
         )
-        self.tensor_embedding = TensorEmbedding(
+        self.tensor_embedding = _TensorEmbedding(
             hidden_channels,
             num_rbf,
             act_class,
@@ -160,7 +156,7 @@ class TensorNet(nn.Module):
         if num_layers != 0:
             for _ in range(num_layers):
                 self.layers.append(
-                    Interaction(
+                    _Interaction(
                         num_rbf,
                         hidden_channels,
                         act_class,
@@ -227,14 +223,14 @@ class TensorNet(nn.Module):
         X = self.tensor_embedding(z, edge_index, edge_weight, edge_vec, edge_attr)
         for layer in self.layers:
             X = layer(X, edge_index, edge_weight, edge_attr)
-        I, A, S = decompose_tensor(X)
-        x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
+        I, A, S = _decompose_tensor(X)
+        x = torch.cat((_tensor_norm(I), _tensor_norm(A), _tensor_norm(S)), dim=-1)
         x = self.out_norm(x)
         x = self.act(self.linear((x)))
         return x, None, z, pos, batch
 
 
-class TensorEmbedding(nn.Module):
+class _TensorEmbedding(nn.Module):
     def __init__(
         self,
         hidden_channels,
@@ -246,7 +242,7 @@ class TensorEmbedding(nn.Module):
         max_z=128,
         dtype=torch.float32,
     ):
-        super(TensorEmbedding, self).__init__()
+        super(_TensorEmbedding, self).__init__()
 
         self.hidden_channels = hidden_channels
         self.distance_proj1 = nn.Linear(num_rbf, hidden_channels, dtype=dtype)
@@ -296,12 +292,12 @@ class TensorEmbedding(nn.Module):
         W1 = self.distance_proj1(edge_attr) * C.view(-1, 1)
         W2 = self.distance_proj2(edge_attr) * C.view(-1, 1)
         W3 = self.distance_proj3(edge_attr) * C.view(-1, 1)
-        Iij, Aij, Sij = new_radial_tensor(
+        Iij, Aij, Sij = _new_radial_tensor(
             torch.eye(3, 3, device=edge_vec_norm.device, dtype=edge_vec_norm.dtype)[
                 None, None, :, :
             ],
-            vector_to_skewtensor(edge_vec_norm)[..., None, :, :],
-            vector_to_symtensor(edge_vec_norm)[..., None, :, :],
+            _vector_to_skewtensor(edge_vec_norm)[..., None, :, :],
+            _vector_to_symtensor(edge_vec_norm)[..., None, :, :],
             W1,
             W2,
             W3,
@@ -313,26 +309,27 @@ class TensorEmbedding(nn.Module):
         I = scatter(Zij*Iij, edge_index[0], dim=0, dim_size=z.shape[0])
         A = scatter(Zij*Aij, edge_index[0], dim=0, dim_size=z.shape[0])
         S = scatter(Zij*Sij, edge_index[0], dim=0, dim_size=z.shape[0])
-        norm = self.init_norm(tensor_norm(I + A + S))
+        norm = self.init_norm(_tensor_norm(I + A + S))
         I = self.linears_tensor[0](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         A = self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         for linear_scalar in self.linears_scalar:
             norm = self.act(linear_scalar(norm))
         norm = norm.reshape(norm.shape[0], self.hidden_channels, 3)
-        I, A, S = new_radial_tensor(I, A, S, norm[..., 0], norm[..., 1], norm[..., 2])
+        I, A, S = _new_radial_tensor(I, A, S, norm[..., 0], norm[..., 1], norm[..., 2])
         X = I + A + S
 
         return X
 
 
-def tensor_message_passing(edge_index: Tensor, factor: Tensor, tensor: Tensor, natoms: int) -> Tensor:
+def _tensor_message_passing(edge_index: Tensor, factor: Tensor, tensor: Tensor, natoms: int) -> Tensor:
+    """Message passing for tensors."""
     msg = factor * tensor.index_select(0, edge_index[1])
     tensor_m = scatter(msg, edge_index[0], dim=0, dim_size=natoms)
     return tensor_m
 
 
-class Interaction(nn.Module):
+class _Interaction(nn.Module):
     def __init__(
         self,
         num_rbf,
@@ -343,7 +340,7 @@ class Interaction(nn.Module):
         equivariance_invariance_group,
         dtype=torch.float32,
     ):
-        super(Interaction, self).__init__()
+        super(_Interaction, self).__init__()
 
         self.num_rbf = num_rbf
         self.hidden_channels = hidden_channels
@@ -383,24 +380,24 @@ class Interaction(nn.Module):
         edge_attr = (edge_attr * C.view(-1, 1)).reshape(
             edge_attr.shape[0], self.hidden_channels, 3
         )
-        X = X / (tensor_norm(X) + 1)[..., None, None]
-        I, A, S = decompose_tensor(X)
+        X = X / (_tensor_norm(X) + 1)[..., None, None]
+        I, A, S = _decompose_tensor(X)
         I = self.linears_tensor[0](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         A = self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         Y = I + A + S
-        Im = tensor_message_passing(edge_index, edge_attr[..., 0, None, None], I, X.shape[0])
-        Am = tensor_message_passing(edge_index, edge_attr[..., 1, None, None], A, X.shape[0])
-        Sm = tensor_message_passing(edge_index, edge_attr[..., 2, None, None], S, X.shape[0])
+        Im = _tensor_message_passing(edge_index, edge_attr[..., 0, None, None], I, X.shape[0])
+        Am = _tensor_message_passing(edge_index, edge_attr[..., 1, None, None], A, X.shape[0])
+        Sm = _tensor_message_passing(edge_index, edge_attr[..., 2, None, None], S, X.shape[0])
         msg = Im + Am + Sm
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(msg, Y)
             B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor(A + B)
+            I, A, S = _decompose_tensor(A + B)
         if self.equivariance_invariance_group == "SO(3)":
             B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor(2 * B)
-        normp1 = (tensor_norm(I + A + S) + 1)[..., None, None]
+            I, A, S = _decompose_tensor(2 * B)
+        normp1 = (_tensor_norm(I + A + S) + 1)[..., None, None]
         I, A, S = I / normp1, A / normp1, S / normp1
         I = self.linears_tensor[3](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)

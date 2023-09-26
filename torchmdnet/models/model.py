@@ -14,15 +14,16 @@ import warnings
 
 def create_model(args, prior_model=None, mean=None, std=None):
     """Create a model from the given arguments.
-    See :func:`get_args` in scripts/train.py for a description of the arguments.
-    Parameters
-    ----------
+
+    Run `torchmd-train --help` for a description of the arguments.
+
+    Args:
         args (dict): Arguments for the model.
         prior_model (nn.Module, optional): Prior model to use. Defaults to None.
         mean (torch.Tensor, optional): Mean of the training data. Defaults to None.
         std (torch.Tensor, optional): Standard deviation of the training data. Defaults to None.
-    Returns
-    -------
+
+    Returns:
         nn.Module: An instance of the TorchMD_Net model.
     """
     dtype = dtype_mapping[args["precision"]]
@@ -119,6 +120,18 @@ def create_model(args, prior_model=None, mean=None, std=None):
 
 
 def load_model(filepath, args=None, device="cpu", **kwargs):
+    """Load a model from a checkpoint file.
+
+    Args:
+        filepath (str): Path to the checkpoint file.
+        args (dict, optional): Arguments for the model. Defaults to None.
+        device (str, optional): Device on which the model should be loaded. Defaults to "cpu".
+        **kwargs: Extra keyword arguments for the model.
+
+    Returns:
+        nn.Module: An instance of the TorchMD_Net model.
+    """
+
     ckpt = torch.load(filepath, map_location="cpu")
     if args is None:
         args = ckpt["hyper_parameters"]
@@ -182,34 +195,35 @@ def create_prior_models(args, dataset=None):
 
 
 class TorchMD_Net(nn.Module):
-    """The  TorchMD_Net  class combines  a  given  representation  model  (such as  the  equivariant
-    transformer), an output model (such as the scalar  output module) and a prior model (such as the
-    atomref prior), producing a Module that takes as  input a series of atoms features and outputs a
-    scalar value (i.e  energy for each batch/molecule)  and, if derivative is True,  the negative of
-    its derivative with respect to the positions (i.e forces for each atom).
+    """ The main TorchMD-Net model.
+
+    The TorchMD_Net class combines a given representation model (such as the equivariant transformer),
+    an output model (such as the scalar output module), and a prior model (such as the atomref prior).
+    It produces a Module that takes as input a series of atom features and outputs a scalar value
+    (i.e., energy for each batch/molecule). If `derivative` is True, it also outputs the negative of
+    its derivative with respect to the positions (i.e., forces for each atom).
 
     Parameters
     ----------
-
-        representation_model (nn.Module): Representation model.
-            A model that takes as input the  atomic numbers, positions, batch indices and optionally
-            charges and spins.   It must return a tuple of  the form (x, v, z, pos,  batch), where x
-            are the atom features, v are the vector features (if any), z are the atomic numbers, pos
-            are the positions and batch are the batch indices.  See TorchMD_ET for more details.
-
-        output_model (nn.Module): Output model.
-            A model that takes as input the atom features, vector features (if any), atomic numbers,
-            positions and batch indices. See OutputModel for more details.
-
-        prior_model (nn.Module, optional): Prior model. Defaults to None.
-            A model  that takes  as input  the atom  features, atomic  numbers, positions  and batch
-            indices. See BasePrior for more details.
-
-        mean (torch.Tensor, optional): Mean of the training data. Defaults to None.
-        std (torch.Tensor, optional): Standard deviation of the training data. Defaults to None.
-        derivative (bool, optional): Whether to compute the derivative of the outputs via
-            backpropagation. Defaults to False.
-        dtype (torch.dtype, optional): Data type of the model. Defaults to torch.float32.
+    representation_model : nn.Module
+        A model that takes as input the atomic numbers, positions, batch indices, and optionally
+        charges and spins. It must return a tuple of the form (x, v, z, pos, batch), where x
+        are the atom features, v are the vector features (if any), z are the atomic numbers,
+        pos are the positions, and batch are the batch indices. See TorchMD_ET for more details.
+    output_model : nn.Module
+        A model that takes as input the atom features, vector features (if any), atomic numbers,
+        positions, and batch indices. See OutputModel for more details.
+    prior_model : nn.Module, optional
+        A model that takes as input the atom features, atomic numbers, positions, and batch
+        indices. See BasePrior for more details. Defaults to None.
+    mean : torch.Tensor, optional
+        Mean of the training data. Defaults to None.
+    std : torch.Tensor, optional
+        Standard deviation of the training data. Defaults to None.
+    derivative : bool, optional
+        Whether to compute the derivative of the outputs via backpropagation. Defaults to False.
+    dtype : torch.dtype, optional
+        Data type of the model. Defaults to torch.float32.
 
     """
 
@@ -268,16 +282,20 @@ class TorchMD_Net(nn.Module):
         s: Optional[Tensor] = None,
         extra_args: Optional[Dict[str, Tensor]] = None,
     ) -> Tuple[Tensor, Optional[Tensor]]:
-        """Compute the output of the model.
-        Args:
-            z (Tensor): Atomic numbers of the atoms in the molecule. Shape (N,).
-            pos (Tensor): Atomic positions in the molecule. Shape (N, 3).
-            batch (Tensor, optional): Batch indices for the atoms in the molecule. Shape (N,).
-            q (Tensor, optional): Atomic charges in the molecule. Shape (N,).
-            s (Tensor, optional): Atomic spins in the molecule. Shape (N,).
-            extra_args (Dict[str, Tensor], optional): Extra arguments to pass to the prior model.
         """
+        Compute the output of the model.
 
+        Args:
+            z (Tensor): Atomic numbers of the atoms in the molecule. Shape: (N,).
+    	    pos (Tensor): Atomic positions in the molecule. Shape: (N, 3).
+    	    batch (Tensor, optional): Batch indices for the atoms in the molecule. Shape: (N,).
+    	    q (Tensor, optional): Atomic charges in the molecule. Shape: (N,).
+    	    s (Tensor, optional): Atomic spins in the molecule. Shape: (N,).
+    	    extra_args (Dict[str, Tensor], optional): Extra arguments to pass to the prior model.
+
+        Returns:
+            Tuple[Tensor, Optional[Tensor]]: The output of the model and the derivative of the output with respect to the positions if derivative is True, None otherwise.
+        """
         assert z.dim() == 1 and z.dtype == torch.long
         batch = torch.zeros_like(z) if batch is None else batch
 
