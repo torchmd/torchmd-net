@@ -44,13 +44,15 @@ def test_compare_forward_cuda_graph():
             "output_model": "Scalar",
             "reduce_op": "sum",
             "precision": 32 }
-    model = create_model(args)
+    model = create_model(args).to(device="cuda")
     z, pos, _ = create_example_batch(multiple_batches=False)
-    calc = External(checkpoint, z.unsqueeze(0), use_cuda_graph=False)
-    calc_graph = External(checkpoint, z.unsqueeze(0), use_cuda_graph=True)
+    z = z.to("cuda")
+    pos = pos.to("cuda")
+    calc = External(checkpoint, z.unsqueeze(0), use_cuda_graph=False, device="cuda")
+    calc_graph = External(checkpoint, z.unsqueeze(0), use_cuda_graph=True, device="cuda")
     calc.model = model
     calc_graph.model = model
-    for _ in range(3):
+    for _ in range(10):
         e_calc, f_calc = calc.calculate(pos, None)
         e_pred, f_pred = calc_graph.calculate(pos, None)
         assert_allclose(e_calc, e_pred)
