@@ -165,15 +165,12 @@ class LNNP(LightningModule):
             step_losses = self._compute_losses(y, neg_dy, batch, loss_fn, stage)
 
             loss_name = loss_fn.__name__
-
             if self.hparams.neg_dy_weight > 0:
                 self.losses[stage]["neg_dy"][loss_name].append(
                     step_losses["neg_dy"].detach()
                 )
-
             if self.hparams.y_weight > 0:
                 self.losses[stage]["y"][loss_name].append(step_losses["y"].detach())
-
             total_loss = (
                 step_losses["y"] * self.hparams.y_weight
                 + step_losses["neg_dy"] * self.hparams.neg_dy_weight
