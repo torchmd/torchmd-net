@@ -74,7 +74,6 @@ class External:
                 self.energy, self.forces = self.model(self.embeddings, self.pos, self.batch)
             with torch.cuda.graph(self.cuda_graph):
                 self.energy, self.forces = self.model(self.embeddings, self.pos, self.batch)
-    torch.cuda.make_graphed_callables
     def calculate(self, pos, box):
         pos = pos.to(self.device).type(torch.float32).reshape(-1, 3)
         if self.use_cuda_graph:
