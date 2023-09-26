@@ -38,8 +38,7 @@ class External:
     cuda_graph_warmup_steps : int, optional
         Number of steps to run as warmup before recording the CUDA graph. Default: 12
     """
-
-    def __init__(self, netfile, embeddings, device="cpu", output_transform=None, use_cuda_graph=False):
+    def __init__(self, netfile, embeddings, device="cpu", output_transform=None, use_cuda_graph=False, cuda_graph_warmup_steps=12):
         self.model = load_model(netfile, device=device, derivative=True)
         self.device = device
         self.n_atoms = embeddings.size(1)
@@ -61,6 +60,7 @@ class External:
         if not torch.cuda.is_available() and use_cuda_graph:
             raise ValueError("CUDA graphs are only available if CUDA is")
         self.use_cuda_graph = use_cuda_graph
+        self.cuda_graph_warmup_steps = cuda_graph_warmup_steps
         self.cuda_graph = None
         self.energy = None
         self.forces = None
@@ -70,8 +70,8 @@ class External:
     def _init_cuda_graph(self):
         self.stream = torch.cuda.Stream()
         self.cuda_graph = torch.cuda.CUDAGraph()
-        with torch.cuda.stream(self.stream):
-            for _ in range(3):
+        with torch.cuda.stream(stream):
+            for _ in range(self.cuda_graph_warmup_steps):
                 self.energy, self.forces = self.model(self.embeddings, self.pos, self.batch)
             with torch.cuda.graph(self.cuda_graph):
                 self.energy, self.forces = self.model(self.embeddings, self.pos, self.batch)
