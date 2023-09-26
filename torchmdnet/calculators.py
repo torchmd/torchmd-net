@@ -17,14 +17,26 @@ tranforms = {
     ),  # Hartree -> kcal/mol, Hartree/A -> kcal/mol/A
 }
 
-
 class External:
     """
-    The External class is used to calculate the energy and forces of an external potential, such as a neural network. The class is initialized with the path to the neural network
-    ckpt, the embeddings, the device on which the neural network should be run and the output_transform argument. The output_transform is used to give a function that transform
-    the energy and the forces, this could be a preset transform or a custom function. In this way there is no constraint to the units of the neural network, the user can choose
-    the units of the simulation and the neural network will be automatically converted to the units of the simulation. The function should take two arguments, the energy and the
-    forces, and return the transformed energy and the transformed forces.
+    This is an adapter to use TorchMD-Net models in TorchMD.
+    Parameters
+    ----------
+    netfile : str
+        Path to the checkpoint file of the model.
+    embeddings : torch.Tensor
+        Embeddings of the atoms in the system.
+    device : str, optional
+        Device on which the model should be run. Default: "cpu"
+    output_transform : str or callable, optional
+        Transform to apply to the energy and forces.
+        If a string is given, it should be a key in the `transforms` dict.
+        If a callable is given, it should take two arguments (energy and forces) and return two tensors of the same shape.
+        Default: None
+    use_cuda_graph : bool, optional
+        Whether to use CUDA graphs to speed up the calculation. Default: False
+    cuda_graph_warmup_steps : int, optional
+        Number of steps to run as warmup before recording the CUDA graph. Default: 12
     """
 
     def __init__(self, netfile, embeddings, device="cpu", output_transform=None, use_cuda_graph=False):
