@@ -34,14 +34,13 @@ See `here <https://github.com/torchmd/torchmd-net/tree/main/examples#loading-che
 Creating a New Dataset
 ======================
 
-If you want to train on custom data, first have a look at ``torchmdnet.datasets.Custom``, which provides functionalities for loading a NumPy dataset consisting of atom types and coordinates, as well as energies, forces or both as the labels. Alternatively, you can implement a custom class according to the torch-geometric way of implementing a dataset. That is, derive the `Dataset` or `InMemoryDataset` class and implement the necessary functions (more info `here <https://pytorch-geometric.readthedocs.io/en/latest/notes/create_dataset.html#creating-your-own-datasets>`_). The dataset must return torch-geometric `Data` objects, containing at least the keys `z` (atom types) and `pos` (atomic coordinates), as well as `y` (label), `neg_dy` (negative derivative of the label w.r.t atom coordinates) or both.
+If you want to train on custom data, first have a look at :py:mod:`torchmdnet.datasets.Custom`, which provides functionalities for loading a NumPy dataset consisting of atom types and coordinates, as well as energies, forces or both as the labels. Alternatively, you can implement a custom class according to the torch-geometric way of implementing a dataset. That is, derive the `Dataset` or `InMemoryDataset` class and implement the necessary functions (more info `here <https://pytorch-geometric.readthedocs.io/en/latest/notes/create_dataset.html#creating-your-own-datasets>`_). The dataset must return torch-geometric `Data` objects, containing at least the keys `z` (atom types) and `pos` (atomic coordinates), as well as `y` (label), `neg_dy` (negative derivative of the label w.r.t atom coordinates) or both.
 
 Custom Prior Models
 ===================
 
-In addition to implementing a custom dataset class, it is also possible to add a custom prior model to the model. This can be done by implementing a new prior model class in ``torchmdnet.priors`` and adding the argument ``--prior-model <PriorModelName>``. As an example, have a look at ``torchmdnet.priors.Atomref``.
+In addition to implementing a custom dataset class, it is also possible to add a custom prior model to the model. This can be done by implementing a new prior model class in :py:mod:`torchmdnet.priors` and adding the argument ``--prior-model <PriorModelName>``. As an example, have a look at :py:mod:`torchmdnet.priors.Atomref`.
 
-This is a reference to the API page for the priors: :py:mod:`torchmdnet.priors`.
 
 Multi-Node Training
 ===================

@@ -153,6 +153,7 @@ Contents
 .. toctree::
 
    usage
+   torchmd-train
    api
 
 Indices and tables
