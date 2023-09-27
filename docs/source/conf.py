@@ -48,15 +48,8 @@ html_theme = 'sphinx_rtd_theme'
 # -- Options for EPUB output
 epub_show_urls = 'footnote'
 
-# If extensions (or modules to document with autodoc) are in another directory,
-# add these directories to sys.path here.
-import pathlib
-import sys
-#sys.path.insert(0, pathlib.Path(__file__).parents[3].resolve().as_posix())
-#autosummary_imported_members = True
-#autodoc_mock_imports=["torch_scatter", "torch", "torch_geometric", "torch_cluster", "lightning_utilities", "lightning", "NNPOps", "h5py"]
-
 autoclass_content = 'both'
+sphinx_autodoc_typehints = True
 autodoc_default_options = {
     'members': True,
     'member-order': 'bysource',
