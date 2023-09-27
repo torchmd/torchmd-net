@@ -58,12 +58,12 @@ def decompose_tensor(tensor):
 def new_radial_tensor(I, A, S, f_I, f_A, f_S):
     # Writing this function without using intermediate tensors breaks CUDA graphs in some cases
     tempf = f_I[..., None, None]
-    In =  tempf * I
+    I =  tempf * I
     tempf = f_A[..., None, None]
-    An = tempf * A
+    A = tempf * A
     tempf = f_S[..., None, None]
-    Sn = tempf * S
-    return In, An, Sn
+    S = tempf * S
+    return I, A, S
 
 
 # Computes Frobenius norm
