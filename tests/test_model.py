@@ -3,10 +3,11 @@ from pytest import mark
 import pickle
 from os.path import exists, dirname, join
 import torch
-import pytorch_lightning as pl
+import lightning as pl
 from torchmdnet import models
 from torchmdnet.models.model import create_model
 from torchmdnet.models import output_modules
+from torchmdnet.models.utils import dtype_mapping
 
 from utils import load_example_args, create_example_batch
 
@@ -14,11 +15,11 @@ from utils import load_example_args, create_example_batch
 @mark.parametrize("model_name", models.__all__)
 @mark.parametrize("use_batch", [True, False])
 @mark.parametrize("explicit_q_s", [True, False])
-@mark.parametrize("dtype", [torch.float32, torch.float64])
-def test_forward(model_name, use_batch, explicit_q_s, dtype):
+@mark.parametrize("precision", [32, 64])
+def test_forward(model_name, use_batch, explicit_q_s, precision):
     z, pos, batch = create_example_batch()
-    pos = pos.to(dtype=dtype)
-    model = create_model(load_example_args(model_name, prior_model=None, dtype=dtype))
+    pos = pos.to(dtype=dtype_mapping[precision])
+    model = create_model(load_example_args(model_name, prior_model=None, precision=precision))
     batch = batch if use_batch else None
     if explicit_q_s:
         model(z, pos, batch=batch, q=None, s=None)
@@ -28,10 +29,10 @@ def test_forward(model_name, use_batch, explicit_q_s, dtype):
 
 @mark.parametrize("model_name", models.__all__)
 @mark.parametrize("output_model", output_modules.__all__)
-@mark.parametrize("dtype", [torch.float32, torch.float64])
-def test_forward_output_modules(model_name, output_model, dtype):
+@mark.parametrize("precision", [32,64])
+def test_forward_output_modules(model_name, output_model, precision):
     z, pos, batch = create_example_batch()
-    args = load_example_args(model_name, remove_prior=True, output_model=output_model, dtype=dtype)
+    args = load_example_args(model_name, remove_prior=True, output_model=output_model, precision=precision)
     model = create_model(args)
     model(z, pos, batch=batch)
 
@@ -61,6 +62,8 @@ def test_torchscript(model_name, device):
 def test_torchscript_dynamic_shapes(model_name, device):
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA not available")
+    if model_name == "tensornet":
+        pytest.skip("TorchScripted TensorNet does not support dynamic shapes.")
     z, pos, batch = create_example_batch()
     model = torch.jit.script(
         create_model(load_example_args(model_name, remove_prior=True, derivative=True))
@@ -78,6 +81,48 @@ def test_torchscript_dynamic_shapes(model_name, device):
             [posi],
             grad_outputs=grad_outputs,
         )[0]
+
+#Currently only tensornet is CUDA graph compatible
+@mark.parametrize("model_name", ["tensornet"])
+def test_cuda_graph_compatible(model_name):
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    z, pos, batch = create_example_batch()
+    args = {"model": model_name,
+            "embedding_dimension": 128,
+            "num_layers": 2,
+            "num_rbf": 32,
+            "rbf_type": "expnorm",
+            "trainable_rbf": False,
+            "activation": "silu",
+            "cutoff_lower": 0.0,
+            "cutoff_upper": 5.0,
+            "max_z": 100,
+            "max_num_neighbors": 128,
+            "equivariance_invariance_group": "O(3)",
+            "prior_model": None,
+            "atom_filter": -1,
+            "derivative": True,
+            "output_model": "Scalar",
+            "reduce_op": "sum",
+            "precision": 32 }
+    model = create_model(args).to(device="cuda")
+    z = z.to("cuda")
+    pos = pos.to("cuda").requires_grad_(True)
+    batch = batch.to("cuda")
+    model = torch.jit.script(model).to(device="cuda")
+    #Save and load the model, do not use a file
+    import io
+    buffer = io.BytesIO()
+    torch.jit.save(model, buffer)
+    buffer.seek(0)
+    model = torch.jit.load(buffer)
+    for _ in range(0, 5):
+        y, neg_dy = model(z, pos, batch=batch)
+    model = torch.cuda.make_graphed_callables(model, (z, pos, batch), allow_unused_input=True)
+    y2, neg_dy2 = model(z, pos, batch=batch)
+    assert torch.allclose(y, y2)
+    assert torch.allclose(neg_dy, neg_dy2)
 
 @mark.parametrize("model_name", models.__all__)
 def test_seed(model_name):
@@ -146,7 +191,7 @@ def test_forward_output(model_name, output_model, overwrite_reference=False):
 @mark.parametrize("model_name", models.__all__)
 def test_gradients(model_name):
     pl.seed_everything(1234)
-    dtype = torch.float64
+    precision = 64
     output_model = "Scalar"
     # create model and sample batch
     derivative = output_model in ["Scalar", "EquivariantScalar"]
@@ -155,12 +200,12 @@ def test_gradients(model_name):
         remove_prior=True,
         output_model=output_model,
         derivative=derivative,
-        dtype=dtype,
+        precision=precision
     )
     model = create_model(args)
     z, pos, batch = create_example_batch(n_atoms=5)
     pos.requires_grad_(True)
-    pos = pos.to(dtype)
+    pos = pos.to(torch.float64)
     torch.autograd.gradcheck(
         model, (z, pos, batch), eps=1e-4, atol=1e-3, rtol=1e-2, nondet_tol=1e-3
     )

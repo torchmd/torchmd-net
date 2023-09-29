@@ -3,11 +3,40 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import Subset
 from torch_geometric.loader import DataLoader
-from pytorch_lightning import LightningDataModule
-from pytorch_lightning.utilities import rank_zero_warn
+from lightning import LightningDataModule
+from lightning_utilities.core.rank_zero import rank_zero_warn
 from torchmdnet import datasets
+from torch_geometric.data import Dataset
 from torchmdnet.utils import make_splits, MissingEnergyException
 from torch_scatter import scatter
+from torchmdnet.models.utils import dtype_mapping
+
+
+class FloatCastDatasetWrapper(Dataset):
+    def __init__(self, dataset, dtype=torch.float64):
+        super(FloatCastDatasetWrapper, self).__init__(
+            dataset.root, dataset.transform, dataset.pre_transform, dataset.pre_filter
+        )
+        self.dataset = dataset
+        self.dtype = dtype
+
+    def len(self):
+        return len(self.dataset)
+
+    def get(self, idx):
+        data = self.dataset.get(idx)
+        for key, value in data:
+            if torch.is_tensor(value) and torch.is_floating_point(value):
+                setattr(data, key, value.to(self.dtype))
+        return data
+
+    def __getattr__(self, name):
+        # Check if the attribute exists in the underlying dataset
+        if hasattr(self.dataset, name):
+            return getattr(self.dataset, name)
+        raise AttributeError(
+            f"'{type(self).__name__}' and its underlying dataset have no attribute '{name}'"
+        )
 
 
 class DataModule(LightningDataModule):
@@ -34,6 +63,9 @@ class DataModule(LightningDataModule):
                 self.dataset = getattr(datasets, self.hparams["dataset"])(
                     self.hparams["dataset_root"], **dataset_arg
                 )
+        self.dataset = FloatCastDatasetWrapper(
+            self.dataset, dtype_mapping[self.hparams["precision"]]
+        )
 
         self.idx_train, self.idx_val, self.idx_test = make_splits(
             len(self.dataset),
@@ -60,10 +92,10 @@ class DataModule(LightningDataModule):
 
     def val_dataloader(self):
         loaders = [self._get_dataloader(self.val_dataset, "val")]
-        if (
-            len(self.test_dataset) > 0
-            and (self.trainer.current_epoch+1) % self.hparams["test_interval"] == 0
-        ):
+        # To allow to report the performance on the testing dataset during training
+        # we send the trainer two dataloaders every few steps and modify the
+        # validation step to understand the second dataloader as test data.
+        if self._is_test_during_training_epoch():
             loaders.append(self._get_dataloader(self.test_dataset, "test"))
         return loaders
 
@@ -84,13 +116,16 @@ class DataModule(LightningDataModule):
     def std(self):
         return self._std
 
-    def _get_dataloader(self, dataset, stage, store_dataloader=True):
-        store_dataloader = (
-            store_dataloader and self.trainer.reload_dataloaders_every_n_epochs <= 0
+    def _is_test_during_training_epoch(self):
+        return (
+            len(self.test_dataset) > 0
+            and self.hparams["test_interval"] > 0
+            and self.trainer.current_epoch > 0
+            and self.trainer.current_epoch % self.hparams["test_interval"] == 0
         )
+
+    def _get_dataloader(self, dataset, stage, store_dataloader=True):
         if stage in self._saved_dataloaders and store_dataloader:
-            # storing the dataloaders like this breaks calls to trainer.reload_train_val_dataloaders
-            # but makes it possible that the dataloaders are not recreated on every testing epoch
             return self._saved_dataloaders[stage]
 
         if stage == "train":
