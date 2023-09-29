@@ -21,11 +21,11 @@ class Ace(Dataset):
     ):
         assert isinstance(paths, (str, list))
 
-        arg_hash = f"{paths}{atomic_numbers}{max_gradient}{subsample_molecules}"
+        self.atomic_numbers = set([] if atomic_numbers is None else atomic_numbers)
+        arg_hash = f"{paths}{self.atomic_numbers}{max_gradient}{subsample_molecules}"
         arg_hash = hashlib.md5(arg_hash.encode()).hexdigest()
         self.name = f"{self.__class__.__name__}-{arg_hash}"
         self.paths = paths
-        self.atomic_numbers = atomic_numbers
         self.max_gradient = max_gradient
         self.subsample_molecules = int(subsample_molecules)
         super().__init__(root, transform, pre_transform, pre_filter)
