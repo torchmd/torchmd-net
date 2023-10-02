@@ -3,7 +3,7 @@ channels:
   - conda-forge
 dependencies:
   - h5py
-  - matplotlib
+  - matplotlib-base
   - nnpops==0.5
   - pip
   - pytorch==2.0.*
