@@ -1,7 +1,7 @@
 from pytest import mark
 from glob import glob
 from os.path import dirname, join
-import pytorch_lightning as pl
+import lightning as pl
 from torchmdnet import models
 from torchmdnet.models.model import load_model
 from torchmdnet.priors import Atomref
@@ -24,7 +24,8 @@ def test_load_model():
 
 @mark.parametrize("model_name", models.__all__)
 @mark.parametrize("use_atomref", [True, False])
-def test_train(model_name, use_atomref, tmpdir):
+@mark.parametrize("precision", [32, 64])
+def test_train(model_name, use_atomref, precision, tmpdir):
     args = load_example_args(
         model_name,
         remove_prior=not use_atomref,
@@ -37,6 +38,7 @@ def test_train(model_name, use_atomref, tmpdir):
         num_layers=2,
         num_rbf=16,
         batch_size=8,
+        precision=precision,
     )
     datamodule = DataModule(args, DummyDataset(has_atomref=use_atomref))
 
@@ -47,6 +49,6 @@ def test_train(model_name, use_atomref, tmpdir):
 
     module = LNNP(args, prior_model=prior)
 
-    trainer = pl.Trainer(max_steps=10, default_root_dir=tmpdir)
+    trainer = pl.Trainer(max_steps=10, default_root_dir=tmpdir, precision=args["precision"],inference_mode=False)
     trainer.fit(module, datamodule)
     trainer.test(module, datamodule)

@@ -4,11 +4,11 @@ import torch
 from torch.autograd import grad
 from torch import nn, Tensor
 from torch_scatter import scatter
-from pytorch_lightning.utilities import rank_zero_warn
 from torchmdnet.models import output_modules
 from torchmdnet.models.wrappers import AtomFilter
 from torchmdnet.models.utils import dtype_mapping
 from torchmdnet import priors
+from lightning_utilities.core.rank_zero import rank_zero_warn
 import warnings
 
 
@@ -25,8 +25,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
     -------
         nn.Module: An instance of the TorchMD_Net model.
     """
-    args["dtype"] = "float32" if "dtype" not in args else args["dtype"]
-    args["dtype"] = dtype_mapping[args["dtype"]] if isinstance(args["dtype"], str) else args["dtype"]
+    dtype = dtype_mapping[args["precision"]]
     shared_args = dict(
         hidden_channels=args["embedding_dimension"],
         num_layers=args["num_layers"],
@@ -38,7 +37,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         cutoff_upper=args["cutoff_upper"],
         max_z=args["max_z"],
         max_num_neighbors=args["max_num_neighbors"],
-        dtype=args["dtype"]
+        dtype=dtype
     )
 
     # representation network
@@ -76,6 +75,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         )
     elif args["model"] == "tensornet":
         from torchmdnet.models.tensornet import TensorNet
+
 	# Setting is_equivariant to False to enforce the use of Scalar output module instead of EquivariantScalar
         is_equivariant = False
         representation_model = TensorNet(
@@ -103,7 +103,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         args["embedding_dimension"],
         activation=args["activation"],
         reduce_op=args["reduce_op"],
-        dtype=args["dtype"],
+        dtype=dtype,
     )
 
     # combine representation and output network
@@ -114,7 +114,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         mean=mean,
         std=std,
         derivative=args["derivative"],
-        dtype=args["dtype"],
+        dtype=dtype,
     )
     return model
 
@@ -254,10 +254,8 @@ class TorchMD_Net(nn.Module):
 
         if self.derivative:
             pos.requires_grad_(True)
-
         # run the potentially wrapped representation model
         x, v, z, pos, batch = self.representation_model(z, pos, batch, q=q, s=s)
-
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch)
 
@@ -284,8 +282,8 @@ class TorchMD_Net(nn.Module):
         if self.prior_model is not None:
             for prior in self.prior_model:
                 y = prior.post_reduce(y, z, pos, batch, extra_args)
-
         # compute gradients with respect to coordinates
+
         if self.derivative:
             grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(y)]
             dy = grad(

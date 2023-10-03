@@ -30,7 +30,7 @@ lr_min: 1.0e-08
 lr_patience: 25
 lr_warmup_steps: 500
 max_num_neighbors: 32
-max_z: 128
+max_z: 100
 model: tensornet
 ngpus: 1
 num_epochs: 10000
