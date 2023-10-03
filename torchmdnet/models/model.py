@@ -81,7 +81,6 @@ def create_model(args, prior_model=None, mean=None, std=None):
         is_equivariant = False
         representation_model = TensorNet(
 	    equivariance_invariance_group=args["equivariance_invariance_group"],
-            box_vecs=args["box_vecs"],
             **shared_args,
         )
     else:
