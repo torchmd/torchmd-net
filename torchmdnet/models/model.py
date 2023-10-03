@@ -37,6 +37,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         cutoff_upper=args["cutoff_upper"],
         max_z=args["max_z"],
         max_num_neighbors=args["max_num_neighbors"],
+        box_vecs=args["box_vecs"],
         dtype=dtype
     )
 
