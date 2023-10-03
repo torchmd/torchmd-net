@@ -205,6 +205,7 @@ class TensorNet(nn.Module):
             loop=True,
             check_errors=False,
             resize_to_fit=not self.static_shapes,
+            box=box_vecs,
             long_edge_index=True,
         )
 
@@ -222,11 +223,12 @@ class TensorNet(nn.Module):
         z: Tensor,
         pos: Tensor,
         batch: Tensor,
+        box: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
         # Obtain graph, with distances and relative position vectors
-        edge_index, edge_weight, edge_vec = self.distance(pos, batch)
+        edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
         # This assert convinces TorchScript that edge_vec is a Tensor and not an Optional[Tensor]
         assert (
             edge_vec is not None

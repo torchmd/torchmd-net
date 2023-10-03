@@ -205,7 +205,7 @@ class OptimizedDistance(torch.nn.Module):
         self.long_edge_index = long_edge_index
 
     def forward(
-        self, pos: Tensor, batch: Optional[Tensor] = None
+            self, pos: Tensor, batch: Optional[Tensor] = None, box: Optional[Tensor] = None
     ) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
         """Compute the neighbor list for a given cutoff.
         Parameters
@@ -230,7 +230,10 @@ class OptimizedDistance(torch.nn.Module):
         otherwise the tensors will have size max_num_pairs, with neighbor pairs (-1, -1) at the end.
 
         """
-        self.box = self.box.to(pos.dtype)
+        box = self.box if box is None else box
+        assert box is not None, "Box must be provided"
+        box = box.to(pos.dtype)
+        assert box.device == torch.device("cpu"), "Box must be in CPU memory"
         max_pairs = self.max_num_pairs
         if self.max_num_pairs < 0:
             max_pairs = -self.max_num_pairs * pos.shape[0]

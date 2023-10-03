@@ -5,7 +5,7 @@ from torch_geometric.nn import MessagePassing
 from torchmdnet.models.utils import (
     NeighborEmbedding,
     CosineCutoff,
-    Distance,
+    OptimizedDistance,
     rbf_class_mapping,
     act_class_mapping,
 )
@@ -13,14 +13,28 @@ from torchmdnet.models.utils import (
 
 class TorchMD_GN(nn.Module):
     r"""The TorchMD Graph Network architecture.
-    Code adapted from https://github.com/rusty1s/pytorch_geometric/blob/d7d8e5e2edada182d820bbb1eec5f016f50db1e0/torch_geometric/nn/models/schnet.py#L38
+        Code adapted from https://github.com/rusty1s/pytorch_geometric/blob/d7d8e5e2edada182d820bbb1eec5f016f50db1e0/torch_geometric/nn/models/schnet.py#L38
 
-    .. math::
-        \mathbf{x}^{\prime}_i = \sum_{j \in \mathcal{N}(i)} \mathbf{x}_j \odot
-        h_{\mathbf{\Theta}} ( \exp(-\gamma(\mathbf{e}_{j,i} - \mathbf{\mu}))),
+        .. math::
+            \mathbf{x}^{\prime}_i = \sum_{j \in \mathcal{N}(i)} \mathbf{x}_j \odot
+            h_{\mathbf{\Theta}} ( \exp(-\gamma(\mathbf{e}_{j,i} - \mathbf{\mu}))),
 
-    here :math:`h_{\mathbf{\Theta}}` denotes an MLP and
-    :math:`\mathbf{e}_{j,i}` denotes the interatomic distances between atoms.
+        here :math:`h_{\mathbf{\Theta}}` denotes an MLP and
+        :math:`\mathbf{e}_{j,i}` denotes the interatomic distances between atoms.
+
+        This function optionally supports periodic boundary conditions with
+        arbitrary triclinic boxes.  The box vectors `a`, `b`, and `c` must satisfy
+        certain requirements:
+
+        `a[1] = a[2] = b[2] = 0`
+        `a[0] >= 2*cutoff, b[1] >= 2*cutoff, c[2] >= 2*cutoff`
+        `a[0] >= 2*b[0]`
+        `a[0] >= 2*c[0]`
+        `b[1] >= 2*c[1]`
+
+        These requirements correspond to a particular rotation of the system and
+        reduced form of the vectors, as well as the requirement that the cutoff be
+        no larger than half the box width.
 
     Args:
         hidden_channels (int, optional): Hidden embedding size.
@@ -55,6 +69,12 @@ class TorchMD_GN(nn.Module):
             convolution ouput. Can be one of 'add', 'mean', or 'max' (see
             https://pytorch-geometric.readthedocs.io/en/latest/notes/create_gnn.html
             for more details). (default: :obj:`"add"`)
+        box_vecs (Tensor, optional):
+            The vectors defining the periodic box.  This must have shape `(3, 3)`,
+            where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
+            If this is omitted, periodic boundary conditions are not applied.
+            (default: :obj:`None`)
+
     """
 
     def __init__(
@@ -72,7 +92,8 @@ class TorchMD_GN(nn.Module):
         max_z=100,
         max_num_neighbors=32,
         aggr="add",
-        dtype=torch.float32
+        dtype=torch.float32,
+        box_vecs=None,
     ):
         super(TorchMD_GN, self).__init__()
 
@@ -107,9 +128,14 @@ class TorchMD_GN(nn.Module):
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels, dtype=dtype)
 
-        self.distance = Distance(
-            cutoff_lower, cutoff_upper, max_num_neighbors=max_num_neighbors
+        self.distance = OptimizedDistance(
+            cutoff_lower,
+            cutoff_upper,
+            max_num_pairs=-max_num_neighbors,
+            box=box_vecs,
+            long_edge_index=True
         )
+
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf, dtype=dtype
         )
@@ -150,13 +176,14 @@ class TorchMD_GN(nn.Module):
         z: Tensor,
         pos: Tensor,
         batch: Tensor,
+        box: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
 
         x = self.embedding(z)
 
-        edge_index, edge_weight, _ = self.distance(pos, batch)
+        edge_index, edge_weight, _ = self.distance(pos, batch, box)
         edge_attr = self.distance_expansion(edge_weight)
 
         if self.neighbor_embedding is not None:

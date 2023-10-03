@@ -14,6 +14,20 @@ from torchmdnet.models.utils import (
 class TorchMD_ET(nn.Module):
     r"""The TorchMD equivariant Transformer architecture.
 
+        This function optionally supports periodic boundary conditions with
+        arbitrary triclinic boxes.  The box vectors `a`, `b`, and `c` must satisfy
+        certain requirements:
+
+        `a[1] = a[2] = b[2] = 0`
+        `a[0] >= 2*cutoff, b[1] >= 2*cutoff, c[2] >= 2*cutoff`
+        `a[0] >= 2*b[0]`
+        `a[0] >= 2*c[0]`
+        `b[1] >= 2*c[1]`
+
+        These requirements correspond to a particular rotation of the system and
+        reduced form of the vectors, as well as the requirement that the cutoff be
+        no larger than half the box width.
+
     Args:
         hidden_channels (int, optional): Hidden embedding size.
             (default: :obj:`128`)
@@ -48,6 +62,12 @@ class TorchMD_ET(nn.Module):
             higher values if they are using higher upper distance cutoffs and expect more
             than 32 neighbors per node/atom.
             (default: :obj:`32`)
+        box_vecs (Tensor, optional):
+            The vectors defining the periodic box.  This must have shape `(3, 3)`,
+            where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
+            If this is omitted, periodic boundary conditions are not applied.
+            (default: :obj:`None`)
+
     """
 
     def __init__(
@@ -66,6 +86,7 @@ class TorchMD_ET(nn.Module):
         cutoff_upper=5.0,
         max_z=100,
         max_num_neighbors=32,
+        box_vecs=None,
         dtype=torch.float32,
     ):
         super(TorchMD_ET, self).__init__()
@@ -109,6 +130,7 @@ class TorchMD_ET(nn.Module):
             max_num_pairs=-max_num_neighbors,
             return_vecs=True,
             loop=True,
+            box=box_vecs,
             long_edge_index=True
         )
         self.distance_expansion = rbf_class_mapping[rbf_type](
@@ -156,13 +178,14 @@ class TorchMD_ET(nn.Module):
         z: Tensor,
         pos: Tensor,
         batch: Tensor,
+        box: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
 
         x = self.embedding(z)
 
-        edge_index, edge_weight, edge_vec = self.distance(pos, batch)
+        edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
         # This assert must be here to convince TorchScript that edge_vec is not None
         # If you remove it TorchScript will complain down below that you cannot use an Optional[Tensor]
         assert (
