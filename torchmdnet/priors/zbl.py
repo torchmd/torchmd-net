@@ -1,6 +1,6 @@
 import torch
 from torchmdnet.priors.base import BasePrior
-from torchmdnet.models.utils import Distance, CosineCutoff
+from torchmdnet.models.utils import OptimizedDistance, CosineCutoff
 from torch_scatter import scatter
 from typing import Optional, Dict
 
@@ -26,7 +26,7 @@ class ZBL(BasePrior):
             energy_scale = dataset.energy_scale
         atomic_number = torch.as_tensor(atomic_number, dtype=torch.long)
         self.register_buffer("atomic_number", atomic_number)
-        self.distance = Distance(0, cutoff_distance, max_num_neighbors=max_num_neighbors)
+        self.distance = OptimizedDistance(0, cutoff_distance, max_num_pairs=-max_num_neighbors)
         self.cutoff = CosineCutoff(cutoff_upper=cutoff_distance)
         self.cutoff_distance = cutoff_distance
         self.max_num_neighbors = max_num_neighbors
@@ -43,8 +43,8 @@ class ZBL(BasePrior):
     def reset_parameters(self):
         pass
 
-    def post_reduce(self, y, z, pos, batch, extra_args: Optional[Dict[str, torch.Tensor]]):
-        edge_index, distance, _ = self.distance(pos, batch)
+    def post_reduce(self, y, z, pos, batch, box, extra_args: Optional[Dict[str, torch.Tensor]]):
+        edge_index, distance, _ = self.distance(pos, batch, box)
         if edge_index.shape[1] == 0:
             return y
         atomic_number = self.atomic_number[z[edge_index]]

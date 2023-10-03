@@ -300,7 +300,7 @@ class TorchMD_Net(nn.Module):
         # apply molecular-wise prior model
         if self.prior_model is not None:
             for prior in self.prior_model:
-                y = prior.post_reduce(y, z, pos, batch, extra_args)
+                y = prior.post_reduce(y, z, pos, batch, box, extra_args)
         # compute gradients with respect to coordinates
 
         if self.derivative:

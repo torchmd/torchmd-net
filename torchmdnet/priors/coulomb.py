@@ -1,6 +1,6 @@
 import torch
 from torchmdnet.priors.base import BasePrior
-from torchmdnet.models.utils import Distance
+from torchmdnet.models.utils import OptimizedDistance
 from torch_scatter import scatter
 from typing import Optional, Dict
 
@@ -13,33 +13,36 @@ class Coulomb(BasePrior):
 
     distance_scale: multiply by this factor to convert coordinates stored in the dataset to meters
     energy_scale: multiply by this factor to convert energies stored in the dataset to Joules (*not* J/mol)
+    initial_box: the initial box size, in nanometers
     """
-    def __init__(self, alpha, max_num_neighbors, distance_scale=None, energy_scale=None, dataset=None):
+    def __init__(self, alpha, max_num_neighbors, distance_scale=None, energy_scale=None, box_vecs=None, dataset=None):
         super(Coulomb, self).__init__()
         if distance_scale is None:
             distance_scale = dataset.distance_scale
         if energy_scale is None:
             energy_scale = dataset.energy_scale
-        self.distance = Distance(0, torch.inf, max_num_neighbors=max_num_neighbors)
+        self.distance = OptimizedDistance(0, torch.inf, max_num_pairs=-max_num_neighbors)
         self.alpha = alpha
         self.max_num_neighbors = max_num_neighbors
         self.distance_scale = float(distance_scale)
         self.energy_scale = float(energy_scale)
-
+        self.initial_box = box_vecs
     def get_init_args(self):
         return {'alpha': self.alpha,
                 'max_num_neighbors': self.max_num_neighbors,
                 'distance_scale': self.distance_scale,
-                'energy_scale': self.energy_scale}
+                'energy_scale': self.energy_scale,
+                'initial_box': self.initial_box}
 
     def reset_parameters(self):
         pass
 
-    def post_reduce(self, y, z, pos, batch, extra_args: Optional[Dict[str, torch.Tensor]]):
+    def post_reduce(self, y, z, pos, batch, box: Optional[torch.Tensor] = None, extra_args: Optional[Dict[str, torch.Tensor]] = None):
         # Convert to nm and calculate distance.
         x = 1e9*self.distance_scale*pos
         alpha = self.alpha/(1e9*self.distance_scale)
-        edge_index, distance, _ = self.distance(x, batch)
+        box = box if box is not None else self.initial_box
+        edge_index, distance, _ = self.distance(x, batch, box=box)
 
         # Compute the energy, converting to the dataset's units.  Multiply by 0.5 because every atom pair
         # appears twice.

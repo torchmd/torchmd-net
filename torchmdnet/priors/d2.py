@@ -160,7 +160,7 @@ class D2(BasePrior):
             "energy_scale": self.energy_scale
         }
 
-    def post_reduce(self, y, z, pos, batch, extra_args):
+    def post_reduce(self, y, z, pos, batch, box, extra_args):
 
         # Convert to interal units: nm and J/mol
         # NOTE: float32 is overflowed, if m and J are used

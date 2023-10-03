@@ -34,7 +34,7 @@ class BasePrior(nn.Module):
         """
         return x
 
-    def post_reduce(self, y, z, pos, batch, extra_args: Optional[Dict[str, Tensor]]):
+    def post_reduce(self, y, z, pos, batch, box: Optional[Tensor], extra_args: Optional[Dict[str, Tensor]]):
         r"""Post-reduce method of the prior model.
 
         Args:
@@ -42,6 +42,7 @@ class BasePrior(nn.Module):
             z (torch.Tensor): atom types of all atoms.
             pos (torch.Tensor): 3D atomic coordinates.
             batch (torch.Tensor): tensor containing the sample index for each atom.
+            box (Optional[torch.Tensor]): box vectors of the system.
             extra_args (dict): any addition fields provided by the dataset
 
         Returns:
