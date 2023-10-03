@@ -2,7 +2,7 @@ from torchmdnet.priors.base import BasePrior
 from torchmdnet.models.utils import Distance
 import torch as pt
 from torch_scatter import scatter
-
+from typing import Optional, Dict
 
 class D2(BasePrior):
     """Dispersive correction term as used in DFT-D2
@@ -160,7 +160,7 @@ class D2(BasePrior):
             "energy_scale": self.energy_scale
         }
 
-    def post_reduce(self, y, z, pos, batch, box, extra_args):
+    def post_reduce(self, y, z, pos, batch, box: Optional[pt.Tensor] = None, extra_args: Optional[Dict[str, pt.Tensor]] = None):
 
         # Convert to interal units: nm and J/mol
         # NOTE: float32 is overflowed, if m and J are used
