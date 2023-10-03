@@ -1,6 +1,6 @@
 import sys
 import os
-import ast
+import yaml
 import argparse
 import logging
 import torch
@@ -90,7 +90,7 @@ def get_args():
 
     # TensorNet specific
     parser.add_argument('--equivariance-invariance-group', type=str, default='O(3)', help='Equivariance and invariance group of TensorNet')
-    parser.add_argument('--box-vecs', type=lambda x: torch.Tensor(ast.literal_eval(x)), default=None, help='Box vectors for periodic boundary conditions. Example: [[1,0,0],[0,1,0],[0,0,1]]')
+    parser.add_argument('--box-vecs', type=lambda x: torch.Tensor(yaml.safe_load(x)), default=None, help='Box vectors for periodic boundary conditions. Example: [[1,0,0],[0,1,0],[0,0,1]]')
     # other args
     parser.add_argument('--derivative', default=False, type=bool, help='If true, take the derivative of the prediction w.r.t coordinates')
     parser.add_argument('--cutoff-lower', type=float, default=0.0, help='Lower cutoff in model')
