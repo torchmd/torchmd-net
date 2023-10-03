@@ -174,13 +174,14 @@ class TorchMD_T(nn.Module):
         z: Tensor,
         pos: Tensor,
         batch: Tensor,
+        box: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
 
         x = self.embedding(z)
 
-        edge_index, edge_weight, _ = self.distance(pos, batch)
+        edge_index, edge_weight, _ = self.distance(pos, batch, box)
         edge_attr = self.distance_expansion(edge_weight)
 
         if self.neighbor_embedding is not None:
