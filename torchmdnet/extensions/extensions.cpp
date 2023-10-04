@@ -1,6 +1,7 @@
 /* Raul P. Pelaez 2023. Torch extensions to the torchmdnet library.
  * You can expose functions to python here which will be compatible with TorchScript.
  * Add your exports to the TORCH_LIBRARY macro below, see __init__.py to see how to access them from python.
+ * The WITH_CUDA macro will be defined when compiling with CUDA support.
  */
 
 
@@ -31,4 +32,5 @@ bool is_current_stream_capturing() {
 
 TORCH_LIBRARY(torchmdnet_extensions, m) {
     m.def("is_current_stream_capturing", is_current_stream_capturing);
+    m.def("get_neighbor_pairs(str strategy, Tensor positions, Tensor batch, Tensor box_vectors, bool use_periodic, Scalar cutoff_lower, Scalar cutoff_upper, Scalar max_num_pairs, bool loop, bool include_transpose) -> (Tensor neighbors, Tensor distances, Tensor distance_vecs, Tensor num_pairs)");
 }

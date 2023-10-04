@@ -32,3 +32,10 @@ def is_current_stream_capturing():
     """
     _is_current_stream_capturing = torch.ops.torchmdnet_extensions.is_current_stream_capturing
     return _is_current_stream_capturing()
+
+get_neighbor_pairs_kernel = torch.ops.torchmdnet_extensions.get_neighbor_pairs
+
+# For some unknown reason torch.compile is not able to compile this function
+if int(torch.__version__.split('.')[0]) >= 2:
+    import torch._dynamo as dynamo
+    dynamo.disallow_in_graph(get_neighbor_pairs_kernel)

@@ -6,6 +6,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch_cluster import radius_graph
+from torchmdnet.extensions import get_neighbor_pairs_kernel
 import warnings
 
 
@@ -106,8 +107,6 @@ class NeighborEmbedding(MessagePassing):
 
     def message(self, x_j, W):
         return x_j * W
-
-from torchmdnet.neighbors import get_neighbor_pairs_kernel
 
 class OptimizedDistance(torch.nn.Module):
     def __init__(
