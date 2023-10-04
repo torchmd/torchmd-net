@@ -23,8 +23,8 @@ class External:
     This is an adapter to use TorchMD-Net models in TorchMD.
     Parameters
     ----------
-    netfile : str
-        Path to the checkpoint file of the model.
+    netfile : str or torch.nn.Module
+        Path to the checkpoint file of the model or the model itself.
     embeddings : torch.Tensor
         Embeddings of the atoms in the system.
     device : str, optional
@@ -49,7 +49,14 @@ class External:
         use_cuda_graph=False,
         cuda_graph_warmup_steps=12,
     ):
-        self.model = load_model(netfile, device=device, derivative=True)
+        if isinstance(netfile, str):
+            self.model = load_model(netfile, device=device, derivative=True)
+        elif isinstance(netfile, torch.nn.Module):
+            self.model = netfile
+        else:
+            raise ValueError(
+                f"Expected a path to a checkpoint file or a torch.nn.Module, got {type(netfile)}"
+            )
         self.device = device
         self.n_atoms = embeddings.size(1)
         self.embeddings = embeddings.reshape(-1).to(device)
