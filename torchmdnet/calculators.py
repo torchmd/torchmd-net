@@ -101,11 +101,14 @@ class External:
                 )
             if self.cuda_graph is None:
                 self._init_cuda_graph()
+            assert self.cuda_graph is not None, "CUDA graph is not initialized. This should not had happened."
             with torch.no_grad():
                 self.pos.copy_(pos)
                 self.cuda_graph.replay()
         else:
             self.energy, self.forces = self.model(self.embeddings, pos, self.batch)
+        assert self.forces is not None, "The model is not returning forces"
+        assert self.energy is not None, "The model is not returning energy"
         return self.output_transformer(
             self.energy.clone().detach(),
             self.forces.clone().reshape(-1, self.n_atoms, 3).detach(),
