@@ -29,24 +29,19 @@ def set_torch_cuda_arch_list():
 
 set_torch_cuda_arch_list()
 
+extension_root= os.path.join("torchmdnet", "extensions")
 neighbor_sources=["neighbors_cpu.cpp"]
 if torch.cuda._is_compiled():
     neighbor_sources.append("neighbors_cuda.cu")
-neighbor_sources = ["torchmdnet/extensions/neighbors/" + source for source in neighbor_sources]
+neighbor_sources = [os.path.join(extension_root, "neighbors", source) for source in neighbor_sources]
 
-extensions = CppExtension(
+ExtensionType = CppExtension if not torch.cuda._is_compiled() else CUDAExtension
+extensions = ExtensionType(
     name='torchmdnet.extensions.torchmdnet_extensions',
-    sources=["torchmdnet/extensions/extensions.cpp"] + neighbor_sources,
+    sources=[os.path.join(extension_root, "extensions.cpp")] + neighbor_sources,
     include_dirs=include_paths(),
-    language='c++')
-if torch.cuda._is_compiled():
-    extensions = CUDAExtension(
-        name='torchmdnet.extensions.torchmdnet_extensions',
-        sources=["torchmdnet/extensions/extensions.cpp"] + neighbor_sources,
-        include_dirs=include_paths(),
-        define_macros=[('WITH_CUDA', 1)],
-        language='cuda'
-        )
+    define_macros=[('WITH_CUDA', 1)] if torch.cuda._is_compiled() else [],
+)
 
 setup(
     name="torchmd-net",
