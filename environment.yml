@@ -19,5 +19,4 @@ dependencies:
   - flake8
   - pytest
   - psutil
-  - ninja
   - gxx
