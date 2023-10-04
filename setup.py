@@ -52,5 +52,5 @@ setup(
         'build_ext': BuildExtension.with_options(no_python_abi_suffix=True, use_ninja=False)},
     include_package_data=True,
     entry_points={"console_scripts": ["torchmd-train = torchmdnet.scripts.train:main"]},
-    package_data={"torchmdnet": ["neighbors/torchmdnet_neighbors.so", "extensions/torchmdnet_extensions.so"]},
+    package_data={"torchmdnet": ["extensions/torchmdnet_extensions.so"]},
 )
