@@ -1,8 +1,9 @@
 from abc import abstractmethod, ABCMeta
 from torch_scatter import scatter
 from typing import Optional
-from torchmdnet.models.utils import act_class_mapping, GatedEquivariantBlock, check_stream_capturing
+from torchmdnet.models.utils import act_class_mapping, GatedEquivariantBlock
 from torchmdnet.utils import atomic_masses
+from torchmdnet.extensions import is_current_stream_capturing
 from torch_scatter import scatter
 import torch
 from torch import nn
@@ -27,7 +28,7 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
     def reduce(self, x, batch):
         is_capturing = (
             x.is_cuda
-            and check_stream_capturing()
+            and is_current_stream_capturing()
         )
         if not x.is_cuda or not is_capturing:
             self.dim_size = int(batch.max().item() + 1)

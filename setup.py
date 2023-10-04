@@ -15,6 +15,21 @@ from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension, include_paths, CppExtension
 import torch
 
+extensions = CppExtension(
+    name='torchmdnet.extensions.torchmdnet_extensions',
+    sources=["torchmdnet/extensions/extensions.cpp"],
+    include_dirs=include_paths(),
+    language='c++')
+if torch.cuda._is_compiled():
+    extensions = CUDAExtension(
+        name='torchmdnet.extensions.torchmdnet_extensions',
+        sources=["torchmdnet/extensions/extensions.cpp"],
+        include_dirs=include_paths(),
+        define_macros=[('WITH_CUDA', 1)],
+        language='cuda'
+        )
+
+
 neighs = CppExtension(
     name='torchmdnet.neighbors.torchmdnet_neighbors',
     sources=["torchmdnet/neighbors/neighbors.cpp", "torchmdnet/neighbors/neighbors_cpu.cpp"],
@@ -33,11 +48,11 @@ setup(
     name="torchmd-net",
     version=version,
     packages=find_packages(),
-    ext_modules=[neighs,],
+    ext_modules=[neighs, extensions],
     cmdclass={
         'build_ext': BuildExtension.with_options(no_python_abi_suffix=True, use_ninja=False)},
     include_package_data=True,
     entry_points={"console_scripts": ["torchmd-train = torchmdnet.scripts.train:main"]},
-    package_data={"torchmdnet": ["neighbors/torchmdnet_neighbors.so"]},
+    package_data={"torchmdnet": ["neighbors/torchmdnet_neighbors.so", "extensions/torchmdnet_extensions.so"]},
 
 )
