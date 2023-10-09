@@ -8,9 +8,8 @@ from torchmdnet.models.utils import (
     OptimizedDistance,
     rbf_class_mapping,
     act_class_mapping,
-    scatter
 )
-
+from torch_scatter import scatter
 
 class TorchMD_T(nn.Module):
     r"""The TorchMD Transformer architecture.
