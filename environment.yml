@@ -7,7 +7,6 @@ dependencies:
   - nnpops==0.5
   - pip
   - pytorch==2.0.*
-  - pytorch_cluster==1.6.1
   - pytorch_geometric==2.3.1
   - pytorch_scatter==2.1.1
   - pytorch_sparse==0.6.17
