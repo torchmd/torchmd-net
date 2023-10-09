@@ -316,7 +316,7 @@ def test_large_size(strategy, n_batches):
     pos.requires_grad = True
     # Find the particle appearing in the most pairs
     max_num_neighbors = 64
-    ref_neighbors, ref_distances, ref_distance_vecs = compute_ref_neighbors(
+    ref_neighbors, ref_distances_vecs, ref_distance = compute_ref_neighbors(
         pos, batch, loop, True, cutoff, None
     )
     ref_neighbors, ref_distance_vecs, ref_distances = sort_neighbors(
