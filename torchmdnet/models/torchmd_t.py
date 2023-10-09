@@ -1,7 +1,6 @@
 from typing import Optional, Tuple
 import torch
 from torch import Tensor, nn
-from torch_geometric.nn import MessagePassing
 from torchmdnet.models.utils import (
     NeighborEmbedding,
     CosineCutoff,
@@ -108,7 +107,7 @@ class TorchMD_T(nn.Module):
         self.neighbor_embedding = (
             NeighborEmbedding(
                 hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z, dtype=dtype
-            ).jittable()
+            )
             if neighbor_embedding
             else None
         )
@@ -125,7 +124,7 @@ class TorchMD_T(nn.Module):
                 cutoff_lower,
                 cutoff_upper,
                 dtype=dtype,
-            ).jittable()
+            )
             self.attention_layers.append(layer)
 
         self.out_norm = nn.LayerNorm(hidden_channels, dtype=dtype)
@@ -159,7 +158,7 @@ class TorchMD_T(nn.Module):
             x = self.neighbor_embedding(z, x, edge_index, edge_weight, edge_attr)
 
         for attn in self.attention_layers:
-            x = x + attn(x, edge_index, edge_weight, edge_attr)
+            x = x + attn(x, edge_index, edge_weight, edge_attr, z.shape[0])
         x = self.out_norm(x)
 
         return x, None, z, pos, batch
@@ -182,7 +181,7 @@ class TorchMD_T(nn.Module):
         )
 
 
-class MultiHeadAttention(MessagePassing):
+class MultiHeadAttention(nn.Module):
     def __init__(
         self,
         hidden_channels,
@@ -195,7 +194,7 @@ class MultiHeadAttention(MessagePassing):
         cutoff_upper,
         dtype=torch.float,
     ):
-        super(MultiHeadAttention, self).__init__(aggr="add", node_dim=0)
+        super(MultiHeadAttention, self).__init__()
         assert hidden_channels % num_heads == 0, (
             f"The number of hidden channels ({hidden_channels}) "
             f"must be evenly divisible by the number of "
@@ -243,7 +242,7 @@ class MultiHeadAttention(MessagePassing):
             nn.init.xavier_uniform_(self.dv_proj.weight)
             self.dv_proj.bias.data.fill_(0)
 
-    def forward(self, x, edge_index, r_ij, f_ij):
+    def forward(self, x: Tensor, edge_index: Tensor, r_ij: Tensor, f_ij: Tensor, n_atoms: int) -> Tensor:
         head_shape = (-1, self.num_heads, self.head_dim)
 
         x = self.layernorm(x)
@@ -261,15 +260,15 @@ class MultiHeadAttention(MessagePassing):
             if self.dv_proj is not None
             else None
         )
-
-        # propagate_type: (q: Tensor, k: Tensor, v: Tensor, dk: Tensor, dv: Tensor, r_ij: Tensor)
-        out = self.propagate(
-            edge_index, q=q, k=k, v=v, dk=dk, dv=dv, r_ij=r_ij, size=None
-        )
+        msg = self.message(edge_index, q, k, v, dk, dv, r_ij)
+        out = scatter(msg, edge_index[0], dim=0, dim_size=n_atoms)
         out = self.o_proj(out.reshape(-1, self.num_heads * self.head_dim))
         return out
 
-    def message(self, q_i, k_j, v_j, dk, dv, r_ij):
+    def message(self, edge_index: Tensor, q: Tensor, k: Tensor, v: Tensor, dk: Optional[Tensor], dv: Optional[Tensor], r_ij: Tensor) -> Tensor:
+        q_i = q.index_select(0, edge_index[0])
+        k_j = k.index_select(0, edge_index[1])
+        v_j = v.index_select(0, edge_index[1])
         # compute attention matrix
         if dk is None:
             attn = (q_i * k_j).sum(dim=-1)

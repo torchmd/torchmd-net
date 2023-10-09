@@ -53,14 +53,6 @@ def decompose_tensor(tensor):
     return I, A, S
 
 
-# Modifies tensor by multiplying invariant features to irreducible components
-def new_radial_tensor(I, A, S, f_I, f_A, f_S):
-    I = f_I[..., None, None] * I
-    A = f_A[..., None, None] * A
-    S = f_S[..., None, None] * S
-    return I, A, S
-
-
 # Computes Frobenius norm
 def tensor_norm(tensor):
     return (tensor**2).sum((-2, -1))
@@ -309,10 +301,9 @@ class TensorEmbedding(nn.Module):
         Zij = self._get_atomic_number_message(z, edge_index)
         Iij, Aij, Sij = self._get_tensor_messages(Zij, edge_weight, edge_vec_norm, edge_attr)
         source = torch.zeros(z.shape[0], self.hidden_channels, 3, 3, device=z.device, dtype=Iij.dtype)
-        index = edge_index[0].reshape(-1, 1, 1, 1).expand_as(Iij)
-        I = source.scatter_add(dim=0, index=index, src=Iij)
-        A = source.scatter_add(dim=0, index=index, src=Aij)
-        S = source.scatter_add(dim=0, index=index, src=Sij)
+        I = source.index_add(dim=0, index=edge_index[0], source=Iij)
+        A = source.index_add(dim=0, index=edge_index[0], source=Aij)
+        S = source.index_add(dim=0, index=edge_index[0], source=Sij)
         norm = self.init_norm(tensor_norm(I + A + S))
         for linear_scalar in self.linears_scalar:
             norm = self.act(linear_scalar(norm))
@@ -328,8 +319,7 @@ def tensor_message_passing(edge_index: Tensor, factor: Tensor, tensor: Tensor, n
     msg = factor * tensor.index_select(0, edge_index[1])
     shape = (natoms, tensor.shape[1], tensor.shape[2], tensor.shape[3])
     tensor_m = torch.zeros(*shape, device=tensor.device, dtype=tensor.dtype)
-    index = edge_index[0].reshape(-1, 1, 1, 1).expand_as(msg)
-    tensor_m = tensor_m.scatter_add(dim=0, index=index, src=msg)
+    tensor_m = tensor_m.index_add(0, edge_index[0] ,msg)
     return tensor_m
 
 

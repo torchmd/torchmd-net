@@ -1,11 +1,8 @@
 import math
 from typing import Optional, Tuple
 import torch
-from torch import Tensor
-from torch import nn
+from torch import nn, Tensor
 import torch.nn.functional as F
-from torch_geometric.nn import MessagePassing
-from torch_cluster import radius_graph
 from torchmdnet.extensions import get_neighbor_pairs_kernel
 import warnings
 
@@ -40,7 +37,7 @@ def visualize_basis(basis_type, num_rbf=50, cutoff_lower=0, cutoff_upper=5):
         plt.plot(distances.numpy(), expanded_distances[:, i].detach().numpy())
     plt.show()
 
-class NeighborEmbedding(MessagePassing):
+class NeighborEmbedding(nn.Module):
     def __init__(self, hidden_channels, num_rbf, cutoff_lower, cutoff_upper, max_z=100, dtype=torch.float32):
         """
         The ET architecture assigns two  learned vectors to each atom type
@@ -55,7 +52,7 @@ class NeighborEmbedding(MessagePassing):
 
         See eq. 3 in https://arxiv.org/pdf/2202.02541.pdf for more details.
         """
-        super(NeighborEmbedding, self).__init__(aggr="add")
+        super(NeighborEmbedding, self).__init__()
         self.embedding = nn.Embedding(max_z, hidden_channels, dtype=dtype)
         self.distance_proj = nn.Linear(num_rbf, hidden_channels, dtype=dtype)
         self.combine = nn.Linear(hidden_channels * 2, hidden_channels, dtype=dtype)
@@ -77,7 +74,7 @@ class NeighborEmbedding(MessagePassing):
         edge_index: Tensor,
         edge_weight: Tensor,
         edge_attr: Tensor,
-    ):
+    ) -> Tensor:
         """
         Args:
             z (Tensor): Atomic numbers of shape :obj:`[num_nodes]`
@@ -99,13 +96,10 @@ class NeighborEmbedding(MessagePassing):
         W = self.distance_proj(edge_attr) * C.view(-1, 1)
 
         x_neighbors = self.embedding(z)
-        # propagate_type: (x: Tensor, W: Tensor)
-        x_neighbors = self.propagate(edge_index, x=x_neighbors, W=W, size=None)
+        msg = W*x_neighbors.index_select(0, edge_index[1])
+        x_neighbors = torch.zeros(z.shape[0], x.shape[1], dtype=x.dtype, device=x.device).index_add(0, edge_index[0], msg)
         x_neighbors = self.combine(torch.cat([x, x_neighbors], dim=1))
         return x_neighbors
-
-    def message(self, x_j, W):
-        return x_j * W
 
 class OptimizedDistance(torch.nn.Module):
     def __init__(
@@ -292,7 +286,7 @@ class GaussianSmearing(nn.Module):
         self.offset.data.copy_(offset)
         self.coeff.data.copy_(coeff)
 
-    def forward(self, dist):
+    def forward(self, dist: Tensor) -> Tensor:
         dist = dist.unsqueeze(-1) - self.offset
         return torch.exp(self.coeff * torch.pow(dist, 2))
 
