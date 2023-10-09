@@ -56,7 +56,6 @@ def decompose_tensor(tensor):
 
 # Modifies tensor by multiplying invariant features to irreducible components
 def new_radial_tensor(I, A, S, f_I, f_A, f_S):
-    # Writing this function without using intermediate tensors breaks CUDA graphs in some cases
     I =  f_I[..., None, None] * I
     A = f_A[..., None, None] * A
     S = f_S[..., None, None] * S
