@@ -248,7 +248,7 @@ class OptimizedDistance(torch.nn.Module):
         )
         if self.check_errors:
             if num_pairs[0] > max_pairs:
-                raise RuntimeError(
+                raise AssertionError(
                     "Found num_pairs({}) > max_num_pairs({})".format(
                         num_pairs[0], max_pairs
                     )
