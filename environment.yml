@@ -7,6 +7,7 @@ dependencies:
   - nnpops==0.5
   - pip
   - pytorch==2.0.*
+  - pytorch_cluster==1.6.1
   - pytorch_geometric==2.3.1
   - lightning==2.0.8
   - pydantic<2
