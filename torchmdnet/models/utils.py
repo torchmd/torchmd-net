@@ -4,6 +4,7 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 from torchmdnet.extensions import get_neighbor_pairs_kernel
+from torch_cluster import radius_graph
 import warnings
 
 
