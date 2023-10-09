@@ -1,15 +1,12 @@
 from abc import abstractmethod, ABCMeta
-from torch_scatter import scatter
 from typing import Optional
-from torchmdnet.models.utils import act_class_mapping, GatedEquivariantBlock
-from torchmdnet.utils import atomic_masses
-from torchmdnet.extensions import is_current_stream_capturing
-from torch_scatter import scatter
 import torch
 from torch import nn
+from torchmdnet.models.utils import act_class_mapping, GatedEquivariantBlock, scatter
+from torchmdnet.utils import atomic_masses
+from torchmdnet.extensions import is_current_stream_capturing
 from warnings import warn
 __all__ = ["Scalar", "DipoleMoment", "ElectronicSpatialExtent"]
-
 
 class OutputModel(nn.Module, metaclass=ABCMeta):
     def __init__(self, allow_prior_model, reduce_op):

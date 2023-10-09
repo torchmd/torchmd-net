@@ -2,13 +2,13 @@ from typing import Optional, Tuple
 import torch
 from torch import Tensor, nn
 from torch_geometric.nn import MessagePassing
-from torch_scatter import scatter
 from torchmdnet.models.utils import (
     NeighborEmbedding,
     CosineCutoff,
     OptimizedDistance,
     rbf_class_mapping,
     act_class_mapping,
+    scatter
 )
 
 class TorchMD_ET(nn.Module):

@@ -40,7 +40,6 @@ def visualize_basis(basis_type, num_rbf=50, cutoff_lower=0, cutoff_upper=5):
         plt.plot(distances.numpy(), expanded_distances[:, i].detach().numpy())
     plt.show()
 
-
 class NeighborEmbedding(MessagePassing):
     def __init__(self, hidden_channels, num_rbf, cutoff_lower, cutoff_upper, max_z=100, dtype=torch.float32):
         """
@@ -266,7 +265,6 @@ class OptimizedDistance(torch.nn.Module):
             return edge_index, edge_weight, edge_vec
         else:
             return edge_index, edge_weight, None
-
 
 class GaussianSmearing(nn.Module):
     def __init__(self, cutoff_lower=0.0, cutoff_upper=5.0, num_rbf=50, trainable=True, dtype=torch.float32):
@@ -519,6 +517,37 @@ class GatedEquivariantBlock(nn.Module):
         if self.act is not None:
             x = self.act(x)
         return x, v
+
+def _broadcast(src: torch.Tensor, other: torch.Tensor, dim: int):
+    """Broadcasts src to the shape of other along the given dimension."""
+    if dim < 0:
+        dim = other.dim() + dim
+    if src.dim() == 1:
+        for _ in range(0, dim):
+            src = src.unsqueeze(0)
+    for _ in range(src.dim(), other.dim()):
+        src = src.unsqueeze(-1)
+    src = src.expand(other.size())
+    return src
+
+def scatter(src: Tensor, index: Tensor, dim: int=0, dim_size: Optional[int] =None, reduce: str ="sum") -> Tensor:
+    """Has the signature of torch_scatter.scatter, but uses torch.scatter_reduce instead."""
+    if dim_size is None:
+        dim_size = index.max().item() + 1
+    operation_dict = {"add":"sum", "sum": "sum", "mul": "prod", "mean": "mean", "min": "amin", "max": "amax"}
+    reduce_op = operation_dict[reduce]
+    # take into account the dimensionality of src
+    index = _broadcast(index, src, dim)
+    size = list(src.size())
+    if dim_size is not None:
+        size[dim] = dim_size
+    elif index.numel() == 0:
+        size[dim] = 0
+    else:
+        size[dim] = int(index.max()) + 1
+    out = torch.zeros(size, dtype=src.dtype, device=src.device)
+    res = out.scatter_reduce(dim, index, src, reduce_op)
+    return res
 
 rbf_class_mapping = {"gauss": GaussianSmearing, "expnorm": ExpNormalSmearing}
 

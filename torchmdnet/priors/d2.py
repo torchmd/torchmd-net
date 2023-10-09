@@ -1,7 +1,7 @@
 from torchmdnet.priors.base import BasePrior
 from torchmdnet.models.utils import Distance
 import torch as pt
-from torch_scatter import scatter
+from torchmdnet.models.utils import scatter
 
 
 class D2(BasePrior):
