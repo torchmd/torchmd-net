@@ -5,7 +5,6 @@ from torch import Tensor
 from torch import nn
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
-from torch_cluster import radius_graph
 from torchmdnet.extensions import get_neighbor_pairs_kernel
 import warnings
 
