@@ -7,6 +7,7 @@ from torchmdnet.models.utils import (
     Distance,
     rbf_class_mapping,
     act_class_mapping,
+    scatter
 )
 
 
