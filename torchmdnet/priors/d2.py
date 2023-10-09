@@ -1,5 +1,5 @@
 from torchmdnet.priors.base import BasePrior
-from torchmdnet.models.utils import Distance
+from torchmdnet.models.utils import OptimizedDistance
 import torch as pt
 from torch_scatter import scatter
 
@@ -135,10 +135,10 @@ class D2(BasePrior):
         )
 
         # Distance calculator
-        self.distances = Distance(
+        self.distances = OptimizedDistance(
             cutoff_lower=0,
             cutoff_upper=self.cutoff_distance,
-            max_num_neighbors=self.max_num_neighbors,
+            max_num_pairs=-self.max_num_neighbors,
         )
 
         # Parameters (default values from the reference)

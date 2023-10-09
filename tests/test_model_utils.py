@@ -2,7 +2,7 @@ from pytest import mark, raises
 import torch
 from torch.autograd import grad
 from torchmdnet.models.model import create_model
-from torchmdnet.models.utils import Distance
+from torchmdnet.models.utils import OptimizedDistance
 from utils import load_example_args
 
 
@@ -11,10 +11,10 @@ from utils import load_example_args
 @mark.parametrize("return_vecs", [False, True])
 @mark.parametrize("loop", [False, True])
 def test_distance_calculation(cutoff_lower, cutoff_upper, return_vecs, loop):
-    dist = Distance(
+    dist = OptimizedDistance(
         cutoff_lower,
         cutoff_upper,
-        max_num_neighbors=100,
+        max_num_pairs=-100,
         return_vecs=return_vecs,
         loop=loop,
     )
@@ -65,7 +65,7 @@ def test_distance_calculation(cutoff_lower, cutoff_upper, return_vecs, loop):
 
 
 def test_neighbor_count_error():
-    dist = Distance(0, 5, max_num_neighbors=32)
+    dist = OptimizedDistance(0, 5, max_num_pairs=-32)
 
     # single molecule that should produce an error due to exceeding
     # the maximum number of neighbors
