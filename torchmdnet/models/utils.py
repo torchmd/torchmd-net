@@ -37,8 +37,17 @@ def visualize_basis(basis_type, num_rbf=50, cutoff_lower=0, cutoff_upper=5):
         plt.plot(distances.numpy(), expanded_distances[:, i].detach().numpy())
     plt.show()
 
+
 class NeighborEmbedding(nn.Module):
-    def __init__(self, hidden_channels, num_rbf, cutoff_lower, cutoff_upper, max_z=100, dtype=torch.float32):
+    def __init__(
+        self,
+        hidden_channels,
+        num_rbf,
+        cutoff_lower,
+        cutoff_upper,
+        max_z=100,
+        dtype=torch.float32,
+    ):
         """
         The ET architecture assigns two  learned vectors to each atom type
         zi. One  is used to  encode information  specific to an  atom, the
@@ -96,10 +105,13 @@ class NeighborEmbedding(nn.Module):
         W = self.distance_proj(edge_attr) * C.view(-1, 1)
 
         x_neighbors = self.embedding(z)
-        msg = W*x_neighbors.index_select(0, edge_index[1])
-        x_neighbors = torch.zeros(z.shape[0], x.shape[1], dtype=x.dtype, device=x.device).index_add(0, edge_index[0], msg)
+        msg = W * x_neighbors.index_select(0, edge_index[1])
+        x_neighbors = torch.zeros(
+            z.shape[0], x.shape[1], dtype=x.dtype, device=x.device
+        ).index_add(0, edge_index[0], msg)
         x_neighbors = self.combine(torch.cat([x, x_neighbors], dim=1))
         return x_neighbors
+
 
 class OptimizedDistance(torch.nn.Module):
     def __init__(
@@ -114,7 +126,7 @@ class OptimizedDistance(torch.nn.Module):
         resize_to_fit=True,
         check_errors=True,
         box=None,
-        long_edge_index=True
+        long_edge_index=True,
     ):
         super(OptimizedDistance, self).__init__()
         """ Compute the neighbor list for a given cutoff.
@@ -223,7 +235,7 @@ class OptimizedDistance(torch.nn.Module):
 
         """
         self.box = self.box.to(pos.dtype)
-        max_pairs : int = self.max_num_pairs
+        max_pairs: int = self.max_num_pairs
         if self.max_num_pairs < 0:
             max_pairs = -self.max_num_pairs * pos.shape[0]
         if batch is None:
@@ -260,8 +272,16 @@ class OptimizedDistance(torch.nn.Module):
         else:
             return edge_index, edge_weight, None
 
+
 class GaussianSmearing(nn.Module):
-    def __init__(self, cutoff_lower=0.0, cutoff_upper=5.0, num_rbf=50, trainable=True, dtype=torch.float32):
+    def __init__(
+        self,
+        cutoff_lower=0.0,
+        cutoff_upper=5.0,
+        num_rbf=50,
+        trainable=True,
+        dtype=torch.float32,
+    ):
         super(GaussianSmearing, self).__init__()
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
@@ -277,7 +297,9 @@ class GaussianSmearing(nn.Module):
             self.register_buffer("offset", offset)
 
     def _initial_params(self):
-        offset = torch.linspace(self.cutoff_lower, self.cutoff_upper, self.num_rbf, dtype=self.dtype)
+        offset = torch.linspace(
+            self.cutoff_lower, self.cutoff_upper, self.num_rbf, dtype=self.dtype
+        )
         coeff = -0.5 / (offset[1] - offset[0]) ** 2
         return offset, coeff
 
@@ -292,7 +314,14 @@ class GaussianSmearing(nn.Module):
 
 
 class ExpNormalSmearing(nn.Module):
-    def __init__(self, cutoff_lower=0.0, cutoff_upper=5.0, num_rbf=50, trainable=True, dtype=torch.float32):
+    def __init__(
+        self,
+        cutoff_lower=0.0,
+        cutoff_upper=5.0,
+        num_rbf=50,
+        trainable=True,
+        dtype=torch.float32,
+    ):
         super(ExpNormalSmearing, self).__init__()
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
@@ -314,11 +343,14 @@ class ExpNormalSmearing(nn.Module):
         # initialize means and betas according to the default values in PhysNet
         # https://pubs.acs.org/doi/10.1021/acs.jctc.9b00181
         start_value = torch.exp(
-            torch.scalar_tensor(-self.cutoff_upper + self.cutoff_lower, dtype=self.dtype)
+            torch.scalar_tensor(
+                -self.cutoff_upper + self.cutoff_lower, dtype=self.dtype
+            )
         )
         means = torch.linspace(start_value, 1, self.num_rbf, dtype=self.dtype)
         betas = torch.tensor(
-            [(2 / self.num_rbf * (1 - start_value)) ** -2] * self.num_rbf, dtype=self.dtype
+            [(2 / self.num_rbf * (1 - start_value)) ** -2] * self.num_rbf,
+            dtype=self.dtype,
         )
         return means, betas
 
@@ -342,6 +374,7 @@ class ShiftedSoftplus(nn.Module):
     SoftPlus is a smooth approximation to the ReLU function and can be used
     to constrain the output of a machine to always be positive.
     """
+
     def __init__(self):
         super(ShiftedSoftplus, self).__init__()
         self.shift = torch.log(torch.tensor(2.0)).item()
@@ -380,6 +413,7 @@ class CosineCutoff(nn.Module):
             cutoffs = cutoffs * (distances < self.cutoff_upper)
             return cutoffs
 
+
 class GatedEquivariantBlock(nn.Module):
     """Gated Equivariant Block as defined in Schütt et al. (2021):
     Equivariant message passing for the prediction of tensorial properties and molecular spectra
@@ -400,8 +434,12 @@ class GatedEquivariantBlock(nn.Module):
         if intermediate_channels is None:
             intermediate_channels = hidden_channels
 
-        self.vec1_proj = nn.Linear(hidden_channels, hidden_channels, bias=False, dtype=dtype)
-        self.vec2_proj = nn.Linear(hidden_channels, out_channels, bias=False, dtype=dtype)
+        self.vec1_proj = nn.Linear(
+            hidden_channels, hidden_channels, bias=False, dtype=dtype
+        )
+        self.vec2_proj = nn.Linear(
+            hidden_channels, out_channels, bias=False, dtype=dtype
+        )
 
         act_class = act_class_mapping[activation]
         self.update_net = nn.Sequential(
@@ -425,7 +463,10 @@ class GatedEquivariantBlock(nn.Module):
 
         # detach zero-entries to avoid NaN gradients during force loss backpropagation
         vec1 = torch.zeros(
-            vec1_buffer.size(0), vec1_buffer.size(2), device=vec1_buffer.device, dtype=vec1_buffer.dtype
+            vec1_buffer.size(0),
+            vec1_buffer.size(2),
+            device=vec1_buffer.device,
+            dtype=vec1_buffer.dtype,
         )
         mask = (vec1_buffer != 0).view(vec1_buffer.size(0), -1).any(dim=1)
         if not mask.all():
@@ -448,6 +489,7 @@ class GatedEquivariantBlock(nn.Module):
             x = self.act(x)
         return x, v
 
+
 def _broadcast(src: torch.Tensor, other: torch.Tensor, dim: int):
     """Broadcasts src to the shape of other along the given dimension."""
     if dim < 0:
@@ -460,11 +502,25 @@ def _broadcast(src: torch.Tensor, other: torch.Tensor, dim: int):
     src = src.expand(other.size())
     return src
 
-def scatter(src: Tensor, index: Tensor, dim: int=0, dim_size: Optional[int] =None, reduce: str ="sum") -> Tensor:
+
+def scatter(
+    src: Tensor,
+    index: Tensor,
+    dim: int = 0,
+    dim_size: Optional[int] = None,
+    reduce: str = "sum",
+) -> Tensor:
     """Has the signature of torch_scatter.scatter, but uses torch.scatter_reduce instead."""
     if dim_size is None:
         dim_size = index.max().item() + 1
-    operation_dict = {"add":"sum", "sum": "sum", "mul": "prod", "mean": "mean", "min": "amin", "max": "amax"}
+    operation_dict = {
+        "add": "sum",
+        "sum": "sum",
+        "mul": "prod",
+        "mean": "mean",
+        "min": "amin",
+        "max": "amax",
+    }
     reduce_op = operation_dict[reduce]
     # take into account the dimensionality of src
     index = _broadcast(index, src, dim)
@@ -478,6 +534,7 @@ def scatter(src: Tensor, index: Tensor, dim: int=0, dim_size: Optional[int] =Non
     out = torch.zeros(size, dtype=src.dtype, device=src.device)
     res = out.scatter_reduce(dim, index, src, reduce_op)
     return res
+
 
 rbf_class_mapping = {"gauss": GaussianSmearing, "expnorm": ExpNormalSmearing}
 

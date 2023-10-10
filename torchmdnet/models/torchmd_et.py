@@ -7,8 +7,9 @@ from torchmdnet.models.utils import (
     OptimizedDistance,
     rbf_class_mapping,
     act_class_mapping,
-    scatter
+    scatter,
 )
+
 
 class TorchMD_ET(nn.Module):
     r"""The TorchMD equivariant Transformer architecture.
@@ -108,7 +109,7 @@ class TorchMD_ET(nn.Module):
             max_num_pairs=-max_num_neighbors,
             return_vecs=True,
             loop=True,
-            long_edge_index=True
+            long_edge_index=True,
         )
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
@@ -148,7 +149,6 @@ class TorchMD_ET(nn.Module):
         for attn in self.attention_layers:
             attn.reset_parameters()
         self.out_norm.reset_parameters()
-
 
     def forward(
         self,
@@ -238,7 +238,9 @@ class EquivariantMultiHeadAttention(nn.Module):
         self.v_proj = nn.Linear(hidden_channels, hidden_channels * 3, dtype=dtype)
         self.o_proj = nn.Linear(hidden_channels, hidden_channels * 3, dtype=dtype)
 
-        self.vec_proj = nn.Linear(hidden_channels, hidden_channels * 3, bias=False, dtype=dtype)
+        self.vec_proj = nn.Linear(
+            hidden_channels, hidden_channels * 3, bias=False, dtype=dtype
+        )
 
         self.dk_proj = None
         if distance_influence in ["keys", "both"]:
@@ -298,7 +300,7 @@ class EquivariantMultiHeadAttention(nn.Module):
             dv=dv,
             r_ij=r_ij,
             d_ij=d_ij,
-            dim_size=None
+            dim_size=None,
         )
         x = x.reshape(-1, self.hidden_channels)
         vec = vec.reshape(-1, 3, self.hidden_channels)
@@ -308,7 +310,19 @@ class EquivariantMultiHeadAttention(nn.Module):
         dvec = vec3 * o1.unsqueeze(1) + vec
         return dx, dvec
 
-    def propagate(self, edge_index: Tensor, q: Tensor, k: Tensor, v: Tensor, vec: Tensor, dk: Optional[Tensor], dv: Optional[Tensor], r_ij: Tensor, d_ij: Tensor, dim_size: Optional[int]) -> Tuple[Tensor, Tensor]:
+    def propagate(
+        self,
+        edge_index: Tensor,
+        q: Tensor,
+        k: Tensor,
+        v: Tensor,
+        vec: Tensor,
+        dk: Optional[Tensor],
+        dv: Optional[Tensor],
+        r_ij: Tensor,
+        d_ij: Tensor,
+        dim_size: Optional[int],
+    ) -> Tuple[Tensor, Tensor]:
         q_i = q.index_select(0, edge_index[1])
         k_j = k.index_select(0, edge_index[0])
         v_j = v.index_select(0, edge_index[0])
@@ -316,7 +330,17 @@ class EquivariantMultiHeadAttention(nn.Module):
         x, vec = self.message(q_i, k_j, v_j, vec_j, dk, dv, r_ij, d_ij)
         return self.aggregate((x, vec), edge_index[1], dim_size=dim_size)
 
-    def message(self, q_i: Tensor, k_j: Tensor, v_j: Tensor, vec_j: Tensor, dk: Optional[Tensor], dv: Optional[Tensor], r_ij: Tensor, d_ij: Tensor) -> Tuple[Tensor, Tensor]:
+    def message(
+        self,
+        q_i: Tensor,
+        k_j: Tensor,
+        v_j: Tensor,
+        vec_j: Tensor,
+        dk: Optional[Tensor],
+        dv: Optional[Tensor],
+        r_ij: Tensor,
+        d_ij: Tensor,
+    ) -> Tuple[Tensor, Tensor]:
         # attention mechanism
         if dk is None:
             attn = (q_i * k_j).sum(dim=-1)

@@ -7,8 +7,9 @@ from torchmdnet.models.utils import (
     OptimizedDistance,
     rbf_class_mapping,
     act_class_mapping,
-    scatter
+    scatter,
 )
+
 
 class TorchMD_T(nn.Module):
     r"""The TorchMD Transformer architecture.
@@ -65,7 +66,7 @@ class TorchMD_T(nn.Module):
         cutoff_upper=5.0,
         max_z=100,
         max_num_neighbors=32,
-        dtype=torch.float
+        dtype=torch.float,
     ):
         super(TorchMD_T, self).__init__()
 
@@ -106,7 +107,12 @@ class TorchMD_T(nn.Module):
         )
         self.neighbor_embedding = (
             NeighborEmbedding(
-                hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z, dtype=dtype
+                hidden_channels,
+                num_rbf,
+                cutoff_lower,
+                cutoff_upper,
+                self.max_z,
+                dtype=dtype,
             )
             if neighbor_embedding
             else None
@@ -242,7 +248,9 @@ class MultiHeadAttention(nn.Module):
             nn.init.xavier_uniform_(self.dv_proj.weight)
             self.dv_proj.bias.data.fill_(0)
 
-    def forward(self, x: Tensor, edge_index: Tensor, r_ij: Tensor, f_ij: Tensor, n_atoms: int) -> Tensor:
+    def forward(
+        self, x: Tensor, edge_index: Tensor, r_ij: Tensor, f_ij: Tensor, n_atoms: int
+    ) -> Tensor:
         head_shape = (-1, self.num_heads, self.head_dim)
 
         x = self.layernorm(x)
@@ -265,7 +273,16 @@ class MultiHeadAttention(nn.Module):
         out = self.o_proj(out.reshape(-1, self.num_heads * self.head_dim))
         return out
 
-    def message(self, edge_index: Tensor, q: Tensor, k: Tensor, v: Tensor, dk: Optional[Tensor], dv: Optional[Tensor], r_ij: Tensor) -> Tensor:
+    def message(
+        self,
+        edge_index: Tensor,
+        q: Tensor,
+        k: Tensor,
+        v: Tensor,
+        dk: Optional[Tensor],
+        dv: Optional[Tensor],
+        r_ij: Tensor,
+    ) -> Tensor:
         q_i = q.index_select(0, edge_index[0])
         k_j = k.index_select(0, edge_index[1])
         v_j = v.index_select(0, edge_index[1])
