@@ -4,12 +4,12 @@ from torch import Tensor, nn
 from torchmdnet.models.utils import (
     NeighborEmbedding,
     CosineCutoff,
-    Distance,
+    OptimizedDistance,
     rbf_class_mapping,
     act_class_mapping,
     scatter
 )
-
+from torch_scatter import scatter
 
 class TorchMD_T(nn.Module):
     r"""The TorchMD Transformer architecture.
@@ -99,8 +99,8 @@ class TorchMD_T(nn.Module):
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels, dtype=dtype)
 
-        self.distance = Distance(
-            cutoff_lower, cutoff_upper, max_num_neighbors=max_num_neighbors, loop=True
+        self.distance = OptimizedDistance(
+            cutoff_lower, cutoff_upper, max_num_pairs=-max_num_neighbors, loop=True
         )
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf, dtype=dtype
