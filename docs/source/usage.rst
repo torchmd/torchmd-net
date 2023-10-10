@@ -64,3 +64,70 @@ In order to train models on multiple nodes some environment variables have to be
 	  
 	  - Due to the way PyTorch Lightning calculates the number of required DDP processes, all nodes must use the same number of GPUs. Otherwise training will not start or crash.
 	  - We observe a 50x decrease in performance when mixing nodes with different GPU architectures (tested with RTX 2080 Ti and RTX 3090).
+
+Developer Guide
+---------------
+
+Implementing a New Architecture
+===============================
+
+To implement a new architecture, you need to follow these steps:
+
+1. Create a new class in ``torchmdnet.models`` that inherits from ``torch.nn.Model``. Follow TorchMD_ET as a template. This is a minimum implementation of a model:
+
+    .. code-block:: python
+
+        class MyModule(nn.Module):
+            def __init__(self, parameter1, parameter2):
+                super(MyModule, self).__init__()
+                # Define your model here
+                self.layer1 = nn.Linear(10, 10)
+                # Initialize your model parameters here
+                self.reset_parameters()
+
+            def reset_parameters(self):
+                # Initialize your model parameters here
+                nn.init.xavier_uniform_(self.layer1.weight)
+                
+            def forward(self, z: Tensor, pos: Tensor, batch: Tensor, q: Optional[Tensor] = None, s: Optional[Tensor] = None) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+                # Define your forward pass here
+                scalar_features = ...
+                vector_features = ...
+                return scalar_features, vector_features, z, pos, batch
+
+2. Add the model to the ``__all__`` list in ``torchmdnet.models.__init__.py``. This will make the tests pick your model up.
+
+3. Tell models.model.create_model how to initialize your module by adding a new entry:
+
+    .. code-block:: python
+
+        elif args["model"] == "mymodule":
+            from torchmdnet.models.torchmd_mymodule import MyModule
+            is_equivariant = False
+            representation_model = MyModule(
+                parameter1=args["parameter1"],
+                parameter2=args["parameter2"],
+                **shared_args,
+            )
+
+4. Add any new parameters required to initialize your module to scripts.train.get_args:
+
+    .. code-block:: python
+
+        parser.add_argument('--parameter1', type=int, default=32, help='Parameter1 required by MyModule')
+
+5. Add an example configuration file to ``torchmd-net/examples`` that uses your model.
+
+6. Make tests use your configuration file by adding a case to tests.utils.load_example_args:
+
+    .. code-block:: python
+
+        if model_name == "mymodule":
+            config_file = join(dirname(dirname(__file__)), "examples", "MyModule-QM9.yaml")
+
+At this point, if your module is missing some feature the tests will let you know, and you can add it. If you add a new feature to the package, please add a test for it.
+
+Code Style
+~~~~~~~~~~
+
+We use `black <https://black.readthedocs.io/en/stable/>`_. Please run ``black`` on your modified
