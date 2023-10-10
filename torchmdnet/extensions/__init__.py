@@ -24,8 +24,8 @@ _load_library("torchmdnet_extensions")
 
 @torch.jit.script
 def is_current_stream_capturing():
-    """
-    Returns True if the current CUDA stream is capturing.
+    """Returns True if the current CUDA stream is capturing.
+
     Returns False if CUDA is not available or the current stream is not capturing.
 
     This utility is required because the builtin torch function that does this is not scriptable.

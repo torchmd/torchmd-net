@@ -112,7 +112,9 @@ class OptimizedDistance(torch.nn.Module):
 
         This operation can be placed inside a CUDA graph in some cases.
         In particular, resize_to_fit and check_errors must be False.
+
         Note that this module returns neighbors such that :math:`r_{ij} \\ge \\text{cutoff_lower}\\quad\\text{and}\\quad r_{ij} < \\text{cutoff_upper}`.
+
         This function optionally supports periodic boundary conditions with
         arbitrary triclinic boxes.  The box vectors `a`, `b`, and `c` must satisfy
         certain requirements:
