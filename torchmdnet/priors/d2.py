@@ -1,7 +1,6 @@
 from torchmdnet.priors.base import BasePrior
-from torchmdnet.models.utils import OptimizedDistance
+from torchmdnet.models.utils import OptimizedDistance, scatter
 import torch as pt
-from torchmdnet.models.utils import scatter
 
 
 class D2(BasePrior):
