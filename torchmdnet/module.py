@@ -216,8 +216,8 @@ class LNNP(LightningModule):
             result_dict = {
                 "epoch": float(self.current_epoch),
                 "lr": self.trainer.optimizers[0].param_groups[0]["lr"],
+                "time": time.time() - self.tstart,
             }
-            result_dict["time"] = time.time() - self.tstart
             result_dict.update(self._get_mean_loss_dict_for_type("total"))
             result_dict.update(self._get_mean_loss_dict_for_type("y"))
             result_dict.update(self._get_mean_loss_dict_for_type("neg_dy"))
