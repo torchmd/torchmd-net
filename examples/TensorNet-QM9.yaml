@@ -1,7 +1,7 @@
 activation: silu
 aggr: add
 atom_filter: -1
-batch_size: 32
+batch_size: 16
 coord_files: null
 cutoff_lower: 0.0
 cutoff_upper: 5.0
@@ -24,7 +24,7 @@ gradient_clipping: 40
 inference_batch_size: 128
 load_model: null
 log_dir: logs/
-lr: 0.0002
+lr: 0.0001
 lr_factor: 0.8
 lr_min: 1.0e-07
 lr_patience: 15
@@ -45,7 +45,7 @@ rbf_type: expnorm
 redirect: false
 reduce_op: add
 save_interval: 10
-seed: 1234
+seed: 1
 splits: null
 standardize: false
 test_interval: 20

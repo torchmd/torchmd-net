@@ -5,7 +5,7 @@ from torch_geometric.nn import MessagePassing
 from torchmdnet.models.utils import (
     NeighborEmbedding,
     CosineCutoff,
-    Distance,
+    OptimizedDistance,
     rbf_class_mapping,
     act_class_mapping,
 )
@@ -107,8 +107,8 @@ class TorchMD_GN(nn.Module):
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels, dtype=dtype)
 
-        self.distance = Distance(
-            cutoff_lower, cutoff_upper, max_num_neighbors=max_num_neighbors
+        self.distance = OptimizedDistance(
+            cutoff_lower, cutoff_upper, max_num_pairs=-max_num_neighbors
         )
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf, dtype=dtype
