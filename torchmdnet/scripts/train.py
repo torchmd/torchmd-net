@@ -173,7 +173,7 @@ def main():
         )
 
     trainer = pl.Trainer(
-        strategy=DDPStrategy(find_unused_parameters=False),
+        strategy="auto",
         max_epochs=args.num_epochs,
         accelerator="auto",
         devices=args.ngpus,
