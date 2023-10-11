@@ -17,7 +17,7 @@ class Custom(Dataset):
             (default: :obj:`None`)
         forceglob (string, optional): Glob path for force files. Stored as "neg_dy".
             (default: :obj:`None`)
-        load_into_memory_limit (int, optional): If the dataset is smaller than this limit (in MB), preload it into CPU memory.
+        preload_memory_limit (int, optional): If the dataset is smaller than this limit (in MB), preload it into CPU memory.
     Example:
         >>> data = Custom(coordglob="coords_files*npy", embedglob="embed_files*npy")
         >>> sample = data[0]
