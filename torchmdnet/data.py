@@ -55,6 +55,7 @@ class DataModule(LightningDataModule):
                     self.hparams["embed_files"],
                     self.hparams["energy_files"],
                     self.hparams["force_files"],
+                    self.hparams["dataset_preload_limit"],
                 )
             else:
                 dataset_arg = {}
