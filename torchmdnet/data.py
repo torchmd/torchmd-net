@@ -11,6 +11,7 @@ from torchmdnet.utils import make_splits, MissingEnergyException
 from torch_scatter import scatter
 from torchmdnet.models.utils import dtype_mapping
 
+
 class FloatCastDatasetWrapper(Dataset):
     def __init__(self, dataset, dtype=torch.float64):
         super(FloatCastDatasetWrapper, self).__init__(

@@ -31,7 +31,14 @@ class Custom(Dataset):
               - If present, "y" is an array of shape (1,) and "neg_dy" has shape (n_atoms, 3)
     """
 
-    def __init__(self, coordglob, embedglob, energyglob=None, forceglob=None, preload_memory_limit=1024):
+    def __init__(
+        self,
+        coordglob,
+        embedglob,
+        energyglob=None,
+        forceglob=None,
+        preload_memory_limit=1024,
+    ):
         super(Custom, self).__init__()
         assert energyglob is not None or forceglob is not None, (
             "Either energies, forces or both must " "be specified as the target"
@@ -64,7 +71,7 @@ class Custom(Dataset):
         # create index
         self.index = []
         nfiles = len(self.coordfiles)
-        total_data_size = 0 # Number of bytes in the dataset
+        total_data_size = 0  # Number of bytes in the dataset
         for i in range(nfiles):
             coord_data = np.load(self.coordfiles[i])
             embed_data = np.load(self.embedfiles[i]).astype(int)
@@ -97,14 +104,25 @@ class Custom(Dataset):
         self.load_into_memory = False
         if total_data_size < data_size_limit:
             self.load_into_memory = True
-            print("Preloading Custom dataset (of size {:.2f} MB) into CPU memory".format(total_data_size / 1024 / 1024))
-            self.coordfiles = torch.from_numpy(np.array([np.load(f) for f in self.coordfiles]))
-            self.embedfiles = torch.from_numpy(np.array([np.load(f).astype(int) for f in self.embedfiles]))
+            print(
+                "Preloading Custom dataset (of size {:.2f} MB) into CPU memory".format(
+                    total_data_size / 1024 / 1024
+                )
+            )
+            self.coordfiles = torch.from_numpy(
+                np.array([np.load(f) for f in self.coordfiles])
+            )
+            self.embedfiles = torch.from_numpy(
+                np.array([np.load(f).astype(int) for f in self.embedfiles])
+            )
             if self.has_energies:
-                self.energyfiles = torch.from_numpy(np.array([np.load(f) for f in self.energyfiles]))
+                self.energyfiles = torch.from_numpy(
+                    np.array([np.load(f) for f in self.energyfiles])
+                )
             if self.has_forces:
-                self.forcefiles = torch.from_numpy(np.array([np.load(f) for f in self.forcefiles]))
-
+                self.forcefiles = torch.from_numpy(
+                    np.array([np.load(f) for f in self.forcefiles])
+                )
 
     def get(self, idx):
         fileid, index = self.index[idx]
@@ -112,18 +130,20 @@ class Custom(Dataset):
             coord_data = self.coordfiles[fileid][index]
             embed_data = self.embedfiles[fileid]
         else:
-            coord_data = torch.from_numpy(np.array(np.load(self.coordfiles[fileid], mmap_mode="r")[index]))
+            coord_data = torch.from_numpy(
+                np.array(np.load(self.coordfiles[fileid], mmap_mode="r")[index])
+            )
             embed_data = torch.from_numpy(np.load(self.embedfiles[fileid]).astype(int))
 
-        features = dict(
-            pos=coord_data, z=embed_data
-        )
+        features = dict(pos=coord_data, z=embed_data)
 
         if self.has_energies and self.load_into_memory:
             energy_data = self.energyfiles[fileid][index]
             features["y"] = energy_data
         elif self.has_energies:
-            energy_data = torch.from_numpy(np.array(np.load(self.energyfiles[fileid], mmap_mode="r")[index]))
+            energy_data = torch.from_numpy(
+                np.array(np.load(self.energyfiles[fileid], mmap_mode="r")[index])
+            )
 
             features["y"] = energy_data
 
