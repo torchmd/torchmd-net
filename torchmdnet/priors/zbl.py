@@ -1,7 +1,7 @@
 import torch
 from torchmdnet.priors.base import BasePrior
-from torchmdnet.models.utils import Distance, CosineCutoff
 from torch_scatter import scatter
+from torchmdnet.models.utils import OptimizedDistance, CosineCutoff
 from typing import Optional, Dict
 
 class ZBL(BasePrior):
@@ -26,7 +26,7 @@ class ZBL(BasePrior):
             energy_scale = dataset.energy_scale
         atomic_number = torch.as_tensor(atomic_number, dtype=torch.long)
         self.register_buffer("atomic_number", atomic_number)
-        self.distance = Distance(0, cutoff_distance, max_num_neighbors=max_num_neighbors)
+        self.distance = OptimizedDistance(0, cutoff_distance, max_num_pairs=-max_num_neighbors)
         self.cutoff = CosineCutoff(cutoff_upper=cutoff_distance)
         self.cutoff_distance = cutoff_distance
         self.max_num_neighbors = max_num_neighbors

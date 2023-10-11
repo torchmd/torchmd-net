@@ -1,7 +1,72 @@
 import os
 import torch
 import numpy as np
-from torchmdnet.models.utils import Distance, OptimizedDistance
+from torchmdnet.models.utils import OptimizedDistance
+from torch import nn
+from typing import Optional
+from torch_cluster import radius_graph
+
+class Distance(nn.Module):
+    def __init__(
+        self,
+        cutoff_lower,
+        cutoff_upper,
+        max_num_neighbors=32,
+        return_vecs=False,
+        loop=False,
+    ):
+        super(Distance, self).__init__()
+        self.cutoff_lower = cutoff_lower
+        self.cutoff_upper = cutoff_upper
+        self.max_num_neighbors = max_num_neighbors
+        self.return_vecs = return_vecs
+        self.loop = loop
+
+    def forward(self, pos, batch):
+        edge_index = radius_graph(
+            pos,
+            r=self.cutoff_upper,
+            batch=batch,
+            loop=self.loop,
+            max_num_neighbors=self.max_num_neighbors + 1,
+        )
+
+        # make sure we didn't miss any neighbors due to max_num_neighbors
+        assert not (
+            torch.unique(edge_index[0], return_counts=True)[1] > self.max_num_neighbors
+        ).any(), (
+            "The neighbor search missed some atoms due to max_num_neighbors being too low. "
+            "Please increase this parameter to include the maximum number of atoms within the cutoff."
+        )
+
+        edge_vec = pos[edge_index[0]] - pos[edge_index[1]]
+
+        mask: Optional[torch.Tensor] = None
+        if self.loop:
+            # mask out self loops when computing distances because
+            # the norm of 0 produces NaN gradients
+            # NOTE: might influence force predictions as self loop gradients are ignored
+            mask = edge_index[0] != edge_index[1]
+            edge_weight = torch.zeros(
+                edge_vec.size(0), device=edge_vec.device, dtype=edge_vec.dtype
+            )
+            edge_weight[mask] = torch.norm(edge_vec[mask], dim=-1)
+        else:
+            edge_weight = torch.norm(edge_vec, dim=-1)
+
+        lower_mask = edge_weight >= self.cutoff_lower
+        if self.loop and mask is not None:
+            # keep self loops even though they might be below the lower cutoff
+            lower_mask = lower_mask | ~mask
+        edge_index = edge_index[:, lower_mask]
+        edge_weight = edge_weight[lower_mask]
+
+        if self.return_vecs:
+            edge_vec = edge_vec[lower_mask]
+            return edge_index, edge_weight, edge_vec
+        # TODO: return only `edge_index` and `edge_weight` once
+        # Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
+        return edge_index, edge_weight, None
 
 
 def benchmark_neighbors(
