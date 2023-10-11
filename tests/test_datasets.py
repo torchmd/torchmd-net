@@ -10,7 +10,8 @@ import h5py
 @mark.parametrize("energy", [True, False])
 @mark.parametrize("forces", [True, False])
 @mark.parametrize("num_files", [1, 3])
-def test_custom(energy, forces, num_files, tmpdir, num_samples=100):
+@mark.parametrize("preload", [False, True])
+def test_custom(energy, forces, num_files, preload, tmpdir, num_samples=100):
     # set up necessary files
     for i in range(num_files):
         np.save(
@@ -42,6 +43,7 @@ def test_custom(energy, forces, num_files, tmpdir, num_samples=100):
         embedglob=join(tmpdir, "embed*"),
         energyglob=join(tmpdir, "energy*") if energy else None,
         forceglob=join(tmpdir, "forces*") if forces else None,
+        preload_memory_limit=256 if preload else 0,
     )
 
     assert len(data) == num_samples * num_files, "Number of samples does not match"
@@ -52,6 +54,20 @@ def test_custom(energy, forces, num_files, tmpdir, num_samples=100):
         assert hasattr(sample, "y"), "Sample doesn't contain energy"
     if forces:
         assert hasattr(sample, "neg_dy"), "Sample doesn't contain forces"
+
+    # Assert sample has the correct values
+
+    # get the reference values from coords_0.npy and embed_0.npy
+    ref_pos = np.load(join(tmpdir, "coords_0.npy"))[0]
+    ref_z = np.load(join(tmpdir, "embed_0.npy"))
+    assert np.allclose(sample.pos, ref_pos), "Sample has incorrect coords"
+    assert np.allclose(sample.z, ref_z), "Sample has incorrect atom numbers"
+    if energy:
+        ref_y = np.load(join(tmpdir, "energy_0.npy"))[0] if energy else None
+        assert np.allclose(sample.y, ref_y), "Sample has incorrect energy"
+    if forces:
+        ref_neg_dy = np.load(join(tmpdir, "forces_0.npy"))[0] if forces else None
+        assert np.allclose(sample.neg_dy, ref_neg_dy), "Sample has incorrect forces"
 
 
 def test_hdf5_multiprocessing(tmpdir, num_entries=100):
