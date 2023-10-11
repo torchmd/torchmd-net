@@ -11,7 +11,6 @@ from torchmdnet.utils import make_splits, MissingEnergyException
 from torch_scatter import scatter
 from torchmdnet.models.utils import dtype_mapping
 
-
 class FloatCastDatasetWrapper(Dataset):
     def __init__(self, dataset, dtype=torch.float64):
         super(FloatCastDatasetWrapper, self).__init__(
@@ -64,9 +63,11 @@ class DataModule(LightningDataModule):
                 self.dataset = getattr(datasets, self.hparams["dataset"])(
                     self.hparams["dataset_root"], **dataset_arg
                 )
-        self.dataset = FloatCastDatasetWrapper(
-            self.dataset, dtype_mapping[self.hparams["precision"]]
-        )
+
+        if self.hparams["precision"] != 32:
+            self.dataset = FloatCastDatasetWrapper(
+                self.dataset, dtype_mapping[self.hparams["precision"]]
+            )
 
         self.idx_train, self.idx_val, self.idx_test = make_splits(
             len(self.dataset),
@@ -131,15 +132,15 @@ class DataModule(LightningDataModule):
 
         if stage == "train":
             batch_size = self.hparams["batch_size"]
-            shuffle = True
         elif stage in ["val", "test"]:
             batch_size = self.hparams["inference_batch_size"]
-            shuffle = False
 
+        shuffle = stage == "train"
         dl = DataLoader(
             dataset=dataset,
             batch_size=batch_size,
             num_workers=self.hparams["num_workers"],
+            persistent_workers=True,
             pin_memory=True,
             shuffle=shuffle,
         )
