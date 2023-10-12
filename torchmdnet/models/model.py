@@ -37,7 +37,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         cutoff_upper=args["cutoff_upper"],
         max_z=args["max_z"],
         max_num_neighbors=args["max_num_neighbors"],
-        box_vecs=torch.tensor(args["box_vecs"], dtype=dtype) if "box_vecs" in args else None,
+        box_vecs=torch.tensor(args["box_vecs"], dtype=dtype) if args["box_vecs"] is not None else None,
         dtype=dtype
     )
 
