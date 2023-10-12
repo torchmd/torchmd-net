@@ -5,7 +5,7 @@ from torch import Tensor
 from torch import nn
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
-from torch_cluster import radius_graph
+from torchmdnet.extensions import get_neighbor_pairs_kernel
 import warnings
 
 
@@ -106,8 +106,6 @@ class NeighborEmbedding(MessagePassing):
 
     def message(self, x_j, W):
         return x_j * W
-
-from torchmdnet.neighbors import get_neighbor_pairs_kernel
 
 class OptimizedDistance(torch.nn.Module):
     def __init__(
@@ -234,7 +232,7 @@ class OptimizedDistance(torch.nn.Module):
         assert box is not None, "Box must be provided"
         box = box.to(pos.dtype)
         assert box.device == torch.device("cpu"), "Box must be in CPU memory"
-        max_pairs = self.max_num_pairs
+        max_pairs : int = self.max_num_pairs
         if self.max_num_pairs < 0:
             max_pairs = -self.max_num_pairs * pos.shape[0]
         if batch is None:
@@ -243,7 +241,7 @@ class OptimizedDistance(torch.nn.Module):
             strategy=self.strategy,
             positions=pos,
             batch=batch,
-            max_num_pairs=max_pairs,
+            max_num_pairs=int(max_pairs),
             cutoff_lower=self.cutoff_lower,
             cutoff_upper=self.cutoff_upper,
             loop=self.loop,
@@ -252,8 +250,12 @@ class OptimizedDistance(torch.nn.Module):
             use_periodic=self.use_periodic,
         )
         if self.check_errors:
-            assert num_pairs[0] <= max_pairs, f"Found num_pairs({num_pairs[0]}) > max_num_pairs({max_pairs})"
-
+            if num_pairs[0] > max_pairs:
+                raise AssertionError(
+                    "Found num_pairs({}) > max_num_pairs({})".format(
+                        num_pairs[0], max_pairs
+                    )
+                )
         # Remove (-1,-1)  pairs
         if self.resize_to_fit:
             mask = edge_index[0] != -1
@@ -388,70 +390,6 @@ class CosineCutoff(nn.Module):
             cutoffs = cutoffs * (distances < self.cutoff_upper)
             return cutoffs
 
-
-class Distance(nn.Module):
-    def __init__(
-        self,
-        cutoff_lower,
-        cutoff_upper,
-        max_num_neighbors=32,
-        return_vecs=False,
-        loop=False,
-    ):
-        super(Distance, self).__init__()
-        self.cutoff_lower = cutoff_lower
-        self.cutoff_upper = cutoff_upper
-        self.max_num_neighbors = max_num_neighbors
-        self.return_vecs = return_vecs
-        self.loop = loop
-
-    def forward(self, pos, batch):
-        edge_index = radius_graph(
-            pos,
-            r=self.cutoff_upper,
-            batch=batch,
-            loop=self.loop,
-            max_num_neighbors=self.max_num_neighbors + 1,
-        )
-
-        # make sure we didn't miss any neighbors due to max_num_neighbors
-        assert not (
-            torch.unique(edge_index[0], return_counts=True)[1] > self.max_num_neighbors
-        ).any(), (
-            "The neighbor search missed some atoms due to max_num_neighbors being too low. "
-            "Please increase this parameter to include the maximum number of atoms within the cutoff."
-        )
-
-        edge_vec = pos[edge_index[0]] - pos[edge_index[1]]
-
-        mask: Optional[torch.Tensor] = None
-        if self.loop:
-            # mask out self loops when computing distances because
-            # the norm of 0 produces NaN gradients
-            # NOTE: might influence force predictions as self loop gradients are ignored
-            mask = edge_index[0] != edge_index[1]
-            edge_weight = torch.zeros(
-                edge_vec.size(0), device=edge_vec.device, dtype=edge_vec.dtype
-            )
-            edge_weight[mask] = torch.norm(edge_vec[mask], dim=-1)
-        else:
-            edge_weight = torch.norm(edge_vec, dim=-1)
-
-        lower_mask = edge_weight >= self.cutoff_lower
-        if self.loop and mask is not None:
-            # keep self loops even though they might be below the lower cutoff
-            lower_mask = lower_mask | ~mask
-        edge_index = edge_index[:, lower_mask]
-        edge_weight = edge_weight[lower_mask]
-
-        if self.return_vecs:
-            edge_vec = edge_vec[lower_mask]
-            return edge_index, edge_weight, edge_vec
-        # TODO: return only `edge_index` and `edge_weight` once
-        # Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
-        return edge_index, edge_weight, None
-
-
 class GatedEquivariantBlock(nn.Module):
     """Gated Equivariant Block as defined in Schütt et al. (2021):
     Equivariant message passing for the prediction of tensorial properties and molecular spectra
@@ -519,59 +457,6 @@ class GatedEquivariantBlock(nn.Module):
         if self.act is not None:
             x = self.act(x)
         return x, v
-
-def _compile_check_stream_capturing():
-    """
-    Compiles the check_stream_capturing function.
-    This is required because the builtin torch function that does this is not scriptable.
-    """
-    # Check if the function is already compiled
-    if hasattr(torch.ops.torch_extension, "is_stream_capturing"):
-        return
-    from torch.utils.cpp_extension import load_inline
-    cpp_source = '''
-#include <torch/script.h>
-#if defined(WITH_CUDA)
-#include <c10/cuda/CUDAStream.h>
-#include <cuda_runtime_api.h>
-#endif
-bool is_stream_capturing() {
-#if defined(WITH_CUDA)
-  auto current_stream = at::cuda::getCurrentCUDAStream().stream();
-  cudaStreamCaptureStatus capture_status;
-  cudaError_t err = cudaStreamGetCaptureInfo(current_stream, &capture_status, nullptr);
-  if (err != cudaSuccess) {
-    throw std::runtime_error(cudaGetErrorString(err));
-  }
-  return capture_status == cudaStreamCaptureStatus::cudaStreamCaptureStatusActive;
-#else
-  return false;
-#endif
-}
-
-static auto registry = torch::RegisterOperators()
-    .op("torch_extension::is_stream_capturing", &is_stream_capturing);
-'''
-
-    # Create an inline extension
-    load_inline(
-        "is_stream_capturing",
-        cpp_sources=cpp_source,
-        functions=["is_stream_capturing"],
-        with_cuda=torch.cuda.is_available(),
-        extra_cflags=["-DWITH_CUDA"] if torch.cuda.is_available() else None,
-        verbose=True,
-    )
-_compile_check_stream_capturing()
-@torch.jit.script
-def check_stream_capturing():
-    """
-    Returns True if the current CUDA stream is capturing.
-    Returns False if CUDA is not available or the current stream is not capturing.
-
-    This utility is required because the builtin torch function that does this is not scriptable.
-    """
-    return torch.ops.torch_extension.is_stream_capturing()
 
 rbf_class_mapping = {"gauss": GaussianSmearing, "expnorm": ExpNormalSmearing}
 

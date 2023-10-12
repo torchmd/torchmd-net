@@ -1,7 +1,7 @@
 import torch
 from torchmdnet.priors.base import BasePrior
-from torchmdnet.models.utils import OptimizedDistance, CosineCutoff
 from torch_scatter import scatter
+from torchmdnet.models.utils import OptimizedDistance, CosineCutoff
 from typing import Optional, Dict
 
 class ZBL(BasePrior):

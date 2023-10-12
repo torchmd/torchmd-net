@@ -71,7 +71,7 @@ public:
     }
 };
 
-TORCH_LIBRARY_IMPL(torchmdnet_neighbors, AutogradCUDA, m) {
+TORCH_LIBRARY_IMPL(torchmdnet_extensions, AutogradCUDA, m) {
     m.impl("get_neighbor_pairs",
            [](const std::string& strategy, const Tensor& positions, const Tensor& batch,
               const Tensor& box_vectors, bool use_periodic, const Scalar& cutoff_lower,

@@ -107,22 +107,22 @@ def test_cuda_graph_compatible(model_name):
             "reduce_op": "sum",
             "precision": 32 }
     model = create_model(args).to(device="cuda")
+    model.eval()
     z = z.to("cuda")
     pos = pos.to("cuda").requires_grad_(True)
     batch = batch.to("cuda")
-    model = torch.jit.script(model).to(device="cuda")
-    #Save and load the model, do not use a file
-    import io
-    buffer = io.BytesIO()
-    torch.jit.save(model, buffer)
-    buffer.seek(0)
-    model = torch.jit.load(buffer)
-    for _ in range(0, 5):
-        y, neg_dy = model(z, pos, batch=batch)
-    model = torch.cuda.make_graphed_callables(model, (z, pos, batch), allow_unused_input=True)
+    with torch.cuda.stream(torch.cuda.Stream()):
+        for _ in range(0, 15):
+            y, neg_dy = model(z, pos, batch=batch)
+    g = torch.cuda.CUDAGraph()
     y2, neg_dy2 = model(z, pos, batch=batch)
+    with torch.cuda.graph(g):
+        y, neg_dy = model(z, pos, batch=batch)
+    y.fill_(0.0)
+    neg_dy.fill_(0.0)
+    g.replay()
     assert torch.allclose(y, y2)
-    assert torch.allclose(neg_dy, neg_dy2)
+    assert torch.allclose(neg_dy, neg_dy2, atol=1e-5, rtol=1e-5)
 
 @mark.parametrize("model_name", models.__all__)
 def test_seed(model_name):

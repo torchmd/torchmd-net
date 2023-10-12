@@ -9,7 +9,7 @@ from torchmdnet.models.utils import (
     rbf_class_mapping,
     act_class_mapping,
 )
-
+from torch_scatter import scatter
 
 class TorchMD_T(nn.Module):
     r"""The TorchMD Transformer architecture.
@@ -124,7 +124,6 @@ class TorchMD_T(nn.Module):
             cutoff_lower,
             cutoff_upper,
             max_num_pairs=-max_num_neighbors,
-            return_vecs=True,
             loop=True,
             box=box_vecs,
             long_edge_index=True

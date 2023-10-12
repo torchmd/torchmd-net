@@ -94,12 +94,14 @@ template <class scalar_t> struct PairListAccessor {
 template <typename scalar_t>
 __device__ void writeAtomPair(PairListAccessor<scalar_t>& list, int i, int j,
                               scalar3<scalar_t> delta, scalar_t distance, int i_pair) {
+  if(i_pair < list.neighbors.size(1)){
     list.neighbors[0][i_pair] = i;
     list.neighbors[1][i_pair] = j;
     list.deltas[i_pair][0] = delta.x;
     list.deltas[i_pair][1] = delta.y;
     list.deltas[i_pair][2] = delta.z;
     list.distances[i_pair] = distance;
+  }
 }
 
 template <typename scalar_t>
@@ -107,11 +109,9 @@ __device__ void addAtomPairToList(PairListAccessor<scalar_t>& list, int i, int j
                                   scalar3<scalar_t> delta, scalar_t distance, bool add_transpose) {
     const int32_t i_pair = atomicAdd(&list.i_curr_pair[0], add_transpose ? 2 : 1);
     // Neighbors after the max number of pairs are ignored, although the pair is counted
-    if (i_pair + add_transpose < list.neighbors.size(1)) {
-        writeAtomPair(list, i, j, delta, distance, i_pair);
-        if (add_transpose) {
-            writeAtomPair(list, j, i, {-delta.x, -delta.y, -delta.z}, distance, i_pair + 1);
-        }
+    writeAtomPair(list, i, j, delta, distance, i_pair);
+    if (add_transpose) {
+      writeAtomPair(list, j, i, {-delta.x, -delta.y, -delta.z}, distance, i_pair + 1);
     }
 }
 

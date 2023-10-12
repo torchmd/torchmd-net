@@ -3,8 +3,7 @@ import pytest
 import torch
 import torch.jit
 import numpy as np
-from torchmdnet.models.utils import Distance, OptimizedDistance
-
+from torchmdnet.models.utils import OptimizedDistance
 
 def sort_neighbors(neighbors, deltas, distances):
     i_sorted = np.lexsort(neighbors)
@@ -293,116 +292,6 @@ def test_neighbor_autograds(
     torch.autograd.gradcheck(lambda_dist, (positions, batch), eps=1e-4, atol=1e-4, rtol=1e-4, nondet_tol=1e-4)
     torch.autograd.gradgradcheck(lambda_dist, (positions, batch), eps=1e-4, atol=1e-4, rtol=1e-4, nondet_tol=1e-4)
 
-@pytest.mark.parametrize(("device", "strategy"), [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")])
-@pytest.mark.parametrize("n_batches", [1, 2, 3, 4])
-@pytest.mark.parametrize("cutoff", [0.1, 1.0, 1000.0])
-@pytest.mark.parametrize("loop", [True, False])
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-@pytest.mark.parametrize("grad", ["deltas", "distances", "combined"])
-def test_compatible_with_distance(device, strategy, n_batches, cutoff, loop, dtype, grad):
-    if device == "cuda" and not torch.cuda.is_available():
-        pytest.skip("CUDA not available")
-    if device == "cpu" and strategy != "brute":
-        pytest.skip("Only brute force supported on CPU")
-
-    torch.manual_seed(4321)
-    n_atoms_per_batch = torch.randint(3, 100, size=(n_batches,))
-    batch = torch.repeat_interleave(
-        torch.arange(n_batches, dtype=torch.long), n_atoms_per_batch
-    ).to(device)
-    cumsum = np.cumsum(np.concatenate([[0], n_atoms_per_batch]))
-    lbox = 10.0
-    pos = torch.rand(cumsum[-1], 3, device=device, dtype=dtype) * lbox
-    # Ensure there is at least one pair
-    pos[0, :] = torch.zeros(3)
-    pos[1, :] = torch.zeros(3)
-
-    ref_pos_cpu = pos.clone().detach()
-    ref_neighbors, _, _ = compute_ref_neighbors(
-        ref_pos_cpu, batch, loop, True, cutoff, None
-    )
-    # Find the particle appearing in the most pairs
-    max_num_neighbors = int(torch.max(torch.bincount(torch.tensor(ref_neighbors[0, :]))))
-    d = Distance(
-        cutoff_lower=0.0,
-        cutoff_upper=cutoff,
-        loop=loop,
-        max_num_neighbors=max_num_neighbors,
-        return_vecs=True,
-    )
-    ref_pos = pos.clone().detach().to(device)
-    ref_pos.requires_grad = True
-    ref_neighbors, ref_distances, ref_distance_vecs = d(ref_pos, batch)
-
-    max_num_pairs = ref_neighbors.shape[1]
-    nl = OptimizedDistance(
-        cutoff_lower=0.0,
-        loop=loop,
-        cutoff_upper=cutoff,
-        max_num_pairs=-max_num_neighbors,
-        strategy=strategy,
-        return_vecs=True,
-        include_transpose=True,
-    )
-    pos.requires_grad = True
-    neighbors, distances, distance_vecs = nl(pos, batch)
-    # Compute gradients
-    if grad == "deltas":
-        ref_distance_vecs.sum().backward(retain_graph=True)
-        distance_vecs.sum().backward(retain_graph=True)
-    elif grad == "distances":
-        ref_distances.sum().backward(retain_graph=True)
-        distances.sum().backward(retain_graph=True)
-    elif grad == "combined":
-        (ref_distance_vecs.sum() + ref_distances.sum()).backward(retain_graph=True)
-        (distance_vecs.sum() + distances.sum()).backward(retain_graph=True)
-    else:
-        raise ValueError("grad")
-    # Save the gradients (first derivatives)
-    ref_first_deriv = ref_pos.grad.clone().requires_grad_(True)
-    first_deriv = pos.grad.clone().requires_grad_(True)
-
-    # Check first derivatives are correct
-    ref_pos_grad_sorted = ref_first_deriv.cpu().detach().numpy()
-    pos_grad_sorted = first_deriv.cpu().detach().numpy()
-    if dtype == torch.float32:
-        assert np.allclose(ref_pos_grad_sorted, pos_grad_sorted, atol=1e-2, rtol=1e-2)
-    else:
-        assert np.allclose(ref_pos_grad_sorted, pos_grad_sorted, atol=1e-8, rtol=1e-5)
-
-    # Zero out the gradients of ref_positions and positions
-    ref_pos.grad.zero_()
-    pos.grad.zero_()
-
-    # Compute second derivatives
-    ref_first_deriv.sum().backward()  # compute second derivatives
-    first_deriv.sum().backward()      # compute second derivatives
-
-    # Check second derivatives are correct
-    ref_pos_grad2_sorted = ref_pos.grad.cpu().detach().numpy()
-    pos_grad2_sorted = pos.grad.cpu().detach().numpy()
-    if dtype == torch.float32:
-        assert np.allclose(ref_pos_grad2_sorted, pos_grad2_sorted, atol=1e-2, rtol=1e-2)
-    else:
-        assert np.allclose(ref_pos_grad2_sorted, pos_grad2_sorted, atol=1e-8, rtol=1e-5)
-
-    ref_neighbors = ref_neighbors.cpu().detach().numpy()
-    ref_distance_vecs = ref_distance_vecs.cpu().detach().numpy()
-    ref_distances = ref_distances.cpu().detach().numpy()
-    ref_neighbors, ref_distance_vecs, ref_distances = sort_neighbors(
-        ref_neighbors, ref_distance_vecs, ref_distances
-    )
-
-    neighbors = neighbors.cpu().detach().numpy()
-    distance_vecs = distance_vecs.cpu().detach().numpy()
-    distances = distances.cpu().detach().numpy()
-    neighbors, distance_vecs, distances = sort_neighbors(
-        neighbors, distance_vecs, distances
-    )
-    assert np.allclose(neighbors, ref_neighbors)
-    assert np.allclose(distances, ref_distances)
-    assert np.allclose(distance_vecs, ref_distance_vecs)
-
 
 @pytest.mark.parametrize("strategy", ["brute", "cell", "shared"])
 @pytest.mark.parametrize("n_batches", [1, 2, 3, 4])
@@ -427,17 +316,9 @@ def test_large_size(strategy, n_batches):
     pos.requires_grad = True
     # Find the particle appearing in the most pairs
     max_num_neighbors = 64
-    d = Distance(
-        cutoff_lower=0.0,
-        cutoff_upper=cutoff,
-        loop=loop,
-        max_num_neighbors=max_num_neighbors,
-        return_vecs=True,
+    ref_neighbors, ref_distance_vecs, ref_distances = compute_ref_neighbors(
+        pos, batch, loop, True, cutoff, None
     )
-    ref_neighbors, ref_distances, ref_distance_vecs = d(pos, batch)
-    ref_neighbors = ref_neighbors.cpu().detach().numpy()
-    ref_distance_vecs = ref_distance_vecs.cpu().detach().numpy()
-    ref_distances = ref_distances.cpu().detach().numpy()
     ref_neighbors, ref_distance_vecs, ref_distances = sort_neighbors(
         ref_neighbors, ref_distance_vecs, ref_distances
     )

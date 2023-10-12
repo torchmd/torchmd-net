@@ -133,7 +133,7 @@ class TorchMD_GN(nn.Module):
             cutoff_upper,
             max_num_pairs=-max_num_neighbors,
             box=box_vecs,
-            long_edge_index=True
+            long_edge_index=True,
         )
 
         self.distance_expansion = rbf_class_mapping[rbf_type](
@@ -141,7 +141,12 @@ class TorchMD_GN(nn.Module):
         )
         self.neighbor_embedding = (
             NeighborEmbedding(
-                hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z, dtype=dtype
+                hidden_channels,
+                num_rbf,
+                cutoff_lower,
+                cutoff_upper,
+                self.max_z,
+                dtype=dtype,
             ).jittable()
             if neighbor_embedding
             else None
@@ -157,7 +162,7 @@ class TorchMD_GN(nn.Module):
                 cutoff_lower,
                 cutoff_upper,
                 aggr=self.aggr,
-                dtype=dtype
+                dtype=dtype,
             )
             self.interactions.append(block)
 
@@ -180,7 +185,6 @@ class TorchMD_GN(nn.Module):
         s: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
-
         x = self.embedding(z)
 
         edge_index, edge_weight, _ = self.distance(pos, batch, box)
@@ -221,7 +225,7 @@ class InteractionBlock(nn.Module):
         cutoff_lower,
         cutoff_upper,
         aggr="add",
-        dtype=torch.float32
+        dtype=torch.float32,
     ):
         super(InteractionBlock, self).__init__()
         self.mlp = nn.Sequential(
@@ -237,7 +241,7 @@ class InteractionBlock(nn.Module):
             cutoff_lower,
             cutoff_upper,
             aggr=aggr,
-            dtype=dtype
+            dtype=dtype,
         ).jittable()
         self.act = activation()
         self.lin = nn.Linear(hidden_channels, hidden_channels, dtype=dtype)
@@ -270,7 +274,7 @@ class CFConv(MessagePassing):
         cutoff_lower,
         cutoff_upper,
         aggr="add",
-        dtype=torch.float32
+        dtype=torch.float32,
     ):
         super(CFConv, self).__init__(aggr=aggr)
         self.lin1 = nn.Linear(in_channels, num_filters, bias=False, dtype=dtype)
