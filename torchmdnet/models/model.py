@@ -26,6 +26,8 @@ def create_model(args, prior_model=None, mean=None, std=None):
         nn.Module: An instance of the TorchMD_Net model.
     """
     dtype = dtype_mapping[args["precision"]]
+    if "box_vecs" not in args:
+        args["box_vecs"] = None
     shared_args = dict(
         hidden_channels=args["embedding_dimension"],
         num_layers=args["num_layers"],
