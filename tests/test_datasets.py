@@ -55,6 +55,14 @@ def test_custom(energy, forces, num_files, preload, tmpdir, num_samples=100):
     if forces:
         assert hasattr(sample, "neg_dy"), "Sample doesn't contain forces"
 
+    # Assert shapes of whole dataset:
+    for i in range(len(data)):
+        assert np.array(data[i].z).shape == (5,), "Dataset has incorrect atom numbers shape"
+        assert np.array(data[i].pos).shape == (5, 3), "Dataset has incorrect coords shape"
+        if energy:
+            assert np.array(data[i].y).shape == (1,), "Dataset has incorrect energy shape"
+        if forces:
+            assert np.array(data[i].neg_dy).shape == (5, 3), "Dataset has incorrect forces shape"
     # Assert sample has the correct values
 
     # get the reference values from coords_0.npy and embed_0.npy
