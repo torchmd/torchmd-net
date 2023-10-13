@@ -10,23 +10,26 @@ import h5py
 @mark.parametrize("energy", [True, False])
 @mark.parametrize("forces", [True, False])
 @mark.parametrize("num_files", [1, 3])
-@mark.parametrize("preload", [False, True])
-def test_custom(energy, forces, num_files, preload, tmpdir, num_samples=100):
+@mark.parametrize(("preload", "read_as_hdf5"), [(True, None), (False, "test.hdf5")])
+def test_custom(energy, forces, num_files, preload, read_as_hdf5, tmpdir, num_samples=100):
+    if energy == False and isinstance(read_as_hdf5, str):
+        pytest.skip("HDF5 format requires energies to be present in the dataset.")
+    np.random.seed(0)
     # set up necessary files
     for i in range(num_files):
         np.save(
-            join(tmpdir, f"coords_{i}.npy"), np.random.normal(size=(num_samples, 5, 3))
+            join(tmpdir, f"coords_{i}.npy"), np.random.normal(size=(num_samples, 5, 3)).astype(np.float32)
         )
         np.save(join(tmpdir, f"embed_{i}.npy"), np.random.randint(0, 100, size=(5)))
         if energy:
             np.save(
                 join(tmpdir, f"energy_{i}.npy"),
-                np.random.uniform(size=(num_samples, 1)),
+                np.random.uniform(size=(num_samples, 1)).astype(np.float32),
             )
         if forces:
             np.save(
                 join(tmpdir, f"forces_{i}.npy"),
-                np.random.normal(size=(num_samples, 5, 3)),
+                np.random.normal(size=(num_samples, 5, 3)).astype(np.float32),
             )
 
     # load data and test Custom dataset
@@ -38,12 +41,15 @@ def test_custom(energy, forces, num_files, preload, tmpdir, num_samples=100):
             )
         return
 
+    if read_as_hdf5 is not None:
+        read_as_hdf5 = join(tmpdir, read_as_hdf5)
     data = Custom(
         coordglob=join(tmpdir, "coords*"),
         embedglob=join(tmpdir, "embed*"),
         energyglob=join(tmpdir, "energy*") if energy else None,
         forceglob=join(tmpdir, "forces*") if forces else None,
         preload_memory_limit=256 if preload else 0,
+        read_as_hdf5=read_as_hdf5,
     )
 
     assert len(data) == num_samples * num_files, "Number of samples does not match"

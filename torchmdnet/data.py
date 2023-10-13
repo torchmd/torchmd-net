@@ -56,6 +56,7 @@ class DataModule(LightningDataModule):
                     self.hparams["energy_files"],
                     self.hparams["force_files"],
                     self.hparams["dataset_preload_limit"],
+                    self.hparams["custom_read_as_hdf5"],
                 )
             else:
                 dataset_arg = {}
