@@ -210,6 +210,8 @@ class Custom(Dataset):
         fileid, index = self.index[idx]
         data = Data()
         for field in self.fields:
+            # The dataset is stored as mem mapped numpy arrays unless it is cached,
+            # in which case it is already stored as torch tensors
             f = self.stored_data[field[0]][fileid][index]
             data[field[0]] = f if self.cached else torch.from_numpy(np.array(f))
         return data
