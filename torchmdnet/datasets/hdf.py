@@ -7,13 +7,14 @@ import numpy as np
 class HDF5(Dataset):
     """A custom dataset that loads data from a HDF5 file.
 
-    To use this, dataset_root should be the path to the HDF5 file, or alternatively
-    a semicolon separated list of multiple files.  Each group in the file contains
-    samples that all have the same number of atoms.  Typically there is one
-    group for each unique number of atoms, but that is not required.  Each group
-    should contain arrays called "types" (atom type indices), "pos" (atom positions),
-    and "energy" (the energy of each sample).  It may optionally include an array
-    called "forces" (the force on each atom).
+    To use this, dataset_root should be  the path to the HDF5 file, or
+    alternatively a semicolon separated  list of multiple files.  Each
+    group in the  file contains samples that all have  the same number
+    of atoms.  Typically there is one  group for each unique number of
+    atoms, but that is not required.  Each group should contain arrays
+    called "types" (atom type indices), "pos" (atom positions), and at
+    least one of "energy" (the  energy of each sample) and/or "forces"
+    (the force on each atom).
 
     Args:
         filename (string): A semicolon separated list of HDF5 files.
@@ -45,6 +46,9 @@ class HDF5(Dataset):
                             self.fields.append(('neg_dy', 'forces', torch.float32))
                         if 'partial_charges' in group:
                             self.fields.append(('partial_charges', 'partial_charges', torch.float32))
+                        assert ("energy" in group) or (
+                            "forces" in group
+                        ), "Each group must contain at least energies or forces"
             file.close()
 
     def setup_index(self):
