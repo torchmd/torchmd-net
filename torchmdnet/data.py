@@ -62,6 +62,8 @@ class DataModule(LightningDataModule):
                 dataset_arg = {}
                 if self.hparams["dataset_arg"] is not None:
                     dataset_arg = self.hparams["dataset_arg"]
+                if self.hparams["dataset"] == "HD5F":
+                    dataset_arg["dataset_preload_limit"] = self.hparams["dataset_preload_limit"]
                 self.dataset = getattr(datasets, self.hparams["dataset"])(
                     self.hparams["dataset_root"], **dataset_arg
                 )
