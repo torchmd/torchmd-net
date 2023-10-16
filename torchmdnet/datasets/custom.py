@@ -18,17 +18,17 @@ def write_as_hdf5(files, hdf5_dataset):
     with h5py.File(hdf5_dataset, "w") as f:
         for i in range(len(files["pos"])):
             # Create a group for each file
-            coord_data = np.load(files["pos"][i])
-            embed_data = np.load(files["z"][i]).astype(int)
+            coord_data = np.load(files["pos"][i], mmap_mode="r")
+            embed_data = np.load(files["z"][i], mmap_mode="r").astype(int)
             group = f.create_group(str(i))
             num_samples = coord_data.shape[0]
             group["pos"] = coord_data
             group["types"] = np.tile(embed_data, (num_samples, 1))
             if "y" in files:
-                energy_data = np.load(files["y"][i])
+                energy_data = np.load(files["y"][i], mmap_mode="r")
                 group["energy"] = energy_data
             if "neg_dy" in files:
-                force_data = np.load(files["neg_dy"][i])
+                force_data = np.load(files["neg_dy"][i], mmap_mode="r")
                 group["forces"] = force_data
 
 
