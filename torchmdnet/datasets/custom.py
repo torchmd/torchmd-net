@@ -113,7 +113,6 @@ class Custom(Dataset):
         print("Combined dataset size {}".format(len(self.index)))
         # If the dataset is small enough, load it whole into CPU memory
         data_size_limit = preload_memory_limit * 1024 * 1024
-        self.cache = False
         if total_data_size < data_size_limit:
             self.cached = True
             print(
