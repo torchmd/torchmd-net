@@ -4,6 +4,7 @@ import torch
 from torch_geometric.data import Dataset, Data
 from .hdf import HDF5
 import h5py
+import torch.distributed as dist
 
 __all__ = ["Custom"]
 
@@ -104,10 +105,20 @@ class Custom(Dataset):
         self.cached = False
         if read_as_hdf5 is not None:
             hdf5_file = read_as_hdf5
-            write_as_hdf5(
-                self.files,
-                hdf5_file,
-            )
+            # Check if DDP is being used
+            if dist.is_initialized():
+                # Only rank 0 will write the HDF5 file
+                if dist.get_rank() == 0:
+                    write_as_hdf5(
+                        self.files,
+                        hdf5_file,
+                    )
+                dist.barrier()
+            else:
+                write_as_hdf5(
+                    self.files,
+                    hdf5_file,
+                )
             self.hdf5_dataset = HDF5(hdf5_file)
         total_data_size = self._initialize_index()
         print("Combined dataset size {}".format(len(self.index)))
