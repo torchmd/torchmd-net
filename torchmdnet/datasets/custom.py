@@ -22,14 +22,14 @@ def write_as_hdf5(files, hdf5_dataset):
             embed_data = np.load(files["z"][i], mmap_mode="r").astype(int)
             group = f.create_group(str(i))
             num_samples = coord_data.shape[0]
-            group["pos"] = coord_data
-            group["types"] = np.tile(embed_data, (num_samples, 1))
+            group.create_dataset("pos", data=coord_data)
+            group.create_dataset("types", data=np.tile(embed_data, (num_samples, 1)))
             if "y" in files:
                 energy_data = np.load(files["y"][i], mmap_mode="r")
-                group["energy"] = energy_data
+                group.create_dataset("energy", data=energy_data)
             if "neg_dy" in files:
                 force_data = np.load(files["neg_dy"][i], mmap_mode="r")
-                group["forces"] = force_data
+                group.create_dataset("forces", data=force_data)
 
 
 class Custom(Dataset):
