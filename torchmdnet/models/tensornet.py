@@ -212,12 +212,13 @@ class TensorNet(nn.Module):
             edge_vec is not None
         ), "Distance module did not return directional information"
         # Distance module returns -1 for non-existing edges, to avoid having to resize the tensors when we want to ensure static shapes (for CUDA graphs) we make all non-existing edges pertain to a ghost atom
+        zp = z
         if self.static_shapes:
             mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
-            z = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
+            zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
             # I trick the model into thinking that the masked edges pertain to the extra atom
             # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
-            edge_index = edge_index.masked_fill(mask, z.shape[0] - 1)
+            edge_index = edge_index.masked_fill(mask, z.shape[0])
             edge_weight = edge_weight.masked_fill(mask[0], 0)
             edge_vec = edge_vec.masked_fill(mask[0].unsqueeze(-1).expand_as(edge_vec), 0)
         edge_attr = self.distance_expansion(edge_weight)
@@ -225,7 +226,7 @@ class TensorNet(nn.Module):
         # Normalizing edge vectors by their length can result in NaNs, breaking Autograd.
         # I avoid dividing by zero by setting the weight of self edges and self loops to 1
         edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
-        X = self.tensor_embedding(z, edge_index, edge_weight, edge_vec, edge_attr)
+        X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr)
         for layer in self.layers:
             X = layer(X, edge_index, edge_weight, edge_attr)
         I, A, S = decompose_tensor(X)
@@ -235,7 +236,6 @@ class TensorNet(nn.Module):
         # # Remove the extra atom
         if self.static_shapes:
             x = x[:-1]
-            z = z[:-1]
         return x, None, z, pos, batch
 
 
