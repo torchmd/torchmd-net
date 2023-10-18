@@ -211,14 +211,15 @@ class TensorNet(nn.Module):
         assert (
             edge_vec is not None
         ), "Distance module did not return directional information"
-        # Distance module returns -1 for non-existing edges, to avoid having to resize the tensors when we want to ensure static shapes (for CUDA graphs) we make all non-existing edges pertain to the first atom
+        # Distance module returns -1 for non-existing edges, to avoid having to resize the tensors when we want to ensure static shapes (for CUDA graphs) we make all non-existing edges pertain to a ghost atom
         if self.static_shapes:
-            mask = (edge_index[0] >= 0).unsqueeze(0).expand_as(edge_index)
-            # I trick the model into thinking that the masked edges pertain to the first atom
+            mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
+            z = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
+            # I trick the model into thinking that the masked edges pertain to the extra atom
             # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
-            edge_index = edge_index * mask
-            edge_weight = edge_weight * mask[0]
-            edge_vec = edge_vec * mask[0].unsqueeze(-1).expand_as(edge_vec)
+            edge_index = edge_index.masked_fill(mask, z.shape[0] - 1)
+            edge_weight = edge_weight.masked_fill(mask[0], 0)
+            edge_vec = edge_vec.masked_fill(mask[0].unsqueeze(-1).expand_as(edge_vec), 0)
         edge_attr = self.distance_expansion(edge_weight)
         mask = edge_index[0] == edge_index[1]
         # Normalizing edge vectors by their length can result in NaNs, breaking Autograd.
@@ -231,6 +232,10 @@ class TensorNet(nn.Module):
         x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
         x = self.out_norm(x)
         x = self.act(self.linear((x)))
+        # # Remove the extra atom
+        if self.static_shapes:
+            x = x[:-1]
+            z = z[:-1]
         return x, None, z, pos, batch
 
 
