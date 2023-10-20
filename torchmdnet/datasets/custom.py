@@ -9,30 +9,6 @@ import torch.distributed as dist
 __all__ = ["Custom"]
 
 
-def write_as_hdf5(files, hdf5_dataset):
-    """Transform the input to hdf5 format compatible with the HDF5 Dataset class.
-    The input files to the Custom dataset are transformed to a single HDF5 file.
-    Args:
-        files (dict): Dictionary of input files. Must contain "pos", "z" and at least one of "y" or "neg_dy".
-        hdf5_dataset (string): Path to the output HDF5 dataset.
-    """
-    with h5py.File(hdf5_dataset, "w") as f:
-        for i in range(len(files["pos"])):
-            # Create a group for each file
-            coord_data = np.load(files["pos"][i], mmap_mode="r")
-            embed_data = np.load(files["z"][i], mmap_mode="r").astype(int)
-            group = f.create_group(str(i))
-            num_samples = coord_data.shape[0]
-            group.create_dataset("pos", data=coord_data)
-            group.create_dataset("types", data=np.tile(embed_data, (num_samples, 1)))
-            if "y" in files:
-                energy_data = np.load(files["y"][i], mmap_mode="r")
-                group.create_dataset("energy", data=energy_data)
-            if "neg_dy" in files:
-                force_data = np.load(files["neg_dy"][i], mmap_mode="r")
-                group.create_dataset("forces", data=force_data)
-
-
 class Custom(Dataset):
     r"""Custom Dataset to manage loading coordinates, embedding indices,
     energies and forces from NumPy files. :obj:`coordglob` and :obj:`embedglob`
@@ -47,7 +23,7 @@ class Custom(Dataset):
         forceglob (string, optional): Glob path for force files. Stored as "neg_dy".
             (default: :obj:`None`)
         preload_memory_limit (int, optional): If the dataset is smaller than this limit (in MB), preload it into CPU memory.
-        read_as_hdf5 (string, optional): If present, transform the input files to HDF5 format and use the HDF5 Dataset.
+
     Example:
         >>> data = Custom(coordglob="coords_files*npy", embedglob="embed_files*npy")
         >>> sample = data[0]
@@ -68,7 +44,6 @@ class Custom(Dataset):
         energyglob=None,
         forceglob=None,
         preload_memory_limit=1024,
-        read_as_hdf5=None,
     ):
         super(Custom, self).__init__()
         assert energyglob is not None or forceglob is not None, (
@@ -103,23 +78,6 @@ class Custom(Dataset):
             )
         print("Number of files: ", len(self.files["pos"]))
         self.cached = False
-        if read_as_hdf5 is not None:
-            hdf5_file = read_as_hdf5
-            # Check if DDP is being used
-            if dist.is_initialized():
-                # Only rank 0 will write the HDF5 file
-                if dist.get_rank() == 0:
-                    write_as_hdf5(
-                        self.files,
-                        hdf5_file,
-                    )
-                dist.barrier()
-            else:
-                write_as_hdf5(
-                    self.files,
-                    hdf5_file,
-                )
-            self.hdf5_dataset = HDF5(hdf5_file)
         total_data_size = self._initialize_index()
         print("Combined dataset size {}".format(len(self.index)))
         # If the dataset is small enough, load it whole into CPU memory
@@ -215,8 +173,6 @@ class Custom(Dataset):
         return total_data_size
 
     def get(self, idx):
-        if hasattr(self, "hdf5_dataset"):
-            return self.hdf5_dataset.get(idx)
         fileid, index = self.index[idx]
         data = Data()
         for field in self.fields:

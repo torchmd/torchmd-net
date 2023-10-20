@@ -5,8 +5,9 @@ from os.path import join
 import numpy as np
 import psutil
 from torchmdnet.datasets import Custom, HDF5
+from torchmdnet.utils import write_as_hdf5
 import h5py
-
+import glob
 
 def write_sample_npy_files(energy, forces, tmpdir, num_files):
         # set up necessary files
@@ -39,8 +40,8 @@ def write_sample_npy_files(energy, forces, tmpdir, num_files):
 @mark.parametrize("energy", [True, False])
 @mark.parametrize("forces", [True, False])
 @mark.parametrize("num_files", [1, 3])
-@mark.parametrize(("preload", "read_as_hdf5"), [(True, None), (False, "test.hdf5"), (False, None)])
-def test_custom(energy, forces, num_files, preload, read_as_hdf5, tmpdir):
+@mark.parametrize("preload", [True, False])
+def test_custom(energy, forces, num_files, preload, tmpdir):
     # set up necessary files
     n_atoms_per_sample = write_sample_npy_files(energy, forces, tmpdir, num_files)
 
@@ -53,15 +54,12 @@ def test_custom(energy, forces, num_files, preload, read_as_hdf5, tmpdir):
             )
         return
 
-    if read_as_hdf5 is not None:
-        read_as_hdf5 = join(tmpdir, read_as_hdf5)
     data = Custom(
         coordglob=join(tmpdir, "coords*"),
         embedglob=join(tmpdir, "embed*"),
         energyglob=join(tmpdir, "energy*") if energy else None,
         forceglob=join(tmpdir, "forces*") if forces else None,
         preload_memory_limit=256 if preload else 0,
-        read_as_hdf5=read_as_hdf5,
     )
 
     assert len(data) == len(n_atoms_per_sample), "Number of samples does not match"
@@ -96,21 +94,49 @@ def test_custom(energy, forces, num_files, preload, read_as_hdf5, tmpdir):
         ref_neg_dy = np.load(join(tmpdir, "forces_0.npy"))[0] if forces else None
         assert np.allclose(sample.neg_dy, ref_neg_dy), "Sample has incorrect forces"
 
+@mark.parametrize(("energy", "forces"), [(True, False), (False, True), (True, True)])
+def test_write_as_hdf5(energy, forces, tmpdir):
+    # set up necessary files
+    num_files = 3
+    write_sample_npy_files(energy, forces, tmpdir, num_files)
+    files={}
+    files["pos"]=sorted(glob.glob(join(tmpdir, "coords*")))
+    files["z"]=sorted(glob.glob(join(tmpdir, "embed*")))
+    if energy:
+        files["y"]=sorted(glob.glob(join(tmpdir, "energy*")))
+    if forces:
+        files["neg_dy"]=sorted(glob.glob(join(tmpdir, "forces*")))
+    write_as_hdf5(files, join(tmpdir, "test.hdf5"))
+    # Assert file is present in the disk
+    assert os.path.isfile(join(tmpdir, "test.hdf5")), "HDF5 file was not created"
+    # Assert shapes of whole dataset:
+    data = h5py.File(join(tmpdir, "test.hdf5"), mode="r")
+    assert len(data) == num_files
+    for i in range(len(data)):
+        pos_npy = np.load(files["pos"][i])
+        n_samples = pos_npy.shape[0]
+        n_atoms_i = pos_npy.shape[1]
+        assert np.array(data[str(i)]["types"]).shape == (n_samples, n_atoms_i,), "Dataset has incorrect atom numbers shape"
+        assert np.array(data[str(i)]["pos"]).shape == (n_samples, n_atoms_i, 3), "Dataset has incorrect coords shape"
+        if energy:
+            assert np.array(data[str(i)]["energy"]).shape == (n_samples, 1,), "Dataset has incorrect energy shape"
+        if forces:
+            assert np.array(data[str(i)]["forces"]).shape == (n_samples, n_atoms_i, 3), "Dataset has incorrect forces shape"
+
 @mark.parametrize("preload", [True, False])
 @mark.parametrize(("energy", "forces"), [(True, False), (False, True), (True, True)])
 @mark.parametrize("num_files", [1, 3])
 def test_hdf5(preload, energy, forces, num_files, tmpdir):
     # set up necessary files
     n_atoms_per_sample = write_sample_npy_files(energy, forces, tmpdir, num_files)
-    data = Custom(
-        coordglob=join(tmpdir, "coords*"),
-        embedglob=join(tmpdir, "embed*"),
-        energyglob=join(tmpdir, "energy*") if energy else None,
-        forceglob=join(tmpdir, "forces*") if forces else None,
-        preload_memory_limit=0,
-        read_as_hdf5=join(tmpdir, "test.hdf5"),
-    )
-    del data
+    files={}
+    files["pos"]=sorted(glob.glob(join(tmpdir, "coords*")))
+    files["z"]=sorted(glob.glob(join(tmpdir, "embed*")))
+    if energy:
+        files["y"]=sorted(glob.glob(join(tmpdir, "energy*")))
+    if forces:
+        files["neg_dy"]=sorted(glob.glob(join(tmpdir, "forces*")))
+    write_as_hdf5(files, join(tmpdir, "test.hdf5"))
     # Assert file is present in the disk
     assert os.path.isfile(join(tmpdir, "test.hdf5")), "HDF5 file was not created"
 
