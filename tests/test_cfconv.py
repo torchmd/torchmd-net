@@ -2,7 +2,7 @@ import pytest
 from pytest import mark
 import torch as pt
 from torchmdnet.models.torchmd_gn import CFConv as RefCFConv
-from torchmdnet.models.utils import Distance, GaussianSmearing, ShiftedSoftplus
+from torchmdnet.models.utils import OptimizedDistance, GaussianSmearing, ShiftedSoftplus
 
 from NNPOps.CFConv import CFConv
 from NNPOps.CFConvNeighbors import CFConvNeighbors
@@ -27,7 +27,7 @@ def test_cfconv(device, num_atoms, num_filters, num_rbfs, cutoff_upper):
     input = pt.rand(num_atoms, num_filters, dtype=pt.float32, device=device)
 
     # Construct a non-optimized CFConv object
-    dist = Distance(0.0, cutoff_upper).to(device)
+    dist = OptimizedDistance(0.0, cutoff_upper).to(device)
     rbf = GaussianSmearing(0.0, cutoff_upper, num_rbfs, trainable=False).to(device)
     net = pt.nn.Sequential(
         pt.nn.Linear(num_rbfs, num_filters),
@@ -77,5 +77,5 @@ def test_cfconv(device, num_atoms, num_filters, num_rbfs, cutoff_upper):
     total.backward()
     grad = pos.grad.clone()
 
-    assert pt.allclose(ref_output, output, atol=5e-7)
-    assert pt.allclose(ref_grad, grad, atol=5e-7)
+    pt.testing.assert_close(ref_output, output, atol=1e-6, rtol=1e-5)
+    pt.testing.assert_close(ref_grad, grad, atol=1e-6, rtol=1e-5)

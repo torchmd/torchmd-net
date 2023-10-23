@@ -4,11 +4,11 @@ import torch
 from torch.autograd import grad
 from torch import nn, Tensor
 from torch_scatter import scatter
-from pytorch_lightning.utilities import rank_zero_warn
 from torchmdnet.models import output_modules
 from torchmdnet.models.wrappers import AtomFilter
 from torchmdnet.models.utils import dtype_mapping
 from torchmdnet import priors
+from lightning_utilities.core.rank_zero import rank_zero_warn
 import warnings
 
 
@@ -75,6 +75,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         )
     elif args["model"] == "tensornet":
         from torchmdnet.models.tensornet import TensorNet
+
 	# Setting is_equivariant to False to enforce the use of Scalar output module instead of EquivariantScalar
         is_equivariant = False
         representation_model = TensorNet(
@@ -252,10 +253,8 @@ class TorchMD_Net(nn.Module):
 
         if self.derivative:
             pos.requires_grad_(True)
-
         # run the potentially wrapped representation model
         x, v, z, pos, batch = self.representation_model(z, pos, batch, q=q, s=s)
-
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch)
 
@@ -282,16 +281,16 @@ class TorchMD_Net(nn.Module):
         if self.prior_model is not None:
             for prior in self.prior_model:
                 y = prior.post_reduce(y, z, pos, batch, extra_args)
-
         # compute gradients with respect to coordinates
+
         if self.derivative:
             grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(y)]
             dy = grad(
                 [y],
                 [pos],
                 grad_outputs=grad_outputs,
-                create_graph=True,
-                retain_graph=True,
+                create_graph=self.training,
+                retain_graph=self.training,
             )[0]
             if dy is None:
                 raise RuntimeError("Autograd returned None for the force prediction.")

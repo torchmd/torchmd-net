@@ -1,11 +1,12 @@
+from collections import defaultdict
 import torch
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.nn.functional import mse_loss, l1_loss
+from torch.nn.functional import local_response_norm, mse_loss, l1_loss
 from torch import Tensor
 from typing import Optional, Dict, Tuple
 
-from pytorch_lightning import LightningModule
+from lightning import LightningModule
 from torchmdnet.models.model import create_model, load_model
 
 
@@ -13,9 +14,9 @@ class LNNP(LightningModule):
     """
     Lightning wrapper for the Neural Network Potentials in TorchMD-Net.
     """
+
     def __init__(self, hparams, prior_model=None, mean=None, std=None):
         super(LNNP, self).__init__()
-
         if "charge" not in hparams:
             hparams["charge"] = False
         if "spin" not in hparams:
@@ -57,34 +58,89 @@ class LNNP(LightningModule):
         }
         return [optimizer], [lr_scheduler]
 
-    def forward(self,
-                z: Tensor,
-                pos: Tensor,
-                batch: Optional[Tensor] = None,
-                q: Optional[Tensor] = None,
-                s: Optional[Tensor] = None,
-                extra_args: Optional[Dict[str, Tensor]] = None
-                ) -> Tuple[Tensor, Optional[Tensor]]:
-
+    def forward(
+        self,
+        z: Tensor,
+        pos: Tensor,
+        batch: Optional[Tensor] = None,
+        q: Optional[Tensor] = None,
+        s: Optional[Tensor] = None,
+        extra_args: Optional[Dict[str, Tensor]] = None,
+    ) -> Tuple[Tensor, Optional[Tensor]]:
         return self.model(z, pos, batch=batch, q=q, s=s, extra_args=extra_args)
 
     def training_step(self, batch, batch_idx):
-        return self.step(batch, mse_loss, "train")
+        return self.step(batch, [mse_loss], "train")
 
     def validation_step(self, batch, batch_idx, *args):
-        if len(args) == 0 or (len(args) > 0 and args[0] == 0):
-            # validation step
-            return self.step(batch, mse_loss, "val")
-        # test step
-        return self.step(batch, l1_loss, "test")
+        # If args is not empty the first (and only) element is the dataloader_idx
+        # We want to test every number of epochs just for reporting, but this is not supported by Lightning.
+        # Instead, we trick it by providing two validation dataloaders and interpreting the second one as test.
+        # The dataloader takes care of sending the two sets only when the second one is needed.
+        is_val = len(args) == 0 or (len(args) > 0 and args[0] == 0)
+        if is_val:
+            step_type = {"loss_fn_list": [l1_loss, mse_loss], "stage": "val"}
+        else:
+            step_type = {"loss_fn_list": [l1_loss], "stage": "test"}
+        return self.step(batch, **step_type)
 
     def test_step(self, batch, batch_idx):
-        return self.step(batch, l1_loss, "test")
+        return self.step(batch, [l1_loss], "test")
 
-    def step(self, batch, loss_fn, stage):
+    def _compute_losses(self, y, neg_y, batch, loss_fn, stage):
+        # Compute the loss for the predicted value and the negative derivative (if available)
+        # Args:
+        #   y: predicted value
+        #   neg_y: predicted negative derivative
+        #   batch: batch of data
+        #   loss_fn: loss function to compute
+        # Returns:
+        #   loss_y: loss for the predicted value
+        #   loss_neg_y: loss for the predicted negative derivative
+        loss_y, loss_neg_y = 0.0, 0.0
+        loss_name = loss_fn.__name__
+        if self.hparams.derivative and "neg_dy" in batch:
+            loss_neg_y = loss_fn(neg_y, batch.neg_dy)
+            loss_neg_y = self._update_loss_with_ema(
+                stage, "neg_dy", loss_name, loss_neg_y
+            )
+        if "y" in batch:
+            loss_y = loss_fn(y, batch.y)
+            loss_y = self._update_loss_with_ema(stage, "y", loss_name, loss_y)
+        return {"y": loss_y, "neg_dy": loss_neg_y}
+
+    def _update_loss_with_ema(self, stage, type, loss_name, loss):
+        # Update the loss using an exponential moving average when applicable
+        # Args:
+        #   stage: stage of the training (train, val, test)
+        #   type: type of loss (y, neg_dy)
+        #   loss_name: name of the loss function
+        #   loss: loss value
+        alpha = getattr(self.hparams, f"ema_alpha_{type}")
+        if stage in ["train", "val"] and alpha < 1:
+            ema = (
+                self.ema[stage][type][loss_name]
+                if loss_name in self.ema[stage][type]
+                else loss.detach()
+            )
+            loss = alpha * loss + (1 - alpha) * ema
+            self.ema[stage][type][loss_name] = loss.detach()
+        return loss
+
+    def step(self, batch, loss_fn_list, stage):
+        # Run a forward pass and compute the loss for each loss function
+        # If the batch contains the derivative, also compute the loss for the negative derivative
+        # Args:
+        #   batch: batch of data
+        #   loss_fn_list: list of loss functions to compute and record (the last one is used for the total loss returned by this function)
+        #   stage: stage of the training (train, val, test)
+        # Returns:
+        #   total_loss: sum of all losses (weighted by the loss weights) for the last loss function in the provided list
+        assert len(loss_fn_list) > 0
+        assert self.losses is not None
         with torch.set_grad_enabled(stage == "train" or self.hparams.derivative):
             extra_args = batch.to_dict()
-            for a in ('y', 'neg_dy', 'z', 'pos', 'batch', 'q', 's'):
+            for a in ("y", "neg_dy", "z", "pos", "batch", "q", "s"):
                 if a in extra_args:
                     del extra_args[a]
             # TODO: the model doesn't necessarily need to return a derivative once
@@ -95,59 +151,32 @@ class LNNP(LightningModule):
                 batch=batch.batch,
                 q=batch.q if self.hparams.charge else None,
                 s=batch.s if self.hparams.spin else None,
-                extra_args=extra_args
+                extra_args=extra_args,
             )
+        if self.hparams.derivative and "y" not in batch:
+            # "use" both outputs of the model's forward function but discard the first
+            # to only use the negative derivative and avoid 'Expected to have finished reduction
+            # in the prior iteration before starting a new one.', which otherwise get's
+            # thrown because of setting 'find_unused_parameters=False' in the DDPPlugin
+            neg_dy = neg_dy + y.sum() * 0
+        if "y" in batch and batch.y.ndim == 1:
+            batch.y = batch.y.unsqueeze(1)
+        for loss_fn in loss_fn_list:
+            step_losses = self._compute_losses(y, neg_dy, batch, loss_fn, stage)
 
-        loss_y, loss_neg_dy = 0, 0
-        if self.hparams.derivative:
-            if "y" not in batch:
-                # "use" both outputs of the model's forward function but discard the first
-                # to only use the negative derivative and avoid 'Expected to have finished reduction
-                # in the prior iteration before starting a new one.', which otherwise get's
-                # thrown because of setting 'find_unused_parameters=False' in the DDPPlugin
-                neg_dy = neg_dy + y.sum() * 0
-
-            # negative derivative loss
-            loss_neg_dy = loss_fn(neg_dy, batch.neg_dy)
-
-            if stage in ["train", "val"] and self.hparams.ema_alpha_neg_dy < 1:
-                if self.ema[stage + "_neg_dy"] is None:
-                    self.ema[stage + "_neg_dy"] = loss_neg_dy.detach()
-                # apply exponential smoothing over batches to neg_dy
-                loss_neg_dy = (
-                    self.hparams.ema_alpha_neg_dy * loss_neg_dy
-                    + (1 - self.hparams.ema_alpha_neg_dy) * self.ema[stage + "_neg_dy"]
-                )
-                self.ema[stage + "_neg_dy"] = loss_neg_dy.detach()
-
+            loss_name = loss_fn.__name__
             if self.hparams.neg_dy_weight > 0:
-                self.losses[stage + "_neg_dy"].append(loss_neg_dy.detach())
-
-        if "y" in batch:
-            if batch.y.ndim == 1:
-                batch.y = batch.y.unsqueeze(1)
-
-            # y loss
-            loss_y = loss_fn(y, batch.y)
-
-            if stage in ["train", "val"] and self.hparams.ema_alpha_y < 1:
-                if self.ema[stage + "_y"] is None:
-                    self.ema[stage + "_y"] = loss_y.detach()
-                # apply exponential smoothing over batches to y
-                loss_y = (
-                    self.hparams.ema_alpha_y * loss_y
-                    + (1 - self.hparams.ema_alpha_y) * self.ema[stage + "_y"]
+                self.losses[stage]["neg_dy"][loss_name].append(
+                    step_losses["neg_dy"].detach()
                 )
-                self.ema[stage + "_y"] = loss_y.detach()
-
             if self.hparams.y_weight > 0:
-                self.losses[stage + "_y"].append(loss_y.detach())
-
-        # total loss
-        loss = loss_y * self.hparams.y_weight + loss_neg_dy * self.hparams.neg_dy_weight
-
-        self.losses[stage].append(loss.detach())
-        return loss
+                self.losses[stage]["y"][loss_name].append(step_losses["y"].detach())
+            total_loss = (
+                step_losses["y"] * self.hparams.y_weight
+                + step_losses["neg_dy"] * self.hparams.neg_dy_weight
+            )
+            self.losses[stage]["total"][loss_name].append(total_loss.detach())
+        return total_loss
 
     def optimizer_step(self, *args, **kwargs):
         optimizer = kwargs["optimizer"] if "optimizer" in kwargs else args[2]
@@ -163,64 +192,61 @@ class LNNP(LightningModule):
         super().optimizer_step(*args, **kwargs)
         optimizer.zero_grad()
 
-    def training_epoch_end(self, training_step_outputs):
-        dm = self.trainer.datamodule
-        if hasattr(dm, "test_dataset") and len(dm.test_dataset) > 0:
-            should_reset = (
-                self.current_epoch % self.hparams.test_interval == 0
-                or (self.current_epoch + 1) % self.hparams.test_interval == 0
-            )
-            if should_reset:
-                # reset validation dataloaders before and after testing epoch, which is faster
-                # than skipping test validation steps by returning None
-                self.trainer.reset_val_dataloader(self)
+    def _get_mean_loss_dict_for_type(self, type):
+        # Returns a list with the mean loss for each loss_fn for each stage (train, val, test)
+        # Parameters:
+        # type: either y, neg_dy or total
+        # Returns:
+        # A dict with an entry for each stage (train, val, test) with the mean loss for each loss_fn (e.g. mse_loss)
+        # The key for each entry is "stage_type_loss_fn"
+        assert self.losses is not None
+        mean_losses = {}
+        for stage in ["train", "val", "test"]:
+            for loss_fn_name in self.losses[stage][type].keys():
+                mean_losses[stage + "_" + type + "_" + loss_fn_name] = torch.stack(
+                    self.losses[stage][type][loss_fn_name]
+                ).mean()
+        return mean_losses
 
-    def validation_epoch_end(self, validation_step_outputs):
+    def on_validation_epoch_end(self):
         if not self.trainer.sanity_checking:
             # construct dict of logged metrics
             result_dict = {
                 "epoch": float(self.current_epoch),
                 "lr": self.trainer.optimizers[0].param_groups[0]["lr"],
-                "train_loss": torch.stack(self.losses["train"]).mean(),
-                "val_loss": torch.stack(self.losses["val"]).mean(),
             }
-
-            # add test loss if available
-            if len(self.losses["test"]) > 0:
-                result_dict["test_loss"] = torch.stack(self.losses["test"]).mean()
-
-            # if prediction and derivative are present, also log them separately
-            if len(self.losses["train_y"]) > 0 and len(self.losses["train_neg_dy"]) > 0:
-                result_dict["train_loss_y"] = torch.stack(self.losses["train_y"]).mean()
-                result_dict["train_loss_neg_dy"] = torch.stack(
-                    self.losses["train_neg_dy"]
-                ).mean()
-                result_dict["val_loss_y"] = torch.stack(self.losses["val_y"]).mean()
-                result_dict["val_loss_neg_dy"] = torch.stack(self.losses["val_neg_dy"]).mean()
-
-                if len(self.losses["test"]) > 0:
-                    result_dict["test_loss_y"] = torch.stack(
-                        self.losses["test_y"]
-                    ).mean()
-                    result_dict["test_loss_neg_dy"] = torch.stack(
-                        self.losses["test_neg_dy"]
-                    ).mean()
-
+            result_dict.update(self._get_mean_loss_dict_for_type("total"))
+            result_dict.update(self._get_mean_loss_dict_for_type("y"))
+            result_dict.update(self._get_mean_loss_dict_for_type("neg_dy"))
             self.log_dict(result_dict, sync_dist=True)
+
         self._reset_losses_dict()
 
+    def on_test_epoch_end(self):
+        # Log all test losses
+        if not self.trainer.sanity_checking:
+            result_dict = {}
+            result_dict.update(self._get_mean_loss_dict_for_type("total"))
+            result_dict.update(self._get_mean_loss_dict_for_type("y"))
+            result_dict.update(self._get_mean_loss_dict_for_type("neg_dy"))
+            # Get only test entries
+            result_dict = {k: v for k, v in result_dict.items() if k.startswith("test")}
+            self.log_dict(result_dict, sync_dist=True)
+
     def _reset_losses_dict(self):
-        self.losses = {
-            "train": [],
-            "val": [],
-            "test": [],
-            "train_y": [],
-            "val_y": [],
-            "test_y": [],
-            "train_neg_dy": [],
-            "val_neg_dy": [],
-            "test_neg_dy": [],
-        }
+        # Losses has an entry for each stage in ["train", "val", "test"]
+        # Each entry has an entry with "total", "y" and "neg_dy"
+        # Each of these entries has an entry for each loss_fn (e.g. mse_loss)
+        # The loss_fn values are not known in advance
+        self.losses = {}
+        for stage in ["train", "val", "test"]:
+            self.losses[stage] = {}
+            for loss_type in ["total", "y", "neg_dy"]:
+                self.losses[stage][loss_type] = defaultdict(list)
 
     def _reset_ema_dict(self):
-        self.ema = {"train_y": None, "val_y": None, "train_neg_dy": None, "val_neg_dy": None}
+        self.ema = {}
+        for stage in ["train", "val"]:
+            self.ema[stage] = {}
+            for loss_type in ["y", "neg_dy"]:
+                self.ema[stage][loss_type] = {}

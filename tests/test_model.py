@@ -3,7 +3,7 @@ from pytest import mark
 import pickle
 from os.path import exists, dirname, join
 import torch
-import pytorch_lightning as pl
+import lightning as pl
 from torchmdnet import models
 from torchmdnet.models.model import create_model
 from torchmdnet.models import output_modules
@@ -62,6 +62,8 @@ def test_torchscript(model_name, device):
 def test_torchscript_dynamic_shapes(model_name, device):
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA not available")
+    if model_name == "tensornet":
+        pytest.skip("TorchScripted TensorNet does not support dynamic shapes.")
     z, pos, batch = create_example_batch()
     model = torch.jit.script(
         create_model(load_example_args(model_name, remove_prior=True, derivative=True))
@@ -79,6 +81,48 @@ def test_torchscript_dynamic_shapes(model_name, device):
             [posi],
             grad_outputs=grad_outputs,
         )[0]
+
+#Currently only tensornet is CUDA graph compatible
+@mark.parametrize("model_name", ["tensornet"])
+def test_cuda_graph_compatible(model_name):
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    z, pos, batch = create_example_batch()
+    args = {"model": model_name,
+            "embedding_dimension": 128,
+            "num_layers": 2,
+            "num_rbf": 32,
+            "rbf_type": "expnorm",
+            "trainable_rbf": False,
+            "activation": "silu",
+            "cutoff_lower": 0.0,
+            "cutoff_upper": 5.0,
+            "max_z": 100,
+            "max_num_neighbors": 128,
+            "equivariance_invariance_group": "O(3)",
+            "prior_model": None,
+            "atom_filter": -1,
+            "derivative": True,
+            "output_model": "Scalar",
+            "reduce_op": "sum",
+            "precision": 32 }
+    model = create_model(args).to(device="cuda")
+    model.eval()
+    z = z.to("cuda")
+    pos = pos.to("cuda").requires_grad_(True)
+    batch = batch.to("cuda")
+    with torch.cuda.stream(torch.cuda.Stream()):
+        for _ in range(0, 15):
+            y, neg_dy = model(z, pos, batch=batch)
+    g = torch.cuda.CUDAGraph()
+    y2, neg_dy2 = model(z, pos, batch=batch)
+    with torch.cuda.graph(g):
+        y, neg_dy = model(z, pos, batch=batch)
+    y.fill_(0.0)
+    neg_dy.fill_(0.0)
+    g.replay()
+    assert torch.allclose(y, y2)
+    assert torch.allclose(neg_dy, neg_dy2, atol=1e-5, rtol=1e-5)
 
 @mark.parametrize("model_name", models.__all__)
 def test_seed(model_name):

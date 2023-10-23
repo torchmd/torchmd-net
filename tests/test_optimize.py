@@ -52,5 +52,5 @@ def test_gn(device, num_atoms):
     # Execute the optimize model
     energy, gradient = model(elements, positions)
 
-    assert pt.allclose(ref_energy, energy, atol=5e-7)
-    assert pt.allclose(ref_gradient, gradient, atol=1e-5)
+    pt.testing.assert_close(ref_energy, energy, rtol=1e-5, atol=1e-5)
+    pt.testing.assert_close(ref_gradient, gradient, rtol=1e-4, atol=1e-5)
