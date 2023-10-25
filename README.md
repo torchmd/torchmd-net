@@ -43,6 +43,23 @@ We recommend using [Mamba](https://github.com/conda-forge/miniforge/#mambaforge)
 This will install TorchMD-NET in editable mode, so that changes to the source code are immediately available.
 Besides making all python utilities available environment-wide, this will also install the `torchmd-train` command line utility.
 
+
+#### CUDA enabled installation
+
+Besides the dependencies listed in the environment file, you will also need the CUDA `nvcc` compiler suite to build TorchMD-Net.   
+If your system lacks nvcc you may install it via conda-forge:
+	```shell
+	mamba install cudatoolkit-dev
+	```
+Or from the nvidia channel:
+```shell
+mamba install -c nvidia cuda-nvcc cuda-cudart-dev cuda-libraries-dev
+```
+Make sure you install a major version compatible with your torch installation, which you can check with:
+```shell
+python -c "import torch; print(torch.version.cuda)"
+```
+
 ## Usage
 Specifying training arguments can either be done via a configuration yaml file or through command line arguments directly. Several examples of architectural and training specifications for some models and datasets can be found in [examples/](https://github.com/torchmd/torchmd-net/tree/main/examples). Note that if a parameter is present both in the yaml file and the command line, the command line version takes precedence.
 GPUs can be selected by setting the `CUDA_VISIBLE_DEVICES` environment variable. Otherwise, the argument `--ngpus` can be used to select the number of GPUs to train on (-1, the default, uses all available GPUs or the ones specified in `CUDA_VISIBLE_DEVICES`). Keep in mind that the [GPU ID reported by nvidia-smi might not be the same as the one `CUDA_VISIBLE_DEVICES` uses](https://stackoverflow.com/questions/26123252/inconsistency-of-ids-between-nvidia-smi-l-and-cudevicegetname).  
