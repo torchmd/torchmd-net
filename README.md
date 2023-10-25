@@ -13,7 +13,14 @@ TorchMD-NET provides state-of-the-art neural networks potentials (NNPs) and a me
 - [TensorNet](https://arxiv.org/abs/2306.06482)
 
 
-## Installation
+## Installation  
+TorchMD-Net is available in [conda-forge](https://conda-forge.org/) and can be installed with:  
+```shell
+mamba install torchmd-net
+```
+We recommend using [Mamba](https://github.com/conda-forge/miniforge/#mambaforge) instead of conda.  
+
+### Install from source  
 
 1. Clone the repository:
     ```shell
@@ -21,7 +28,7 @@ TorchMD-NET provides state-of-the-art neural networks potentials (NNPs) and a me
     cd torchmd-net
     ```
 
-2. Install [Mambaforge](https://github.com/conda-forge/miniforge/#mambaforge). We recommend to use `mamba` rather than `conda`.
+2. Install the dependencies in environment.yml. You can do it via pip, but we recommend [Mambaforge](https://github.com/conda-forge/miniforge/#mambaforge) instead.
 
 3. Create an environment and activate it:
     ```shell
