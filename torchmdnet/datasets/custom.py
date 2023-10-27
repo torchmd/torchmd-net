@@ -76,15 +76,13 @@ class Custom(Dataset):
         print("Number of files: ", len(self.files["pos"]))
         self.cached = False
         total_data_size = self._initialize_index()
-        print("Combined dataset size {}".format(len(self.index)))
+        print(f"Combined dataset size {len(self.index))}")
         # If the dataset is small enough, load it whole into CPU memory
         data_size_limit = preload_memory_limit * 1024 * 1024
         if total_data_size < data_size_limit:
             self.cached = True
             print(
-                "Preloading Custom dataset (of size {:.2f} MB)".format(
-                    total_data_size / 1024**2
-                )
+                f"Preloading Custom dataset (of size {total_data_size / 1024**2:.2f} MB)"
             )
             self._preload_data()
         else:
