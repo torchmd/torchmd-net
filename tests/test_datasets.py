@@ -10,7 +10,7 @@ import h5py
 import glob
 
 def write_sample_npy_files(energy, forces, tmpdir, num_files):
-        # set up necessary files
+    # set up necessary files
     n_atoms = np.random.randint(2, 10, size=num_files)
     num_samples = np.random.randint(10, 100, size=num_files)
     #n_atoms repeated num_samples times for each file
