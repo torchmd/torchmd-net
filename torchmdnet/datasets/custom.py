@@ -2,9 +2,6 @@ import glob
 import numpy as np
 import torch
 from torch_geometric.data import Dataset, Data
-from .hdf import HDF5
-import h5py
-import torch.distributed as dist
 
 __all__ = ["Custom"]
 
