@@ -32,6 +32,7 @@ napoleon_use_rtype = True
 napoleon_preprocess_types = True
 napoleon_type_aliases = None
 napoleon_attr_annotations = True
+autosummary_ignore_module_all=False
 
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),
@@ -61,7 +62,7 @@ autodoc_default_options = {
     'show-inheritance': True,
 }
 #Exclude all torchmdnet.datasets.*.rst files in source/generated/
-exclude_patterns = ['generated/torchmdnet.datasets.*.rst']
+exclude_patterns = ['generated/torchmdnet.datasets.*.rst', 'generated/torchmdnet.scripts.*rst']
 html_static_path = ['../_static']
 html_css_files = [
     'style.css',
