@@ -11,6 +11,8 @@ from torchmdnet.models.utils import (
     act_class_mapping,
 )
 
+__all__ = ["TorchMD_ET"]
+
 class TorchMD_ET(nn.Module):
     r"""The TorchMD equivariant Transformer architecture.
 

@@ -10,6 +10,7 @@ from torchmdnet.models.utils import (
     act_class_mapping,
 )
 
+__all__ = ["TorchMD_GN"]
 
 class TorchMD_GN(nn.Module):
     r"""The TorchMD Graph Network architecture.

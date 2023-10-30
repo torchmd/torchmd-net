@@ -11,6 +11,8 @@ from torchmdnet.models.utils import (
 )
 from torch_scatter import scatter
 
+__all__ = ["TorchMD_T"]
+
 class TorchMD_T(nn.Module):
     r"""The TorchMD Transformer architecture.
 
