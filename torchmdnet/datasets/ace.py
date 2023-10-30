@@ -13,31 +13,39 @@ class Ace(Dataset):
     This dataset is sourced from HDF5 files.
 
     Mandatory HDF5 file attributes:
+
     - `layout`: Must be set to `Ace`.
     - `layout_version`: Can be `1.0` or `2.0`.
     - `name`: Name of the dataset.
 
     For `layout_version` 1.0:
+
     - Files can contain multiple molecule groups directly under the root.
     - Each molecule group contains:
+
       - `atomic_numbers`: Atomic numbers of the atoms.
       - `formal_charges`: Formal charges of the atoms. The sum is the molecule's total charge. Units: electron charges.
       - `conformations` subgroup: This subgroup has individual conformation groups, each with datasets for different properties of the conformation.
 
     For `layout_version` 2.0:
+
     - Files contain a single root group (e.g., a 'master molecule group').
     - Within this root group, there can be multiple molecule groups.
     - Each molecule group contains:
+
       - `atomic_numbers`: Atomic numbers of the atoms.
       - `formal_charges`: Formal charges of the atoms.
       - Datasets for multiple conformations directly, without individual conformation groups.
 
+
     Each conformation group (version 1.0) or molecule group (version 2.0) should have the following datasets:
+
     - `positions`: Atomic positions. Units: Angstrom.
     - `forces`: Forces on the atoms. Units: eV/Å.
     - `partial_charges`: Atomic partial charges. Units: electron charges.
     - `dipole_moment` (version 1.0) or `dipole_moments` (version 2.0): Dipole moment (a vector of three components). Units: e*Å.
     - `formation_energy` (version 1.0) or `formation_energies` (version 2.0): Formation energy. Units: eV.
+
     Each dataset should also have an `units` attribute specifying its units (i.e., `Å`, `eV`, `e*Å`).
 
     Note that version 2.0 is more efficient than 1.0.
@@ -102,7 +110,6 @@ class Ace(Dataset):
         ...         mol["partial_charges"].attrs["units"] = "e"
         ...         mol["dipole_moment"] = np.random.random((2, 3))
         ...         mol["dipole_moment"].attrs["units"] = "e*Å"
-
         >>> dataset_v2 = Ace(root=".", paths="molecule_v2.h5")
         >>> len(dataset_v2)
         6
@@ -409,7 +416,9 @@ class Ace(Dataset):
 
     def get(self, idx):
         """Gets the data object at index :obj:`idx`.
+
         The data object contains the following attributes:
+
             - :obj:`z`: Atomic numbers of the atoms.
             - :obj:`pos`: Positions of the atoms.
             - :obj:`y`: Formation energy of the molecule.
