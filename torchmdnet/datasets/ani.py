@@ -8,6 +8,26 @@ import warnings
 
 
 class ANIBase(Dataset):
+    """ANI Dataset Classes
+    ----------------------
+
+    A foundational dataset class for handling the ANI datasets. ANI (ANAKIN-ME or Accurate NeurAl networK engINe for Molecular Energies)
+    is a deep learning method trained on quantum mechanical DFT calculations to predict accurate and transferable potentials for organic molecules.
+
+    Key features of ANI:
+    - Utilizes a modified version of the Behler and Parrinello symmetry functions to construct single-atom atomic environment vectors (AEV) for molecular representation.
+    - AEVs enable the training of neural networks over both configurational and conformational space.
+    - The ANI-1 potential was trained on a subset of the GDB databases with up to 8 heavy atoms.
+    - ANI-1x and ANI-1ccx datasets provide diverse quantum mechanical properties for organic molecules:
+      - ANI-1x contains multiple QM properties from 5M density functional theory calculations.
+      - ANI-1ccx contains 500k data points obtained with an accurate CCSD(T)/CBS extrapolation.
+    - Properties include energies, atomic forces, multipole moments, atomic charges, and more for the chemical elements C, H, N, and O.
+    - Developed through active learning, an automated data diversification process.
+
+    References:
+    - Smith, J. S., Isayev, O., & Roitberg, A. E. (2017). ANI-1: an extensible neural network potential with DFT accuracy at force field computational cost. Chemical Science, 8(4), 3192-3203.
+    - Smith, J. S., Zubatyuk, R., Nebgen, B., Lubbers, N., Barros, K., Roitberg, A. E., Isayev, O., & Tretiak, S. (2020). The ANI-1ccx and ANI-1x data sets, coupled-cluster and density functional theory properties for molecules. Scientific Data, 7, Article 134.
+    """
 
     HARTREE_TO_EV = 27.211386246
 
