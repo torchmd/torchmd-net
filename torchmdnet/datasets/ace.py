@@ -36,10 +36,11 @@ class Ace(Dataset):
     - `positions`: Atomic positions. Units: Angstrom.
     - `forces`: Forces on the atoms. Units: eV/Å.
     - `partial_charges`: Atomic partial charges. Units: electron charges.
-    - `dipole_moment`: Molecule's dipole moment. Units: e*Å.
+    - `dipole_moment` (version 1.0) or `dipole_moments` (version 2.0): Dipole moment (a vector of three components). Units: e*Å.
     - `formation_energy` (version 1.0) or `formation_energies` (version 2.0): Formation energy. Units: eV.
     Each dataset should also have an `units` attribute specifying its units (i.e., `Å`, `eV`, `e*Å`).
 
+    Note that version 2.0 is more efficient than 1.0.
     Args:
         root (string, optional): Root directory where the dataset should be saved.
         transform (callable, optional): A function/transform that takes in an :obj:`torch_geometric.data.Data` object and returns a transformed version.
@@ -53,7 +54,7 @@ class Ace(Dataset):
         >>> import numpy as np
         >>> from torchmdnet.datasets import Ace
         >>> import h5py
-        >>>
+        >>> # Version 1.0 example
         >>> with h5py.File("molecule.h5", 'w') as f:
         ...     f.attrs["layout"] = "Ace"
         ...     f.attrs["layout_version"] = "1.0"
@@ -80,6 +81,33 @@ class Ace(Dataset):
         6
         >>> dataset = Ace(root=".", paths=["molecule.h5", "molecule.h5"])
         >>> len(dataset)
+        12
+        >>> # Version 2.0 example
+        >>> with h5py.File("molecule_v2.h5", 'w') as f:
+        ...     f.attrs["layout"] = "Ace"
+        ...     f.attrs["layout_version"] = "2.0"
+        ...     f.attrs["name"] = "sample_molecule_data_v2"
+        ...     master_mol_group = f.create_group("master_molecule_group")
+        ...     for m in range(3):  # Three molecules
+        ...         mol = master_mol_group.create_group(f"mol_{m+1}")
+        ...         mol["atomic_numbers"] = [1, 6, 8]  # H, C, O
+        ...         mol["formal_charges"] = [0, 0, 0]  # Neutral charges
+        ...         mol["positions"] = np.random.random((2, 3, 3))  # Two conformations
+        ...         mol["positions"].attrs["units"] = "Å"
+        ...         mol["formation_energies"] = np.random.random(2)
+        ...         mol["formation_energies"].attrs["units"] = "eV"
+        ...         mol["forces"] = np.random.random((2, 3, 3))
+        ...         mol["forces"].attrs["units"] = "eV/Å"
+        ...         mol["partial_charges"] = np.random.random((2, 3))
+        ...         mol["partial_charges"].attrs["units"] = "e"
+        ...         mol["dipole_moment"] = np.random.random((2, 3))
+        ...         mol["dipole_moment"].attrs["units"] = "e*Å"
+
+        >>> dataset_v2 = Ace(root=".", paths="molecule_v2.h5")
+        >>> len(dataset_v2)
+        6
+        >>> dataset_v2 = Ace(root=".", paths=["molecule_v2.h5", "molecule_v2.h5"])
+        >>> len(dataset_v2)
         12
     """
 
