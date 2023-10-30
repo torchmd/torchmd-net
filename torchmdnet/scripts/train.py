@@ -64,7 +64,7 @@ def get_argparse():
     parser.add_argument('--neg-dy-weight', default=1.0, type=float, help='Weighting factor for neg_dy label in the loss function')
 
     # model architecture
-    parser.add_argument('--model', type=str, default='graph-network', choices=models.__all__, help='Which model to train')
+    parser.add_argument('--model', type=str, default='graph-network', choices=models.__all_models__, help='Which model to train')
     parser.add_argument('--output-model', type=str, default='Scalar', choices=output_modules.__all__, help='The type of output model')
     parser.add_argument('--prior-model', type=str, default=None, choices=priors.__all__, help='Which prior model to use')
 

@@ -12,7 +12,7 @@ from os.path import dirname, join
 import tempfile
 
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 def test_atomref(model_name):
     dataset = DummyDataset(has_atomref=True)
     atomref = Atomref(max_z=100, dataset=dataset)

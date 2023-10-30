@@ -12,7 +12,7 @@ from torchmdnet.models.utils import dtype_mapping
 from utils import load_example_args, create_example_batch
 
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 @mark.parametrize("use_batch", [True, False])
 @mark.parametrize("explicit_q_s", [True, False])
 @mark.parametrize("precision", [32, 64])
@@ -27,7 +27,7 @@ def test_forward(model_name, use_batch, explicit_q_s, precision):
         model(z, pos, batch=batch)
 
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 @mark.parametrize("output_model", output_modules.__all__)
 @mark.parametrize("precision", [32,64])
 def test_forward_output_modules(model_name, output_model, precision):
@@ -37,7 +37,7 @@ def test_forward_output_modules(model_name, output_model, precision):
     model(z, pos, batch=batch)
 
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 @mark.parametrize("device", ["cpu", "cuda"])
 def test_torchscript(model_name, device):
     if device == "cuda" and not torch.cuda.is_available():
@@ -57,7 +57,7 @@ def test_torchscript(model_name, device):
         grad_outputs=grad_outputs,
     )[0]
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 @mark.parametrize("device", ["cpu", "cuda"])
 def test_torchscript_dynamic_shapes(model_name, device):
     if device == "cuda" and not torch.cuda.is_available():
@@ -124,7 +124,7 @@ def test_cuda_graph_compatible(model_name):
     assert torch.allclose(y, y2)
     assert torch.allclose(neg_dy, neg_dy2, atol=1e-5, rtol=1e-5)
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 def test_seed(model_name):
     args = load_example_args(model_name, remove_prior=True)
     pl.seed_everything(1234)
@@ -135,7 +135,7 @@ def test_seed(model_name):
     for p1, p2 in zip(m1.parameters(), m2.parameters()):
         assert (p1 == p2).all(), "Parameters don't match although using the same seed."
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 @mark.parametrize(
     "output_model",
     output_modules.__all__,
@@ -188,7 +188,7 @@ def test_forward_output(model_name, output_model, overwrite_reference=False):
         )
 
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 def test_gradients(model_name):
     pl.seed_everything(1234)
     precision = 64
