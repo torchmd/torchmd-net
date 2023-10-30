@@ -66,3 +66,5 @@ html_static_path = ['../_static']
 html_css_files = [
     'style.css',
 ]
+
+autodoc_mock_imports = ["torchmdnet.extensions.torchmdnet_extensions"]
