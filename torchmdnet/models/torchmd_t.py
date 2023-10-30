@@ -115,7 +115,7 @@ class TorchMD_T(nn.Module):
 
         self.attention_layers = nn.ModuleList()
         for _ in range(num_layers):
-            layer = _MultiHeadAttention(
+            layer = MultiHeadAttention(
                 hidden_channels,
                 num_rbf,
                 distance_influence,
@@ -182,7 +182,7 @@ class TorchMD_T(nn.Module):
         )
 
 
-class _MultiHeadAttention(MessagePassing):
+class MultiHeadAttention(MessagePassing):
     def __init__(
         self,
         hidden_channels,
@@ -195,7 +195,7 @@ class _MultiHeadAttention(MessagePassing):
         cutoff_upper,
         dtype=torch.float,
     ):
-        super(_MultiHeadAttention, self).__init__(aggr="add", node_dim=0)
+        super(MultiHeadAttention, self).__init__(aggr="add", node_dim=0)
         assert hidden_channels % num_heads == 0, (
             f"The number of hidden channels ({hidden_channels}) "
             f"must be evenly divisible by the number of "
