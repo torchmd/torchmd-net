@@ -1,7 +1,7 @@
 TorchMD-Train Utility
 ---------------------
 
-.. autoprogram:: torchmdnet.options:get_argparse()
+.. autoprogram:: scripts.train:get_argparse()
    :prog: torchmd-train
 
 	     
