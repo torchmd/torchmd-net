@@ -49,6 +49,7 @@ class Ace(Dataset):
     Each dataset should also have an `units` attribute specifying its units (i.e., `Å`, `eV`, `e*Å`).
 
     Note that version 2.0 is more efficient than 1.0.
+
     Args:
         root (string, optional): Root directory where the dataset should be saved.
         transform (callable, optional): A function/transform that takes in an :obj:`torch_geometric.data.Data` object and returns a transformed version.
