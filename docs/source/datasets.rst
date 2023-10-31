@@ -75,7 +75,7 @@ Available Datasets
 ------------------
 
 .. automodule:: torchmdnet.datasets
-   :no-index:
+   :noindex:
       
    .. include:: generated/torchmdnet.datasets.rst
       :start-line: 5

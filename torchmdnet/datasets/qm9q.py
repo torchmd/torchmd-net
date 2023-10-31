@@ -8,9 +8,10 @@ from tqdm import tqdm
 
 class QM9q(Dataset):
 
-    HARTREE_TO_EV = 27.211386246
-    BORH_TO_ANGSTROM = 0.529177
-    DEBYE_TO_EANG = 0.2081943  # Debey -> e*A
+
+    HARTREE_TO_EV = 27.211386246#::meta private:
+    BORH_TO_ANGSTROM = 0.529177 #::meta private:
+    DEBYE_TO_EANG = 0.2081943  #::meta private: Debey -> e*A
 
     # Ion energies of elements
     ELEMENT_ENERGIES = {
@@ -19,13 +20,13 @@ class QM9q(Dataset):
         7: {-1: -54.4626446440, 0: -54.5269367415, 1: -53.9895574739},
         8: {-1: -74.9699154500, 0: -74.9812632126, 1: -74.4776884006},
         9: {-1: -99.6695561536, 0: -99.6185158728},
-    }
+    } #::meta private:
 
     # Select an ion with the lowest energy for each element
     INITIAL_CHARGES = {
         element: sorted(zip(charges.values(), charges.keys()))[0][1]
         for element, charges in ELEMENT_ENERGIES.items()
-    }
+    } #::meta private:
 
     def __init__(
         self,

@@ -63,15 +63,16 @@ epub_show_urls = "footnote"
 
 autoclass_content = "both"
 autodoc_typehints = "none"
-autodoc_inherit_docstrings = False
+autodoc_inherit_docstrings = True
 sphinx_autodoc_typehints = True
 html_show_sourcelink = True
 autodoc_default_options = {
     "members": True,
     "member-order": "bysource",
-    "undoc-members": True,
     "exclude-members": "__weakref__",
+    "undoc-members": False,
     "show-inheritance": True,
+    "inherited-members": False,
 }
 # Exclude all torchmdnet.datasets.*.rst files in source/generated/
 exclude_patterns = [
