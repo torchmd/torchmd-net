@@ -7,9 +7,10 @@ build:
   jobs:
      post_create_environment:
        - pip install -r docs/requirements.txt
+       - pip install .
 
 conda:
-  environment: docs/environment.yml
+  environment: environment.yml
 
     
 sphinx:
