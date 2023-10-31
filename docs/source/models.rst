@@ -47,7 +47,7 @@ TensorNet
 TensorNet is an equivariant model based on rank-2 Cartesian tensor representations. Euclidean neural network potentials have been shown to achieve state-of-the-art performance and better data efficiency than previous models, relying on higher-rank equivariant features which are irreducible representations of the rotation group, in the form of spherical tensors. However, the computation of tensor products in these models can be computationally demanding. In contrast, TensorNet exploits the use of Cartesian rank-2 tensors (3x3 matrices) which can be very efficiently decomposed into scalar, vector and rank-2 tensor features. Furthermore, Clebsch-Gordan tensor products are substituted by straightforward 3x3 matrix products. Overall, these properties allow TensorNet to achieve state-of-the-art accuracy on common benchmark datasets such as rMD17 and QM9 with a reduced number of message passing steps, learnable parameters and computational cost. The prediction of up to rank-2 molecular properties that behave appropriately under geometric transformations such as reflections and rotations is also possible.
 
 .. automodule:: torchmdnet.models.tensornet
-   :no-index:
+   :noindex:
 
 .. note:: TensorNet is referred to as "tensornet" in the :ref:`configuration-file`.
 	  
@@ -57,8 +57,9 @@ Equivariant Transformer
 The Equivariant Transformer (ET) is an equivariant neural network which uses both scalar and Cartesian vector representations. The distinctive feature of the ET in comparison to other Cartesian vector models such as PaiNN or EGNN is the use of a distance-dependent dot product attention mechanism, which achieved state-of-the-art performance on benchmark datasets at the time of publication. Furthermore, the analysis of attention weights allowed to extract insights on the interaction of different atomic species for the prediction of molecular energies and forces. The model also exhibits a low computational cost for inference and training in comparison to some of the most used NNPs in the literature.
 
 .. automodule:: torchmdnet.models.torchmd_et
-   :no-index:
+   :noindex:
 
+      
 .. note:: Equivariant Transformer is referred to as "equivariant-transformer" in the :ref:`configuration-file`.
 	  
 Graph Network
@@ -67,7 +68,7 @@ Graph Network
 The graph network is an invariant model inspired on the SchNet and PhysNet architectures. The network was optimized to have satisfactory performance on coarse-grained proteins, allowing to build NNPs that correctly reproduce protein free energy landscapes. In contrast to the ET and TensorNet, the graph network only uses relative distances between atoms as geometrical information, which are invariant to translations, rotations and reflections. The distances are used by the model to learn a set of continuous filters that are applied to feature graph convolutions as in SchNet, progressively updating the intial atomic embeddings by means of residual connections.
 
 .. automodule:: torchmdnet.models.torchmd_gn
-   :no-index:
+   :noindex:
 
 
 .. note:: Graph Network is referred to as "graph-network" in the :ref:`configuration-file`.
