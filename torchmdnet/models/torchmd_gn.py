@@ -10,8 +10,6 @@ from torchmdnet.models.utils import (
     act_class_mapping,
 )
 
-__all__ = ["TorchMD_GN"]
-
 class TorchMD_GN(nn.Module):
     r"""The TorchMD Graph Network architecture.
     Code adapted from https://github.com/rusty1s/pytorch_geometric/blob/d7d8e5e2edada182d820bbb1eec5f016f50db1e0/torch_geometric/nn/models/schnet.py#L38
@@ -186,6 +184,10 @@ class TorchMD_GN(nn.Module):
 
 
 class InteractionBlock(nn.Module):
+    """Interaction block for the TorchMD Graph Network architecture.
+
+    :meta private:
+    """
     def __init__(
         self,
         hidden_channels,
@@ -235,6 +237,10 @@ class InteractionBlock(nn.Module):
 
 
 class CFConv(MessagePassing):
+    """Continuous-filter convolution layer for the TorchMD Graph Network architecture.
+
+    :meta private:
+    """
     def __init__(
         self,
         in_channels,

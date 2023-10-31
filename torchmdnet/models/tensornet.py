@@ -141,7 +141,7 @@ class TensorNet(nn.Module):
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
         )
-        self.tensor_embedding = _TensorEmbedding(
+        self.tensor_embedding = TensorEmbedding(
             hidden_channels,
             num_rbf,
             act_class,
@@ -156,7 +156,7 @@ class TensorNet(nn.Module):
         if num_layers != 0:
             for _ in range(num_layers):
                 self.layers.append(
-                    _Interaction(
+                    Interaction(
                         num_rbf,
                         hidden_channels,
                         act_class,
@@ -235,7 +235,11 @@ class TensorNet(nn.Module):
         return x, None, z, pos, batch
 
 
-class _TensorEmbedding(nn.Module):
+class TensorEmbedding(nn.Module):
+    """Tensor embedding layer.
+
+    :meta private:
+    """
     def __init__(
         self,
         hidden_channels,
@@ -247,7 +251,7 @@ class _TensorEmbedding(nn.Module):
         max_z=128,
         dtype=torch.float32,
     ):
-        super(_TensorEmbedding, self).__init__()
+        super(TensorEmbedding, self).__init__()
 
         self.hidden_channels = hidden_channels
         self.distance_proj1 = nn.Linear(num_rbf, hidden_channels, dtype=dtype)
@@ -334,7 +338,11 @@ def _tensor_message_passing(edge_index: Tensor, factor: Tensor, tensor: Tensor, 
     return tensor_m
 
 
-class _Interaction(nn.Module):
+class Interaction(nn.Module):
+    """Interaction layer.
+
+    :meta private:
+    """
     def __init__(
         self,
         num_rbf,
@@ -345,7 +353,7 @@ class _Interaction(nn.Module):
         equivariance_invariance_group,
         dtype=torch.float32,
     ):
-        super(_Interaction, self).__init__()
+        super(Interaction, self).__init__()
 
         self.num_rbf = num_rbf
         self.hidden_channels = hidden_channels

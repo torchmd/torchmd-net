@@ -11,8 +11,6 @@ from torchmdnet.models.utils import (
     act_class_mapping,
 )
 
-__all__ = ["TorchMD_ET"]
-
 class TorchMD_ET(nn.Module):
     r"""The TorchMD equivariant Transformer architecture.
 
@@ -208,6 +206,10 @@ class TorchMD_ET(nn.Module):
 
 
 class EquivariantMultiHeadAttention(MessagePassing):
+    """Equivariant multi-head attention layer.
+
+    :meta private:
+    """
     def __init__(
         self,
         hidden_channels,
