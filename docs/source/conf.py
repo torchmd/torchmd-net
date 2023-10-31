@@ -4,8 +4,19 @@
 project = 'TorchMD-Net'
 author = 'RaulPPelaez'
 
-release = '0.1'
-version = '0.1.0'
+import git
+
+
+def get_latest_git_tag(repo_path="."):
+    repo = git.Repo(repo_path)
+    tags = sorted(repo.tags, key=lambda t: t.commit.committed_datetime)
+    return tags[-1].name if tags else None
+
+
+current_tag = get_latest_git_tag("../../")
+
+release = current_tag
+version = current_tag
 
 # -- General configuration
 extensions = [
