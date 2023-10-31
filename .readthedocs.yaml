@@ -8,6 +8,9 @@ build:
      post_create_environment:
        - pip install -r docs/requirements.txt
 
+conda:
+  environment: docs/environment.yml
+
     
 sphinx:
   configuration: docs/source/conf.py
