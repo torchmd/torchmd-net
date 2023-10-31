@@ -63,7 +63,7 @@ epub_show_urls = "footnote"
 
 autoclass_content = "both"
 autodoc_typehints = "none"
-autodoc_inherit_docstrings = True
+autodoc_inherit_docstrings = False
 sphinx_autodoc_typehints = True
 html_show_sourcelink = True
 autodoc_default_options = {
