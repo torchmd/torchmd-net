@@ -202,7 +202,7 @@ class TensorNet(nn.Module):
         z: Tensor,
         pos: Tensor,
         batch: Tensor,
-        q: Optional[Tensor],
+        q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
         # Obtain graph, with distances and relative position vectors
