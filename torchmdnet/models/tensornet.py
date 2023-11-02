@@ -421,5 +421,5 @@ class Interaction(nn.Module):
         A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         dX = I + A + S
-        X = X + dX + torch.matrix_power(dX, 2)
+        X = X + dX + (1 + 0.1*q) * torch.matrix_power(dX, 2)
         return X
