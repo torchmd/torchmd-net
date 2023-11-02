@@ -202,7 +202,7 @@ class TensorNet(nn.Module):
         z: Tensor,
         pos: Tensor,
         batch: Tensor,
-        q: Optional[Tensor] = None,
+        q: Optional[Tensor],
         s: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
         # Obtain graph, with distances and relative position vectors
@@ -227,8 +227,12 @@ class TensorNet(nn.Module):
         # I avoid dividing by zero by setting the weight of self edges and self loops to 1
         edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
         X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr)
+        if q is None:
+            q = 0
+        else:
+            q = q[...,None,None,None]
         for layer in self.layers:
-            X = layer(X, edge_index, edge_weight, edge_attr)
+            X = layer(X, edge_index, edge_weight, edge_attr, q)
         I, A, S = decompose_tensor(X)
         x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
         x = self.out_norm(x)
@@ -379,7 +383,7 @@ class Interaction(nn.Module):
             linear.reset_parameters()
 
     def forward(
-        self, X: Tensor, edge_index: Tensor, edge_weight: Tensor, edge_attr: Tensor
+        self, X: Tensor, edge_index: Tensor, edge_weight: Tensor, edge_attr: Tensor, q: Tensor
     ) -> Tensor:
 
         C = self.cutoff(edge_weight)
@@ -401,7 +405,7 @@ class Interaction(nn.Module):
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(msg, Y)
             B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor(A + B)
+            I, A, S = decompose_tensor((1 + 0.1*q)*(A + B))
         if self.equivariance_invariance_group == "SO(3)":
             B = torch.matmul(Y, msg)
             I, A, S = decompose_tensor(2 * B)
