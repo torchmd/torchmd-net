@@ -106,10 +106,10 @@ def create_model(args, prior_model=None, mean=None, std=None):
         dtype=dtype,
     )
     # combine representation and output network
-    model = TorchMD_Net(
+    model = MultiHeadTorchMD_Net(
         representation_model,
-        output_model,
-        prior_model=prior_model,
+#        output_model,
+#        prior_model=prior_model,
         mean=mean,
         std=std,
         derivative=args["derivative"],
@@ -119,6 +119,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
 
 
 def load_model(filepath, args=None, device="cpu", **kwargs):
+    raise NotImplementedError("load_model is not implemented yet")
     ckpt = torch.load(filepath, map_location="cpu")
     if args is None:
         args = ckpt["hyper_parameters"]
@@ -346,6 +347,32 @@ class EnergyHead(BaseHead):
         results["energy"] = scatter(results["energy"], batch, dim=0)
         return point_features, results
 
+class PointChargeHead(BaseHead):
+    def __init__(self,
+                 hidden_channels,
+                 activation="silu",
+                 dtype=torch.float32):
+        super(ChargeHead, self).__init__(dtype=dtype)
+        act_class = act_class_mapping[activation]
+        self.output_network = nn.Sequential(
+            nn.Linear(hidden_channels, hidden_channels // 2, dtype=dtype),
+            act_class(),
+            nn.Linear(hidden_channels // 2, 1, dtype=dtype),
+        )
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.xavier_uniform_(self.output_network[0].weight)
+        self.output_network[0].bias.data.fill_(0)
+        nn.init.xavier_uniform_(self.output_network[2].weight)
+        self.output_network[2].bias.data.fill_(0)
+
+    def per_point(self, point_features, results, z, pos, batch, extra_args):
+        results["charge"] = self.output_network(point_features)
+        return point_features, results
+
+    def per_sample(self, point_features, results, z, pos, batch, extra_args):
+        return point_features, results
 
 class ForceHead(BaseHead):
     def __init__(self,
