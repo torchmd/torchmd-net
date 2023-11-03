@@ -217,11 +217,11 @@ class TensorNet(nn.Module):
             mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
             zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
             if q is None:
-                q = 0
+                q = torch.zeros_like(zp, device=z.device, dtype=z.dtype)
             else:
                 batchp = torch.cat((batch, batch[-1] + 1), dim=0)
                 qp = torch.cat((q, torch.zeros(1, device=q.device, dtype=q.dtype)), dim=0)
-                q = qp[batchp][...,None,None,None]
+                q = qp[batchp]
             # I trick the model into thinking that the masked edges pertain to the extra atom
             # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
             edge_index = edge_index.masked_fill(mask, z.shape[0])
@@ -234,9 +234,9 @@ class TensorNet(nn.Module):
         edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
         X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr)
         if q is None:
-            q = 0
+            q = torch.zeros_like(z, device=z.device, dtype=z.dtype)
         else:
-            q = q[batch][...,None,None,None]
+            q = q[batch]
         for layer in self.layers:
             X = layer(X, edge_index, edge_weight, edge_attr, q)
         I, A, S = decompose_tensor(X)
@@ -411,7 +411,7 @@ class Interaction(nn.Module):
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(msg, Y)
             B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor((1 + 0.1*q)*(A + B))
+            I, A, S = decompose_tensor((1 + 0.1*q[...,None,None,None])*(A + B))
         if self.equivariance_invariance_group == "SO(3)":
             B = torch.matmul(Y, msg)
             I, A, S = decompose_tensor(2 * B)
@@ -421,5 +421,5 @@ class Interaction(nn.Module):
         A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         dX = I + A + S
-        X = X + dX + (1 + 0.1*q) * torch.matrix_power(dX, 2)
+        X = X + dX + (1 + 0.1*q[...,None,None,None]) * torch.matrix_power(dX, 2)
         return X
