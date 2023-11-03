@@ -313,9 +313,6 @@ class BaseHead(nn.Module):
     def per_point(self, point_features, results, z, pos, batch, extra_args):
         return point_features, results
 
-    def reduce(self, point_features, results, z, pos, batch, extra_args):
-        return point_features, results
-
     def per_sample(self, point_features, results, z, pos, batch, extra_args):
         return point_features, results
 
