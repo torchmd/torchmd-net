@@ -220,9 +220,9 @@ class TensorNet(nn.Module):
             if q is None:
                 q = torch.zeros_like(zp, device=z.device, dtype=z.dtype)
             else:
-                batchp = torch.cat((batch, batch[-1] + 1), dim=0)
-                qp = torch.cat((q, torch.zeros(1, device=q.device, dtype=q.dtype)), dim=0)
-                q = qp[batchp]
+                #batchp = torch.cat((batch, batch[-1] + 1), dim=0)
+                #qp = torch.cat((q, torch.zeros(1, device=q.device, dtype=q.dtype)), dim=0)
+                q = torch.cat((q[batch], torch.zeros(1, device=q.device, dtype=q.dtype)), dim=0)
             # I trick the model into thinking that the masked edges pertain to the extra atom
             # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
             edge_index = edge_index.masked_fill(mask, z.shape[0])
