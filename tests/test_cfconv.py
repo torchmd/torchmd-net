@@ -56,7 +56,7 @@ def test_cfconv(device, num_atoms, num_filters, num_rbfs, cutoff_upper):
     # Compute with the non-optimized CFConv
     edge_index, edge_weight, _ = dist(pos, batch=None)
     edge_attr = rbf(edge_weight)
-    ref_output = ref_conv(input, edge_index, edge_weight, edge_attr)
+    ref_output = ref_conv(input, edge_index, edge_weight, edge_attr, pos.shape[0])
     ref_total = pt.sum(ref_output)
     ref_total.backward()
     ref_grad = pos.grad.clone()

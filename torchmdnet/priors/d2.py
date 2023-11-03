@@ -1,7 +1,6 @@
 from torchmdnet.priors.base import BasePrior
-from torchmdnet.models.utils import OptimizedDistance
+from torchmdnet.models.utils import OptimizedDistance, scatter
 import torch as pt
-from torch_scatter import scatter
 
 
 class D2(BasePrior):
@@ -103,8 +102,8 @@ class D2(BasePrior):
             [31.74, 1.892],  # 52 Te
             [31.50, 1.892],  # 53 I
             [29.99, 1.881],  # 54 Xe
-        ], dtype=pt.float64
-
+        ],
+        dtype=pt.float64,
     )
     C_6_R_r[:, 1] *= 0.1  # Å --> nm
 
@@ -157,15 +156,15 @@ class D2(BasePrior):
             "max_num_neighbors": self.max_num_neighbors,
             "atomic_number": self.atomic_number,
             "distance_scale": self.distance_scale,
-            "energy_scale": self.energy_scale
+            "energy_scale": self.energy_scale,
         }
 
     def post_reduce(self, y, z, pos, batch, extra_args):
 
         # Convert to interal units: nm and J/mol
         # NOTE: float32 is overflowed, if m and J are used
-        distance_scale = self.distance_scale*1e9  # m --> nm
-        energy_scale = self.energy_scale*6.02214076e23  # J --> J/mol
+        distance_scale = self.distance_scale * 1e9  # m --> nm
+        energy_scale = self.energy_scale * 6.02214076e23  # J --> J/mol
 
         # Get atom pairs and their distancence
         ij, R_ij, _ = self.distances(pos, batch)

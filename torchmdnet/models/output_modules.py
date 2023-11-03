@@ -1,13 +1,12 @@
 from abc import abstractmethod, ABCMeta
-from torch_scatter import scatter
 from typing import Optional
-from torchmdnet.models.utils import act_class_mapping, GatedEquivariantBlock
-from torchmdnet.utils import atomic_masses
-from torchmdnet.extensions import is_current_stream_capturing
-from torch_scatter import scatter
 import torch
 from torch import nn
+from torchmdnet.models.utils import act_class_mapping, GatedEquivariantBlock, scatter
+from torchmdnet.utils import atomic_masses
+from torchmdnet.extensions import is_current_stream_capturing
 from warnings import warn
+
 __all__ = ["Scalar", "DipoleMoment", "ElectronicSpatialExtent"]
 
 
@@ -26,10 +25,7 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
         return
 
     def reduce(self, x, batch):
-        is_capturing = (
-            x.is_cuda
-            and is_current_stream_capturing()
-        )
+        is_capturing = x.is_cuda and is_current_stream_capturing()
         if not x.is_cuda or not is_capturing:
             self.dim_size = int(batch.max().item() + 1)
         if is_capturing:
@@ -54,7 +50,7 @@ class Scalar(OutputModel):
         activation="silu",
         allow_prior_model=True,
         reduce_op="sum",
-        dtype=torch.float
+        dtype=torch.float,
     ):
         super(Scalar, self).__init__(
             allow_prior_model=allow_prior_model, reduce_op=reduce_op
@@ -85,7 +81,7 @@ class EquivariantScalar(OutputModel):
         activation="silu",
         allow_prior_model=True,
         reduce_op="sum",
-        dtype=torch.float
+        dtype=torch.float,
     ):
         super(EquivariantScalar, self).__init__(
             allow_prior_model=allow_prior_model, reduce_op=reduce_op
@@ -97,9 +93,11 @@ class EquivariantScalar(OutputModel):
                     hidden_channels // 2,
                     activation=activation,
                     scalar_activation=True,
-                    dtype=dtype
+                    dtype=dtype,
                 ),
-                GatedEquivariantBlock(hidden_channels // 2, 1, activation=activation, dtype=dtype),
+                GatedEquivariantBlock(
+                    hidden_channels // 2, 1, activation=activation, dtype=dtype
+                ),
             ]
         )
 
@@ -117,9 +115,15 @@ class EquivariantScalar(OutputModel):
 
 
 class DipoleMoment(Scalar):
-    def __init__(self, hidden_channels, activation="silu", reduce_op="sum", dtype=torch.float):
+    def __init__(
+        self, hidden_channels, activation="silu", reduce_op="sum", dtype=torch.float
+    ):
         super(DipoleMoment, self).__init__(
-            hidden_channels, activation, allow_prior_model=False, reduce_op=reduce_op, dtype=dtype
+            hidden_channels,
+            activation,
+            allow_prior_model=False,
+            reduce_op=reduce_op,
+            dtype=dtype,
         )
         atomic_mass = torch.from_numpy(atomic_masses).to(dtype)
         self.register_buffer("atomic_mass", atomic_mass)
@@ -138,9 +142,15 @@ class DipoleMoment(Scalar):
 
 
 class EquivariantDipoleMoment(EquivariantScalar):
-    def __init__(self, hidden_channels, activation="silu", reduce_op="sum", dtype=torch.float):
+    def __init__(
+        self, hidden_channels, activation="silu", reduce_op="sum", dtype=torch.float
+    ):
         super(EquivariantDipoleMoment, self).__init__(
-            hidden_channels, activation, allow_prior_model=False, reduce_op=reduce_op, dtype=dtype
+            hidden_channels,
+            activation,
+            allow_prior_model=False,
+            reduce_op=reduce_op,
+            dtype=dtype,
         )
         atomic_mass = torch.from_numpy(atomic_masses).to(dtype)
         self.register_buffer("atomic_mass", atomic_mass)
@@ -160,7 +170,9 @@ class EquivariantDipoleMoment(EquivariantScalar):
 
 
 class ElectronicSpatialExtent(OutputModel):
-    def __init__(self, hidden_channels, activation="silu", reduce_op="sum", dtype=torch.float):
+    def __init__(
+        self, hidden_channels, activation="silu", reduce_op="sum", dtype=torch.float
+    ):
         super(ElectronicSpatialExtent, self).__init__(
             allow_prior_model=False, reduce_op=reduce_op
         )
@@ -197,9 +209,15 @@ class EquivariantElectronicSpatialExtent(ElectronicSpatialExtent):
 
 
 class EquivariantVectorOutput(EquivariantScalar):
-    def __init__(self, hidden_channels, activation="silu", reduce_op="sum", dtype=torch.float):
+    def __init__(
+        self, hidden_channels, activation="silu", reduce_op="sum", dtype=torch.float
+    ):
         super(EquivariantVectorOutput, self).__init__(
-            hidden_channels, activation, allow_prior_model=False, reduce_op="sum", dtype=dtype
+            hidden_channels,
+            activation,
+            allow_prior_model=False,
+            reduce_op="sum",
+            dtype=dtype,
         )
 
     def pre_reduce(self, x, v, z, pos, batch):

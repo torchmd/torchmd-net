@@ -1,8 +1,8 @@
 import torch
 from torchmdnet.priors.base import BasePrior
-from torch_scatter import scatter
-from torchmdnet.models.utils import OptimizedDistance, CosineCutoff
+from torchmdnet.models.utils import OptimizedDistance, CosineCutoff, scatter
 from typing import Optional, Dict
+
 
 class ZBL(BasePrior):
     """This class implements the Ziegler-Biersack-Littmark (ZBL) potential for screened nuclear repulsion.
@@ -16,7 +16,16 @@ class ZBL(BasePrior):
     distance_scale: multiply by this factor to convert coordinates stored in the dataset to meters
     energy_scale: multiply by this factor to convert energies stored in the dataset to Joules (*not* J/mol)
     """
-    def __init__(self, cutoff_distance, max_num_neighbors, atomic_number=None, distance_scale=None, energy_scale=None, dataset=None):
+
+    def __init__(
+        self,
+        cutoff_distance,
+        max_num_neighbors,
+        atomic_number=None,
+        distance_scale=None,
+        energy_scale=None,
+        dataset=None,
+    ):
         super(ZBL, self).__init__()
         if atomic_number is None:
             atomic_number = dataset.atomic_number
@@ -26,7 +35,9 @@ class ZBL(BasePrior):
             energy_scale = dataset.energy_scale
         atomic_number = torch.as_tensor(atomic_number, dtype=torch.long)
         self.register_buffer("atomic_number", atomic_number)
-        self.distance = OptimizedDistance(0, cutoff_distance, max_num_pairs=-max_num_neighbors)
+        self.distance = OptimizedDistance(
+            0, cutoff_distance, max_num_pairs=-max_num_neighbors
+        )
         self.cutoff = CosineCutoff(cutoff_upper=cutoff_distance)
         self.cutoff_distance = cutoff_distance
         self.max_num_neighbors = max_num_neighbors
@@ -34,30 +45,47 @@ class ZBL(BasePrior):
         self.energy_scale = float(energy_scale)
 
     def get_init_args(self):
-        return {'cutoff_distance': self.cutoff_distance,
-                'max_num_neighbors': self.max_num_neighbors,
-                'atomic_number': self.atomic_number.tolist(),
-                'distance_scale': self.distance_scale,
-                'energy_scale': self.energy_scale}
+        return {
+            "cutoff_distance": self.cutoff_distance,
+            "max_num_neighbors": self.max_num_neighbors,
+            "atomic_number": self.atomic_number.tolist(),
+            "distance_scale": self.distance_scale,
+            "energy_scale": self.energy_scale,
+        }
 
     def reset_parameters(self):
         pass
 
-    def post_reduce(self, y, z, pos, batch, extra_args: Optional[Dict[str, torch.Tensor]]):
+    def post_reduce(
+        self, y, z, pos, batch, extra_args: Optional[Dict[str, torch.Tensor]]
+    ):
         edge_index, distance, _ = self.distance(pos, batch)
         if edge_index.shape[1] == 0:
             return y
         atomic_number = self.atomic_number[z[edge_index]]
         # 5.29e-11 is the Bohr radius in meters.  All other numbers are magic constants from the ZBL potential.
-        a = 0.8854*5.29177210903e-11/(atomic_number[0]**0.23 + atomic_number[1]**0.23)
-        d = distance*self.distance_scale/a
-        f = 0.1818*torch.exp(-3.2*d) + 0.5099*torch.exp(-0.9423*d) + 0.2802*torch.exp(-0.4029*d) + 0.02817*torch.exp(-0.2016*d)
+        a = (
+            0.8854
+            * 5.29177210903e-11
+            / (atomic_number[0] ** 0.23 + atomic_number[1] ** 0.23)
+        )
+        d = distance * self.distance_scale / a
+        f = (
+            0.1818 * torch.exp(-3.2 * d)
+            + 0.5099 * torch.exp(-0.9423 * d)
+            + 0.2802 * torch.exp(-0.4029 * d)
+            + 0.02817 * torch.exp(-0.2016 * d)
+        )
         f *= self.cutoff(distance)
         # Compute the energy, converting to the dataset's units.  Multiply by 0.5 because every atom pair
         # appears twice.
-        energy = f*atomic_number[0]*atomic_number[1]/distance
-        energy = 0.5*(2.30707755e-28/self.energy_scale/self.distance_scale)*scatter(energy, batch[edge_index[0]], dim=0, reduce="sum")
+        energy = f * atomic_number[0] * atomic_number[1] / distance
+        energy = (
+            0.5
+            * (2.30707755e-28 / self.energy_scale / self.distance_scale)
+            * scatter(energy, batch[edge_index[0]], dim=0, reduce="sum")
+        )
         if energy.shape[0] < y.shape[0]:
-            energy = torch.nn.functional.pad(energy, (0, y.shape[0]-energy.shape[0]))
+            energy = torch.nn.functional.pad(energy, (0, y.shape[0] - energy.shape[0]))
         energy = energy.reshape(y.shape)
         return y + energy

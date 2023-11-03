@@ -181,10 +181,10 @@ def test_forward_output(model_name, output_model, overwrite_reference=False):
         ), f"Set new reference outputs for {model_name} with output model {output_model}."
 
     # compare actual ouput with reference
-    torch.testing.assert_allclose(pred, expected[model_name][output_model]["pred"])
+    torch.testing.assert_close(pred, expected[model_name][output_model]["pred"], atol=1e-5, rtol=1e-5)
     if derivative:
-        torch.testing.assert_allclose(
-            deriv, expected[model_name][output_model]["deriv"]
+        torch.testing.assert_close(
+            deriv, expected[model_name][output_model]["deriv"], atol=1e-5, rtol=1e-5
         )
 
 

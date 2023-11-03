@@ -8,6 +8,7 @@ from torchmdnet.models.utils import (
     OptimizedDistance,
     rbf_class_mapping,
     act_class_mapping,
+    scatter,
 )
 
 
@@ -72,7 +73,7 @@ class TorchMD_GN(nn.Module):
         max_z=100,
         max_num_neighbors=32,
         aggr="add",
-        dtype=torch.float32
+        dtype=torch.float32,
     ):
         super(TorchMD_GN, self).__init__()
 
@@ -115,8 +116,13 @@ class TorchMD_GN(nn.Module):
         )
         self.neighbor_embedding = (
             NeighborEmbedding(
-                hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z, dtype=dtype
-            ).jittable()
+                hidden_channels,
+                num_rbf,
+                cutoff_lower,
+                cutoff_upper,
+                self.max_z,
+                dtype=dtype,
+            )
             if neighbor_embedding
             else None
         )
@@ -131,7 +137,7 @@ class TorchMD_GN(nn.Module):
                 cutoff_lower,
                 cutoff_upper,
                 aggr=self.aggr,
-                dtype=dtype
+                dtype=dtype,
             )
             self.interactions.append(block)
 
@@ -163,7 +169,9 @@ class TorchMD_GN(nn.Module):
             x = self.neighbor_embedding(z, x, edge_index, edge_weight, edge_attr)
 
         for interaction in self.interactions:
-            x = x + interaction(x, edge_index, edge_weight, edge_attr)
+            x = x + interaction(
+                x, edge_index, edge_weight, edge_attr, n_atoms=z.shape[0]
+            )
 
         return x, None, z, pos, batch
 
@@ -194,7 +202,7 @@ class InteractionBlock(nn.Module):
         cutoff_lower,
         cutoff_upper,
         aggr="add",
-        dtype=torch.float32
+        dtype=torch.float32,
     ):
         super(InteractionBlock, self).__init__()
         self.mlp = nn.Sequential(
@@ -210,8 +218,8 @@ class InteractionBlock(nn.Module):
             cutoff_lower,
             cutoff_upper,
             aggr=aggr,
-            dtype=dtype
-        ).jittable()
+            dtype=dtype,
+        )
         self.act = activation()
         self.lin = nn.Linear(hidden_channels, hidden_channels, dtype=dtype)
 
@@ -226,14 +234,21 @@ class InteractionBlock(nn.Module):
         nn.init.xavier_uniform_(self.lin.weight)
         self.lin.bias.data.fill_(0)
 
-    def forward(self, x, edge_index, edge_weight, edge_attr):
-        x = self.conv(x, edge_index, edge_weight, edge_attr)
+    def forward(
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        edge_weight: Tensor,
+        edge_attr: Tensor,
+        n_atoms: Optional[int] = None,
+    ) -> Tensor:
+        x = self.conv(x, edge_index, edge_weight, edge_attr, n_atoms)
         x = self.act(x)
         x = self.lin(x)
         return x
 
 
-class CFConv(MessagePassing):
+class CFConv(nn.Module):
     def __init__(
         self,
         in_channels,
@@ -243,14 +258,14 @@ class CFConv(MessagePassing):
         cutoff_lower,
         cutoff_upper,
         aggr="add",
-        dtype=torch.float32
+        dtype=torch.float32,
     ):
-        super(CFConv, self).__init__(aggr=aggr)
+        super(CFConv, self).__init__()
         self.lin1 = nn.Linear(in_channels, num_filters, bias=False, dtype=dtype)
         self.lin2 = nn.Linear(num_filters, out_channels, bias=True, dtype=dtype)
         self.net = net
         self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)
-
+        self.aggr = aggr
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -258,15 +273,19 @@ class CFConv(MessagePassing):
         nn.init.xavier_uniform_(self.lin2.weight)
         self.lin2.bias.data.fill_(0)
 
-    def forward(self, x, edge_index, edge_weight, edge_attr):
+    def forward(
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        edge_weight: Tensor,
+        edge_attr: Tensor,
+        n_atoms: Optional[int] = None,
+    ) -> Tensor:
         C = self.cutoff(edge_weight)
         W = self.net(edge_attr) * C.view(-1, 1)
 
         x = self.lin1(x)
-        # propagate_type: (x: Tensor, W: Tensor)
-        x = self.propagate(edge_index, x=x, W=W, size=None)
+        msg = W * x.index_select(0, edge_index[1])
+        x = scatter(msg, edge_index[0], dim=0, dim_size=n_atoms, reduce=self.aggr)
         x = self.lin2(x)
         return x
-
-    def message(self, x_j, W):
-        return x_j * W
