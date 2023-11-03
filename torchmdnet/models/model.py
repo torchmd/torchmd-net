@@ -352,7 +352,7 @@ class PointChargeHead(BaseHead):
                  hidden_channels,
                  activation="silu",
                  dtype=torch.float32):
-        super(ChargeHead, self).__init__(dtype=dtype)
+        super(PointChargeHead, self).__init__(dtype=dtype)
         act_class = act_class_mapping[activation]
         self.output_network = nn.Sequential(
             nn.Linear(hidden_channels, hidden_channels // 2, dtype=dtype),
