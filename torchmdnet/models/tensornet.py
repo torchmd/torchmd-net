@@ -216,13 +216,13 @@ class TensorNet(nn.Module):
         if self.static_shapes:
             mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
             zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
-            # I trick the model into thinking that the masked edges pertain to the extra atom
             if q is None:
                 q = 0
             else:
                 batchp = torch.cat((batch, batch[-1] + 1), dim=0)
                 qp = torch.cat((q, torch.zeros(1, device=q.device, dtype=q.dtype)), dim=0)
                 q = qp[batchp][...,None,None,None]
+            # I trick the model into thinking that the masked edges pertain to the extra atom
             # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
             edge_index = edge_index.masked_fill(mask, z.shape[0])
             edge_weight = edge_weight.masked_fill(mask[0], 0)
