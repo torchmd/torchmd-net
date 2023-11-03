@@ -212,17 +212,16 @@ class TensorNet(nn.Module):
             edge_vec is not None
         ), "Distance module did not return directional information"
         # Distance module returns -1 for non-existing edges, to avoid having to resize the tensors when we want to ensure static shapes (for CUDA graphs) we make all non-existing edges pertain to a ghost atom
+        # Total charge q is a molecule-wise property. We transform it into an atom-wise property, with all atoms belonging to the same molecule being assigned the same charge q
+        if q is None:
+            q = torch.zeros_like(z, device=z.device, dtype=z.dtype)
+        else:
+            q = q[batch]
         zp = z
         if self.static_shapes:
             mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
             zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
-            # Total charge q is a molecule-wise property. We transform it into an atom-wise property, with all atoms belonging to the same molecule being assigned the same charge q
-            if q is None:
-                q = torch.zeros_like(zp, device=z.device, dtype=z.dtype)
-            else:
-                #batchp = torch.cat((batch, batch[-1] + 1), dim=0)
-                #qp = torch.cat((q, torch.zeros(1, device=q.device, dtype=q.dtype)), dim=0)
-                q = torch.cat((q[batch], torch.zeros(1, device=q.device, dtype=q.dtype)), dim=0)
+            q = torch.cat((q, torch.zeros(1, device=q.device, dtype=q.dtype)), dim=0)
             # I trick the model into thinking that the masked edges pertain to the extra atom
             # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
             edge_index = edge_index.masked_fill(mask, z.shape[0])
@@ -234,11 +233,6 @@ class TensorNet(nn.Module):
         # I avoid dividing by zero by setting the weight of self edges and self loops to 1
         edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
         X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr)
-        # Total charge q is a molecule-wise property. We transform it into an atom-wise property, with all atoms belonging to the same molecule being assigned the same charge q
-        if q is None:
-            q = torch.zeros_like(z, device=z.device, dtype=z.dtype)
-        else:
-            q = q[batch]
         for layer in self.layers:
             X = layer(X, edge_index, edge_weight, edge_attr, q)
         I, A, S = decompose_tensor(X)
