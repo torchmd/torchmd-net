@@ -216,6 +216,7 @@ class TensorNet(nn.Module):
         if self.static_shapes:
             mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
             zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
+            # Total charge q is a molecule-wise property. We transform it into an atom-wise property, with all atoms belonging to the same molecule being assigned the same charge q
             if q is None:
                 q = torch.zeros_like(zp, device=z.device, dtype=z.dtype)
             else:
@@ -233,6 +234,7 @@ class TensorNet(nn.Module):
         # I avoid dividing by zero by setting the weight of self edges and self loops to 1
         edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
         X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr)
+        # Total charge q is a molecule-wise property. We transform it into an atom-wise property, with all atoms belonging to the same molecule being assigned the same charge q
         if q is None:
             q = torch.zeros_like(z, device=z.device, dtype=z.dtype)
         else:
