@@ -236,8 +236,7 @@ class OptimizedDistance(torch.nn.Module):
         """
         box = self.box if box is None else box
         assert box is not None, "Box must be provided"
-        box = box.to(pos.dtype)
-        assert box.device == torch.device("cpu"), "Box must be in CPU memory"
+        box = box.to(pos.dtype).cpu()
         max_pairs : int = self.max_num_pairs
         if self.max_num_pairs < 0:
             max_pairs = -self.max_num_pairs * pos.shape[0]
