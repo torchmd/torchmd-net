@@ -251,7 +251,7 @@ class OptimizedDistance(torch.nn.Module):
             cutoff_upper=self.cutoff_upper,
             loop=self.loop,
             include_transpose=self.include_transpose,
-            box_vectors=self.box,
+            box_vectors=box,
             use_periodic=self.use_periodic,
         )
         if self.check_errors:
