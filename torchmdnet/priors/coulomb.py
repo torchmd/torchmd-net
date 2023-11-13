@@ -1,7 +1,6 @@
 import torch
 from torchmdnet.priors.base import BasePrior
-from torch_scatter import scatter
-from torchmdnet.models.utils import OptimizedDistance
+from torchmdnet.models.utils import OptimizedDistance, scatter
 from typing import Optional, Dict
 
 class Coulomb(BasePrior):

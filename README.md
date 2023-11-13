@@ -13,7 +13,14 @@ TorchMD-NET provides state-of-the-art neural networks potentials (NNPs) and a me
 - [TensorNet](https://arxiv.org/abs/2306.06482)
 
 
-## Installation
+## Installation  
+TorchMD-Net is available in [conda-forge](https://conda-forge.org/) and can be installed with:  
+```shell
+mamba install torchmd-net
+```
+We recommend using [Mamba](https://github.com/conda-forge/miniforge/#mambaforge) instead of conda.  
+
+### Install from source  
 
 1. Clone the repository:
     ```shell
@@ -21,7 +28,7 @@ TorchMD-NET provides state-of-the-art neural networks potentials (NNPs) and a me
     cd torchmd-net
     ```
 
-2. Install [Mambaforge](https://github.com/conda-forge/miniforge/#mambaforge). We recommend to use `mamba` rather than `conda`.
+2. Install the dependencies in environment.yml. You can do it via pip, but we recommend [Mambaforge](https://github.com/conda-forge/miniforge/#mambaforge) instead.
 
 3. Create an environment and activate it:
     ```shell
@@ -35,6 +42,23 @@ TorchMD-NET provides state-of-the-art neural networks potentials (NNPs) and a me
     ```
 This will install TorchMD-NET in editable mode, so that changes to the source code are immediately available.
 Besides making all python utilities available environment-wide, this will also install the `torchmd-train` command line utility.
+
+
+#### CUDA enabled installation
+
+Besides the dependencies listed in the environment file, you will also need the CUDA `nvcc` compiler suite to build TorchMD-Net.   
+If your system lacks nvcc you may install it via conda-forge:
+	```shell
+	mamba install cudatoolkit-dev
+	```
+Or from the nvidia channel:
+```shell
+mamba install -c nvidia cuda-nvcc cuda-cudart-dev cuda-libraries-dev
+```
+Make sure you install a major version compatible with your torch installation, which you can check with:
+```shell
+python -c "import torch; print(torch.version.cuda)"
+```
 
 ## Usage
 Specifying training arguments can either be done via a configuration yaml file or through command line arguments directly. Several examples of architectural and training specifications for some models and datasets can be found in [examples/](https://github.com/torchmd/torchmd-net/tree/main/examples). Note that if a parameter is present both in the yaml file and the command line, the command line version takes precedence.

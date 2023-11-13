@@ -3,7 +3,6 @@ from typing import Optional, List, Tuple, Dict
 import torch
 from torch.autograd import grad
 from torch import nn, Tensor
-from torch_scatter import scatter
 from torchmdnet.models import output_modules
 from torchmdnet.models.wrappers import AtomFilter
 from torchmdnet.models.utils import dtype_mapping
@@ -311,8 +310,8 @@ class TorchMD_Net(nn.Module):
                 [y],
                 [pos],
                 grad_outputs=grad_outputs,
-                create_graph=True,
-                retain_graph=True,
+                create_graph=self.training,
+                retain_graph=self.training,
             )[0]
             if dy is None:
                 raise RuntimeError("Autograd returned None for the force prediction.")
