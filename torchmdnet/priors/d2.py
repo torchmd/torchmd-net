@@ -1,7 +1,7 @@
 from torchmdnet.priors.base import BasePrior
 from torchmdnet.models.utils import OptimizedDistance, scatter
 import torch as pt
-
+from typing import Optional, Dict
 
 class D2(BasePrior):
     """Dispersive correction term as used in DFT-D2
