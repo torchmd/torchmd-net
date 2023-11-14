@@ -8,7 +8,7 @@ from lightning_utilities.core.rank_zero import rank_zero_warn
 from torchmdnet import datasets
 from torch_geometric.data import Dataset
 from torchmdnet.utils import make_splits, MissingEnergyException
-from torch_scatter import scatter
+from torchmdnet.models.utils import scatter
 from torchmdnet.models.utils import dtype_mapping
 
 
