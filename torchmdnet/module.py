@@ -29,6 +29,11 @@ class LNNP(LightningModule):
         else:
             self.model = create_model(self.hparams, prior_model, mean, std)
 
+        self.weights = {}
+        for key in self.model.state_dict():
+            if "_weight" in key:
+                self.weights[key] = self.model.state_dict()[key]
+
         # initialize exponential smoothing
         self.ema = None
         self._reset_ema_dict()
@@ -66,7 +71,7 @@ class LNNP(LightningModule):
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
         extra_args: Optional[Dict[str, Tensor]] = None,
-    ) -> Tuple[Tensor, Optional[Tensor]]:
+    ) -> Dict[str, Tensor]:
         return self.model(z, pos, batch=batch, q=q, s=s, extra_args=extra_args)
 
     def training_step(self, batch, batch_idx):
@@ -87,29 +92,29 @@ class LNNP(LightningModule):
     def test_step(self, batch, batch_idx):
         return self.step(batch, [l1_loss], "test")
 
-    def _compute_losses(self, y, neg_y, batch, loss_fn, stage):
-        # Compute the loss for the predicted value and the negative derivative (if available)
-        # Args:
-        #   y: predicted value
-        #   neg_y: predicted negative derivative
-        #   batch: batch of data
-        #   loss_fn: loss function to compute
-        # Returns:
-        #   loss_y: loss for the predicted value
-        #   loss_neg_y: loss for the predicted negative derivative
-        loss_y, loss_neg_y = torch.tensor(0.0, device=self.device), torch.tensor(
-            0.0, device=self.device
-        )
+    def _compute_losses(self, outputs, batch, loss_fn, stage):
+        """
+        Compute the losses for each model output.
+
+        Args:
+          outputs: Dictionary of model outputs.
+          batch: Batch of data.
+          loss_fn: Loss function to compute.
+          stage: Current training stage.
+
+        Returns:
+          losses: Dictionary of computed losses for each model output.
+        """
+        losses = {}
         loss_name = loss_fn.__name__
-        if self.hparams.derivative and "neg_dy" in batch:
-            loss_neg_y = loss_fn(neg_y, batch.neg_dy)
-            loss_neg_y = self._update_loss_with_ema(
-                stage, "neg_dy", loss_name, loss_neg_y
-            )
-        if "y" in batch:
-            loss_y = loss_fn(y, batch.y)
-            loss_y = self._update_loss_with_ema(stage, "y", loss_name, loss_y)
-        return {"y": loss_y, "neg_dy": loss_neg_y}
+        for key in outputs:
+            if key in batch:
+                loss = loss_fn(outputs[key], getattr(batch, key))
+                loss = self._update_loss_with_ema(stage, key, loss_name, loss)
+                losses[key] = loss
+            else:
+                raise ValueError(f"Reference values for '{key}' are missing in the batch")
+        return losses
 
     def _update_loss_with_ema(self, stage, type, loss_name, loss):
         # Update the loss using an exponential moving average when applicable
@@ -147,7 +152,7 @@ class LNNP(LightningModule):
                     del extra_args[a]
             # TODO: the model doesn't necessarily need to return a derivative once
             # Union typing works under TorchScript (https://github.com/pytorch/pytorch/pull/53180)
-            y, neg_dy = self(
+            outputs = self(
                 batch.z,
                 batch.pos,
                 batch=batch.batch,
@@ -155,28 +160,22 @@ class LNNP(LightningModule):
                 s=batch.s if self.hparams.spin else None,
                 extra_args=extra_args,
             )
-        if self.hparams.derivative and "y" not in batch:
-            # "use" both outputs of the model's forward function but discard the first
-            # to only use the negative derivative and avoid 'Expected to have finished reduction
-            # in the prior iteration before starting a new one.', which otherwise get's
-            # thrown because of setting 'find_unused_parameters=False' in the DDPPlugin
-            neg_dy = neg_dy + y.sum() * 0
-        if "y" in batch and batch.y.ndim == 1:
-            batch.y = batch.y.unsqueeze(1)
+        # Raul 2023, I don't think this is needed anymore
+        # if self.hparams.derivative and "energy" not in batch:
+        #     # "use" both outputs of the model's forward function but discard the first
+        #     # to only use the negative derivative and avoid 'Expected to have finished reduction
+        #     # in the prior iteration before starting a new one.', which otherwise get's
+        #     # thrown because of setting 'find_unused_parameters=False' in the DDPPlugin
+        #     outputs["forces"] += outputs["energy"].sum() * 0
         for loss_fn in loss_fn_list:
-            step_losses = self._compute_losses(y, neg_dy, batch, loss_fn, stage)
+            step_losses = self._compute_losses(outputs, batch, loss_fn, stage)
 
             loss_name = loss_fn.__name__
-            if self.hparams.neg_dy_weight > 0:
-                self.losses[stage]["neg_dy"][loss_name].append(
-                    step_losses["neg_dy"].detach()
-                )
-            if self.hparams.y_weight > 0:
-                self.losses[stage]["y"][loss_name].append(step_losses["y"].detach())
-            total_loss = (
-                step_losses["y"] * self.hparams.y_weight
-                + step_losses["neg_dy"] * self.hparams.neg_dy_weight
-            )
+            total_loss = torch.tensor(0.0, device=self.device, dtype=batch.pos.dtype)
+            for key, loss in step_losses.items():
+                if key in self.weights and self.weights[key] > 0:
+                    self.losses[stage][key][loss_name].append(loss.detach())
+                    total_loss += loss * self.weights[key]
             self.losses[stage]["total"][loss_name].append(total_loss.detach())
         return total_loss
 
@@ -218,8 +217,8 @@ class LNNP(LightningModule):
                 "lr": self.trainer.optimizers[0].param_groups[0]["lr"],
             }
             result_dict.update(self._get_mean_loss_dict_for_type("total"))
-            result_dict.update(self._get_mean_loss_dict_for_type("y"))
-            result_dict.update(self._get_mean_loss_dict_for_type("neg_dy"))
+            for i in self.weights.keys():
+                result_dict.update(self._get_mean_loss_dict_for_type(i))
             self.log_dict(result_dict, sync_dist=True)
 
         self._reset_losses_dict()
@@ -229,26 +228,28 @@ class LNNP(LightningModule):
         if not self.trainer.sanity_checking:
             result_dict = {}
             result_dict.update(self._get_mean_loss_dict_for_type("total"))
-            result_dict.update(self._get_mean_loss_dict_for_type("y"))
-            result_dict.update(self._get_mean_loss_dict_for_type("neg_dy"))
+            for i in self.weights.keys():
+                result_dict.update(self._get_mean_loss_dict_for_type(i))
             # Get only test entries
             result_dict = {k: v for k, v in result_dict.items() if k.startswith("test")}
             self.log_dict(result_dict, sync_dist=True)
 
     def _reset_losses_dict(self):
         # Losses has an entry for each stage in ["train", "val", "test"]
-        # Each entry has an entry with "total", "y" and "neg_dy"
+        # Each entry has an entry with "total" and each of the weights keys (e.g. y, neg_dy)
         # Each of these entries has an entry for each loss_fn (e.g. mse_loss)
         # The loss_fn values are not known in advance
         self.losses = {}
         for stage in ["train", "val", "test"]:
             self.losses[stage] = {}
-            for loss_type in ["total", "y", "neg_dy"]:
+            types = ["total"] + list(self.weights.keys())
+            for loss_type in types:
                 self.losses[stage][loss_type] = defaultdict(list)
 
     def _reset_ema_dict(self):
         self.ema = {}
         for stage in ["train", "val"]:
             self.ema[stage] = {}
-            for loss_type in ["y", "neg_dy"]:
+            types = ["total"] + list(self.weights.keys())
+            for loss_type in types:
                 self.ema[stage][loss_type] = {}
