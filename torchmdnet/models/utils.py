@@ -203,8 +203,9 @@ class OptimizedDistance(torch.nn.Module):
             if self.strategy == "cell":
                 # Default the box to 3 times the cutoff, really inefficient for the cell list
                 lbox = cutoff_upper * 3.0
-                self.box = torch.tensor([[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]])
-        self.box = self.box.cpu()  # All strategies expect the box to be in CPU memory
+                self.box = torch.tensor([[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]], device="cpu")
+        if self.strategy == "cell":
+            self.box = self.box.cpu()
         self.check_errors = check_errors
         self.long_edge_index = long_edge_index
 
@@ -236,7 +237,7 @@ class OptimizedDistance(torch.nn.Module):
         """
         box = self.box if box is None else box
         assert box is not None, "Box must be provided"
-        box = box.to(pos.dtype).cpu()
+        box = box.to(pos.dtype)
         max_pairs : int = self.max_num_pairs
         if self.max_num_pairs < 0:
             max_pairs = -self.max_num_pairs * pos.shape[0]

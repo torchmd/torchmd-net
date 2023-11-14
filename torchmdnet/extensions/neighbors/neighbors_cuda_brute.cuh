@@ -22,7 +22,7 @@ template <typename scalar_t>
 __global__ void forward_kernel_brute(uint32_t num_all_pairs, const Accessor<scalar_t, 2> positions,
                                      const Accessor<int64_t, 1> batch, scalar_t cutoff_lower2,
                                      scalar_t cutoff_upper2, PairListAccessor<scalar_t> list,
-                                     triclinic::Box<scalar_t> box) {
+                                     triclinic::BoxAccessor<scalar_t> box) {
     const uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index >= num_all_pairs)
         return;
@@ -59,18 +59,18 @@ __global__ void add_self_kernel(const int num_atoms, Accessor<scalar_t, 2> posit
 }
 
 static std::tuple<Tensor, Tensor, Tensor, Tensor>
-forward_brute(const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
+forward_brute(const Tensor& positions, const Tensor& batch, const Tensor& in_box_vectors,
               bool use_periodic, const Scalar& cutoff_lower, const Scalar& cutoff_upper,
               const Scalar& max_num_pairs, bool loop, bool include_transpose) {
     checkInput(positions, batch);
     const auto max_num_pairs_ = max_num_pairs.toLong();
     TORCH_CHECK(max_num_pairs_ > 0, "Expected \"max_num_neighbors\" to be positive");
+    const auto box_vectors = in_box_vectors.to(positions.device());
     if (use_periodic) {
         TORCH_CHECK(box_vectors.dim() == 2, "Expected \"box_vectors\" to have two dimensions");
         TORCH_CHECK(box_vectors.size(0) == 3 && box_vectors.size(1) == 3,
                     "Expected \"box_vectors\" to have shape (3, 3)");
     }
-    TORCH_CHECK(box_vectors.device() == torch::kCPU, "Expected \"box_vectors\" to be on CPU");
     const int num_atoms = positions.size(0);
     TORCH_CHECK(num_atoms < 32768, "The brute strategy fails with \"num_atoms\" larger than 32768");
     const int num_pairs = max_num_pairs_;
@@ -83,7 +83,8 @@ forward_brute(const Tensor& positions, const Tensor& batch, const Tensor& box_ve
     const uint64_t num_blocks = std::max((num_all_pairs + num_threads - 1UL) / num_threads, 1UL);
     AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "get_neighbor_pairs_forward", [&]() {
         PairListAccessor<scalar_t> list_accessor(list);
-        triclinic::Box<scalar_t> box(box_vectors, use_periodic);
+        // triclinic::Box<scalar_t> box(box_vectors, use_periodic);
+	auto box = triclinic::get_box_accessor<scalar_t>(box_vectors, use_periodic);
         const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
         const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();
         TORCH_CHECK(cutoff_upper_ > 0, "Expected \"cutoff\" to be positive");
