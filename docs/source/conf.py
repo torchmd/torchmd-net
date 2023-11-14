@@ -14,7 +14,8 @@ def get_latest_git_tag(repo_path="."):
 
 
 current_tag = get_latest_git_tag("../../")
-
+if current_tag is None:
+    current_tag = "master"
 release = current_tag
 version = current_tag
 
