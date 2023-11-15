@@ -21,12 +21,15 @@ jobs:
       with:
         environment-file: environment.yml
         init-shell: bash
-      run: pip install -vv .
-      
+        generate-run-shell: true
+    
+
     - name: Install docs dependencies
       run: |
+        pip install -vv .
         pip install -r docs/requirements.txt
-
+      shell: bash -el {0}
+      
     - name: Build Sphinx Documentation
       run: |
         cd docs
