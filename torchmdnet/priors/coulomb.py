@@ -4,14 +4,26 @@ from torchmdnet.models.utils import OptimizedDistance, scatter
 from typing import Optional, Dict
 
 class Coulomb(BasePrior):
-    """This class implements a Coulomb potential, scaled by erf(alpha*r) to reduce its
+    """This class implements a Coulomb potential, scaled by :math:`\\textrm{erf}(\\textrm{alpha}*r)` to reduce its
     effect at short distances.
 
-    To use this prior, the Dataset must include a field called `partial_charges` with each sample,
-    containing the partial charge for each atom.  It also must provide the following attributes.
+    Parameters
+    ----------
+    alpha : float
+        Scaling factor for the error function.
+    max_num_neighbors : int
+        Maximum number of neighbors per atom allowed.
+    distance_scale : float, optional
+        Factor to multiply with coordinates in the dataset to convert them to meters.
+    energy_scale : float, optional
+        Factor to multiply with energies in the dataset to convert them to Joules (*not* J/mol).
+    dataset : Dataset
+        Dataset object.
 
-    distance_scale: multiply by this factor to convert coordinates stored in the dataset to meters
-    energy_scale: multiply by this factor to convert energies stored in the dataset to Joules (*not* J/mol)
+    Notes
+    -----
+    The Dataset used with this class must include a `partial_charges` field for each sample, and provide
+    `distance_scale` and `energy_scale` attributes if they are not explicitly passed as arguments.
     """
     def __init__(self, alpha, max_num_neighbors, distance_scale=None, energy_scale=None, dataset=None):
         super(Coulomb, self).__init__()

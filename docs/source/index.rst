@@ -60,6 +60,7 @@ TensorNet
    torchmd-train
    datasets
    models
+   priors
    api
 
 ..
