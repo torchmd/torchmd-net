@@ -1,0 +1,31 @@
+name: Build Documentation
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    branches:
+      - "main"
+
+
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x' # Specify your Python version
+
+    - name: Install dependencies
+      run: |
+        pip install -r docs/requirements.txt
+        pip install .
+
+    - name: Build Sphinx Documentation
+      run: |
+        cd docs
+        make html
