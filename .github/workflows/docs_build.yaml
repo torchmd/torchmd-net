@@ -15,10 +15,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+
     - name: Set up Env
       uses: mamba-org/setup-micromamba@v1
       with:
         environment-file: environment.yml
+        init-shell: bash
 
     - name: Install docs dependencies
       run: |
