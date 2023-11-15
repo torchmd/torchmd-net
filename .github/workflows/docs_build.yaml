@@ -15,12 +15,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Set up Python
-      uses: actions/setup-python@v2
+    - name: Set up Env
+      uses: mamba-org/setup-micromamba@v1
       with:
-        python-version: '3.x' # Specify your Python version
+        environment-file: environment.yml
 
-    - name: Install dependencies
+    - name: Install docs dependencies
       run: |
         pip install -r docs/requirements.txt
         pip install .
