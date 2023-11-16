@@ -4,35 +4,31 @@ import torch as pt
 
 
 class D2(BasePrior):
-    """Dispersive correction term as used in DFT-D2
+    """
+    Dispersive correction term as used in DFT-D2.
 
-    Reference
-    ---------
-    Grimme, Stefan. "Semiempirical GGA-type density functional constructed with a long‐range dispersion correction." Journal of computational chemistry 27.15 (2006): 1787-1799.
-    https://onlinelibrary.wiley.com/doi/10.1002/jcc.20495
+    Reference:
+        Grimme, Stefan. "Semiempirical GGA-type density functional constructed with a long‐range dispersion correction."
+        Journal of computational chemistry 27.15 (2006): 1787-1799.
+        Available at: https://onlinelibrary.wiley.com/doi/10.1002/jcc.20495
 
-    Arguments
-    ---------
-    cutoff_distance: float
-        Distance cutoff for the correction term
-    max_num_neighbors: int
-        Maximum number of neighbors
-    atomic_number: list of ints or None
-        Map of atom types to atomic numbers.
-        If `atomic_numbers=None`, use `dataset.atomic_numbers`
-    position_scale: float or None
-        Multiply by this factor to convert positions stored in the dataset to meters (m).
-        If `position_scale=None` (default), use `dataset.position_scale`
-    energy_scale: float or None
-        Multiply by this factor to convert energies stored in the dataset to Joules (J).
-        Note: *not* J/mol.
-        If `energy_scale=None` (default), use `dataset.energy_scale`
-    dataset: Dataset or None
-        Dataset object.
-        If `dataset=None`; `atomic_number`, `position_scale`, and `energy_scale` have to be set.
+    Parameters
+    ----------
+    cutoff_distance : float
+        Distance cutoff for the correction term.
+    max_num_neighbors : int
+        Maximum number of neighbors to consider.
+    atomic_number : list of int, optional
+        Map of atom types to atomic numbers. If None, use `dataset.atomic_numbers`.
+    position_scale : float, optional
+        Factor to convert positions stored in the dataset to meters (m). If None (default), use `dataset.position_scale`.
+    energy_scale : float, optional
+        Factor to convert energies stored in the dataset to Joules (J). Note: not J/mol. If None (default), use `dataset.energy_scale`.
+    dataset : Dataset, optional
+        Dataset object. If None, `atomic_number`, `position_scale`, and `energy_scale` must be explicitly set.
 
-    Example
-    -------
+    Examples
+    --------
     >>> from torchmdnet.priors import D2
     >>> prior = D2(
             cutoff_distance=10.0,  # Å
@@ -104,7 +100,7 @@ class D2(BasePrior):
             [29.99, 1.881],  # 54 Xe
         ],
         dtype=pt.float64,
-    )
+    ) #::meta private:
     C_6_R_r[:, 1] *= 0.1  # Å --> nm
 
     def __init__(

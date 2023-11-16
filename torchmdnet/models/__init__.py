@@ -1,1 +1,1 @@
-__all__ = ["graph-network", "transformer", "equivariant-transformer", "tensornet"]
+__all_models__ = ["graph-network", "transformer", "equivariant-transformer", "tensornet"]

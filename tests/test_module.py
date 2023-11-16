@@ -12,7 +12,7 @@ from torchmdnet import priors
 from utils import load_example_args, DummyDataset
 
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 def test_create_model(model_name):
     LNNP(load_example_args(model_name), prior_model=Atomref(100))
 
@@ -22,7 +22,7 @@ def test_load_model():
     load_model(checkpoint)
 
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 @mark.parametrize("use_atomref", [True, False])
 @mark.parametrize("precision", [32, 64])
 def test_train(model_name, use_atomref, precision, tmpdir):

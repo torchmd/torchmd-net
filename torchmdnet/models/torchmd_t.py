@@ -11,6 +11,7 @@ from torchmdnet.models.utils import (
 )
 
 
+
 class TorchMD_T(nn.Module):
     r"""The TorchMD Transformer architecture.
 
@@ -188,6 +189,11 @@ class TorchMD_T(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
+    """Multi-head attention layer.
+
+    :meta private:
+    """
+
     def __init__(
         self,
         hidden_channels,

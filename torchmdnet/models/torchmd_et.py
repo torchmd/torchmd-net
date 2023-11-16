@@ -205,6 +205,10 @@ class TorchMD_ET(nn.Module):
 
 
 class EquivariantMultiHeadAttention(nn.Module):
+    """Equivariant multi-head attention layer.
+
+    :meta private:
+    """
     def __init__(
         self,
         hidden_channels,

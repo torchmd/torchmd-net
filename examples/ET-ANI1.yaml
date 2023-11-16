@@ -54,3 +54,5 @@ train_size: 0.8
 trainable_rbf: false
 val_size: 0.05
 weight_decay: 0.0
+charge: false
+spin: false

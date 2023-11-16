@@ -1,7 +1,6 @@
 from typing import Optional, Tuple
 import torch
 from torch import Tensor, nn
-from torch_geometric.nn import MessagePassing
 from torchmdnet.models.utils import (
     NeighborEmbedding,
     CosineCutoff,
@@ -10,7 +9,6 @@ from torchmdnet.models.utils import (
     act_class_mapping,
     scatter,
 )
-
 
 class TorchMD_GN(nn.Module):
     r"""The TorchMD Graph Network architecture.
@@ -193,6 +191,10 @@ class TorchMD_GN(nn.Module):
 
 
 class InteractionBlock(nn.Module):
+    """Interaction block for the TorchMD Graph Network architecture.
+
+    :meta private:
+    """
     def __init__(
         self,
         hidden_channels,
@@ -249,6 +251,10 @@ class InteractionBlock(nn.Module):
 
 
 class CFConv(nn.Module):
+    """Continuous-filter convolution layer for the TorchMD Graph Network architecture.
+
+    :meta private:
+    """
     def __init__(
         self,
         in_channels,

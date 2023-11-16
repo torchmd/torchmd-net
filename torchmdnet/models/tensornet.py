@@ -8,10 +8,12 @@ from torchmdnet.models.utils import (
     act_class_mapping,
 )
 
+__all__ = ["TensorNet"]
 torch.set_float32_matmul_precision("high")
 torch.backends.cuda.matmul.allow_tf32 = True
-# Creates a skew-symmetric tensor from a vector
+
 def vector_to_skewtensor(vector):
+    """Creates a skew-symmetric tensor from a vector."""
     batch_size = vector.size(0)
     zero = torch.zeros(batch_size, device=vector.device, dtype=vector.dtype)
     tensor = torch.stack(
@@ -31,9 +33,8 @@ def vector_to_skewtensor(vector):
     tensor = tensor.view(-1, 3, 3)
     return tensor.squeeze(0)
 
-
-# Creates a symmetric traceless tensor from the outer product of a vector with itself
 def vector_to_symtensor(vector):
+    """Creates a symmetric traceless tensor from the outer product of a vector with itself."""
     tensor = torch.matmul(vector.unsqueeze(-1), vector.unsqueeze(-2))
     I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)[
         ..., None, None
@@ -41,9 +42,8 @@ def vector_to_symtensor(vector):
     S = 0.5 * (tensor + tensor.transpose(-2, -1)) - I
     return S
 
-
-# Full tensor decomposition into irreducible components
 def decompose_tensor(tensor):
+    """Full tensor decomposition into irreducible components."""
     I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)[
         ..., None, None
     ] * torch.eye(3, 3, device=tensor.device, dtype=tensor.dtype)
@@ -51,15 +51,13 @@ def decompose_tensor(tensor):
     S = 0.5 * (tensor + tensor.transpose(-2, -1)) - I
     return I, A, S
 
-
-# Computes Frobenius norm
 def tensor_norm(tensor):
+    """Computes Frobenius norm."""
     return (tensor**2).sum((-2, -1))
 
-
 class TensorNet(nn.Module):
-    r"""TensorNet's architecture, from TensorNet: Cartesian Tensor Representations
-        for Efficient Learning of Molecular Potentials; G. Simeon and G. de Fabritiis.
+    r"""TensorNet's architecture.
+    From TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials; G. Simeon and G. de Fabritiis.
 
     Args:
         hidden_channels (int, optional): Hidden embedding size.
@@ -236,6 +234,10 @@ class TensorNet(nn.Module):
 
 
 class TensorEmbedding(nn.Module):
+    """Tensor embedding layer.
+
+    :meta private:
+    """
     def __init__(
         self,
         hidden_channels,
@@ -352,9 +354,8 @@ class TensorEmbedding(nn.Module):
         return X
 
 
-def tensor_message_passing(
-    edge_index: Tensor, factor: Tensor, tensor: Tensor, natoms: int
-) -> Tensor:
+def tensor_message_passing(edge_index: Tensor, factor: Tensor, tensor: Tensor, natoms: int) -> Tensor:
+    """Message passing for tensors."""
     msg = factor * tensor.index_select(0, edge_index[1])
     shape = (natoms, tensor.shape[1], tensor.shape[2], tensor.shape[3])
     tensor_m = torch.zeros(*shape, device=tensor.device, dtype=tensor.dtype)
@@ -363,6 +364,10 @@ def tensor_message_passing(
 
 
 class Interaction(nn.Module):
+    """Interaction layer.
+
+    :meta private:
+    """
     def __init__(
         self,
         num_rbf,
