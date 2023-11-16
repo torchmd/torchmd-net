@@ -22,7 +22,6 @@ jobs:
         environment-file: environment.yml
         init-shell: bash
         generate-run-shell: true
-    
 
     - name: Install docs dependencies
       run: |

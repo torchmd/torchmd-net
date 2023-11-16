@@ -5,12 +5,20 @@
 
 TorchMD-NET provides state-of-the-art neural networks potentials (NNPs) and a mechanism to train them. It offers efficient and fast implementations if several NNPs and it is integrated in GPU-accelerated molecular dynamics code like [ACEMD](https://www.acellera.com/products/molecular-dynamics-software-gpu-acemd/), [OpenMM](https://www.openmm.org) and [TorchMD](https://github.com/torchmd/torchmd). TorchMD-NET exposes its NNPs as [PyTorch](https://pytorch.org) modules.
 
+
+## Documentation_
+
+[![Documentation Status](https://readthedocs.org/projects/torchmd-net/badge/?version=latest)](https://torchmd-net.readthedocs.io/en/latest/?badge=latest)  
+
+Documentation is available here https://torchmd-net.readthedocs.io  
+
 ## Available architectures
 
 - [Equivariant Transformer (ET)](https://arxiv.org/abs/2202.02541)
 - [Transformer (T)](https://arxiv.org/abs/2202.02541)
 - [Graph Neural Network (GN)](https://arxiv.org/abs/2212.07492)
 - [TensorNet](https://arxiv.org/abs/2306.06482)
+
 
 
 ## Installation  
