@@ -9,9 +9,10 @@ from torchmdnet.models.utils import (
     act_class_mapping,
     scatter,
 )
+from torchmdnet.utils import deprecated_class
 
 
-
+@deprecated_class
 class TorchMD_T(nn.Module):
     r"""The TorchMD Transformer architecture.
 
@@ -155,7 +156,6 @@ class TorchMD_T(nn.Module):
         s: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
-
         x = self.embedding(z)
 
         edge_index, edge_weight, _ = self.distance(pos, batch)
