@@ -12,6 +12,7 @@ __all__ = ["TensorNet"]
 torch.set_float32_matmul_precision("high")
 torch.backends.cuda.matmul.allow_tf32 = True
 
+
 def vector_to_skewtensor(vector):
     """Creates a skew-symmetric tensor from a vector."""
     batch_size = vector.size(0)
@@ -33,6 +34,7 @@ def vector_to_skewtensor(vector):
     tensor = tensor.view(-1, 3, 3)
     return tensor.squeeze(0)
 
+
 def vector_to_symtensor(vector):
     """Creates a symmetric traceless tensor from the outer product of a vector with itself."""
     tensor = torch.matmul(vector.unsqueeze(-1), vector.unsqueeze(-2))
@@ -41,6 +43,7 @@ def vector_to_symtensor(vector):
     ] * torch.eye(3, 3, device=tensor.device, dtype=tensor.dtype)
     S = 0.5 * (tensor + tensor.transpose(-2, -1)) - I
     return S
+
 
 def decompose_tensor(tensor):
     """Full tensor decomposition into irreducible components."""
@@ -51,9 +54,11 @@ def decompose_tensor(tensor):
     S = 0.5 * (tensor + tensor.transpose(-2, -1)) - I
     return I, A, S
 
+
 def tensor_norm(tensor):
     """Computes Frobenius norm."""
     return (tensor**2).sum((-2, -1))
+
 
 class TensorNet(nn.Module):
     r"""TensorNet's architecture.
@@ -237,7 +242,9 @@ class TensorNet(nn.Module):
             # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
             edge_index = edge_index.masked_fill(mask, z.shape[0])
             edge_weight = edge_weight.masked_fill(mask[0], 0)
-            edge_vec = edge_vec.masked_fill(mask[0].unsqueeze(-1).expand_as(edge_vec), 0)
+            edge_vec = edge_vec.masked_fill(
+                mask[0].unsqueeze(-1).expand_as(edge_vec), 0
+            )
         edge_attr = self.distance_expansion(edge_weight)
         mask = edge_index[0] == edge_index[1]
         # Normalizing edge vectors by their length can result in NaNs, breaking Autograd.
@@ -261,6 +268,7 @@ class TensorEmbedding(nn.Module):
 
     :meta private:
     """
+
     def __init__(
         self,
         hidden_channels,
@@ -377,7 +385,9 @@ class TensorEmbedding(nn.Module):
         return X
 
 
-def tensor_message_passing(edge_index: Tensor, factor: Tensor, tensor: Tensor, natoms: int) -> Tensor:
+def tensor_message_passing(
+    edge_index: Tensor, factor: Tensor, tensor: Tensor, natoms: int
+) -> Tensor:
     """Message passing for tensors."""
     msg = factor * tensor.index_select(0, edge_index[1])
     shape = (natoms, tensor.shape[1], tensor.shape[2], tensor.shape[3])
@@ -391,6 +401,7 @@ class Interaction(nn.Module):
 
     :meta private:
     """
+
     def __init__(
         self,
         num_rbf,
@@ -432,9 +443,13 @@ class Interaction(nn.Module):
             linear.reset_parameters()
 
     def forward(
-        self, X: Tensor, edge_index: Tensor, edge_weight: Tensor, edge_attr: Tensor, q: Tensor
+        self,
+        X: Tensor,
+        edge_index: Tensor,
+        edge_weight: Tensor,
+        edge_attr: Tensor,
+        q: Tensor,
     ) -> Tensor:
-
         C = self.cutoff(edge_weight)
         for linear_scalar in self.linears_scalar:
             edge_attr = self.act(linear_scalar(edge_attr))
@@ -460,7 +475,7 @@ class Interaction(nn.Module):
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(msg, Y)
             B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor((1 + 0.1*q[...,None,None,None])*(A + B))
+            I, A, S = decompose_tensor((1 + 0.1 * q[..., None, None, None]) * (A + B))
         if self.equivariance_invariance_group == "SO(3)":
             B = torch.matmul(Y, msg)
             I, A, S = decompose_tensor(2 * B)
@@ -470,5 +485,5 @@ class Interaction(nn.Module):
         A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         dX = I + A + S
-        X = X + dX + (1 + 0.1*q[...,None,None,None]) * torch.matrix_power(dX, 2)
+        X = X + dX + (1 + 0.1 * q[..., None, None, None]) * torch.matrix_power(dX, 2)
         return X

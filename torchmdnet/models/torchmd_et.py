@@ -183,7 +183,6 @@ class TorchMD_ET(nn.Module):
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-
         x = self.embedding(z)
 
         edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
@@ -234,6 +233,7 @@ class EquivariantMultiHeadAttention(nn.Module):
 
     :meta private:
     """
+
     def __init__(
         self,
         hidden_channels,
