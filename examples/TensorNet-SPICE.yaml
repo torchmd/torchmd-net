@@ -56,3 +56,5 @@ trainable_rbf: false
 val_size: 0.1
 weight_decay: 0.0
 box_vecs: null
+charge: false
+spin: false

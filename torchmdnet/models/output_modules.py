@@ -11,6 +11,11 @@ __all__ = ["Scalar", "DipoleMoment", "ElectronicSpatialExtent"]
 
 
 class OutputModel(nn.Module, metaclass=ABCMeta):
+    """Base class for output models.
+
+    Derive this class to make custom output models.
+    As an example, have a look at the :py:mod:`torchmdnet.output_modules.Scalar` output model.
+    """
     def __init__(self, allow_prior_model, reduce_op):
         super(OutputModel, self).__init__()
         self.allow_prior_model = allow_prior_model

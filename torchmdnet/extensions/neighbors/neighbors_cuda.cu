@@ -1,6 +1,5 @@
 /* Raul P. Pelaez 2023
    Connection between the neighbor CUDA implementations and the torch extension.
-   See neighbors.cpp for the definition of the torch extension functions.
  */
 #include "neighbors_cuda_brute.cuh"
 #include "neighbors_cuda_cell.cuh"

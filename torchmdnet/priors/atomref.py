@@ -39,4 +39,11 @@ class Atomref(BasePrior):
         return dict(max_z=self.initial_atomref.size(0))
 
     def pre_reduce(self, x: Tensor, z: Tensor, pos: Tensor, batch: Optional[Tensor] = None, extra_args: Optional[Dict[str, Tensor]] = None):
+        """Adds the stored atomref to the input as:
+
+        .. math::
+
+            x' = x + \\textrm{atomref}(z)
+
+        """
         return x + self.atomref(z)

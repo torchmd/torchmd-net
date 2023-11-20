@@ -7,7 +7,7 @@ from utils import load_example_args, create_example_batch
 
 
 @mark.parametrize("remove_threshold", [-1, 2, 5])
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 def test_atom_filter(remove_threshold, model_name):
     # wrap a representation model using the AtomFilter wrapper
     model = create_model(load_example_args(model_name, remove_prior=True))

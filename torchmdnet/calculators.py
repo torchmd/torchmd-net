@@ -19,8 +19,8 @@ tranforms = {
 
 
 class External:
-    """
-    This is an adapter to use TorchMD-Net models in TorchMD.
+    """This is an adapter to use TorchMD-Net models in TorchMD.
+
     Parameters
     ----------
     netfile : str or torch.nn.Module

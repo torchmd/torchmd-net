@@ -8,8 +8,29 @@ import warnings
 
 
 class ANIBase(Dataset):
+    """ANI Dataset Classes
 
-    HARTREE_TO_EV = 27.211386246
+    A foundational dataset class for handling the ANI datasets. ANI (ANAKIN-ME or Accurate NeurAl networK engINe for Molecular Energies)
+    is a deep learning method trained on quantum mechanical DFT calculations to predict accurate and transferable potentials for organic molecules.
+
+    Key features of ANI:
+
+    - Utilizes a modified version of the Behler and Parrinello symmetry functions to construct single-atom atomic environment vectors (AEV) for molecular representation.
+    - AEVs enable the training of neural networks over both configurational and conformational space.
+    - The ANI-1 potential was trained on a subset of the GDB databases with up to 8 heavy atoms.
+    - ANI-1x and ANI-1ccx datasets provide diverse quantum mechanical properties for organic molecules:
+       -  ANI-1x contains multiple QM properties from 5M density functional theory calculations.
+       -  ANI-1ccx contains 500k data points obtained with an accurate CCSD(T)/CBS extrapolation.
+    - Properties include energies, atomic forces, multipole moments, atomic charges, and more for the chemical elements C, H, N, and O.
+    - Developed through active learning, an automated data diversification process.
+
+    References:
+
+    - Smith, J. S., Isayev, O., & Roitberg, A. E. (2017). ANI-1: an extensible neural network potential with DFT accuracy at force field computational cost. Chemical Science, 8(4), 3192-3203.
+    - Smith, J. S., Zubatyuk, R., Nebgen, B., Lubbers, N., Barros, K., Roitberg, A. E., Isayev, O., & Tretiak, S. (2020). The ANI-1ccx and ANI-1x data sets, coupled-cluster and density functional theory properties for molecules. Scientific Data, 7, Article 134.
+    """
+
+    HARTREE_TO_EV = 27.211386246 #::meta private:
 
     @property
     def raw_url(self):
@@ -21,7 +42,7 @@ class ANIBase(Dataset):
 
     def compute_reference_energy(self, atomic_numbers):
         atomic_numbers = np.array(atomic_numbers)
-        energy = sum(self.ELEMENT_ENERGIES[z] for z in atomic_numbers)
+        energy = sum(self._ELEMENT_ENERGIES[z] for z in atomic_numbers)
         return energy * ANIBase.HARTREE_TO_EV
 
     def sample_iter(self, mol_ids=False):
@@ -148,7 +169,21 @@ class ANIBase(Dataset):
         return len(self.y_mm)
 
     def get(self, idx):
+        """Get a single sample from the dataset.
 
+        Data object contains the following attributes by default:
+
+        - :obj:`z` (:class:`torch.LongTensor`): Atomic numbers of shape :obj:`[num_nodes]`.
+        - :obj:`pos` (:class:`torch.FloatTensor`): Atomic positions of shape :obj:`[num_nodes, 3]`.
+        - :obj:`y` (:class:`torch.FloatTensor`): Energies of shape :obj:`[1, 1]`.
+        - :obj:`neg_dy` (:class:`torch.FloatTensor`, *optional*): Negative gradients of shape :obj:`[num_nodes, 3]`.
+
+        Args:
+            idx (int): Index of the sample.
+
+        Returns:
+            :class:`torch_geometric.data.Data`: The data object.
+        """
         atoms = slice(self.idx_mm[idx], self.idx_mm[idx + 1])
         z = pt.tensor(self.z_mm[atoms], dtype=pt.long)
         pos = pt.tensor(self.pos_mm[atoms], dtype=pt.float32)
@@ -165,12 +200,14 @@ class ANIBase(Dataset):
 
 
 class ANI1(ANIBase):
+    __doc__ = ANIBase.__doc__
+    # Avoid sphinx from documenting this
     ELEMENT_ENERGIES = {
         1: -0.500607632585,
         6: -37.8302333826,
         7: -54.5680045287,
         8: -75.0362229210,
-    }
+    } #::meta private:
 
     @property
     def raw_url(self):
@@ -219,7 +256,8 @@ class ANI1(ANIBase):
                         yield data
 
     def get_atomref(self, max_z=100):
-
+        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior.
+        """
         refs = pt.zeros(max_z)
         refs[1] = -0.500607632585 * self.HARTREE_TO_EV  # H
         refs[6] = -37.8302333826 * self.HARTREE_TO_EV  # C
@@ -235,6 +273,7 @@ class ANI1(ANIBase):
 
 
 class ANI1XBase(ANIBase):
+
     @property
     def raw_url(self):
         return "https://figshare.com/ndownloader/files/18112775"
@@ -249,7 +288,8 @@ class ANI1XBase(ANIBase):
         os.rename(file, self.raw_paths[0])
 
     def get_atomref(self, max_z=100):
-
+        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior.
+        """
         warnings.warn("Atomic references from the ANI-1 dataset are used!")
 
         refs = pt.zeros(max_z)
@@ -262,13 +302,17 @@ class ANI1XBase(ANIBase):
 
 
 class ANI1X(ANI1XBase):
+    __doc__ = ANIBase.__doc__
     ELEMENT_ENERGIES = {
         1: -0.500607632585,
         6: -37.8302333826,
         7: -54.5680045287,
         8: -75.0362229210,
     }
+    """
 
+    :meta private:
+    """
     def sample_iter(self, mol_ids=False):
 
         assert len(self.raw_paths) == 1
@@ -319,7 +363,7 @@ class ANI1X(ANI1XBase):
 
 
 class ANI1CCX(ANI1XBase):
-
+    __doc__ = ANIBase.__doc__
     def sample_iter(self, mol_ids=False):
 
         assert len(self.raw_paths) == 1

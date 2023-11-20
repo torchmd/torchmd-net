@@ -5,16 +5,27 @@ from typing import Optional, Dict
 
 
 class ZBL(BasePrior):
-    """This class implements the Ziegler-Biersack-Littmark (ZBL) potential for screened nuclear repulsion.
-    Is is described in https://doi.org/10.1007/978-3-642-68779-2_5 (equations 9 and 10 on page 147).  It
-    is an empirical potential that does a good job of describing the repulsion between atoms at very short
-    distances.
+    """
+    Implements the Ziegler-Biersack-Littmark (ZBL) potential for screened nuclear repulsion.
 
-    To use this prior, the Dataset must provide the following attributes.
+    This potential is described in Ziegler, J.F., Biersack, J.P., Littmark, U. "The Stopping and Range of Ions in Solids."
+    (1985), specifically in equations 9 and 10 on page 147. It is an empirical potential effectively describing the
+    repulsion between atoms at very short distances.
 
-    atomic_number: 1D tensor of length max_z.  atomic_number[z] is the atomic number of atoms with atom type z.
-    distance_scale: multiply by this factor to convert coordinates stored in the dataset to meters
-    energy_scale: multiply by this factor to convert energies stored in the dataset to Joules (*not* J/mol)
+    Reference:
+        Available at: https://doi.org/10.1007/978-3-642-68779-2_5
+
+    Parameters
+    ----------
+    atomic_number : torch.Tensor, optional
+        A 1D tensor of length max_z. `atomic_number[z]` is the atomic number of atoms with atom type z. If None, use `dataset.atomic_number`.
+    distance_scale : float, optional
+        Factor to multiply with coordinates stored in the dataset to convert them to meters. If None, use `dataset.distance_scale`.
+    energy_scale : float, optional
+        Factor to multiply with energies stored in the dataset to convert them to Joules (not J/mol). If None, use `dataset.energy_scale`.
+    dataset : Dataset, optional
+        Dataset object. If None, `atomic_number`, `distance_scale`, and `energy_scale` must be explicitly set.
+
     """
 
     def __init__(
