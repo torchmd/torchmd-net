@@ -1,3 +1,5 @@
+.. _neural-network-potentials:
+
 Neural Network Potentials
 =========================
 
@@ -31,8 +33,10 @@ Once you have trained a model you should have a checkpoint that you can load for
    
 .. note:: You can train a model using only the labels (i.e. energy) by passing :code:`derivative=False` and then set it to :code:`True` to compute its derivative (i.e. forces) only during inference.
 
+.. note:: Some models take additional inputs such as the charge :code:`q` and the spin :code:`s` of the atoms depending on the chosen priors/outputs. Check the documentation of the model you are using to see if this is the case.
 
-
+.. note:: When periodic boundary conditions are required, modules typically offer the possibility of providing the box vectors at construction and/or as an argument to the forward pass. Check the documentation of the class you are using to see if this is the case.
+	  
 Available Models
 ----------------
 
@@ -94,7 +98,7 @@ To implement a new architecture, you need to follow these steps:
                 # Initialize your model parameters here
                 nn.init.xavier_uniform_(self.layer1.weight)
                 
-            def forward(self, z: Tensor, pos: Tensor, batch: Tensor, q: Optional[Tensor] = None, s: Optional[Tensor] = None) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+            def forward(self, z: Tensor, pos: Tensor, batch: Tensor, box: Optional[Tensor], q: Optional[Tensor] = None, s: Optional[Tensor] = None) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
                 # Define your forward pass here
                 scalar_features = ...
                 vector_features = ...

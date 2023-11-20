@@ -14,19 +14,21 @@ from torchmdnet.models.utils import (
 class TorchMD_ET(nn.Module):
     r"""The TorchMD equivariant Transformer architecture.
 
-        This function optionally supports periodic boundary conditions with
-        arbitrary triclinic boxes.  The box vectors `a`, `b`, and `c` must satisfy
-        certain requirements:
+    This function optionally supports periodic boundary conditions with arbitrary triclinic boxes.
+    For a given cutoff, :math:`r_c`, the box vectors :math:`\vec{a},\vec{b},\vec{c}` must satisfy
+    certain requirements:
 
-        `a[1] = a[2] = b[2] = 0`
-        `a[0] >= 2*cutoff, b[1] >= 2*cutoff, c[2] >= 2*cutoff`
-        `a[0] >= 2*b[0]`
-        `a[0] >= 2*c[0]`
-        `b[1] >= 2*c[1]`
+    .. math::
 
-        These requirements correspond to a particular rotation of the system and
-        reduced form of the vectors, as well as the requirement that the cutoff be
-        no larger than half the box width.
+      \begin{align*}
+      a_y = a_z = b_z &= 0 \\
+      a_x, b_y, c_z &\geq 2 r_c \\
+      a_x &\geq 2  b_x \\
+      a_x &\geq 2  c_x \\
+      b_y &\geq 2  c_y
+      \end{align*}
+
+    These requirements correspond to a particular rotation of the system and reduced form of the vectors, as well as the requirement that the cutoff be no larger than half the box width.
 
     Args:
         hidden_channels (int, optional): Hidden embedding size.

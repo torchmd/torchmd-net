@@ -34,6 +34,28 @@ Custom Prior Models
 
 In addition to implementing a custom dataset class, it is also possible to add a custom prior model to the model. This can be done by implementing a new prior model class in :py:mod:`torchmdnet.priors` and adding the argument ``--prior-model <PriorModelName>``. As an example, have a look at :py:mod:`torchmdnet.priors.Atomref`.
 
+Periodic Boundary Conditions
+============================
+
+TorchMD-Net supports periodic boundary conditions with arbitrary triclinic boxes.
+
+Periodic boundary conditions can be enabled by passing the `box-vecs` option in the :ref:`configuration file <configuration-file>` or by passing the ``--box-vecs`` argument to the :ref:`torchmd-train <torchmd-train>` utility. You may also send the box vectors directly to a :ref:`neural network potential <neural-network-potentials>` as an argument when running inference, e.g. ``model(z, pos, batch, box=box_vecs)``.
+
+For a given cutoff, :math:`r_c`, the box vectors :math:`\vec{a},\vec{b},\vec{c}` must satisfy certain requirements:
+
+.. math::
+	  
+  \begin{align*}
+  a_y = a_z = b_z &= 0 \\
+  a_x, b_y, c_z &\geq 2 r_c \\
+  a_x &\geq 2  b_x \\
+  a_x &\geq 2  c_x \\
+  b_y &\geq 2  c_y
+  \end{align*}
+
+These requirements correspond to a particular rotation of the system and reduced form of the vectors, as well as the requirement that the cutoff be no larger than half the box width.
+
+.. note:: The box defined by the vectors :math:`\vec{a} = (L_x, 0, 0)`, :math:`\vec{b} = (0, L_y, 0)`, and :math:`\vec{c} = (0, 0, L_z)` correspond to a rectangular box. In this case, the input option in the :ref:`configuration file <configuration-file>` would be ``box-vecs: [[L_x, 0, 0], [0, L_y, 0], [0, 0, L_z]]``.
 
 Multi-Node Training
 ===================
