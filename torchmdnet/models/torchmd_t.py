@@ -16,6 +16,9 @@ from torchmdnet.utils import deprecated_class
 class TorchMD_T(nn.Module):
     r"""The TorchMD Transformer architecture.
 
+    This model is considered deprecated and will be removed in a future release.
+    Please refer to https://github.com/torchmd/torchmd-net/pull/240 for more details.
+
     Args:
         hidden_channels (int, optional): Hidden embedding size.
             (default: :obj:`128`)
