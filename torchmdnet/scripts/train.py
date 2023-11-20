@@ -114,8 +114,8 @@ def get_argparse():
 
 def get_args():
 
-    args = get_argparse()
-
+    parser = get_argparse()
+    args = parser.parse_args()
     if args.redirect:
         sys.stdout = open(os.path.join(args.log_dir, "log"), "w")
         sys.stderr = sys.stdout
