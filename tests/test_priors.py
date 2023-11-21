@@ -6,13 +6,13 @@ from torchmdnet import models
 from torchmdnet.models.model import create_model, create_prior_models
 from torchmdnet.module import LNNP
 from torchmdnet.priors import Atomref, D2, ZBL, Coulomb
-from torch_scatter import scatter
+from torchmdnet.models.utils import scatter
 from utils import load_example_args, create_example_batch, DummyDataset
 from os.path import dirname, join
 import tempfile
 
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 def test_atomref(model_name):
     dataset = DummyDataset(has_atomref=True)
     atomref = Atomref(max_z=100, dataset=dataset)

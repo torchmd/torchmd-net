@@ -18,8 +18,7 @@ from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping, dtype_
 from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, number
 from lightning_utilities.core.rank_zero import rank_zero_warn
 
-
-def get_args():
+def get_argparse():
     # fmt: off
     parser = argparse.ArgumentParser(description='Training')
     parser.add_argument('--load-model', action=LoadFromCheckpoint, help='Restart training using a model checkpoint')  # keep first
@@ -66,13 +65,13 @@ def get_args():
     parser.add_argument('--neg-dy-weight', default=1.0, type=float, help='Weighting factor for neg_dy label in the loss function')
 
     # model architecture
-    parser.add_argument('--model', type=str, default='graph-network', choices=models.__all__, help='Which model to train')
+    parser.add_argument('--model', type=str, default='graph-network', choices=models.__all_models__, help='Which model to train')
     parser.add_argument('--output-model', type=str, default='Scalar', choices=output_modules.__all__, help='The type of output model')
     parser.add_argument('--prior-model', type=str, default=None, choices=priors.__all__, help='Which prior model to use')
 
     # architectural args
-    parser.add_argument('--charge', type=bool, default=False, help='Model needs a total charge')
-    parser.add_argument('--spin', type=bool, default=False, help='Model needs a spin state')
+    parser.add_argument('--charge', type=bool, default=False, help='Model needs a total charge. Set this to True if your dataset contains charges and you want them passed down to the model.')
+    parser.add_argument('--spin', type=bool, default=False, help='Model needs a spin state. Set this to True if your dataset contains spin states and you want them passed down to the model.')
     parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
     parser.add_argument('--num-layers', type=int, default=6, help='Number of interaction layers in the model')
     parser.add_argument('--num-rbf', type=int, default=64, help='Number of radial basis functions in model')
@@ -106,9 +105,12 @@ def get_args():
     parser.add_argument('--tensorboard-use', default=False, type=bool, help='Defines if tensor board is used or not')
 
     # fmt: on
+    return parser
 
+def get_args():
+
+    parser = get_argparse()
     args = parser.parse_args()
-
     if args.redirect:
         sys.stdout = open(os.path.join(args.log_dir, "log"), "w")
         sys.stderr = sys.stdout
@@ -174,7 +176,7 @@ def main():
         )
 
     trainer = pl.Trainer(
-        strategy=DDPStrategy(find_unused_parameters=False),
+        strategy="auto",
         max_epochs=args.num_epochs,
         accelerator="auto",
         devices=args.ngpus,

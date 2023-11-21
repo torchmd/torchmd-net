@@ -133,3 +133,11 @@ dmypy.json
 
 # temp directories
 logs/
+
+# Docs
+docs/build/
+docs/source/generated
+
+# Extra
+
+*~
