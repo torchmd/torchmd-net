@@ -9,12 +9,12 @@ from torchmdnet.models.utils import (
     act_class_mapping,
     scatter,
 )
+from torchmdnet.utils import deprecated_class
 
 
-
+@deprecated_class
 class TorchMD_T(nn.Module):
     r"""The TorchMD Transformer architecture.
-
         This function optionally supports periodic boundary conditions with
         arbitrary triclinic boxes.  The box vectors `a`, `b`, and `c` must satisfy
         certain requirements:
@@ -28,6 +28,8 @@ class TorchMD_T(nn.Module):
         These requirements correspond to a particular rotation of the system and
         reduced form of the vectors, as well as the requirement that the cutoff be
         no larger than half the box width.
+    This model is considered deprecated and will be removed in a future release.
+    Please refer to https://github.com/torchmd/torchmd-net/pull/240 for more details.
 
     Args:
         hidden_channels (int, optional): Hidden embedding size.
@@ -183,7 +185,6 @@ class TorchMD_T(nn.Module):
         s: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
-
         x = self.embedding(z)
 
         edge_index, edge_weight, _ = self.distance(pos, batch, box)
