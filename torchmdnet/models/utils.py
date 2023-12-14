@@ -226,7 +226,8 @@ class OptimizedDistance(torch.nn.Module):
             A tensor with shape (N, 3) representing the positions.
         batch : torch.Tensor, optional
             A tensor with shape (N,). Defaults to None.
-
+        box : torch.Tensor, optional
+            The vectors defining the periodic box.  This must have shape `(3, 3)`,
         Returns
         -------
         edge_index : torch.Tensor
