@@ -1,9 +1,13 @@
-/* Raul P. Pelaez 2023. Brute force neighbor list construction in CUDA.
-
-   A brute force approach that assigns a thread per each possible pair of particles in the system.
-   Based on an implementation by Raimondas Galvelis.
-   Works fantastically for small (less than 10K atoms) systems, but cannot handle more than 32K
-   atoms.
+/* Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+ * Distributed under the MIT License.
+ *(See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+ *
+ * Raul P. Pelaez 2023. Brute force neighbor list construction in CUDA.
+ *
+ * A brute force approach that assigns a thread per each possible pair of particles in the system.
+ * Based on an implementation by Raimondas Galvelis.
+ * Works fantastically for small (less than 10K atoms) systems, but cannot handle more than 32K
+ * atoms.
  */
 #ifndef NEIGHBORS_BRUTE_CUH
 #define NEIGHBORS_BRUTE_CUH
