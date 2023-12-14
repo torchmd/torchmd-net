@@ -1,5 +1,8 @@
-/* Raul P. Pelaez 2023
-   Connection between the neighbor CUDA implementations and the torch extension.
+/*
+ * Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+ * Distributed under the MIT License.
+ * (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+ * Raul P. Pelaez 2023
  */
 #include "neighbors_cuda_brute.cuh"
 #include "neighbors_cuda_cell.cuh"

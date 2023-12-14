@@ -1,4 +1,7 @@
-/* Raul P. Pelaez 2023. Common utilities for the CUDA neighbor operation.
+/* Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+ * Distributed under the MIT License.
+ *(See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+ * Raul P. Pelaez 2023. Common utilities for the CUDA neighbor operation.
  */
 #ifndef NEIGHBORS_COMMON_CUH
 #define NEIGHBORS_COMMON_CUH
