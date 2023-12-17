@@ -56,8 +56,9 @@ def tensor_norm(tensor):
     return (tensor**2).sum((-2, -1))
 
 class TensorNet(nn.Module):
-    r"""TensorNet's architecture.
-    From TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials; G. Simeon and G. de Fabritiis.
+    r"""TensorNet's architecture. From
+    TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials; G. Simeon and G. de Fabritiis.
+    NeurIPS 2023.
 
     Args:
         hidden_channels (int, optional): Hidden embedding size.
