@@ -98,6 +98,22 @@ class External:
                 )
 
     def calculate(self, pos, box = None):
+        """Calculate the energy and forces of the system.
+
+        Parameters
+        ----------
+        pos : torch.Tensor
+            Positions of the atoms in the system.
+        box : torch.Tensor, optional
+            Box vectors of the system. Default: None
+
+        Returns
+        -------
+        energy : torch.Tensor
+            Energy of the system.
+        forces : torch.Tensor
+            Forces on the atoms in the system.
+        """
         pos = pos.to(self.device).type(torch.float32).reshape(-1, 3)
         if self.use_cuda_graph:
             if self.pos is None:
