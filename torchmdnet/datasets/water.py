@@ -68,11 +68,9 @@ class WaterBox(InMemoryDataset):
         for i in range(len(energies)):
             z = torch.tensor(atomic_numbers[i], dtype=torch.long).view(-1)
             pos = torch.tensor(positions[i], dtype=torch.float)
-            print(pos.shape)
             y = torch.tensor(energies[i], dtype=torch.float)
             neg_dy = torch.tensor(forces[i], dtype=torch.float)
             box = torch.tensor(box_vectors[i], dtype=torch.float).view(1, 3, 3)
-            print(box.shape)
             data_list.append(Data(z=z, pos=pos, y=y, neg_dy=neg_dy, box=box))
 
         self.save(data_list, self.processed_paths[0])
