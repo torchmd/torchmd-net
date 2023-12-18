@@ -36,6 +36,20 @@ def create_numpy_arrays(file_path):
     return energies, forces, positions, atomic_numbers, box_vectors
 
 class WaterBox(InMemoryDataset):
+    """ WaterBox dataset from [1]_.
+
+    The dataset consists of 1593 water molecules in a cubic box with periodic boundary conditions.
+    The molecules are sampled from a molecular dynamics simulation of liquid water.
+
+    Parameters
+    ----------
+    root : str
+        Root directory where the dataset should be saved.
+
+    References
+    ----------
+    [1] Ab initio thermodynamics of liquid and solid water. Bingqing et. al. https://arxiv.org/abs/1811.08630
+    """
     url = 'https://archive.materialscloud.org/record/file?record_id=71&filename=training-set.zip'
 
     def __init__(self, root, transform=None, pre_transform=None):
