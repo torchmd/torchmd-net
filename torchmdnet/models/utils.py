@@ -154,7 +154,7 @@ class OptimizedDistance(torch.nn.Module):
             2. *Brute*: A brute force O(N^2) algorithm, best for small number of particles.
             3. *Cell*:  A cell list algorithm, best for large number of particles, low cutoffs and low batch size.
         box : torch.Tensor, optional
-            The vectors defining the periodic box.  This must have shape `(3, 3)`,
+            The vectors defining the periodic box.  This must have shape `(3, 3)` or `(max(batch)+1, 3, 3)` if a ox per sample is desired.
             where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
             If this is omitted, periodic boundary conditions are not applied.
         loop : bool, optional
@@ -227,7 +227,7 @@ class OptimizedDistance(torch.nn.Module):
         batch : torch.Tensor, optional
             A tensor with shape (N,). Defaults to None.
         box : torch.Tensor, optional
-            The vectors defining the periodic box.  This must have shape `(3, 3)`,
+            The vectors defining the periodic box.  This must have shape `(3, 3)` or `(max(batch)+1, 3, 3)`,
         Returns
         -------
         edge_index : torch.Tensor

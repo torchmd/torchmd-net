@@ -65,7 +65,7 @@ def get_neighbor_pairs_kernel(
     batch : torch.Tensor
         A tensor with shape (N,). Specifies the batch for each atom.
     box_vectors : torch.Tensor
-        The vectors defining the periodic box with shape `(3, 3)`.
+        The vectors defining the periodic box with shape `(3, 3)` or `(max(batch)+1, 3, 3)` if a different box is used for each sample.
     use_periodic : bool
         Whether to apply periodic boundary conditions.
     cutoff_lower : float
@@ -112,4 +112,4 @@ def get_neighbor_pairs_kernel(
 if int(torch.__version__.split(".")[0]) >= 2:
     import torch._dynamo as dynamo
 
-    dynamo.disallow_in_graph(get_neighbor_pairs_kernel)
+    dynamo.disallow_in_graph(torch.ops.torchmdnet_extensions.get_neighbor_pairs)

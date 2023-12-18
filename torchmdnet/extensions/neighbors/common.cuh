@@ -24,6 +24,9 @@ template <typename scalar_t, int num_dims>
 using Accessor = torch::PackedTensorAccessor32<scalar_t, num_dims, torch::RestrictPtrTraits>;
 
 template <typename scalar_t, int num_dims>
+using KernelAccessor = at::TensorAccessor<scalar_t, num_dims, at::RestrictPtrTraits, signed int>;
+
+template <typename scalar_t, int num_dims>
 inline Accessor<scalar_t, num_dims> get_accessor(const Tensor& tensor) {
     return tensor.packed_accessor32<scalar_t, num_dims, torch::RestrictPtrTraits>();
 };
@@ -161,10 +164,10 @@ __device__ auto compute_distance(scalar3<scalar_t> pos_i, scalar3<scalar_t> pos_
 } // namespace rect
 
 namespace triclinic {
-template <class scalar_t> using BoxAccessor = Accessor<scalar_t, 2>;
+template <class scalar_t> using BoxAccessor = Accessor<scalar_t, 3>;
 template <typename scalar_t>
 BoxAccessor<scalar_t> get_box_accessor(const Tensor& box_vectors, bool use_periodic) {
-    return get_accessor<scalar_t, 2>(box_vectors);
+    return get_accessor<scalar_t, 3>(box_vectors);
 }
 
 /*
@@ -175,7 +178,7 @@ BoxAccessor<scalar_t> get_box_accessor(const Tensor& box_vectors, bool use_perio
  * @return The point in the unit cell
  */
 template <typename scalar_t>
-__device__ auto apply_pbc(scalar3<scalar_t> delta, const BoxAccessor<scalar_t>& box) {
+__device__ auto apply_pbc(scalar3<scalar_t> delta, const KernelAccessor<scalar_t, 2>& box) {
     scalar_t scale3 = round(delta.z / box[2][2]);
     delta.x -= scale3 * box[2][0];
     delta.y -= scale3 * box[2][1];
@@ -188,12 +191,12 @@ __device__ auto apply_pbc(scalar3<scalar_t> delta, const BoxAccessor<scalar_t>& 
     return delta;
 }
 
-template <typename scalar_t>
+  template <typename scalar_t>
 __device__ auto compute_distance(scalar3<scalar_t> pos_i, scalar3<scalar_t> pos_j,
-                                 bool use_periodic, const BoxAccessor<scalar_t>& box) {
+                                 bool use_periodic, const KernelAccessor<scalar_t, 2>& box) {
     scalar3<scalar_t> delta = {pos_i.x - pos_j.x, pos_i.y - pos_j.y, pos_i.z - pos_j.z};
     if (use_periodic) {
-        delta = apply_pbc(delta, box);
+      delta = apply_pbc(delta, box);
     }
     return delta;
 }

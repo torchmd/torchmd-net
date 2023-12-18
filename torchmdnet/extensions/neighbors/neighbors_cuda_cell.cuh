@@ -343,7 +343,14 @@ forward_cell(const Tensor& positions, const Tensor& batch, const Tensor& in_box_
     // batches. The strategy is to first compute a cell list for all particles, and then
     // traverse the cell list for each particle to construct a pair list.
     checkInput(positions, batch);
-    const auto box_size = in_box_size.to("cpu");
+    auto box_size = in_box_size.to("cpu");
+    // If the box has dimensions (1, 3,3) squeeze it
+    if (box_size.dim() == 3) {
+      TORCH_CHECK(box_size.size(0) == 1 && box_size.size(1) == 3 && box_size.size(2) == 3,
+		  "Cell list does not support a box per sample. Expected \"box_size\" to have shape (1, 3, 3) or (3, 3)");
+      box_size = box_size.squeeze(0);
+    }
+
     TORCH_CHECK(box_size.dim() == 2, "Expected \"box_size\" to have two dimensions");
     TORCH_CHECK(box_size.size(0) == 3 && box_size.size(1) == 3,
                 "Expected \"box_size\" to have shape (3, 3)");
