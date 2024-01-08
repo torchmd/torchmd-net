@@ -110,3 +110,9 @@ def get_neighbor_pairs_kernel(
         loop,
         include_transpose,
     )
+
+
+# For some unknown reason torch.compile is not able to compile this function
+if int(torch.__version__.split(".")[0]) >= 2:
+    import torch._dynamo as dynamo
+    dynamo.disallow_in_graph(torch.ops.torchmdnet_extensions.get_neighbor_pairs)
