@@ -43,7 +43,15 @@ We recommend using [Mamba](https://github.com/conda-forge/miniforge/#mambaforge)
     mamba activate torchmd-net
     ```
 
-4. Install TorchMD-NET into the environment:
+4. CUDA enabled installation
+   You can skip this section if you only need a CPU installation.
+
+	```shell
+	mamba install cuda-nvcc cuda-libraries-dev cuda-version "gxx<12" pytorch=*=*cuda*
+	```
+gxx<12 is required due to a [bug in GCC+CUDA12](https://github.com/pybind/pybind11/issues/4606) that prevents pybind11 from compiling correctly.
+	      
+5. Install TorchMD-NET into the environment:
     ```shell
     pip install -e .
     ```
