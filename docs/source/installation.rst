@@ -34,8 +34,10 @@ Install from source
 
  .. code-block:: shell
 
-   mamba install cuda-nvcc cuda-libraries-dev
+   mamba install cuda-nvcc cuda-libraries-dev cuda-version "gxx<12" pytorch=*=*cuda*
 
+ .. warning:: gxx<12 is required due to a `bug in GCC+CUDA12 <https://github.com/pybind/pybind11/issues/4606>`_ that prevents pybind11 from compiling correctly
+	      
 5. Install TorchMD-NET into the environment:
 
    .. code-block:: shell
