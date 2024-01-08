@@ -28,7 +28,17 @@ Install from source
       mamba env create -f environment.yml
       mamba activate torchmd-net
 
-4. Install TorchMD-NET into the environment:
+4. CUDA enabled installation
+
+   You can skip this section if you only need a CPU installation.
+
+ .. code-block:: shell
+
+   mamba install cuda-nvcc cuda-libraries-dev cuda-version "gxx<12" pytorch=*=*cuda*
+
+ .. warning:: gxx<12 is required due to a `bug in GCC+CUDA12 <https://github.com/pybind/pybind11/issues/4606>`_ that prevents pybind11 from compiling correctly
+	      
+5. Install TorchMD-NET into the environment:
 
    .. code-block:: shell
 
@@ -37,24 +47,3 @@ Install from source
 This will install TorchMD-NET in editable mode, so that changes to the source code are immediately available.
 Besides making all python utilities available environment-wide, this will also install the ``torchmd-train`` command line utility.
 
-CUDA enabled installation
--------------------------
-
-Besides the dependencies listed in the environment file, you will also need the CUDA ``nvcc`` compiler suite to build TorchMD-Net.
-If your system lacks nvcc you may install it via conda-forge:
-
-.. code-block:: shell
-
-   mamba install cudatoolkit-dev
-
-Or from the nvidia channel:
-
-.. code-block:: shell
-
-   mamba install -c nvidia cuda-nvcc cuda-cudart-dev cuda-libraries-dev
-
-Make sure you install a major version compatible with your torch installation, which you can check with:
-
-.. code-block:: shell
-
-   python -c "import torch; print(torch.version.cuda)"
