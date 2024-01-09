@@ -44,12 +44,33 @@ We recommend using [Mamba](https://github.com/conda-forge/miniforge/#mambaforge)
 
 3. CUDA enabled installation  
    You can skip this section if you only need a CPU installation.
+   
+   The conda-forge channel [changed the way to install CUDA from versions 12 and above](https://github.com/conda-forge/conda-forge.github.io/issues/1963), thus the following instructions depend on whether you need CUDA < 12. If you have a GPU available, conda-forge probably installed the CUDA runtime (not the developer tools) on your system already, you can check with mamba:
+   
+   ```shell
+   mamba list | grep cuda
+   ```
+   Or by asking pytorch:
+   ```shell
+   python -c "import torch; print(torch.version.cuda)"
+   ```
+   
+   It is recommended to install the same version as the one used by torch.  
+   
+   - CUDA>=12
 
 	```shell
 	mamba install cuda-nvcc cuda-libraries-dev cuda-version "gxx<12" pytorch=*=*cuda*
 	```
 gxx<12 is required due to a [bug in GCC+CUDA12](https://github.com/pybind/pybind11/issues/4606) that prevents pybind11 from compiling correctly.
-	      
+
+  - CUDA<12  
+  
+  The nvidia channel provides the developer tools for CUDA 12.
+	```shell
+	mamba install -c nvidia "cuda-nvcc<12" "cuda-libraries-dev<12" "cuda-version<12" "gxx<12" pytorch=*=*cuda*
+	```
+    
 4. Install TorchMD-NET into the environment:
     ```shell
     pip install -e .
