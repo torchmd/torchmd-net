@@ -26,7 +26,7 @@ Install from source
       mamba env create -f environment.yml
       mamba activate torchmd-net
 
-4. CUDA enabled installation
+3. CUDA enabled installation
 
    You can skip this section if you only need a CPU installation.
 
@@ -62,7 +62,7 @@ Install from source
     mamba install -c nvidia "cuda-nvcc<12" "cuda-libraries-dev<12" "cuda-version<12" "gxx<12" pytorch=*=*cuda*
 
 	      
-5. Install TorchMD-NET into the environment:
+4. Install TorchMD-NET into the environment:
 
    .. code-block:: shell
 
