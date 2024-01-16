@@ -47,7 +47,9 @@ Or by asking pytorch:
 
    
 It is recommended to install the same version as the one used by torch.  
-   
+
+.. warning:: At the time of writing there is a `bug in Mamba <https://github.com/mamba-org/mamba/issues/3120>`_ (v1.5.6) that can cause trouble when installing CUDA on an already created environment. We thus recommend conda for this step.
+	     
 * CUDA>=12
 
 .. code-block:: shell
