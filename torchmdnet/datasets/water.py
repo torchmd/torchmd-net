@@ -41,6 +41,14 @@ class WaterBox(InMemoryDataset):
     The dataset consists of 1593 water molecules in a cubic box with periodic boundary conditions.
     The molecules are sampled from a molecular dynamics simulation of liquid water.
 
+    Each sample in the dataset contains the following properties:
+
+    - z (LongTensor): Atomic numbers of the atoms in the molecule.
+    - pos (FloatTensor): Positions of the atoms in the molecule.
+    - y (FloatTensor): Total energy of the molecule.
+    - neg_dy (FloatTensor): Negative of the forces on the atoms in the molecule.
+    - box (FloatTensor): Box vectors of the simulation cell.
+
     Parameters
     ----------
     root : str

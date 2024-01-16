@@ -39,7 +39,12 @@ Periodic Boundary Conditions
 
 TorchMD-Net supports periodic boundary conditions with arbitrary triclinic boxes.
 
-Periodic boundary conditions can be enabled by passing the `box-vecs` option in the :ref:`configuration file <configuration-file>` or by passing the ``--box-vecs`` argument to the :ref:`torchmd-train <torchmd-train>` utility. You may also send the box vectors directly to a :ref:`neural network potential <neural-network-potentials>` as an argument when running inference, e.g. ``model(z, pos, batch, box=box_vecs)``.
+Periodic boundary conditions can be enabled in several ways, depending on how you are using TorchMD-Net:
+#. Pass the `box-vecs` option in the :ref:`configuration file <configuration-file>`.
+#. Pass the ``--box-vecs`` argument to the :ref:`torchmd-train <torchmd-train>` utility.
+#. Choose or write a dataset that provides a box for each sample. See for instance the :py:mod:`torchmdnet.datasets.WaterBox` dataset.
+#. You may also send the box vectors directly to a :ref:`neural network potential <neural-network-potentials>` as an argument when running inference, e.g. ``model(z, pos, batch, box=box_vecs)``.
+
 
 For a given cutoff, :math:`r_c`, the box vectors :math:`\vec{a},\vec{b},\vec{c}` must satisfy certain requirements:
 
