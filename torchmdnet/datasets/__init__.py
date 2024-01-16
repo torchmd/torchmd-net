@@ -1,3 +1,7 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+
 from .ace import Ace
 from .ani import ANI1, ANI1CCX, ANI1X
 from .comp6 import ANIMD, DrugBank, GDB07to09, GDB10to13, Tripeptides, S66X8, COMP6v1

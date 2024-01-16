@@ -29,43 +29,7 @@ We recommend using [Mamba](https://github.com/conda-forge/miniforge/#mambaforge)
 
 ### Install from source  
 
-1. Clone the repository:
-    ```shell
-    git clone https://github.com/torchmd/torchmd-net.git
-    cd torchmd-net
-    ```
-
-2. Install the dependencies in environment.yml. You can do it via pip, but we recommend [Mambaforge](https://github.com/conda-forge/miniforge/#mambaforge) instead.
-
-3. Create an environment and activate it:
-    ```shell
-    mamba env create -f environment.yml
-    mamba activate torchmd-net
-    ```
-
-4. Install TorchMD-NET into the environment:
-    ```shell
-    pip install -e .
-    ```
-This will install TorchMD-NET in editable mode, so that changes to the source code are immediately available.
-Besides making all python utilities available environment-wide, this will also install the `torchmd-train` command line utility.
-
-
-#### CUDA enabled installation
-
-Besides the dependencies listed in the environment file, you will also need the CUDA `nvcc` compiler suite to build TorchMD-Net.   
-If your system lacks nvcc you may install it via conda-forge:
-	```shell
-	mamba install cudatoolkit-dev
-	```
-Or from the nvidia channel:
-```shell
-mamba install -c nvidia cuda-nvcc cuda-cudart-dev cuda-libraries-dev
-```
-Make sure you install a major version compatible with your torch installation, which you can check with:
-```shell
-python -c "import torch; print(torch.version.cuda)"
-```
+TorchMD-Net is installed using pip, but you will need to install some dependencies before. Check [this documentation page](https://torchmd-net.readthedocs.io/en/latest/installation.html#install-from-source).  
 
 ## Usage
 Specifying training arguments can either be done via a configuration yaml file or through command line arguments directly. Several examples of architectural and training specifications for some models and datasets can be found in [examples/](https://github.com/torchmd/torchmd-net/tree/main/examples). Note that if a parameter is present both in the yaml file and the command line, the command line version takes precedence.

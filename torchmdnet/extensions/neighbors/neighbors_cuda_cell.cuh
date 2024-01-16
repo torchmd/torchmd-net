@@ -1,5 +1,7 @@
-/* Raul P. Pelaez 2023. Batched cell list neighbor list implementation for CUDA.
-
+/* Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+ * Distributed under the MIT License.
+ *(See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+ * Raul P. Pelaez 2023. Batched cell list neighbor list implementation for CUDA.
  */
 #ifndef NEIGHBOR_CUDA_CELL_H
 #define NEIGHBOR_CUDA_CELL_H

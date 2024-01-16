@@ -1,8 +1,11 @@
-/* Raul P. Pelaez 2023. Shared memory neighbor list construction for CUDA.
-   This brute force approach checks all pairs of atoms by collaborativelly loading and processing
-   tiles of atoms into shared memory.
-   This approach is tipically slower than the brute force approach, but can handle an arbitrarily
-   large number of atoms.
+/* Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+ * Distributed under the MIT License.
+ *(See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+ * Raul P. Pelaez 2023. Shared memory neighbor list construction for CUDA.
+ * This brute force approach checks all pairs of atoms by collaborativelly loading and processing
+ * tiles of atoms into shared memory.
+ * This approach is tipically slower than the brute force approach, but can handle an arbitrarily
+ * large number of atoms.
  */
 #ifndef NEIGHBORS_SHARED_CUH
 #define NEIGHBORS_SHARED_CUH

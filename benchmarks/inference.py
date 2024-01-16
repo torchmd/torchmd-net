@@ -1,3 +1,7 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+
 """
 Benchmark script for inference.
 This script compiles a model using torch.compile and measures the time it takes to run a forward and backward pass for a certain molecule.
