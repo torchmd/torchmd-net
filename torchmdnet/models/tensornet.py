@@ -1,3 +1,7 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+
 import torch
 from typing import Optional, Tuple
 from torch import Tensor, nn
@@ -56,8 +60,9 @@ def tensor_norm(tensor):
     return (tensor**2).sum((-2, -1))
 
 class TensorNet(nn.Module):
-    r"""TensorNet's architecture.
-    From TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials; G. Simeon and G. de Fabritiis.
+    r"""TensorNet's architecture. From
+    TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials; G. Simeon and G. de Fabritiis.
+    NeurIPS 2023.
 
     Args:
         hidden_channels (int, optional): Hidden embedding size.

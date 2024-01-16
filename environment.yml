@@ -4,16 +4,16 @@ channels:
 dependencies:
   - h5py
   - matplotlib-base
-  - nnpops==0.5
+  - nnpops
   - pip
-  - pytorch==2.0.*
-  - pytorch_geometric==2.3.1
-  - lightning==2.0.8
-  - pydantic<2
-  - torchmetrics==0.11.4
+  - pytorch<2.2
+  - pytorch_geometric<2.5
+  - lightning<2.2
+  - pydantic
+  - torchmetrics
   - tqdm
   # Dev tools
   - flake8
   - pytest
   - psutil
-  - gxx
+  - gxx<12
