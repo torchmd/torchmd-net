@@ -19,12 +19,12 @@ Install from source
       git clone https://github.com/torchmd/torchmd-net.git
       cd torchmd-net
 
-2. Install the dependencies in environment.yml. You can do it via pip, but we recommend `Mambaforge <https://github.com/conda-forge/miniforge/#mambaforge>`_ instead.
+2. Install the dependencies in environment.yml.
 
 .. code-block:: shell
 
-      mamba env create -f environment.yml
-      mamba activate torchmd-net
+      conda env create -f environment.yml
+      conda activate torchmd-net
 
 3. CUDA enabled installation
 
@@ -34,7 +34,7 @@ The conda-forge channel [changed the way to install CUDA from versions 12 and ab
    
 .. code-block:: shell
 
-   mamba list | grep cuda
+   conda list | grep cuda
 
    
 Or by asking pytorch:
@@ -50,7 +50,7 @@ It is recommended to install the same version as the one used by torch.
 
 .. code-block:: shell
 
-   mamba install cuda-nvcc cuda-libraries-dev cuda-version "gxx<12" pytorch=*=*cuda*
+   conda install -c conda-forge cuda-nvcc cuda-libraries-dev cuda-version "gxx<12" pytorch=*=*cuda*
 
    
 .. warning:: gxx<12 is required due to a `bug in GCC+CUDA12 <https://github.com/pybind/pybind11/issues/4606>`_ that prevents pybind11 from compiling correctly
@@ -58,11 +58,11 @@ It is recommended to install the same version as the one used by torch.
 
 * CUDA<12  
   
-The nvidia channel provides the developer tools for CUDA 12.
+The nvidia channel provides the developer tools for CUDA<12.
   
  .. code-block:: shell
 		 
-    mamba install -c nvidia "cuda-nvcc<12" "cuda-libraries-dev<12" "cuda-version<12" "gxx<12" pytorch=*=*cuda*
+    conda install -c nvidia "cuda-nvcc<12" "cuda-libraries-dev<12" "cuda-version<12" "gxx<12" pytorch=*=*cuda*
 
 	      
 4. Install TorchMD-NET into the environment:
