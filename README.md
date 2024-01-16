@@ -29,55 +29,7 @@ We recommend using [Mamba](https://github.com/conda-forge/miniforge/#mambaforge)
 
 ### Install from source  
 
-1. Clone the repository:
-    ```shell
-    git clone https://github.com/torchmd/torchmd-net.git
-    cd torchmd-net
-    ```
-
-2. Install the dependencies in environment.yml. You can do it via pip, but we recommend [Mambaforge](https://github.com/conda-forge/miniforge/#mambaforge) instead:  
-
-    ```shell
-    mamba env create -f environment.yml
-    mamba activate torchmd-net
-    ```
-
-3. CUDA enabled installation  
-   You can skip this section if you only need a CPU installation.
-   
-   The conda-forge channel [changed the way to install CUDA from versions 12 and above](https://github.com/conda-forge/conda-forge.github.io/issues/1963), thus the following instructions depend on whether you need CUDA < 12. If you have a GPU available, conda-forge probably installed the CUDA runtime (not the developer tools) on your system already, you can check with mamba:
-   
-   ```shell
-   mamba list | grep cuda
-   ```
-   Or by asking pytorch:
-   ```shell
-   python -c "import torch; print(torch.version.cuda)"
-   ```
-   
-   It is recommended to install the same version as the one used by torch.  
-   
-   - CUDA>=12
-
-	```shell
-	mamba install cuda-nvcc cuda-libraries-dev cuda-version "gxx<12" pytorch=*=*cuda*
-	```
-gxx<12 is required due to a [bug in GCC+CUDA12](https://github.com/pybind/pybind11/issues/4606) that prevents pybind11 from compiling correctly.
-
-  - CUDA<12  
-  
-  The nvidia channel provides the developer tools for CUDA 12.
-	```shell
-	mamba install -c nvidia "cuda-nvcc<12" "cuda-libraries-dev<12" "cuda-version<12" "gxx<12" pytorch=*=*cuda*
-	```
-    
-4. Install TorchMD-NET into the environment:
-    ```shell
-    pip install -e .
-    ```
-This will install TorchMD-NET in editable mode, so that changes to the source code are immediately available.
-Besides making all python utilities available environment-wide, this will also install the `torchmd-train` command line utility.
-
+TorchMD-Net is installed using pip, but you will need to install some dependencies before. Check [this documentation page](https://torchmd-net.readthedocs.io/en/latest/installation.html#install-from-source).  
 
 ## Usage
 Specifying training arguments can either be done via a configuration yaml file or through command line arguments directly. Several examples of architectural and training specifications for some models and datasets can be found in [examples/](https://github.com/torchmd/torchmd-net/tree/main/examples). Note that if a parameter is present both in the yaml file and the command line, the command line version takes precedence.
