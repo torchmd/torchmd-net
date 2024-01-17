@@ -5,7 +5,7 @@
 from torchmdnet.priors.base import BasePrior
 from torchmdnet.models.utils import OptimizedDistance, scatter
 import torch as pt
-
+from typing import Optional, Dict
 
 class D2(BasePrior):
     """
@@ -159,7 +159,7 @@ class D2(BasePrior):
             "energy_scale": self.energy_scale,
         }
 
-    def post_reduce(self, y, z, pos, batch, extra_args):
+    def post_reduce(self, y, z, pos, batch, box: Optional[pt.Tensor] = None, extra_args: Optional[Dict[str, pt.Tensor]] = None):
 
         # Convert to interal units: nm and J/mol
         # NOTE: float32 is overflowed, if m and J are used

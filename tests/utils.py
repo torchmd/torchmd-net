@@ -22,6 +22,8 @@ def load_example_args(model_name, remove_prior=False, config_file=None, **kwargs
     args["seed"] = 1234
     if remove_prior:
         args["prior_model"] = None
+    if "box_vecs" not in args:
+        args["box_vecs"] = None
     for key, val in kwargs.items():
         assert key in args, f"Broken test! Unknown key '{key}'."
         args[key] = val

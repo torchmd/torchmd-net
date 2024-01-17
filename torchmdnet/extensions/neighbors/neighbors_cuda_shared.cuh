@@ -17,7 +17,7 @@ template <int BLOCKSIZE, typename scalar_t>
 __global__ void forward_kernel_shared(uint32_t num_atoms, const Accessor<scalar_t, 2> positions,
                                       const Accessor<int64_t, 1> batch, scalar_t cutoff_lower2,
                                       scalar_t cutoff_upper2, PairListAccessor<scalar_t> list,
-                                      int32_t num_tiles, triclinic::Box<scalar_t> box) {
+                                      int32_t num_tiles, triclinic::BoxAccessor<scalar_t> box) {
     // A thread per atom
     const int id = blockIdx.x * blockDim.x + threadIdx.x;
     // All threads must pass through __syncthreads,
@@ -55,8 +55,9 @@ __global__ void forward_kernel_shared(uint32_t num_atoms, const Accessor<scalar_
                 const auto batch_j = sh_batch[counter];
                 if (batch_i == batch_j) {
                     const auto pos_j = sh_pos[counter];
+                    const auto box_i = box[batch_i];
                     const auto delta =
-                        triclinic::compute_distance(pos_i, pos_j, list.use_periodic, box);
+                        triclinic::compute_distance(pos_i, pos_j, list.use_periodic, box_i);
                     const scalar_t distance2 =
                         delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
                     if (distance2 < cutoff_upper2 && distance2 >= cutoff_lower2) {
@@ -72,18 +73,31 @@ __global__ void forward_kernel_shared(uint32_t num_atoms, const Accessor<scalar_
 }
 
 static std::tuple<Tensor, Tensor, Tensor, Tensor>
-forward_shared(const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
+forward_shared(const Tensor& positions, const Tensor& batch, const Tensor& in_box_vectors,
                bool use_periodic, const Scalar& cutoff_lower, const Scalar& cutoff_upper,
                const Scalar& max_num_pairs, bool loop, bool include_transpose) {
     checkInput(positions, batch);
     const auto max_num_pairs_ = max_num_pairs.toLong();
+    auto box_vectors = in_box_vectors.to(positions.device());
+    if (box_vectors.dim() == 2) {
+        // If the box is a 3x3 tensor it is assumed every sample has the same box
+        if (use_periodic) {
+            TORCH_CHECK(box_vectors.size(0) == 3 && box_vectors.size(1) == 3,
+                        "Expected \"box_vectors\" to have shape (n_batch, 3, 3)");
+        }
+        // Make the box (None,3,3), expand artificially to positions.size(0)
+        box_vectors = box_vectors.unsqueeze(0);
+        if (use_periodic) {
+            // I use positions.size(0) because the batch dimension is not available here
+            box_vectors = box_vectors.expand({positions.size(0), 3, 3});
+        }
+    }
     TORCH_CHECK(max_num_pairs_ > 0, "Expected \"max_num_neighbors\" to be positive");
     if (use_periodic) {
-        TORCH_CHECK(box_vectors.dim() == 2, "Expected \"box_vectors\" to have two dimensions");
-        TORCH_CHECK(box_vectors.size(0) == 3 && box_vectors.size(1) == 3,
-                    "Expected \"box_vectors\" to have shape (3, 3)");
+        TORCH_CHECK(box_vectors.dim() == 3, "Expected \"box_vectors\" to have three dimensions");
+        TORCH_CHECK(box_vectors.size(1) == 3 && box_vectors.size(2) == 3,
+                    "Expected \"box_vectors\" to have shape (n_batch, 3, 3)");
     }
-    TORCH_CHECK(box_vectors.device() == torch::kCPU, "Expected \"box_vectors\" to be on CPU");
     const int num_atoms = positions.size(0);
     const int num_pairs = max_num_pairs_;
     const TensorOptions options = positions.options();
@@ -93,7 +107,7 @@ forward_shared(const Tensor& positions, const Tensor& batch, const Tensor& box_v
     AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "get_neighbor_pairs_shared_forward", [&]() {
         const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
         const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();
-        triclinic::Box<scalar_t> box(box_vectors, use_periodic);
+        auto box = triclinic::get_box_accessor<scalar_t>(box_vectors, use_periodic);
         TORCH_CHECK(cutoff_upper_ > 0, "Expected \"cutoff\" to be positive");
         constexpr int BLOCKSIZE = 64;
         const int num_blocks = std::max((num_atoms + BLOCKSIZE - 1) / BLOCKSIZE, 1);

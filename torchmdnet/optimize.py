@@ -55,11 +55,13 @@ class TorchMD_GN_optimized(pt.nn.Module):
         z: pt.Tensor,
         pos: pt.Tensor,
         batch: pt.Tensor,
+        box: Optional[pt.Tensor] = None,
         q: Optional[pt.Tensor] = None,
         s: Optional[pt.Tensor] = None,
     ) -> Tuple[pt.Tensor, Optional[pt.Tensor], pt.Tensor, pt.Tensor, pt.Tensor]:
 
         assert pt.all(batch == 0)
+        assert box is None, "Box is not supported"
 
         x = self.model.embedding(z)
 

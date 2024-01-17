@@ -21,6 +21,8 @@ class Coulomb(BasePrior):
         Factor to multiply with coordinates in the dataset to convert them to meters.
     energy_scale : float, optional
         Factor to multiply with energies in the dataset to convert them to Joules (*not* J/mol).
+    box_vecs : torch.Tensor, optional
+        Initial box vectors for periodic boundary conditions. If None, no periodic boundary conditions are used.
     dataset : Dataset
         Dataset object.
 
@@ -29,7 +31,7 @@ class Coulomb(BasePrior):
     The Dataset used with this class must include a `partial_charges` field for each sample, and provide
     `distance_scale` and `energy_scale` attributes if they are not explicitly passed as arguments.
     """
-    def __init__(self, alpha, max_num_neighbors, distance_scale=None, energy_scale=None, dataset=None):
+    def __init__(self, alpha, max_num_neighbors, distance_scale=None, energy_scale=None, box_vecs=None, dataset=None):
         super(Coulomb, self).__init__()
         if distance_scale is None:
             distance_scale = dataset.distance_scale
@@ -40,21 +42,45 @@ class Coulomb(BasePrior):
         self.max_num_neighbors = max_num_neighbors
         self.distance_scale = float(distance_scale)
         self.energy_scale = float(energy_scale)
-
+        self.initial_box = box_vecs
     def get_init_args(self):
         return {'alpha': self.alpha,
                 'max_num_neighbors': self.max_num_neighbors,
                 'distance_scale': self.distance_scale,
-                'energy_scale': self.energy_scale}
+                'energy_scale': self.energy_scale,
+                'initial_box': self.initial_box}
 
     def reset_parameters(self):
         pass
 
-    def post_reduce(self, y, z, pos, batch, extra_args: Optional[Dict[str, torch.Tensor]]):
+    def post_reduce(self, y, z, pos, batch, box: Optional[torch.Tensor] = None, extra_args: Optional[Dict[str, torch.Tensor]] = None):
+        """ Compute the Coulomb energy for each sample in a batch.
+
+        Parameters
+        ----------
+        y : torch.Tensor
+            Tensor of shape (batch_size, 1) containing the energies of each sample in the batch.
+        z : torch.Tensor
+            Tensor of shape (num_atoms,) containing the atom types for each atom in the batch.
+        pos : torch.Tensor
+            Tensor of shape (num_atoms, 3) containing the positions of each atom in the batch.
+        batch : torch.Tensor
+            Tensor of shape (num_atoms,) containing the batch index for each atom in the batch.
+        box : torch.Tensor, optional
+            Tensor of shape (3, 3) containing the box vectors for the batch. If None, use the initial box vectors.
+        extra_args : dict, optional
+            Dictionary of extra arguments. Must contain a `partial_charges` field.
+
+        Returns
+        -------
+        torch.Tensor
+            Tensor of shape (batch_size, 1) containing the energies of each sample in the batch.
+        """
         # Convert to nm and calculate distance.
         x = 1e9*self.distance_scale*pos
         alpha = self.alpha/(1e9*self.distance_scale)
-        edge_index, distance, _ = self.distance(x, batch)
+        box = box if box is not None else self.initial_box
+        edge_index, distance, _ = self.distance(x, batch, box=box)
 
         # Compute the energy, converting to the dataset's units.  Multiply by 0.5 because every atom pair
         # appears twice.

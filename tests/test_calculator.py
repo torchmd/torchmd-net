@@ -5,8 +5,6 @@
 import torch
 from torch.testing import assert_allclose
 import pytest
-from pytest import mark
-from glob import glob
 from os.path import dirname, join
 from torchmdnet.calculators import External
 from torchmdnet.models.model import load_model, create_model
@@ -26,7 +24,8 @@ def test_compare_forward():
     assert_allclose(e_calc, e_pred)
     assert_allclose(f_calc, f_pred.unsqueeze(0))
 
-def test_compare_forward_cuda_graph():
+@pytest.mark.parametrize("box", [None, torch.eye(3)])
+def test_compare_forward_cuda_graph(box):
     if not torch.cuda.is_available():
         pytest.skip("CUDA not available")
     checkpoint = join(dirname(dirname(__file__)), "tests", "example.ckpt")
@@ -57,8 +56,8 @@ def test_compare_forward_cuda_graph():
     calc.model = model
     calc_graph.model = model
     for _ in range(10):
-        e_calc, f_calc = calc.calculate(pos, None)
-        e_pred, f_pred = calc_graph.calculate(pos, None)
+        e_calc, f_calc = calc.calculate(pos, box)
+        e_pred, f_pred = calc_graph.calculate(pos, box)
         assert_allclose(e_calc, e_pred)
         assert_allclose(f_calc, f_pred)
 
