@@ -16,7 +16,7 @@ from torchmdnet.models.utils import (
 
 
 class TorchMD_GN(nn.Module):
-    r"""Graph Network's architecture.
+    r"""Graph Network architecture.
         Code adapted from https://github.com/rusty1s/pytorch_geometric/blob/d7d8e5e2edada182d820bbb1eec5f016f50db1e0/torch_geometric/nn/models/schnet.py#L38
         and used at
         Machine learning coarse-grained potentials of protein thermodynamics; M. Majewski et al.
