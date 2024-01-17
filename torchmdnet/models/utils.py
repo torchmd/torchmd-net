@@ -249,6 +249,9 @@ class OptimizedDistance(torch.nn.Module):
         If `resize_to_fit` is True, the tensors will be trimmed to the actual number of pairs found.
         Otherwise, the tensors will have size `max_num_pairs`, with neighbor pairs (-1, -1) at the end.
         """
+        use_periodic = self.use_periodic
+        if not use_periodic:
+            use_periodic = box is not None
         box = self.box if box is None else box
         assert box is not None, "Box must be provided"
         box = box.to(pos.dtype)
@@ -267,7 +270,7 @@ class OptimizedDistance(torch.nn.Module):
             loop=self.loop,
             include_transpose=self.include_transpose,
             box_vectors=box,
-            use_periodic=self.use_periodic,
+            use_periodic=use_periodic,
         )
         if self.check_errors:
             if num_pairs[0] > max_pairs:
