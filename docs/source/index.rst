@@ -15,12 +15,12 @@ Main reference
 .. code-block:: bibtex
 
     @inproceedings{
-        tholke2021equivariant,
-        title={Equivariant Transformers for Neural Network based Molecular Potentials},
-        author={Philipp Th{\"o}lke and Gianni De Fabritiis},
-        booktitle={International Conference on Learning Representations},
-        year={2022},
-        url={https://openreview.net/forum?id=zNHzqZ9wrRB}
+    tholke2021equivariant,
+    title={Equivariant Transformers for Neural Network based Molecular Potentials},
+    author={Philipp Th{\"o}lke and Gianni De Fabritiis},
+    booktitle={International Conference on Learning Representations},
+    year={2022},
+    url={https://openreview.net/forum?id=zNHzqZ9wrRB}
     }
 
 
