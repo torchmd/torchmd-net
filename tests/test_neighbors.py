@@ -580,8 +580,9 @@ def test_cuda_graph_compatible_backward(
 
 @pytest.mark.parametrize(("device", "strategy"), [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared")])
 @pytest.mark.parametrize("n_batches", [1, 128])
+@pytest.mark.parametrize("use_forward", [True, False])
 def test_per_batch_box(
-    device, strategy, n_batches,
+    device, strategy, n_batches, use_forward
 ):
     dtype = torch.float32
     cutoff = 1.0
@@ -619,12 +620,12 @@ def test_per_batch_box(
         cutoff_upper=cutoff,
         max_num_pairs=max_num_pairs,
         strategy=strategy,
-        box=box,
+        box=box if not use_forward else None,
         return_vecs=True,
         include_transpose=include_transpose,
     )
     batch.to(device)
-    neighbors, distances, distance_vecs = nl(pos, batch)
+    neighbors, distances, distance_vecs = nl(pos, batch, box=box if use_forward else None)
     neighbors = neighbors.cpu().detach().numpy()
     distance_vecs = distance_vecs.cpu().detach().numpy()
     distances = distances.cpu().detach().numpy()
