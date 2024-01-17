@@ -16,7 +16,9 @@ from torchmdnet.models.utils import (
 
 
 class TorchMD_ET(nn.Module):
-    r"""The TorchMD equivariant Transformer architecture.
+    r"""Equivariant Transformer's architecture. From
+    Equivariant Transformers for Neural Network based Molecular Potentials; P. Tholke and G. de Fabritiis.
+    ICLR 2022.
 
     This function optionally supports periodic boundary conditions with arbitrary triclinic boxes.
     For a given cutoff, :math:`r_c`, the box vectors :math:`\vec{a},\vec{b},\vec{c}` must satisfy
