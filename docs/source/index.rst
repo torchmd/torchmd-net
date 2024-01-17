@@ -15,40 +15,46 @@ Main reference
 .. code-block:: bibtex
 
     @inproceedings{
-        tholke2021equivariant,
-        title={Equivariant Transformers for Neural Network based Molecular Potentials},
-        author={Philipp Th{\"o}lke and Gianni De Fabritiis},
-        booktitle={International Conference on Learning Representations},
-        year={2022},
-        url={https://openreview.net/forum?id=zNHzqZ9wrRB}
+    tholke2021equivariant,
+    title={Equivariant Transformers for Neural Network based Molecular Potentials},
+    author={Philipp Th{\"o}lke and Gianni De Fabritiis},
+    booktitle={International Conference on Learning Representations},
+    year={2022},
+    url={https://openreview.net/forum?id=zNHzqZ9wrRB}
     }
+
 
 Graph Network
 ~~~~~~~~~~~~~
 
 .. code-block:: bibtex
 
-    @misc{majewski2022machine,
-          title={Machine Learning Coarse-Grained Potentials of Protein Thermodynamics},
-          author={Maciej Majewski and Adrià Pérez and Philipp Thölke and Stefan Doerr and Nicholas E. Charron and Toni Giorgino and Brooke E. Husic and Cecilia Clementi and Frank Noé and Gianni De Fabritiis},
-          year={2022},
-          eprint={2212.07492},
-          archivePrefix={arXiv},
-          primaryClass={q-bio.BM}
-    }
+  @article{Majewski2023,
+  title = {Machine learning coarse-grained potentials of protein thermodynamics},
+  volume = {14},
+  ISSN = {2041-1723},
+  url = {http://dx.doi.org/10.1038/s41467-023-41343-1},
+  DOI = {10.1038/s41467-023-41343-1},
+  number = {1},
+  journal = {Nature Communications},
+  publisher = {Springer Science and Business Media LLC},
+  author = {Majewski,  Maciej and Pérez,  Adrià and Th\"{o}lke,  Philipp and Doerr,  Stefan and Charron,  Nicholas E. and Giorgino,  Toni and Husic,  Brooke E. and   Clementi,  Cecilia and Noé,  Frank and De Fabritiis,  Gianni},
+  year = {2023},
+  month = sep 
+  }
 
 TensorNet
 ~~~~~~~~~
 
 .. code-block:: bibtex
 
-    @misc{simeon2023tensornet,
-          title={TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials},
-          author={Guillem Simeon and Gianni de Fabritiis},
-          year={2023},
-          eprint={2306.06482},
-          archivePrefix={arXiv},
-          primaryClass={cs.LG}
+    @inproceedings{
+    simeon2023tensornet,
+    title={TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials},
+    author={Guillem Simeon and Gianni De Fabritiis},
+    booktitle={Thirty-seventh Conference on Neural Information Processing Systems},
+    year={2023},
+    url={https://openreview.net/forum?id=BEHlPdBZ2e}
     }
 
 
