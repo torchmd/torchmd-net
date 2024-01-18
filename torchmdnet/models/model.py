@@ -32,6 +32,10 @@ def create_model(args, prior_model=None, mean=None, std=None):
     dtype = dtype_mapping[args["precision"]]
     if "box_vecs" not in args:
         args["box_vecs"] = None
+    if "check_errors" not in args:
+        args["check_errors"] = True
+    if "static_shapes" not in args:
+        args["static_shapes"] = False
     shared_args = dict(
         hidden_channels=args["embedding_dimension"],
         num_layers=args["num_layers"],
@@ -42,6 +46,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         cutoff_lower=args["cutoff_lower"],
         cutoff_upper=args["cutoff_upper"],
         max_z=args["max_z"],
+        check_errors=args["check_errors"],
         max_num_neighbors=args["max_num_neighbors"],
         box_vecs=torch.tensor(args["box_vecs"], dtype=dtype) if args["box_vecs"] is not None else None,
         dtype=dtype,
@@ -87,6 +92,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         is_equivariant = False
         representation_model = TensorNet(
             equivariance_invariance_group=args["equivariance_invariance_group"],
+            static_shapes=args["static_shapes"],
             **shared_args,
         )
     else:
