@@ -3,7 +3,7 @@
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
 from .ace import Ace
-from .ani import ANI1, ANI1CCX, ANI1X
+from .ani import ANI1, ANI1CCX, ANI1X, ANI2X
 from .comp6 import ANIMD, DrugBank, GDB07to09, GDB10to13, Tripeptides, S66X8, COMP6v1
 from .custom import Custom
 from .water import WaterBox
@@ -20,6 +20,7 @@ __all__ = [
     "ANI1",
     "ANI1CCX",
     "ANI1X",
+    "ANI2X",
     "COMP6v1",
     "Custom",
     "DrugBank",
