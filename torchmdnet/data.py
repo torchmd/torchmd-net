@@ -20,6 +20,7 @@ class FloatCastDatasetWrapper(Dataset):
     """A wrapper around a torch_geometric dataset that casts all floating point
     tensors to a given dtype.
     """
+
     def __init__(self, dataset, dtype=torch.float64):
         super(FloatCastDatasetWrapper, self).__init__(
             dataset.root, dataset.transform, dataset.pre_transform, dataset.pre_filter
@@ -79,15 +80,16 @@ class DataModule(LightningDataModule):
                 if self.hparams["dataset_arg"] is not None:
                     dataset_arg = self.hparams["dataset_arg"]
                 if self.hparams["dataset"] == "HDF5":
-                    dataset_arg["dataset_preload_limit"] = self.hparams["dataset_preload_limit"]
+                    dataset_arg["dataset_preload_limit"] = self.hparams[
+                        "dataset_preload_limit"
+                    ]
                 self.dataset = getattr(datasets, self.hparams["dataset"])(
                     self.hparams["dataset_root"], **dataset_arg
                 )
 
-        if self.hparams["precision"] != 32:
-            self.dataset = FloatCastDatasetWrapper(
-                self.dataset, dtype_mapping[self.hparams["precision"]]
-            )
+        self.dataset = FloatCastDatasetWrapper(
+            self.dataset, dtype_mapping[self.hparams["precision"]]
+        )
 
         self.idx_train, self.idx_val, self.idx_test = make_splits(
             len(self.dataset),
