@@ -66,9 +66,9 @@ These requirements correspond to a particular rotation of the system and reduced
 CUDA Graphs
 ============
 
-TensorNet is capturable into a `CUDA graph <https://developer.nvidia.com/blog/cuda-graphs/>`_ with the right options. This can dramatically increase performance during inference.
+TensorNet is capturable into a `CUDA graph <https://developer.nvidia.com/blog/cuda-graphs/>`_ with the right options. This can dramatically increase performance during inference. The dynamically-shaped nature of training makes CUDA graphs not an option in most practical cases.
 
-For that, `check_errors` must be `False` and `static_shapes` must be `True`. Manually capturing a piece of code can be challenging, instead, to take advantage of CUDA graphs you can use :py:mod:`torchmdnet.calculators.External`, which helps integrating a Torchmd-NET model into another code, or `OpenMM-Torch <https://github.com/openmm/openmm-torch>`_ if you are using OpenMM.
+For TensorNet to be CUDA-graph compatible, `check_errors` must be `False` and `static_shapes` must be `True`. Manually capturing a piece of code can be challenging, instead, to take advantage of CUDA graphs you can use :py:mod:`torchmdnet.calculators.External`, which helps integrating a Torchmd-NET model into another code, or `OpenMM-Torch <https://github.com/openmm/openmm-torch>`_ if you are using OpenMM.
 
 
 
