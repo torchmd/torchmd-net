@@ -49,7 +49,7 @@ def test_zbl():
     # Use the ZBL class to compute the energy.
 
     zbl = ZBL(10.0, 5, atomic_number, distance_scale=distance_scale, energy_scale=energy_scale)
-    energy = zbl.post_reduce(torch.zeros((1,)), types, pos, torch.zeros_like(types), {})[0]
+    energy = zbl.post_reduce(torch.zeros((1,)), types, pos, torch.zeros_like(types), None, {})[0]
 
     # Compare to the expected value.
 
@@ -79,7 +79,7 @@ def test_coulomb(dtype):
     # Use the Coulomb class to compute the energy.
 
     coulomb = Coulomb(alpha, 5, distance_scale=distance_scale, energy_scale=energy_scale)
-    energy = coulomb.post_reduce(torch.zeros((1,)), types, pos, torch.zeros_like(types), {'partial_charges':charge})[0]
+    energy = coulomb.post_reduce(torch.zeros((1,)), types, pos, torch.zeros_like(types), extra_args={'partial_charges':charge})[0]
 
     # Compare to the expected value.
 

@@ -16,6 +16,7 @@ __all__ = ["TensorNet"]
 torch.set_float32_matmul_precision("high")
 torch.backends.cuda.matmul.allow_tf32 = True
 
+
 def vector_to_skewtensor(vector):
     """Creates a skew-symmetric tensor from a vector."""
     batch_size = vector.size(0)
@@ -37,6 +38,7 @@ def vector_to_skewtensor(vector):
     tensor = tensor.view(-1, 3, 3)
     return tensor.squeeze(0)
 
+
 def vector_to_symtensor(vector):
     """Creates a symmetric traceless tensor from the outer product of a vector with itself."""
     tensor = torch.matmul(vector.unsqueeze(-1), vector.unsqueeze(-2))
@@ -45,6 +47,7 @@ def vector_to_symtensor(vector):
     ] * torch.eye(3, 3, device=tensor.device, dtype=tensor.dtype)
     S = 0.5 * (tensor + tensor.transpose(-2, -1)) - I
     return S
+
 
 def decompose_tensor(tensor):
     """Full tensor decomposition into irreducible components."""
@@ -55,14 +58,31 @@ def decompose_tensor(tensor):
     S = 0.5 * (tensor + tensor.transpose(-2, -1)) - I
     return I, A, S
 
+
 def tensor_norm(tensor):
     """Computes Frobenius norm."""
     return (tensor**2).sum((-2, -1))
+
 
 class TensorNet(nn.Module):
     r"""TensorNet's architecture. From
     TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials; G. Simeon and G. de Fabritiis.
     NeurIPS 2023.
+
+    This function optionally supports periodic boundary conditions with arbitrary triclinic boxes.
+    For a given cutoff, :math:`r_c`, the box vectors :math:`\vec{a},\vec{b},\vec{c}` must satisfy certain requirements:
+
+    .. math::
+
+      \begin{align*}
+      a_y = a_z = b_z &= 0 \\
+      a_x, b_y, c_z &\geq 2 r_c \\
+      a_x &\geq 2  b_x \\
+      a_x &\geq 2  c_x \\
+      b_y &\geq 2  c_y
+      \end{align*}
+
+    These requirements correspond to a particular rotation of the system and reduced form of the vectors, as well as the requirement that the cutoff be no larger than half the box width.
 
     Args:
         hidden_channels (int, optional): Hidden embedding size.
@@ -90,8 +110,15 @@ class TensorNet(nn.Module):
             positions internal tensor features will be equivariant and scalar predictions
             will be invariant. O(3) or SO(3).
             (default :obj:`"O(3)"`)
+        box_vecs (Tensor, optional):
+            The vectors defining the periodic box.  This must have shape `(3, 3)`,
+            where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
+            If this is omitted, periodic boundary conditions are not applied.
+            (default: :obj:`None`)
         static_shapes (bool, optional): Whether to enforce static shapes.
-            Makes the model CUDA-graph compatible.
+            Makes the model CUDA-graph compatible if check_errors is set to False.
+            (default: :obj:`True`)
+        check_errors (bool, optional): Whether to check for errors in the distance module.
             (default: :obj:`True`)
     """
 
@@ -109,7 +136,9 @@ class TensorNet(nn.Module):
         max_z=128,
         equivariance_invariance_group="O(3)",
         static_shapes=True,
+        check_errors=True,
         dtype=torch.float32,
+        box_vecs=None,
     ):
         super(TensorNet, self).__init__()
 
@@ -176,8 +205,9 @@ class TensorNet(nn.Module):
             max_num_pairs=-max_num_neighbors,
             return_vecs=True,
             loop=True,
-            check_errors=False,
+            check_errors=check_errors,
             resize_to_fit=not self.static_shapes,
+            box=box_vecs,
             long_edge_index=True,
         )
 
@@ -195,11 +225,12 @@ class TensorNet(nn.Module):
         z: Tensor,
         pos: Tensor,
         batch: Tensor,
+        box: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
         # Obtain graph, with distances and relative position vectors
-        edge_index, edge_weight, edge_vec = self.distance(pos, batch)
+        edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
         # This assert convinces TorchScript that edge_vec is a Tensor and not an Optional[Tensor]
         assert (
             edge_vec is not None
@@ -219,7 +250,9 @@ class TensorNet(nn.Module):
             # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
             edge_index = edge_index.masked_fill(mask, z.shape[0])
             edge_weight = edge_weight.masked_fill(mask[0], 0)
-            edge_vec = edge_vec.masked_fill(mask[0].unsqueeze(-1).expand_as(edge_vec), 0)
+            edge_vec = edge_vec.masked_fill(
+                mask[0].unsqueeze(-1).expand_as(edge_vec), 0
+            )
         edge_attr = self.distance_expansion(edge_weight)
         mask = edge_index[0] == edge_index[1]
         # Normalizing edge vectors by their length can result in NaNs, breaking Autograd.
@@ -243,6 +276,7 @@ class TensorEmbedding(nn.Module):
 
     :meta private:
     """
+
     def __init__(
         self,
         hidden_channels,
@@ -359,7 +393,9 @@ class TensorEmbedding(nn.Module):
         return X
 
 
-def tensor_message_passing(edge_index: Tensor, factor: Tensor, tensor: Tensor, natoms: int) -> Tensor:
+def tensor_message_passing(
+    edge_index: Tensor, factor: Tensor, tensor: Tensor, natoms: int
+) -> Tensor:
     """Message passing for tensors."""
     msg = factor * tensor.index_select(0, edge_index[1])
     shape = (natoms, tensor.shape[1], tensor.shape[2], tensor.shape[3])
@@ -373,6 +409,7 @@ class Interaction(nn.Module):
 
     :meta private:
     """
+
     def __init__(
         self,
         num_rbf,
@@ -414,9 +451,13 @@ class Interaction(nn.Module):
             linear.reset_parameters()
 
     def forward(
-        self, X: Tensor, edge_index: Tensor, edge_weight: Tensor, edge_attr: Tensor, q: Tensor
+        self,
+        X: Tensor,
+        edge_index: Tensor,
+        edge_weight: Tensor,
+        edge_attr: Tensor,
+        q: Tensor,
     ) -> Tensor:
-
         C = self.cutoff(edge_weight)
         for linear_scalar in self.linears_scalar:
             edge_attr = self.act(linear_scalar(edge_attr))
@@ -442,7 +483,7 @@ class Interaction(nn.Module):
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(msg, Y)
             B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor((1 + 0.1*q[...,None,None,None])*(A + B))
+            I, A, S = decompose_tensor((1 + 0.1 * q[..., None, None, None]) * (A + B))
         if self.equivariance_invariance_group == "SO(3)":
             B = torch.matmul(Y, msg)
             I, A, S = decompose_tensor(2 * B)
@@ -452,5 +493,5 @@ class Interaction(nn.Module):
         A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         dX = I + A + S
-        X = X + dX + (1 + 0.1*q[...,None,None,None]) * torch.matrix_power(dX, 2)
+        X = X + dX + (1 + 0.1 * q[..., None, None, None]) * torch.matrix_power(dX, 2)
         return X

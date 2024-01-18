@@ -18,12 +18,13 @@ using torch::round;
 using torch::Scalar;
 using torch::Tensor;
 using torch::vstack;
+using torch::indexing::None;
 using torch::indexing::Slice;
 
 static tuple<Tensor, Tensor, Tensor, Tensor>
-forward(const Tensor& positions, const Tensor& batch, const Tensor& box_vectors, bool use_periodic,
-        const Scalar& cutoff_lower, const Scalar& cutoff_upper, const Scalar& max_num_pairs,
-        bool loop, bool include_transpose) {
+forward(const Tensor& positions, const Tensor& batch, const Tensor& in_box_vectors,
+        bool use_periodic, const Scalar& cutoff_lower, const Scalar& cutoff_upper,
+        const Scalar& max_num_pairs, bool loop, bool include_transpose) {
     TORCH_CHECK(positions.dim() == 2, "Expected \"positions\" to have two dimensions");
     TORCH_CHECK(positions.size(0) > 0,
                 "Expected the 1nd dimension size of \"positions\" to be more than 0");
@@ -31,14 +32,23 @@ forward(const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
     TORCH_CHECK(positions.is_contiguous(), "Expected \"positions\" to be contiguous");
 
     TORCH_CHECK(cutoff_upper.to<double>() > 0, "Expected \"cutoff\" to be positive");
+    Tensor box_vectors = in_box_vectors;
+    const int n_batch = batch.max().item<int>() + 1;
     if (use_periodic) {
-        TORCH_CHECK(box_vectors.dim() == 2, "Expected \"box_vectors\" to have two dimensions");
-        TORCH_CHECK(box_vectors.size(0) == 3 && box_vectors.size(1) == 3,
-                    "Expected \"box_vectors\" to have shape (3, 3)");
+        if (box_vectors.dim() == 2) {
+            box_vectors = box_vectors.unsqueeze(0).expand({n_batch, 3, 3});
+        }
+        TORCH_CHECK(box_vectors.dim() == 3, "Expected \"box_vectors\" to have two dimensions");
+        TORCH_CHECK(box_vectors.size(1) == 3 && box_vectors.size(2) == 3,
+                    "Expected \"box_vectors\" to have shape (n_batch, 3, 3)");
+        // Ensure the box first dimension has size max(batch) + 1
+        TORCH_CHECK(box_vectors.size(0) == n_batch,
+                    "Expected \"box_vectors\" to have shape (n_batch, 3, 3)");
+	// Check that the box is a valid triclinic box, in the case of a box per sample we only check the first one
         double v[3][3];
         for (int i = 0; i < 3; i++)
             for (int j = 0; j < 3; j++)
-                v[i][j] = box_vectors[i][j].item<double>();
+                v[i][j] = box_vectors[0][i][j].item<double>();
         double c = cutoff_upper.to<double>();
         TORCH_CHECK(v[0][1] == 0, "Invalid box vectors: box_vectors[0][1] != 0");
         TORCH_CHECK(v[0][2] == 0, "Invalid box vectors: box_vectors[0][2] != 0");
@@ -65,12 +75,25 @@ forward(const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
     deltas = index_select(positions, 0, neighbors.index({0, Slice()})) -
              index_select(positions, 0, neighbors.index({1, Slice()}));
     if (use_periodic) {
-        deltas -= outer(round(deltas.index({Slice(), 2}) / box_vectors.index({2, 2})),
-                        box_vectors.index({2}));
-        deltas -= outer(round(deltas.index({Slice(), 1}) / box_vectors.index({1, 1})),
-                        box_vectors.index({1}));
-        deltas -= outer(round(deltas.index({Slice(), 0}) / box_vectors.index({0, 0})),
-                        box_vectors.index({0}));
+        const auto pair_batch = batch.index({neighbors.index({0, Slice()})});
+        const auto scale3 =
+            round(deltas.index({Slice(), 2}) / box_vectors.index({pair_batch, 2, 2}));
+        deltas.index_put_({Slice(), 0}, deltas.index({Slice(), 0}) -
+                                            scale3 * box_vectors.index({pair_batch, 2, 0}));
+        deltas.index_put_({Slice(), 1}, deltas.index({Slice(), 1}) -
+                                            scale3 * box_vectors.index({pair_batch, 2, 1}));
+        deltas.index_put_({Slice(), 2}, deltas.index({Slice(), 2}) -
+                                            scale3 * box_vectors.index({pair_batch, 2, 2}));
+        const auto scale2 =
+            round(deltas.index({Slice(), 1}) / box_vectors.index({pair_batch, 1, 1}));
+        deltas.index_put_({Slice(), 0}, deltas.index({Slice(), 0}) -
+                                            scale2 * box_vectors.index({pair_batch, 1, 0}));
+        deltas.index_put_({Slice(), 1}, deltas.index({Slice(), 1}) -
+                                            scale2 * box_vectors.index({pair_batch, 1, 1}));
+        const auto scale1 =
+            round(deltas.index({Slice(), 0}) / box_vectors.index({pair_batch, 0, 0}));
+        deltas.index_put_({Slice(), 0}, deltas.index({Slice(), 0}) -
+                                            scale1 * box_vectors.index({pair_batch, 0, 0}));
     }
     distances = frobenius_norm(deltas, 1);
     mask = (distances < cutoff_upper) * (distances >= cutoff_lower);
@@ -94,9 +117,12 @@ forward(const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
 }
 
 TORCH_LIBRARY_IMPL(torchmdnet_extensions, CPU, m) {
-  m.impl("get_neighbor_pairs", [](const std::string &strategy,  const Tensor& positions, const Tensor& batch, const Tensor& box_vectors,
-				    bool use_periodic, const Scalar& cutoff_lower, const Scalar& cutoff_upper,
-              const Scalar& max_num_pairs, bool loop, bool include_transpose) {
-      return forward(positions, batch, box_vectors, use_periodic, cutoff_lower, cutoff_upper, max_num_pairs, loop, include_transpose);
-    });
+    m.impl("get_neighbor_pairs",
+           [](const std::string& strategy, const Tensor& positions, const Tensor& batch,
+              const Tensor& box_vectors, bool use_periodic, const Scalar& cutoff_lower,
+              const Scalar& cutoff_upper, const Scalar& max_num_pairs, bool loop,
+              bool include_transpose) {
+               return forward(positions, batch, box_vectors, use_periodic, cutoff_lower,
+                              cutoff_upper, max_num_pairs, loop, include_transpose);
+           });
 }

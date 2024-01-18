@@ -34,7 +34,7 @@ class ANIBase(Dataset):
     - Smith, J. S., Zubatyuk, R., Nebgen, B., Lubbers, N., Barros, K., Roitberg, A. E., Isayev, O., & Tretiak, S. (2020). The ANI-1ccx and ANI-1x data sets, coupled-cluster and density functional theory properties for molecules. Scientific Data, 7, Article 134.
     """
 
-    HARTREE_TO_EV = 27.211386246 #::meta private:
+    HARTREE_TO_EV = 27.211386246  #::meta private:
 
     @property
     def raw_url(self):
@@ -95,7 +95,6 @@ class ANIBase(Dataset):
         ]
 
     def filter_and_pre_transform(self, data):
-
         if self.pre_filter is not None and not self.pre_filter(data):
             return None
 
@@ -132,7 +131,10 @@ class ANIBase(Dataset):
         )
         neg_dy_mm = (
             np.memmap(
-                neg_dy_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
+                neg_dy_name + ".tmp",
+                mode="w+",
+                dtype=np.float32,
+                shape=(num_all_atoms, 3),
             )
             if has_neg_dy
             else open(neg_dy_name, "w")
@@ -206,12 +208,12 @@ class ANIBase(Dataset):
 class ANI1(ANIBase):
     __doc__ = ANIBase.__doc__
     # Avoid sphinx from documenting this
-    ELEMENT_ENERGIES = {
+    _ELEMENT_ENERGIES = {
         1: -0.500607632585,
         6: -37.8302333826,
         7: -54.5680045287,
         8: -75.0362229210,
-    } #::meta private:
+    }  #::meta private:
 
     @property
     def raw_url(self):
@@ -229,7 +231,6 @@ class ANI1(ANIBase):
         os.remove(archive)
 
     def sample_iter(self, mol_ids=False):
-
         atomic_numbers = {b"H": 1, b"C": 6, b"N": 7, b"O": 8}
 
         for path in tqdm(self.raw_paths, desc="Files"):
@@ -249,7 +250,6 @@ class ANI1(ANIBase):
                 assert all_pos.shape[2] == 3
 
                 for pos, y in zip(all_pos, all_y):
-
                     # Create a sample
                     args = dict(z=z, pos=pos, y=y.view(1, 1))
                     if mol_ids:
@@ -260,8 +260,7 @@ class ANI1(ANIBase):
                         yield data
 
     def get_atomref(self, max_z=100):
-        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior.
-        """
+        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior."""
         refs = pt.zeros(max_z)
         refs[1] = -0.500607632585 * self.HARTREE_TO_EV  # H
         refs[6] = -37.8302333826 * self.HARTREE_TO_EV  # C
@@ -277,7 +276,6 @@ class ANI1(ANIBase):
 
 
 class ANI1XBase(ANIBase):
-
     @property
     def raw_url(self):
         return "https://figshare.com/ndownloader/files/18112775"
@@ -292,8 +290,7 @@ class ANI1XBase(ANIBase):
         os.rename(file, self.raw_paths[0])
 
     def get_atomref(self, max_z=100):
-        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior.
-        """
+        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior."""
         warnings.warn("Atomic references from the ANI-1 dataset are used!")
 
         refs = pt.zeros(max_z)
@@ -307,7 +304,7 @@ class ANI1XBase(ANIBase):
 
 class ANI1X(ANI1XBase):
     __doc__ = ANIBase.__doc__
-    ELEMENT_ENERGIES = {
+    _ELEMENT_ENERGIES = {
         1: -0.500607632585,
         6: -37.8302333826,
         7: -54.5680045287,
@@ -317,13 +314,12 @@ class ANI1X(ANI1XBase):
 
     :meta private:
     """
-    def sample_iter(self, mol_ids=False):
 
+    def sample_iter(self, mol_ids=False):
         assert len(self.raw_paths) == 1
 
         with h5py.File(self.raw_paths[0]) as h5:
             for mol_id, mol in tqdm(h5.items(), desc="Molecules"):
-
                 z = pt.tensor(mol["atomic_numbers"][:], dtype=pt.long)
                 all_pos = pt.tensor(mol["coordinates"][:], dtype=pt.float32)
                 all_y = pt.tensor(
@@ -342,7 +338,6 @@ class ANI1X(ANI1XBase):
                 assert all_neg_dy.shape[2] == 3
 
                 for pos, y, neg_dy in zip(all_pos, all_y, all_neg_dy):
-
                     if y.isnan() or neg_dy.isnan().any():
                         continue
 
@@ -368,13 +363,12 @@ class ANI1X(ANI1XBase):
 
 class ANI1CCX(ANI1XBase):
     __doc__ = ANIBase.__doc__
-    def sample_iter(self, mol_ids=False):
 
+    def sample_iter(self, mol_ids=False):
         assert len(self.raw_paths) == 1
 
         with h5py.File(self.raw_paths[0]) as h5:
             for mol_id, mol in tqdm(h5.items(), desc="Molecules"):
-
                 z = pt.tensor(mol["atomic_numbers"][:], dtype=pt.long)
                 all_pos = pt.tensor(mol["coordinates"][:], dtype=pt.float32)
                 all_y = pt.tensor(
@@ -386,7 +380,6 @@ class ANI1CCX(ANI1XBase):
                 assert all_pos.shape[2] == 3
 
                 for pos, y in zip(all_pos, all_y):
-
                     if y.isnan():
                         continue
 
@@ -403,6 +396,87 @@ class ANI1CCX(ANI1XBase):
     # TODO remove when fixed
     def download(self):
         super().download()
+
+    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
+    # TODO remove when fixed
+    def process(self):
+        super().process()
+
+
+class ANI2X(ANIBase):
+    __doc__ = ANIBase.__doc__
+
+    # Taken from https://github.com/isayev/ASE_ANI/blob/master/ani_models/ani-2x_8x/sae_linfit.dat
+    _ELEMENT_ENERGIES = {
+        1: -0.5978583943827134,  # H
+        6: -38.08933878049795,  # C
+        7: -54.711968298621066,  # N
+        8: -75.19106774742086,  # O
+        9: -99.80348506781634,  # F
+        16: -398.1577125334925,  # S
+        17: -460.1681939421027,  # Cl
+    }
+
+    @property
+    def raw_url(self):
+        return "https://zenodo.org/records/10108942/files/ANI-2x-wB97X-631Gd.tar.gz"
+
+    @property
+    def raw_file_names(self):
+        return [os.path.join("final_h5", "ANI-2x-wB97X-631Gd.h5")]
+
+    def download(self):
+        archive = download_url(self.raw_url, self.raw_dir)
+        extract_tar(archive, self.raw_dir)
+        os.remove(archive)
+
+    def sample_iter(self, mol_ids=False):
+        """
+        In [15]: list(molecules)
+        Out[15]:
+        [('coordinates', <HDF5 dataset "coordinates": shape (5706, 2, 3), type "<f4">),
+        ('energies', <HDF5 dataset "energies": shape (5706,), type "<f8">),
+        ('forces', <HDF5 dataset "forces": shape (5706, 2, 3), type "<f8">),
+        ('species', <HDF5 dataset "species": shape (5706, 2), type "<i8">)]
+        """
+        assert len(self.raw_paths) == 1
+        with h5py.File(self.raw_paths[0]) as h5data:
+            for key, data in tqdm(h5data.items(), desc="Molecule Group", leave=False):
+                all_z = pt.tensor(data["species"][:], dtype=pt.long)
+                all_pos = pt.tensor(data["coordinates"][:], dtype=pt.float32)
+                all_y = pt.tensor(
+                    data["energies"][:] * self.HARTREE_TO_EV, dtype=pt.float64
+                )
+                all_neg_dy = pt.tensor(
+                    data["forces"][:] * self.HARTREE_TO_EV, dtype=pt.float32
+                )
+                n_mols = all_pos.shape[0]
+                n_atoms = all_pos.shape[1]
+
+                assert all_y.shape[0] == n_mols
+                assert all_z.shape == (n_mols, n_atoms)
+                assert all_pos.shape == (n_mols, n_atoms, 3)
+                assert all_neg_dy.shape == (n_mols, n_atoms, 3)
+
+                for i, (pos, y, z, neg_dy) in enumerate(
+                    zip(all_pos, all_y, all_z, all_neg_dy)
+                ):
+                    # Create a sample
+                    args = dict(z=z, pos=pos, y=y.view(1, 1), neg_dy=neg_dy)
+                    if mol_ids:
+                        args["mol_id"] = f"{key}_{i}"
+                    data = Data(**args)
+
+                    if data := self.filter_and_pre_transform(data):
+                        yield data
+
+    def get_atomref(self, max_z=100):
+        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior."""
+        refs = pt.zeros(max_z)
+        for key, val in self._ELEMENT_ENERGIES.items():
+            refs[key] = val * self.HARTREE_TO_EV
+
+        return refs.view(-1, 1)
 
     # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
     # TODO remove when fixed

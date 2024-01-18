@@ -27,6 +27,9 @@ template <typename scalar_t, int num_dims>
 using Accessor = torch::PackedTensorAccessor32<scalar_t, num_dims, torch::RestrictPtrTraits>;
 
 template <typename scalar_t, int num_dims>
+using KernelAccessor = at::TensorAccessor<scalar_t, num_dims, at::RestrictPtrTraits, signed int>;
+
+template <typename scalar_t, int num_dims>
 inline Accessor<scalar_t, num_dims> get_accessor(const Tensor& tensor) {
     return tensor.packed_accessor32<scalar_t, num_dims, torch::RestrictPtrTraits>();
 };
@@ -74,8 +77,9 @@ struct PairList {
              bool use_periodic)
         : i_curr_pair(zeros({1}, options.dtype(torch::kInt))),
           neighbors(full({2, max_num_pairs}, -1, options.dtype(torch::kInt))),
-          deltas(full({max_num_pairs, 3},0, options)), distances(full({max_num_pairs}, 0, options)),
-          loop(loop), include_transpose(include_transpose), use_periodic(use_periodic) {
+          deltas(full({max_num_pairs, 3}, 0, options)),
+          distances(full({max_num_pairs}, 0, options)), loop(loop),
+          include_transpose(include_transpose), use_periodic(use_periodic) {
     }
 };
 
@@ -97,14 +101,14 @@ template <class scalar_t> struct PairListAccessor {
 template <typename scalar_t>
 __device__ void writeAtomPair(PairListAccessor<scalar_t>& list, int i, int j,
                               scalar3<scalar_t> delta, scalar_t distance, int i_pair) {
-  if(i_pair < list.neighbors.size(1)){
-    list.neighbors[0][i_pair] = i;
-    list.neighbors[1][i_pair] = j;
-    list.deltas[i_pair][0] = delta.x;
-    list.deltas[i_pair][1] = delta.y;
-    list.deltas[i_pair][2] = delta.z;
-    list.distances[i_pair] = distance;
-  }
+    if (i_pair < list.neighbors.size(1)) {
+        list.neighbors[0][i_pair] = i;
+        list.neighbors[1][i_pair] = j;
+        list.deltas[i_pair][0] = delta.x;
+        list.deltas[i_pair][1] = delta.y;
+        list.deltas[i_pair][2] = delta.z;
+        list.distances[i_pair] = distance;
+    }
 }
 
 template <typename scalar_t>
@@ -114,7 +118,7 @@ __device__ void addAtomPairToList(PairListAccessor<scalar_t>& list, int i, int j
     // Neighbors after the max number of pairs are ignored, although the pair is counted
     writeAtomPair(list, i, j, delta, distance, i_pair);
     if (add_transpose) {
-      writeAtomPair(list, j, i, {-delta.x, -delta.y, -delta.z}, distance, i_pair + 1);
+        writeAtomPair(list, j, i, {-delta.x, -delta.y, -delta.z}, distance, i_pair + 1);
     }
 }
 
@@ -163,18 +167,12 @@ __device__ auto compute_distance(scalar3<scalar_t> pos_i, scalar3<scalar_t> pos_
 } // namespace rect
 
 namespace triclinic {
-template <typename scalar_t> struct Box {
-    scalar_t size[3][3];
-    Box(const Tensor& box_vectors, bool use_periodic) {
-        if (use_periodic) {
-            for (int i = 0; i < 3; i++) {
-                for (int j = 0; j < 3; j++) {
-                    size[i][j] = box_vectors[i][j].item<scalar_t>();
-                }
-            }
-        }
-    }
-};
+template <class scalar_t> using BoxAccessor = Accessor<scalar_t, 3>;
+template <typename scalar_t>
+BoxAccessor<scalar_t> get_box_accessor(const Tensor& box_vectors, bool use_periodic) {
+    return get_accessor<scalar_t, 3>(box_vectors);
+}
+
 /*
  * @brief Takes a point to the unit cell using Minimum Image
  * Convention
@@ -183,25 +181,25 @@ template <typename scalar_t> struct Box {
  * @return The point in the unit cell
  */
 template <typename scalar_t>
-__device__ auto apply_pbc(scalar3<scalar_t> delta, const Box<scalar_t>& box) {
-    scalar_t scale3 = round(delta.z / box.size[2][2]);
-    delta.x -= scale3 * box.size[2][0];
-    delta.y -= scale3 * box.size[2][1];
-    delta.z -= scale3 * box.size[2][2];
-    scalar_t scale2 = round(delta.y / box.size[1][1]);
-    delta.x -= scale2 * box.size[1][0];
-    delta.y -= scale2 * box.size[1][1];
-    scalar_t scale1 = round(delta.x / box.size[0][0]);
-    delta.x -= scale1 * box.size[0][0];
+__device__ auto apply_pbc(scalar3<scalar_t> delta, const KernelAccessor<scalar_t, 2>& box) {
+    scalar_t scale3 = round(delta.z / box[2][2]);
+    delta.x -= scale3 * box[2][0];
+    delta.y -= scale3 * box[2][1];
+    delta.z -= scale3 * box[2][2];
+    scalar_t scale2 = round(delta.y / box[1][1]);
+    delta.x -= scale2 * box[1][0];
+    delta.y -= scale2 * box[1][1];
+    scalar_t scale1 = round(delta.x / box[0][0]);
+    delta.x -= scale1 * box[0][0];
     return delta;
 }
 
-template <typename scalar_t>
+  template <typename scalar_t>
 __device__ auto compute_distance(scalar3<scalar_t> pos_i, scalar3<scalar_t> pos_j,
-                                 bool use_periodic, const Box<scalar_t>& box) {
+                                 bool use_periodic, const KernelAccessor<scalar_t, 2>& box) {
     scalar3<scalar_t> delta = {pos_i.x - pos_j.x, pos_i.y - pos_j.y, pos_i.z - pos_j.z};
     if (use_periodic) {
-        delta = apply_pbc(delta, box);
+      delta = apply_pbc(delta, box);
     }
     return delta;
 }

@@ -19,7 +19,19 @@ from torchmdnet.utils import deprecated_class
 @deprecated_class
 class TorchMD_T(nn.Module):
     r"""The TorchMD Transformer architecture.
+        This function optionally supports periodic boundary conditions with
+        arbitrary triclinic boxes.  The box vectors `a`, `b`, and `c` must satisfy
+        certain requirements:
 
+        `a[1] = a[2] = b[2] = 0`
+        `a[0] >= 2*cutoff, b[1] >= 2*cutoff, c[2] >= 2*cutoff`
+        `a[0] >= 2*b[0]`
+        `a[0] >= 2*c[0]`
+        `b[1] >= 2*c[1]`
+
+        These requirements correspond to a particular rotation of the system and
+        reduced form of the vectors, as well as the requirement that the cutoff be
+        no larger than half the box width.
     This model is considered deprecated and will be removed in a future release.
     Please refer to https://github.com/torchmd/torchmd-net/pull/240 for more details.
 
@@ -57,6 +69,14 @@ class TorchMD_T(nn.Module):
             higher values if they are using higher upper distance cutoffs and expect more
             than 32 neighbors per node/atom.
             (default: :obj:`32`)
+        box_vecs (Tensor, optional):
+            The vectors defining the periodic box.  This must have shape `(3, 3)`,
+            where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
+            If this is omitted, periodic boundary conditions are not applied.
+            (default: :obj:`None`)
+        check_errors (bool, optional): Whether to check for errors in the distance module.
+            (default: :obj:`True`)
+
     """
 
     def __init__(
@@ -73,9 +93,11 @@ class TorchMD_T(nn.Module):
         distance_influence="both",
         cutoff_lower=0.0,
         cutoff_upper=5.0,
+        check_errors=True,
         max_z=100,
         max_num_neighbors=32,
         dtype=torch.float,
+        box_vecs=None,
     ):
         super(TorchMD_T, self).__init__()
 
@@ -109,8 +131,15 @@ class TorchMD_T(nn.Module):
         self.embedding = nn.Embedding(self.max_z, hidden_channels, dtype=dtype)
 
         self.distance = OptimizedDistance(
-            cutoff_lower, cutoff_upper, max_num_pairs=-max_num_neighbors, loop=True
+            cutoff_lower,
+            cutoff_upper,
+            max_num_pairs=-max_num_neighbors,
+            loop=True,
+            box=box_vecs,
+            long_edge_index=True,
+            check_errors=check_errors,
         )
+
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf, dtype=dtype
         )
@@ -160,12 +189,13 @@ class TorchMD_T(nn.Module):
         z: Tensor,
         pos: Tensor,
         batch: Tensor,
+        box: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
         x = self.embedding(z)
 
-        edge_index, edge_weight, _ = self.distance(pos, batch)
+        edge_index, edge_weight, _ = self.distance(pos, batch, box)
         edge_attr = self.distance_expansion(edge_weight)
 
         if self.neighbor_embedding is not None:

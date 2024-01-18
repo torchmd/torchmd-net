@@ -84,6 +84,6 @@ def test_d2(test_case):
     batch = pt.tensor(data["batch"])
 
     y_init = pt.zeros_like(y_ref)
-    y_res = prior.post_reduce(y_init, z, pos, batch, {})
+    y_res = prior.post_reduce(y_init, z, pos, batch)
 
     pt.testing.assert_allclose(y_res, y_ref)

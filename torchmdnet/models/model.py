@@ -30,6 +30,12 @@ def create_model(args, prior_model=None, mean=None, std=None):
         nn.Module: An instance of the TorchMD_Net model.
     """
     dtype = dtype_mapping[args["precision"]]
+    if "box_vecs" not in args:
+        args["box_vecs"] = None
+    if "check_errors" not in args:
+        args["check_errors"] = True
+    if "static_shapes" not in args:
+        args["static_shapes"] = False
     shared_args = dict(
         hidden_channels=args["embedding_dimension"],
         num_layers=args["num_layers"],
@@ -40,7 +46,11 @@ def create_model(args, prior_model=None, mean=None, std=None):
         cutoff_lower=args["cutoff_lower"],
         cutoff_upper=args["cutoff_upper"],
         max_z=args["max_z"],
+        check_errors=args["check_errors"],
         max_num_neighbors=args["max_num_neighbors"],
+        box_vecs=torch.tensor(args["box_vecs"], dtype=dtype)
+        if args["box_vecs"] is not None
+        else None,
         dtype=dtype,
     )
 
@@ -84,6 +94,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         is_equivariant = False
         representation_model = TensorNet(
             equivariance_invariance_group=args["equivariance_invariance_group"],
+            static_shapes=args["static_shapes"],
             **shared_args,
         )
     else:
@@ -150,11 +161,21 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
     # The following are for backward compatibility with models created when atomref was
     # the only supported prior.
     if "prior_model.initial_atomref" in state_dict:
+        warnings.warn(
+            "prior_model.initial_atomref is deprecated and will be removed in a future version. Use prior_model.0.initial_atomref instead.",
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         state_dict["prior_model.0.initial_atomref"] = state_dict[
             "prior_model.initial_atomref"
         ]
         del state_dict["prior_model.initial_atomref"]
     if "prior_model.atomref.weight" in state_dict:
+        warnings.warn(
+            "prior_model.atomref.weight is deprecated and will be removed in a future version. Use prior_model.0.atomref.weight instead.",
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         state_dict["prior_model.0.atomref.weight"] = state_dict[
             "prior_model.atomref.weight"
         ]
@@ -198,7 +219,7 @@ def create_prior_models(args, dataset=None):
 
 
 class TorchMD_Net(nn.Module):
-    """ The main TorchMD-Net model.
+    """The main TorchMD-Net model.
 
     The TorchMD_Net class combines a given representation model (such as the equivariant transformer),
     an output model (such as the scalar output module), and a prior model (such as the atomref prior).
@@ -281,6 +302,7 @@ class TorchMD_Net(nn.Module):
         z: Tensor,
         pos: Tensor,
         batch: Optional[Tensor] = None,
+        box: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
         extra_args: Optional[Dict[str, Tensor]] = None,
@@ -288,13 +310,34 @@ class TorchMD_Net(nn.Module):
         """
         Compute the output of the model.
 
+        This function optionally supports periodic boundary conditions with
+        arbitrary triclinic boxes.  The box vectors `a`, `b`, and `c` must satisfy
+        certain requirements:
+
+        .. code:: python
+
+           a[1] = a[2] = b[2] = 0
+           a[0] >= 2*cutoff, b[1] >= 2*cutoff, c[2] >= 2*cutoff
+           a[0] >= 2*b[0]
+           a[0] >= 2*c[0]
+           b[1] >= 2*c[1]
+
+
+        These requirements correspond to a particular rotation of the system and
+        reduced form of the vectors, as well as the requirement that the cutoff be
+        no larger than half the box width.
+
         Args:
             z (Tensor): Atomic numbers of the atoms in the molecule. Shape: (N,).
-    	    pos (Tensor): Atomic positions in the molecule. Shape: (N, 3).
-    	    batch (Tensor, optional): Batch indices for the atoms in the molecule. Shape: (N,).
-    	    q (Tensor, optional): Atomic charges in the molecule. Shape: (N,).
-    	    s (Tensor, optional): Atomic spins in the molecule. Shape: (N,).
-    	    extra_args (Dict[str, Tensor], optional): Extra arguments to pass to the prior model.
+            pos (Tensor): Atomic positions in the molecule. Shape: (N, 3).
+            batch (Tensor, optional): Batch indices for the atoms in the molecule. Shape: (N,).
+            box (Tensor, optional): Box vectors. Shape (3, 3).
+            The vectors defining the periodic box.  This must have shape `(3, 3)`,
+            where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
+            If this is omitted, periodic boundary conditions are not applied.
+            q (Tensor, optional): Atomic charges in the molecule. Shape: (N,).
+            s (Tensor, optional): Atomic spins in the molecule. Shape: (N,).
+            extra_args (Dict[str, Tensor], optional): Extra arguments to pass to the prior model.
 
         Returns:
             Tuple[Tensor, Optional[Tensor]]: The output of the model and the derivative of the output with respect to the positions if derivative is True, None otherwise.
@@ -305,7 +348,9 @@ class TorchMD_Net(nn.Module):
         if self.derivative:
             pos.requires_grad_(True)
         # run the potentially wrapped representation model
-        x, v, z, pos, batch = self.representation_model(z, pos, batch, q=q, s=s)
+        x, v, z, pos, batch = self.representation_model(
+            z, pos, batch, box=box, q=q, s=s
+        )
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch)
 
@@ -331,7 +376,7 @@ class TorchMD_Net(nn.Module):
         # apply molecular-wise prior model
         if self.prior_model is not None:
             for prior in self.prior_model:
-                y = prior.post_reduce(y, z, pos, batch, extra_args)
+                y = prior.post_reduce(y, z, pos, batch, box, extra_args)
         # compute gradients with respect to coordinates
 
         if self.derivative:

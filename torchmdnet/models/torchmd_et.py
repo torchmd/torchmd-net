@@ -16,7 +16,25 @@ from torchmdnet.models.utils import (
 
 
 class TorchMD_ET(nn.Module):
-    r"""The TorchMD equivariant Transformer architecture.
+    r"""Equivariant Transformer's architecture. From
+    Equivariant Transformers for Neural Network based Molecular Potentials; P. Tholke and G. de Fabritiis.
+    ICLR 2022.
+
+    This function optionally supports periodic boundary conditions with arbitrary triclinic boxes.
+    For a given cutoff, :math:`r_c`, the box vectors :math:`\vec{a},\vec{b},\vec{c}` must satisfy
+    certain requirements:
+
+    .. math::
+
+      \begin{align*}
+      a_y = a_z = b_z &= 0 \\
+      a_x, b_y, c_z &\geq 2 r_c \\
+      a_x &\geq 2  b_x \\
+      a_x &\geq 2  c_x \\
+      b_y &\geq 2  c_y
+      \end{align*}
+
+    These requirements correspond to a particular rotation of the system and reduced form of the vectors, as well as the requirement that the cutoff be no larger than half the box width.
 
     Args:
         hidden_channels (int, optional): Hidden embedding size.
@@ -52,6 +70,14 @@ class TorchMD_ET(nn.Module):
             higher values if they are using higher upper distance cutoffs and expect more
             than 32 neighbors per node/atom.
             (default: :obj:`32`)
+        box_vecs (Tensor, optional):
+            The vectors defining the periodic box.  This must have shape `(3, 3)`,
+            where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
+            If this is omitted, periodic boundary conditions are not applied.
+            (default: :obj:`None`)
+        check_errors (bool, optional): Whether to check for errors in the distance module.
+            (default: :obj:`True`)
+
     """
 
     def __init__(
@@ -70,6 +96,8 @@ class TorchMD_ET(nn.Module):
         cutoff_upper=5.0,
         max_z=100,
         max_num_neighbors=32,
+        check_errors=True,
+        box_vecs=None,
         dtype=torch.float32,
     ):
         super(TorchMD_ET, self).__init__()
@@ -113,7 +141,9 @@ class TorchMD_ET(nn.Module):
             max_num_pairs=-max_num_neighbors,
             return_vecs=True,
             loop=True,
+            box=box_vecs,
             long_edge_index=True,
+            check_errors=check_errors,
         )
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
@@ -159,13 +189,13 @@ class TorchMD_ET(nn.Module):
         z: Tensor,
         pos: Tensor,
         batch: Tensor,
+        box: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-
         x = self.embedding(z)
 
-        edge_index, edge_weight, edge_vec = self.distance(pos, batch)
+        edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
         # This assert must be here to convince TorchScript that edge_vec is not None
         # If you remove it TorchScript will complain down below that you cannot use an Optional[Tensor]
         assert (
@@ -213,6 +243,7 @@ class EquivariantMultiHeadAttention(nn.Module):
 
     :meta private:
     """
+
     def __init__(
         self,
         hidden_channels,

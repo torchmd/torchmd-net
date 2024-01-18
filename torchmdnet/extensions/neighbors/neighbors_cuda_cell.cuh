@@ -338,13 +338,21 @@ __global__ void traverseCellList(const CellListAccessor<scalar_t> cell_list,
 }
 
 static std::tuple<Tensor, Tensor, Tensor, Tensor>
-forward_cell(const Tensor& positions, const Tensor& batch, const Tensor& box_size,
+forward_cell(const Tensor& positions, const Tensor& batch, const Tensor& in_box_size,
              bool use_periodic, const Scalar& cutoff_lower, const Scalar& cutoff_upper,
              const Scalar& max_num_pairs, bool loop, bool include_transpose) {
     // This module computes the pair list for a given set of particles, which may be in multiple
     // batches. The strategy is to first compute a cell list for all particles, and then
     // traverse the cell list for each particle to construct a pair list.
     checkInput(positions, batch);
+    auto box_size = in_box_size.to("cpu");
+    // If the box has dimensions (1, 3,3) squeeze it
+    if (box_size.dim() == 3) {
+      TORCH_CHECK(box_size.size(0) == 1 && box_size.size(1) == 3 && box_size.size(2) == 3,
+		  "Cell list does not support a box per sample. Expected \"box_size\" to have shape (1, 3, 3) or (3, 3)");
+      box_size = box_size.squeeze(0);
+    }
+
     TORCH_CHECK(box_size.dim() == 2, "Expected \"box_size\" to have two dimensions");
     TORCH_CHECK(box_size.size(0) == 3 && box_size.size(1) == 3,
                 "Expected \"box_size\" to have shape (3, 3)");

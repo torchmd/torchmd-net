@@ -158,7 +158,7 @@ class OptimizedDistance(torch.nn.Module):
             2. *Brute*: A brute force O(N^2) algorithm, best for small number of particles.
             3. *Cell*:  A cell list algorithm, best for large number of particles, low cutoffs and low batch size.
         box : torch.Tensor, optional
-            The vectors defining the periodic box.  This must have shape `(3, 3)`,
+            The vectors defining the periodic box.  This must have shape `(3, 3)` or `(max(batch)+1, 3, 3)` if a ox per sample is desired.
             where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
             If this is omitted, periodic boundary conditions are not applied.
         loop : bool, optional
@@ -212,13 +212,14 @@ class OptimizedDistance(torch.nn.Module):
             if self.strategy == "cell":
                 # Default the box to 3 times the cutoff, really inefficient for the cell list
                 lbox = cutoff_upper * 3.0
-                self.box = torch.tensor([[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]])
-        self.box = self.box.cpu()  # All strategies expect the box to be in CPU memory
+                self.box = torch.tensor([[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]], device="cpu")
+        if self.strategy == "cell":
+            self.box = self.box.cpu()
         self.check_errors = check_errors
         self.long_edge_index = long_edge_index
 
     def forward(
-        self, pos: Tensor, batch: Optional[Tensor] = None
+            self, pos: Tensor, batch: Optional[Tensor] = None, box: Optional[Tensor] = None
     ) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
         """
         Compute the neighbor list for a given cutoff.
@@ -229,7 +230,8 @@ class OptimizedDistance(torch.nn.Module):
             A tensor with shape (N, 3) representing the positions.
         batch : torch.Tensor, optional
             A tensor with shape (N,). Defaults to None.
-
+        box : torch.Tensor, optional
+            The vectors defining the periodic box.  This must have shape `(3, 3)` or `(max(batch)+1, 3, 3)`,
         Returns
         -------
         edge_index : torch.Tensor
@@ -247,8 +249,13 @@ class OptimizedDistance(torch.nn.Module):
         If `resize_to_fit` is True, the tensors will be trimmed to the actual number of pairs found.
         Otherwise, the tensors will have size `max_num_pairs`, with neighbor pairs (-1, -1) at the end.
         """
-        self.box = self.box.to(pos.dtype)
-        max_pairs: int = self.max_num_pairs
+        use_periodic = self.use_periodic
+        if not use_periodic:
+            use_periodic = box is not None
+        box = self.box if box is None else box
+        assert box is not None, "Box must be provided"
+        box = box.to(pos.dtype)
+        max_pairs : int = self.max_num_pairs
         if self.max_num_pairs < 0:
             max_pairs = -self.max_num_pairs * pos.shape[0]
         if batch is None:
@@ -262,8 +269,8 @@ class OptimizedDistance(torch.nn.Module):
             cutoff_upper=self.cutoff_upper,
             loop=self.loop,
             include_transpose=self.include_transpose,
-            box_vectors=self.box,
-            use_periodic=self.use_periodic,
+            box_vectors=box,
+            use_periodic=use_periodic,
         )
         if self.check_errors:
             if num_pairs[0] > max_pairs:

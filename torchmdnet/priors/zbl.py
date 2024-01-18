@@ -71,10 +71,8 @@ class ZBL(BasePrior):
     def reset_parameters(self):
         pass
 
-    def post_reduce(
-        self, y, z, pos, batch, extra_args: Optional[Dict[str, torch.Tensor]]
-    ):
-        edge_index, distance, _ = self.distance(pos, batch)
+    def post_reduce(self, y, z, pos, batch, box: Optional[torch.Tensor] = None, extra_args: Optional[Dict[str, torch.Tensor]] = None):
+        edge_index, distance, _ = self.distance(pos, batch, box)
         if edge_index.shape[1] == 0:
             return y
         atomic_number = self.atomic_number[z[edge_index]]

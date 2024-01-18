@@ -55,6 +55,7 @@ train_size: 110000
 trainable_rbf: false
 val_size: 10000
 weight_decay: 0.0
+box_vecs: null
 precision: 32
 charge: false
 spin: false

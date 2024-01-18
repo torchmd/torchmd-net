@@ -34,6 +34,43 @@ Custom Prior Models
 
 In addition to implementing a custom dataset class, it is also possible to add a custom prior model to the model. This can be done by implementing a new prior model class in :py:mod:`torchmdnet.priors` and adding the argument ``--prior-model <PriorModelName>``. As an example, have a look at :py:mod:`torchmdnet.priors.Atomref`.
 
+Periodic Boundary Conditions
+============================
+
+TorchMD-Net supports periodic boundary conditions with arbitrary triclinic boxes.
+
+Periodic boundary conditions can be enabled in several ways, depending on how you are using TorchMD-Net:
+#. Pass the `box-vecs` option in the :ref:`configuration file <configuration-file>`.
+#. Pass the ``--box-vecs`` argument to the :ref:`torchmd-train <torchmd-train>` utility.
+#. Choose or write a dataset that provides a box for each sample. See for instance the :py:mod:`torchmdnet.datasets.WaterBox` dataset.
+#. You may also send the box vectors directly to a :ref:`neural network potential <neural-network-potentials>` as an argument when running inference, e.g. ``model(z, pos, batch, box=box_vecs)``.
+
+
+For a given cutoff, :math:`r_c`, the box vectors :math:`\vec{a},\vec{b},\vec{c}` must satisfy certain requirements:
+
+.. math::
+	  
+  \begin{align*}
+  a_y = a_z = b_z &= 0 \\
+  a_x, b_y, c_z &\geq 2 r_c \\
+  a_x &\geq 2  b_x \\
+  a_x &\geq 2  c_x \\
+  b_y &\geq 2  c_y
+  \end{align*}
+
+These requirements correspond to a particular rotation of the system and reduced form of the vectors, as well as the requirement that the cutoff be no larger than half the box width.
+
+.. note:: The box defined by the vectors :math:`\vec{a} = (L_x, 0, 0)`, :math:`\vec{b} = (0, L_y, 0)`, and :math:`\vec{c} = (0, 0, L_z)` correspond to a rectangular box. In this case, the input option in the :ref:`configuration file <configuration-file>` would be ``box-vecs: [[L_x, 0, 0], [0, L_y, 0], [0, 0, L_z]]``.
+
+
+CUDA Graphs
+============
+
+TensorNet is capturable into a `CUDA graph <https://developer.nvidia.com/blog/cuda-graphs/>`_ with the right options. This can dramatically increase performance during inference. The dynamically-shaped nature of training makes CUDA graphs not an option in most practical cases.
+
+For TensorNet to be CUDA-graph compatible, `check_errors` must be `False` and `static_shapes` must be `True`. Manually capturing a piece of code can be challenging, instead, to take advantage of CUDA graphs you can use :py:mod:`torchmdnet.calculators.External`, which helps integrating a Torchmd-NET model into another code, or `OpenMM-Torch <https://github.com/openmm/openmm-torch>`_ if you are using OpenMM.
+
+
 
 Multi-Node Training
 ===================
@@ -58,6 +95,7 @@ In order to train models on multiple nodes some environment variables have to be
 	  - Due to the way PyTorch Lightning calculates the number of required DDP processes, all nodes must use the same number of GPUs. Otherwise training will not start or crash.
 	  - We observe a 50x decrease in performance when mixing nodes with different GPU architectures (tested with RTX 2080 Ti and RTX 3090).
 
+	  
 Developer Guide
 ---------------
 

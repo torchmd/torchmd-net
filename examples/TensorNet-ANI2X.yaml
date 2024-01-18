@@ -1,16 +1,14 @@
 activation: silu
 aggr: add
 atom_filter: -1
-batch_size: 16
+batch_size: 64
 coord_files: null
 cutoff_lower: 0.0
-cutoff_upper: 10.0
-dataset: SPICE
-dataset_arg:
- version: 1.1.3
- max_gradient: 50.94
+cutoff_upper: 5.0
+dataset: ANI2X
 dataset_root: ~/data
 derivative: true
+distance_influence: both
 early_stopping_patience: 50
 ema_alpha_neg_dy: 1.0
 ema_alpha_y: 1.0
@@ -18,18 +16,18 @@ embed_files: null
 embedding_dimension: 128
 energy_files: null
 equivariance_invariance_group: O(3)
-y_weight: 0.5
+y_weight: 1
 force_files: null
-neg_dy_weight: 0.5
+neg_dy_weight: 100
 gradient_clipping: 100.0
-inference_batch_size: 16
+inference_batch_size: 64
 load_model: null
 log_dir: logs/
-lr: 0.0001
+lr: 1.0e-3
 lr_factor: 0.5
-lr_min: 1.0e-08
-lr_patience: 5
-lr_warmup_steps: 500
+lr_min: 1.0e-07
+lr_patience: 4
+lr_warmup_steps: 1000
 max_num_neighbors: 128
 max_z: 128
 model: tensornet
@@ -37,7 +35,7 @@ ngpus: -1
 num_epochs: 500
 num_layers: 2
 num_nodes: 1
-num_rbf: 64
+num_rbf: 32
 num_workers: 4
 output_model: Scalar
 precision: 32
@@ -49,12 +47,12 @@ save_interval: 10
 splits: null
 seed: 1
 standardize: false
-test_interval: 10
+test_interval: -1
 test_size: null
 train_size: 0.8
 trainable_rbf: false
 val_size: 0.1
 weight_decay: 0.0
-box_vecs: null
 charge: false
 spin: false
+tensorboard_use: true

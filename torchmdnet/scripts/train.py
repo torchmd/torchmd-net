@@ -4,8 +4,10 @@
 
 import sys
 import os
+import yaml
 import argparse
 import logging
+import torch
 import lightning.pytorch as pl
 from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.loggers import WandbLogger, CSVLogger, TensorBoardLogger
@@ -21,6 +23,7 @@ from torchmdnet.models.model import create_prior_models
 from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping, dtype_mapping
 from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, number
 from lightning_utilities.core.rank_zero import rank_zero_warn
+
 
 def get_argparse():
     # fmt: off
@@ -92,8 +95,15 @@ def get_argparse():
 
     # TensorNet specific
     parser.add_argument('--equivariance-invariance-group', type=str, default='O(3)', help='Equivariance and invariance group of TensorNet')
+    parser.add_argument('--box-vecs', type=lambda x: list(yaml.safe_load(x)), default=None, help="""Box vectors for periodic boundary conditions. The vectors `a`, `b`, and `c` represent a triclinic box and must satisfy
+        certain requirements:
+        `a[1] = a[2] = b[2] = 0`;`a[0] >= 2*cutoff, b[1] >= 2*cutoff, c[2] >= 2*cutoff`;`a[0] >= 2*b[0]`;`a[0] >= 2*c[0]`;`b[1] >= 2*c[1]`;
+        These requirements correspond to a particular rotation of the system and reduced form of the vectors, as well as the requirement that the cutoff be no larger than half the box width.
+    Example: [[1,0,0],[0,1,0],[0,0,1]]""")
+    parser.add_argument('--static_shapes', type=bool, default=False, help='If true, TensorNet will use statically shaped tensors for the network, making it capturable into a CUDA graphs. In some situations static shapes can lead to a speedup, but it increases memory usage.')
 
     # other args
+    parser.add_argument('--check_errors', type=bool, default=True, help='Will check if max_num_neighbors is not enough to contain all neighbors. This is incompatible with CUDA graphs.')
     parser.add_argument('--derivative', default=False, type=bool, help='If true, take the derivative of the prediction w.r.t coordinates')
     parser.add_argument('--cutoff-lower', type=float, default=0.0, help='Lower cutoff in model')
     parser.add_argument('--cutoff-upper', type=float, default=5.0, help='Upper cutoff in model')
@@ -111,8 +121,8 @@ def get_argparse():
     # fmt: on
     return parser
 
-def get_args():
 
+def get_args():
     parser = get_argparse()
     args = parser.parse_args()
     if args.redirect:
@@ -125,6 +135,7 @@ def get_args():
     if args.inference_batch_size is None:
         args.inference_batch_size = args.batch_size
 
+    os.makedirs(os.path.abspath(args.log_dir), exist_ok=True)
     save_argparse(args, os.path.join(args.log_dir, "input.yaml"), exclude=["conf"])
 
     return args
@@ -171,7 +182,7 @@ def main():
 
     if args.tensorboard_use:
         tb_logger = TensorBoardLogger(
-            args.log_dir, name="tensorbord", version="", default_hp_metric=False
+            args.log_dir, name="tensorboard", version="", default_hp_metric=False
         )
         _logger.append(tb_logger)
     if args.test_interval > 0:
