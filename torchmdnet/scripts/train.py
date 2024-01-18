@@ -24,6 +24,7 @@ from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping, dtype_
 from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, number
 from lightning_utilities.core.rank_zero import rank_zero_warn
 
+
 def get_argparse():
     # fmt: off
     parser = argparse.ArgumentParser(description='Training')
@@ -116,8 +117,8 @@ def get_argparse():
     # fmt: on
     return parser
 
-def get_args():
 
+def get_args():
     parser = get_argparse()
     args = parser.parse_args()
     if args.redirect:
@@ -130,6 +131,7 @@ def get_args():
     if args.inference_batch_size is None:
         args.inference_batch_size = args.batch_size
 
+    os.makedirs(os.path.abspath(args.log_dir), exist_ok=True)
     save_argparse(args, os.path.join(args.log_dir, "input.yaml"), exclude=["conf"])
 
     return args
@@ -176,7 +178,7 @@ def main():
 
     if args.tensorboard_use:
         tb_logger = TensorBoardLogger(
-            args.log_dir, name="tensorbord", version="", default_hp_metric=False
+            args.log_dir, name="tensorboard", version="", default_hp_metric=False
         )
         _logger.append(tb_logger)
     if args.test_interval > 0:
