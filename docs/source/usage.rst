@@ -62,6 +62,16 @@ These requirements correspond to a particular rotation of the system and reduced
 
 .. note:: The box defined by the vectors :math:`\vec{a} = (L_x, 0, 0)`, :math:`\vec{b} = (0, L_y, 0)`, and :math:`\vec{c} = (0, 0, L_z)` correspond to a rectangular box. In this case, the input option in the :ref:`configuration file <configuration-file>` would be ``box-vecs: [[L_x, 0, 0], [0, L_y, 0], [0, 0, L_z]]``.
 
+
+CUDA Graphs
+============
+
+TensorNet is capturable into a `CUDA graph <https://developer.nvidia.com/blog/cuda-graphs/>`_ with the right options. This can dramatically increase performance during inference.
+
+For that, `check_errors` must be `False` and `static_shapes` must be `True`. Manually capturing a piece of code can be challenging, instead, to take advantage of CUDA graphs you can use :py:mod:`torchmdnet.calculators.External`, which helps integrating a Torchmd-NET model into another code, or `OpenMM-Torch <https://github.com/openmm/openmm-torch>`_ if you are using OpenMM.
+
+
+
 Multi-Node Training
 ===================
 
@@ -85,6 +95,7 @@ In order to train models on multiple nodes some environment variables have to be
 	  - Due to the way PyTorch Lightning calculates the number of required DDP processes, all nodes must use the same number of GPUs. Otherwise training will not start or crash.
 	  - We observe a 50x decrease in performance when mixing nodes with different GPU architectures (tested with RTX 2080 Ti and RTX 3090).
 
+	  
 Developer Guide
 ---------------
 
