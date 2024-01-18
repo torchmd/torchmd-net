@@ -75,6 +75,8 @@ class TorchMD_ET(nn.Module):
             where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
             If this is omitted, periodic boundary conditions are not applied.
             (default: :obj:`None`)
+        check_errors (bool, optional): Whether to check for errors in the distance module.
+            (default: :obj:`True`)
 
     """
 
@@ -94,6 +96,7 @@ class TorchMD_ET(nn.Module):
         cutoff_upper=5.0,
         max_z=100,
         max_num_neighbors=32,
+        check_errors=True,
         box_vecs=None,
         dtype=torch.float32,
     ):
@@ -140,6 +143,7 @@ class TorchMD_ET(nn.Module):
             loop=True,
             box=box_vecs,
             long_edge_index=True,
+            check_errors=check_errors,
         )
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
