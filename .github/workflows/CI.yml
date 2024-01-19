@@ -44,3 +44,7 @@ jobs:
 
       - name: Run tests
         run: pytest -v -s
+
+      - name: Test torchmd-train utility
+        run: torchmd-train --help
+          

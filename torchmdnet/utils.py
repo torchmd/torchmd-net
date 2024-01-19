@@ -1,9 +1,15 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+
 import yaml
 import argparse
 import numpy as np
 import torch
 from os.path import dirname, join, exists
 from lightning_utilities.core.rank_zero import rank_zero_warn
+import functools
+import warnings
 
 # fmt: off
 # Atomic masses are based on:
@@ -217,3 +223,23 @@ def number(text):
 
 class MissingEnergyException(Exception):
     pass
+
+
+def deprecated_class(cls):
+    """Decorator to mark classes as deprecated."""
+    orig_init = cls.__init__
+
+    @functools.wraps(orig_init)
+    def wrapped_init(self, *args, **kwargs):
+        warnings.simplefilter(
+            "always", DeprecationWarning
+        )  # ensure all deprecation warnings are shown
+        warnings.warn(
+            f"{cls.__name__} is deprecated and will be removed in a future version.",
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
+        orig_init(self, *args, **kwargs)
+
+    cls.__init__ = wrapped_init
+    return cls

@@ -1,4 +1,8 @@
-/* Raul P. Pelaez 2023. Torch extensions to the torchmdnet library.
+/*
+ * Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+ * Distributed under the MIT License.
+ *(See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+ * Raul P. Pelaez 2023. Torch extensions to the torchmdnet library.
  * You can expose functions to python here which will be compatible with TorchScript.
  * Add your exports to the TORCH_LIBRARY macro below, see __init__.py to see how to access them from python.
  * The WITH_CUDA macro will be defined when compiling with CUDA support.

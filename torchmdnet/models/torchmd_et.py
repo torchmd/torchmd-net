@@ -1,18 +1,40 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+
 from typing import Optional, Tuple
 import torch
 from torch import Tensor, nn
-from torch_geometric.nn import MessagePassing
-from torch_scatter import scatter
 from torchmdnet.models.utils import (
     NeighborEmbedding,
     CosineCutoff,
     OptimizedDistance,
     rbf_class_mapping,
     act_class_mapping,
+    scatter,
 )
 
+
 class TorchMD_ET(nn.Module):
-    r"""The TorchMD equivariant Transformer architecture.
+    r"""Equivariant Transformer's architecture. From
+    Equivariant Transformers for Neural Network based Molecular Potentials; P. Tholke and G. de Fabritiis.
+    ICLR 2022.
+
+    This function optionally supports periodic boundary conditions with arbitrary triclinic boxes.
+    For a given cutoff, :math:`r_c`, the box vectors :math:`\vec{a},\vec{b},\vec{c}` must satisfy
+    certain requirements:
+
+    .. math::
+
+      \begin{align*}
+      a_y = a_z = b_z &= 0 \\
+      a_x, b_y, c_z &\geq 2 r_c \\
+      a_x &\geq 2  b_x \\
+      a_x &\geq 2  c_x \\
+      b_y &\geq 2  c_y
+      \end{align*}
+
+    These requirements correspond to a particular rotation of the system and reduced form of the vectors, as well as the requirement that the cutoff be no larger than half the box width.
 
     Args:
         hidden_channels (int, optional): Hidden embedding size.
@@ -48,6 +70,14 @@ class TorchMD_ET(nn.Module):
             higher values if they are using higher upper distance cutoffs and expect more
             than 32 neighbors per node/atom.
             (default: :obj:`32`)
+        box_vecs (Tensor, optional):
+            The vectors defining the periodic box.  This must have shape `(3, 3)`,
+            where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
+            If this is omitted, periodic boundary conditions are not applied.
+            (default: :obj:`None`)
+        check_errors (bool, optional): Whether to check for errors in the distance module.
+            (default: :obj:`True`)
+
     """
 
     def __init__(
@@ -66,6 +96,8 @@ class TorchMD_ET(nn.Module):
         cutoff_upper=5.0,
         max_z=100,
         max_num_neighbors=32,
+        check_errors=True,
+        box_vecs=None,
         dtype=torch.float32,
     ):
         super(TorchMD_ET, self).__init__()
@@ -109,7 +141,9 @@ class TorchMD_ET(nn.Module):
             max_num_pairs=-max_num_neighbors,
             return_vecs=True,
             loop=True,
-            long_edge_index=True
+            box=box_vecs,
+            long_edge_index=True,
+            check_errors=check_errors,
         )
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
@@ -117,7 +151,7 @@ class TorchMD_ET(nn.Module):
         self.neighbor_embedding = (
             NeighborEmbedding(
                 hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z, dtype
-            ).jittable()
+            )
             if neighbor_embedding
             else None
         )
@@ -134,7 +168,7 @@ class TorchMD_ET(nn.Module):
                 cutoff_lower,
                 cutoff_upper,
                 dtype,
-            ).jittable()
+            )
             self.attention_layers.append(layer)
 
         self.out_norm = nn.LayerNorm(hidden_channels, dtype=dtype)
@@ -150,19 +184,18 @@ class TorchMD_ET(nn.Module):
             attn.reset_parameters()
         self.out_norm.reset_parameters()
 
-
     def forward(
         self,
         z: Tensor,
         pos: Tensor,
         batch: Tensor,
+        box: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-
         x = self.embedding(z)
 
-        edge_index, edge_weight, edge_vec = self.distance(pos, batch)
+        edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
         # This assert must be here to convince TorchScript that edge_vec is not None
         # If you remove it TorchScript will complain down below that you cannot use an Optional[Tensor]
         assert (
@@ -205,7 +238,12 @@ class TorchMD_ET(nn.Module):
         )
 
 
-class EquivariantMultiHeadAttention(MessagePassing):
+class EquivariantMultiHeadAttention(nn.Module):
+    """Equivariant multi-head attention layer.
+
+    :meta private:
+    """
+
     def __init__(
         self,
         hidden_channels,
@@ -218,7 +256,7 @@ class EquivariantMultiHeadAttention(MessagePassing):
         cutoff_upper,
         dtype=torch.float32,
     ):
-        super(EquivariantMultiHeadAttention, self).__init__(aggr="add", node_dim=0)
+        super(EquivariantMultiHeadAttention, self).__init__()
         assert hidden_channels % num_heads == 0, (
             f"The number of hidden channels ({hidden_channels}) "
             f"must be evenly divisible by the number of "
@@ -239,7 +277,9 @@ class EquivariantMultiHeadAttention(MessagePassing):
         self.v_proj = nn.Linear(hidden_channels, hidden_channels * 3, dtype=dtype)
         self.o_proj = nn.Linear(hidden_channels, hidden_channels * 3, dtype=dtype)
 
-        self.vec_proj = nn.Linear(hidden_channels, hidden_channels * 3, bias=False, dtype=dtype)
+        self.vec_proj = nn.Linear(
+            hidden_channels, hidden_channels * 3, bias=False, dtype=dtype
+        )
 
         self.dk_proj = None
         if distance_influence in ["keys", "both"]:
@@ -289,8 +329,6 @@ class EquivariantMultiHeadAttention(MessagePassing):
             if self.dv_proj is not None
             else None
         )
-
-        # propagate_type: (q: Tensor, k: Tensor, v: Tensor, vec: Tensor, dk: Tensor, dv: Tensor, r_ij: Tensor, d_ij: Tensor)
         x, vec = self.propagate(
             edge_index,
             q=q,
@@ -301,7 +339,7 @@ class EquivariantMultiHeadAttention(MessagePassing):
             dv=dv,
             r_ij=r_ij,
             d_ij=d_ij,
-            size=None,
+            dim_size=None,
         )
         x = x.reshape(-1, self.hidden_channels)
         vec = vec.reshape(-1, 3, self.hidden_channels)
@@ -311,7 +349,37 @@ class EquivariantMultiHeadAttention(MessagePassing):
         dvec = vec3 * o1.unsqueeze(1) + vec
         return dx, dvec
 
-    def message(self, q_i, k_j, v_j, vec_j, dk, dv, r_ij, d_ij):
+    def propagate(
+        self,
+        edge_index: Tensor,
+        q: Tensor,
+        k: Tensor,
+        v: Tensor,
+        vec: Tensor,
+        dk: Optional[Tensor],
+        dv: Optional[Tensor],
+        r_ij: Tensor,
+        d_ij: Tensor,
+        dim_size: Optional[int],
+    ) -> Tuple[Tensor, Tensor]:
+        q_i = q.index_select(0, edge_index[1])
+        k_j = k.index_select(0, edge_index[0])
+        v_j = v.index_select(0, edge_index[0])
+        vec_j = vec.index_select(0, edge_index[0])
+        x, vec = self.message(q_i, k_j, v_j, vec_j, dk, dv, r_ij, d_ij)
+        return self.aggregate((x, vec), edge_index[1], dim_size=dim_size)
+
+    def message(
+        self,
+        q_i: Tensor,
+        k_j: Tensor,
+        v_j: Tensor,
+        vec_j: Tensor,
+        dk: Optional[Tensor],
+        dv: Optional[Tensor],
+        r_ij: Tensor,
+        d_ij: Tensor,
+    ) -> Tuple[Tensor, Tensor]:
         # attention mechanism
         if dk is None:
             attn = (q_i * k_j).sum(dim=-1)
@@ -338,12 +406,11 @@ class EquivariantMultiHeadAttention(MessagePassing):
         self,
         features: Tuple[torch.Tensor, torch.Tensor],
         index: torch.Tensor,
-        ptr: Optional[torch.Tensor],
         dim_size: Optional[int],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         x, vec = features
-        x = scatter(x, index, dim=self.node_dim, dim_size=dim_size)
-        vec = scatter(vec, index, dim=self.node_dim, dim_size=dim_size)
+        x = scatter(x, index, dim=0, dim_size=dim_size)
+        vec = scatter(vec, index, dim=0, dim_size=dim_size)
         return x, vec
 
     def update(

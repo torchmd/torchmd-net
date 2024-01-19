@@ -1,3 +1,7 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+
 from torchmdnet.priors.base import BasePrior
 from typing import Optional, Dict
 import torch
@@ -38,5 +42,12 @@ class Atomref(BasePrior):
     def get_init_args(self):
         return dict(max_z=self.initial_atomref.size(0))
 
-    def pre_reduce(self, x: Tensor, z: Tensor, pos: Tensor, batch: Tensor, extra_args: Optional[Dict[str, Tensor]]):
+    def pre_reduce(self, x: Tensor, z: Tensor, pos: Tensor, batch: Optional[Tensor] = None, extra_args: Optional[Dict[str, Tensor]] = None):
+        """Adds the stored atomref to the input as:
+
+        .. math::
+
+            x' = x + \\textrm{atomref}(z)
+
+        """
         return x + self.atomref(z)

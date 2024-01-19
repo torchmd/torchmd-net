@@ -1,3 +1,7 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+
 from collections import defaultdict
 import torch
 from torch.optim import AdamW
@@ -65,11 +69,12 @@ class LNNP(LightningModule):
         z: Tensor,
         pos: Tensor,
         batch: Optional[Tensor] = None,
+        box: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
         extra_args: Optional[Dict[str, Tensor]] = None,
     ) -> Tuple[Tensor, Optional[Tensor]]:
-        return self.model(z, pos, batch=batch, q=q, s=s, extra_args=extra_args)
+        return self.model(z, pos, batch=batch, box=box, q=q, s=s, extra_args=extra_args)
 
     def training_step(self, batch, batch_idx):
         return self.step(batch, [mse_loss], "train")
@@ -99,7 +104,9 @@ class LNNP(LightningModule):
         # Returns:
         #   loss_y: loss for the predicted value
         #   loss_neg_y: loss for the predicted negative derivative
-        loss_y, loss_neg_y = 0.0, 0.0
+        loss_y, loss_neg_y = torch.tensor(0.0, device=self.device), torch.tensor(
+            0.0, device=self.device
+        )
         loss_name = loss_fn.__name__
         if self.hparams.derivative and "neg_dy" in batch:
             loss_neg_y = loss_fn(neg_y, batch.neg_dy)
@@ -142,7 +149,7 @@ class LNNP(LightningModule):
         assert self.losses is not None
         with torch.set_grad_enabled(stage == "train" or self.hparams.derivative):
             extra_args = batch.to_dict()
-            for a in ("y", "neg_dy", "z", "pos", "batch", "q", "s"):
+            for a in ("y", "neg_dy", "z", "pos", "batch", "box", "q", "s"):
                 if a in extra_args:
                     del extra_args[a]
             # TODO: the model doesn't necessarily need to return a derivative once
@@ -151,6 +158,7 @@ class LNNP(LightningModule):
                 batch.z,
                 batch.pos,
                 batch=batch.batch,
+                box=batch.box if "box" in batch else None,
                 q=batch.q if self.hparams.charge else None,
                 s=batch.s if self.hparams.spin else None,
                 extra_args=extra_args,

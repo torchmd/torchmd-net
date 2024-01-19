@@ -1,3 +1,7 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+
 from os.path import join
 from tqdm import tqdm
 import torch
@@ -8,11 +12,14 @@ from lightning_utilities.core.rank_zero import rank_zero_warn
 from torchmdnet import datasets
 from torch_geometric.data import Dataset
 from torchmdnet.utils import make_splits, MissingEnergyException
-from torch_scatter import scatter
+from torchmdnet.models.utils import scatter
 from torchmdnet.models.utils import dtype_mapping
 
 
 class FloatCastDatasetWrapper(Dataset):
+    """A wrapper around a torch_geometric dataset that casts all floating point
+    tensors to a given dtype.
+    """
     def __init__(self, dataset, dtype=torch.float64):
         super(FloatCastDatasetWrapper, self).__init__(
             dataset.root, dataset.transform, dataset.pre_transform, dataset.pre_filter
@@ -40,6 +47,16 @@ class FloatCastDatasetWrapper(Dataset):
 
 
 class DataModule(LightningDataModule):
+    """A LightningDataModule for loading datasets from the torchmdnet.datasets module.
+
+    Args:
+        hparams (dict): A dictionary containing the hyperparameters of the
+            dataset. See the documentation of the torchmdnet.datasets module
+            for details.
+        dataset (torch_geometric.data.Dataset): A dataset to use instead of
+            loading a new one from the torchmdnet.datasets module.
+    """
+
     def __init__(self, hparams, dataset=None):
         super(DataModule, self).__init__()
         self.save_hyperparameters(hparams)
@@ -104,16 +121,19 @@ class DataModule(LightningDataModule):
 
     @property
     def atomref(self):
+        """Returns the atomref of the dataset if it has one, otherwise None."""
         if hasattr(self.dataset, "get_atomref"):
             return self.dataset.get_atomref()
         return None
 
     @property
     def mean(self):
+        """Returns the mean of the dataset if it has one, otherwise None."""
         return self._mean
 
     @property
     def std(self):
+        """Returns the standard deviation of the dataset if it has one, otherwise None."""
         return self._std
 
     def _is_test_during_training_epoch(self):
