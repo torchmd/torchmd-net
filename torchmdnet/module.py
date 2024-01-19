@@ -222,7 +222,7 @@ class LNNP(LightningModule):
         if not self.trainer.sanity_checking:
             # construct dict of logged metrics
             result_dict = {
-                "epoch": float(self.current_epoch),
+                "epoch": self.current_epoch,
                 "lr": self.trainer.optimizers[0].param_groups[0]["lr"],
                 "time": time.time() - self.tstart,
             }
