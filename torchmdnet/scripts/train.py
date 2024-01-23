@@ -93,6 +93,9 @@ def get_argparse():
     parser.add_argument('--attn-activation', default='silu', choices=list(act_class_mapping.keys()), help='Attention activation function')
     parser.add_argument('--num-heads', type=int, default=8, help='Number of attention heads')
 
+    # Equivariant Transformer specific
+    parser.add_argument('--vector-cutoff', type=bool, default=False, help='If true, the vector features are weighted by the cutoff function during message passing, forcing the energy to be continuous at the cutoff.')
+
     # TensorNet specific
     parser.add_argument('--equivariance-invariance-group', type=str, default='O(3)', help='Equivariance and invariance group of TensorNet')
     parser.add_argument('--box-vecs', type=lambda x: list(yaml.safe_load(x)), default=None, help="""Box vectors for periodic boundary conditions. The vectors `a`, `b`, and `c` represent a triclinic box and must satisfy
