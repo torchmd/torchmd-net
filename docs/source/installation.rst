@@ -32,7 +32,7 @@ You can skip this section if you only need a CPU installation.
 
 You will need the CUDA compiler (nvcc) and the corresponding development libraries to build TorchMD-Net with CUDA support. You can install CUDA from the `official NVIDIA channel <https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html#conda-installation>`_ or from conda-forge.
 
-The conda-forge channel `changed the way to install CUDA from versions 12 and above <https://github.com/conda-forge/conda-forge.github.io/issues/1963)`_, thus the following instructions depend on whether you need CUDA < 12. If you have a GPU available, conda-forge probably installed the CUDA runtime (not the developer tools) on your system already, you can check with conda:
+The conda-forge channel `changed the way to install CUDA from versions 12 and above <https://github.com/conda-forge/conda-forge.github.io/issues/1963>`_, thus the following instructions depend on whether you need CUDA < 12. If you have a GPU available, conda-forge probably installed the CUDA runtime (not the developer tools) on your system already, you can check with conda:
    
 .. code-block:: shell
 
@@ -74,6 +74,9 @@ The nvidia channel provides the developer tools for CUDA<12.
 .. code-block:: shell
 
       pip install -e .
+
+
+.. note:: Pip installation in CUDA mode requires compiling CUDA source codes, this can take a really long time and the process might appear as if it is "stuck". Run pip with `-vv` to see the compilation process.
 
 This will install TorchMD-NET in editable mode, so that changes to the source code are immediately available.
 Besides making all python utilities available environment-wide, this will also install the ``torchmd-train`` command line utility.
