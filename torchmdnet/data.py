@@ -20,6 +20,7 @@ class FloatCastDatasetWrapper(Dataset):
     """A wrapper around a torch_geometric dataset that casts all floating point
     tensors to a given dtype.
     """
+
     def __init__(self, dataset, dtype=torch.float64):
         super(FloatCastDatasetWrapper, self).__init__(
             dataset.root, dataset.transform, dataset.pre_transform, dataset.pre_filter
@@ -72,14 +73,20 @@ class DataModule(LightningDataModule):
                     self.hparams["embed_files"],
                     self.hparams["energy_files"],
                     self.hparams["force_files"],
+                    self.hparams["dataset_preload_limit"],
                 )
             else:
                 dataset_arg = {}
                 if self.hparams["dataset_arg"] is not None:
                     dataset_arg = self.hparams["dataset_arg"]
+                if self.hparams["dataset"] == "HDF5":
+                    dataset_arg["dataset_preload_limit"] = self.hparams[
+                        "dataset_preload_limit"
+                    ]
                 self.dataset = getattr(datasets, self.hparams["dataset"])(
                     self.hparams["dataset_root"], **dataset_arg
                 )
+
         self.dataset = FloatCastDatasetWrapper(
             self.dataset, dtype_mapping[self.hparams["precision"]]
         )
@@ -150,15 +157,15 @@ class DataModule(LightningDataModule):
 
         if stage == "train":
             batch_size = self.hparams["batch_size"]
-            shuffle = True
         elif stage in ["val", "test"]:
             batch_size = self.hparams["inference_batch_size"]
-            shuffle = False
 
+        shuffle = stage == "train"
         dl = DataLoader(
             dataset=dataset,
             batch_size=batch_size,
             num_workers=self.hparams["num_workers"],
+            persistent_workers=True,
             pin_memory=True,
             shuffle=shuffle,
         )

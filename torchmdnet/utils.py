@@ -224,6 +224,36 @@ def number(text):
 class MissingEnergyException(Exception):
     pass
 
+def write_as_hdf5(files, hdf5_dataset):
+    """Transform the input numpy files to hdf5 format compatible with the HDF5 Dataset class.
+    The input files to this function are the same as the ones required by the Custom dataset.
+    Args:
+        files (dict): Dictionary of numpy input files. Must contain "pos", "z" and at least one of "y" or "neg_dy".
+        hdf5_dataset (string): Path to the output HDF5 dataset.
+    Example:
+        >>> files = {}
+        >>> files["pos"] = sorted(glob.glob(join(tmpdir, "coords*")))
+        >>> files["z"] = sorted(glob.glob(join(tmpdir, "embed*")))
+        >>> files["y"] = sorted(glob.glob(join(tmpdir, "energy*")))
+        >>> files["neg_dy"] = sorted(glob.glob(join(tmpdir, "forces*")))
+        >>> write_as_hdf5(files, join(tmpdir, "test.hdf5"))
+    """
+    import h5py
+    with h5py.File(hdf5_dataset, "w") as f:
+        for i in range(len(files["pos"])):
+            # Create a group for each file
+            coord_data = np.load(files["pos"][i], mmap_mode="r")
+            embed_data = np.load(files["z"][i], mmap_mode="r").astype(int)
+            group = f.create_group(str(i))
+            num_samples = coord_data.shape[0]
+            group.create_dataset("pos", data=coord_data)
+            group.create_dataset("types", data=np.tile(embed_data, (num_samples, 1)))
+            if "y" in files:
+                energy_data = np.load(files["y"][i], mmap_mode="r")
+                group.create_dataset("energy", data=energy_data)
+            if "neg_dy" in files:
+                force_data = np.load(files["neg_dy"][i], mmap_mode="r")
+                group.create_dataset("forces", data=force_data)
 
 def deprecated_class(cls):
     """Decorator to mark classes as deprecated."""
