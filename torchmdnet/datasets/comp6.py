@@ -4,9 +4,9 @@
 
 import h5py
 import numpy as np
-import os
 import torch as pt
 from torch_geometric.data import Data, Dataset, download_url
+from torchmdnet.datasets.memdataset import MemmappedDataset
 from tqdm import tqdm
 
 """
@@ -20,8 +20,7 @@ For more details check:
 """
 
 
-class COMP6Base(Dataset):
-
+class COMP6Base(MemmappedDataset):
     ELEMENT_ENERGIES = {
         1: -0.500607632585,
         6: -37.8302333826,
@@ -39,22 +38,9 @@ class COMP6Base(Dataset):
         pre_filter=None,
     ):
         self.name = self.__class__.__name__
-        super().__init__(root, transform, pre_transform, pre_filter)
-
-        idx_name, z_name, pos_name, y_name, neg_dy_name = self.processed_paths
-        self.idx_mm = np.memmap(idx_name, mode="r", dtype=np.int64)
-        self.z_mm = np.memmap(z_name, mode="r", dtype=np.int8)
-        self.pos_mm = np.memmap(
-            pos_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
+        super().__init__(
+            root, transform, pre_transform, pre_filter, remove_ref_energy=False
         )
-        self.y_mm = np.memmap(y_name, mode="r", dtype=np.float64)
-        self.neg_dy_mm = np.memmap(
-            neg_dy_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
-        )
-
-        assert self.idx_mm[0] == 0
-        assert self.idx_mm[-1] == len(self.z_mm)
-        assert len(self.idx_mm) == len(self.y_mm) + 1
 
     @property
     def raw_url_name(self):
@@ -77,18 +63,7 @@ class COMP6Base(Dataset):
         for url in self.raw_url:
             download_url(url, self.raw_dir)
 
-    @property
-    def processed_file_names(self):
-        return [
-            f"{self.name}.idx.mmap",
-            f"{self.name}.z.mmap",
-            f"{self.name}.pos.mmap",
-            f"{self.name}.y.mmap",
-            f"{self.name}.neg_dy.mmap",
-        ]
-
     def sample_iter(self, mol_ids=False):
-
         for path in tqdm(self.raw_paths, desc="Files"):
             molecules = list(h5py.File(path).values())[0].items()
 
@@ -104,7 +79,6 @@ class COMP6Base(Dataset):
                 all_neg_dy = pt.tensor(
                     mol["forces"][:] * self.HARTREE_TO_EV, dtype=pt.float32
                 )
-                all_y -= self.compute_reference_energy(z)
 
                 assert all_pos.shape[0] == all_y.shape[0]
                 assert all_pos.shape[1] == z.shape[0]
@@ -115,7 +89,6 @@ class COMP6Base(Dataset):
                 assert all_neg_dy.shape[2] == 3
 
                 for pos, y, neg_dy in zip(all_pos, all_y, all_neg_dy):
-
                     # Create a sample
                     args = dict(z=z, pos=pos, y=y.view(1, 1), neg_dy=neg_dy)
                     if mol_ids:
@@ -129,78 +102,6 @@ class COMP6Base(Dataset):
                         data = self.pre_transform(data)
 
                     yield data
-
-    def process(self):
-
-        print("Gathering statistics...")
-        num_all_confs = 0
-        num_all_atoms = 0
-        for data in self.sample_iter():
-            num_all_confs += 1
-            num_all_atoms += data.z.shape[0]
-
-        print(f"  Total number of conformers: {num_all_confs}")
-        print(f"  Total number of atoms: {num_all_atoms}")
-
-        idx_name, z_name, pos_name, y_name, neg_dy_name = self.processed_paths
-        idx_mm = np.memmap(
-            idx_name + ".tmp", mode="w+", dtype=np.int64, shape=(num_all_confs + 1,)
-        )
-        z_mm = np.memmap(
-            z_name + ".tmp", mode="w+", dtype=np.int8, shape=(num_all_atoms,)
-        )
-        pos_mm = np.memmap(
-            pos_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
-        )
-        y_mm = np.memmap(
-            y_name + ".tmp", mode="w+", dtype=np.float64, shape=(num_all_confs,)
-        )
-        neg_dy_mm = np.memmap(
-            neg_dy_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
-        )
-
-        print("Storing data...")
-        i_atom = 0
-        for i_conf, data in enumerate(self.sample_iter()):
-            i_next_atom = i_atom + data.z.shape[0]
-
-            idx_mm[i_conf] = i_atom
-            z_mm[i_atom:i_next_atom] = data.z.to(pt.int8)
-            pos_mm[i_atom:i_next_atom] = data.pos
-            y_mm[i_conf] = data.y
-            neg_dy_mm[i_atom:i_next_atom] = data.neg_dy
-
-            i_atom = i_next_atom
-
-        idx_mm[-1] = num_all_atoms
-        assert i_atom == num_all_atoms
-
-        idx_mm.flush()
-        z_mm.flush()
-        pos_mm.flush()
-        y_mm.flush()
-        neg_dy_mm.flush()
-
-        os.rename(idx_mm.filename, idx_name)
-        os.rename(z_mm.filename, z_name)
-        os.rename(pos_mm.filename, pos_name)
-        os.rename(y_mm.filename, y_name)
-        os.rename(neg_dy_mm.filename, neg_dy_name)
-
-    def len(self):
-        return len(self.y_mm)
-
-    def get(self, idx):
-
-        atoms = slice(self.idx_mm[idx], self.idx_mm[idx + 1])
-        z = pt.tensor(self.z_mm[atoms], dtype=pt.long)
-        pos = pt.tensor(self.pos_mm[atoms], dtype=pt.float32)
-        y = pt.tensor(self.y_mm[idx], dtype=pt.float32).view(
-            1, 1
-        )  # It would be better to use float64, but the trainer complaints
-        neg_dy = pt.tensor(self.neg_dy_mm[atoms], dtype=pt.float32)
-
-        return Data(z=z, pos=pos, y=y, neg_dy=neg_dy)
 
 
 class ANIMD(COMP6Base):
