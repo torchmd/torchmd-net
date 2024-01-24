@@ -75,6 +75,7 @@ class GenentechTorsions(MemmappedDataset):
             deltaE = None
             mol_id = None
             num_atoms = None
+            scan_atoms = None
             z = []
             pos = []
             for line in f:
@@ -93,15 +94,18 @@ class GenentechTorsions(MemmappedDataset):
                             pos=pt.tensor(np.vstack(pos), dtype=pt.float32),
                             y=pt.tensor(deltaE * self.KCALMOL_TO_EV, dtype=pt.float64),
                             mol_id=mol_id,
+                            scan_atoms=scan_atoms,
                         )
                         yield data
-                    z = []
-                    pos = []
+
+                    molstart_count = 0
+                    discard_molecule = False
                     deltaE = None
                     mol_id = None
-                    discard_molecule = False
                     num_atoms = None
-                    molstart_count = 0
+                    scan_atoms = None
+                    z = []
+                    pos = []
                     continue
 
                 # Parsing the atom section
@@ -122,3 +126,5 @@ class GenentechTorsions(MemmappedDataset):
                     deltaE = float(next(f).strip())
                 if line.strip().startswith(">  <Number>"):
                     mol_id = int(next(f).strip())
+                if line.strip().startswith(">  <ScanAtoms_1>"):
+                    scan_atoms = map(int, next(f).strip().split())
