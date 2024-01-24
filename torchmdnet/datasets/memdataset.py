@@ -11,7 +11,7 @@ import os
 class MemmappedDataset(Dataset):
     """Dataset class which stores all the molecular data in memory-mapped files.
 
-    It supports the following properties:
+    It supports the following attributes in the data returned by sample_iter:
 
         - :obj:`z`: Atomic numbers of the atoms.
         - :obj:`pos`: Positions of the atoms.
