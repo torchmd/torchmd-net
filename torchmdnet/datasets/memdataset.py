@@ -9,6 +9,31 @@ import os
 
 
 class MemmappedDataset(Dataset):
+    """Dataset class which stores all the molecular data in memory-mapped files.
+
+    It supports the following properties:
+
+        - :obj:`z`: Atomic numbers of the atoms.
+        - :obj:`pos`: Positions of the atoms.
+        - :obj:`y`: Energy of the conformation.
+        - :obj:`neg_dy`: Forces on the atoms.
+        - :obj:`q`: Total charge of the conformation.
+        - :obj:`pq`: Partial charges of the atoms.
+        - :obj:`dp`: Dipole moment of the conformation.
+
+    The data is stored in the following files:
+
+        - :obj:`name.idx.mmap`: Index of the first atom of each conformation.
+        - :obj:`name.z.mmap`: Atomic numbers of all the atoms.
+        - :obj:`name.pos.mmap`: Positions of all the atoms.
+        - :obj:`name.y.mmap`: Energy of each conformation.
+        - :obj:`name.neg_dy.mmap`: Forces on all the atoms.
+        - :obj:`name.q.mmap`: Total charge of each conformation.
+        - :obj:`name.pq.mmap`: Partial charges of all the atoms.
+        - :obj:`name.dp.mmap`: Dipole moment of each conformation.
+
+    """
+
     def __init__(
         self,
         root,
