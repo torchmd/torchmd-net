@@ -99,7 +99,12 @@ class SPICE(MemmappedDataset):
         self.max_gradient = max_gradient
         self.subsample_molecules = int(subsample_molecules)
         super().__init__(
-            root, transform, pre_transform, pre_filter, remove_ref_energy=False
+            root,
+            transform,
+            pre_transform,
+            pre_filter,
+            remove_ref_energy=False,
+            properties=("y", "neg_dy"),
         )
 
     def sample_iter(self, mol_ids=False):

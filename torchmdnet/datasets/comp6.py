@@ -39,7 +39,12 @@ class COMP6Base(MemmappedDataset):
     ):
         self.name = self.__class__.__name__
         super().__init__(
-            root, transform, pre_transform, pre_filter, remove_ref_energy=False
+            root,
+            transform,
+            pre_transform,
+            pre_filter,
+            remove_ref_energy=False,
+            properties=("y", "neg_dy"),
         )
 
     @property
@@ -79,6 +84,7 @@ class COMP6Base(MemmappedDataset):
                 all_neg_dy = pt.tensor(
                     mol["forces"][:] * self.HARTREE_TO_EV, dtype=pt.float32
                 )
+                all_y -= self.compute_reference_energy(z)
 
                 assert all_pos.shape[0] == all_y.shape[0]
                 assert all_pos.shape[1] == z.shape[0]

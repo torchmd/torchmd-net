@@ -41,9 +41,11 @@ class MemmappedDataset(Dataset):
         pre_transform=None,
         pre_filter=None,
         remove_ref_energy=False,
+        properties=("y", "neg_dy", "q", "pq", "dp"),
     ):
         self.name = self.__class__.__name__
         self.remove_ref_energy = remove_ref_energy
+        self.properties = properties
         super().__init__(root, transform, pre_transform, pre_filter)
 
         self.idx_mm = np.memmap(self.fname("idx"), mode="r", dtype=np.int64)
@@ -76,6 +78,12 @@ class MemmappedDataset(Dataset):
     def fname(self, prop):
         return f"{self.name}.{prop}.mmap"
 
+    @property
+    def processed_file_names(self):
+        return [
+            self.fname(prop) for prop in ["idx", "z", "pos"] + list(self.properties)
+        ]
+
     @staticmethod
     def compute_reference_energy(self):
         raise NotImplementedError
@@ -90,12 +98,6 @@ class MemmappedDataset(Dataset):
         for data in self.sample_iter():
             num_all_confs += 1
             num_all_atoms += data.z.shape[0]
-
-        self.properties = []
-        for prop in ("y", "neg_dy", "q", "pq", "dp"):
-            if prop in data:
-                self.properties.append(prop)
-        self.properties = tuple(self.properties)
 
         print(f"  Total number of conformers: {num_all_confs}")
         print(f"  Total number of atoms: {num_all_atoms}")

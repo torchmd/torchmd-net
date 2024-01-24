@@ -62,7 +62,12 @@ class ANIBase(MemmappedDataset):
     ):
         self.name = self.__class__.__name__
         super().__init__(
-            root, transform, pre_transform, pre_filter, remove_ref_energy=True
+            root,
+            transform,
+            pre_transform,
+            pre_filter,
+            remove_ref_energy=True,
+            properties=("y", "neg_dy"),
         )
 
     def filter_and_pre_transform(self, data):

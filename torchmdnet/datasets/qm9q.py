@@ -42,7 +42,12 @@ class QM9q(MemmappedDataset):
         self.name = self.__class__.__name__
         self.paths = str(paths)
         super().__init__(
-            root, transform, pre_transform, pre_filter, remove_ref_energy=False
+            root,
+            transform,
+            pre_transform,
+            pre_filter,
+            remove_ref_energy=False,
+            properties=("y", "neg_dy", "q", "pq", "dp"),
         )
 
     @property
