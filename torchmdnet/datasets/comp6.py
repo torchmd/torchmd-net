@@ -5,10 +5,11 @@
 import h5py
 import numpy as np
 import torch as pt
-from torch_geometric.data import Data, Dataset, download_url
+from torch_geometric.data import Data, Dataset, download_url, extract_tar
 from torchmdnet.datasets.memdataset import MemmappedDataset
 from tqdm import tqdm
 from torchmdnet.datasets.ani import ANIBase
+import os
 
 """
 COmprehensive Machine-learning Potential (COMP6) Benchmark Suite
