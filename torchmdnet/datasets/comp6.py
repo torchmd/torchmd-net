@@ -318,7 +318,15 @@ class COMP6v1(Dataset):
 
 
 class COMP6v2(ANIBase):
-    __doc__ = ANIBase.__doc__
+    """Dataset for the COmprehensive Machine-learning Potential (COMP6) Benchmark Suite version 2.0
+
+    COMP6v2 is a data set of density functional properties for molecules containing H, C, N, O, S, F, and Cl.
+    It is available at the following levels of theory but here we use wB97X/631Gd.
+
+    References:
+
+    - https://pubs.acs.org/doi/10.1021/acs.jctc.0c00121
+    """
 
     # Taken from https://github.com/isayev/ASE_ANI/blob/master/ani_models/ani-2x_8x/sae_linfit.dat
     _ELEMENT_ENERGIES = {
