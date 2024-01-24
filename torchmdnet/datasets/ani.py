@@ -6,12 +6,13 @@ import h5py
 import numpy as np
 import os
 import torch as pt
-from torch_geometric.data import Data, Dataset, download_url, extract_tar
+from torch_geometric.data import Data, download_url, extract_tar
+from torchmdnet.datasets.memdataset import MemmappedDataset
 from tqdm import tqdm
 import warnings
 
 
-class ANIBase(Dataset):
+class ANIBase(MemmappedDataset):
     """ANI Dataset Classes
 
     A foundational dataset class for handling the ANI datasets. ANI (ANAKIN-ME or Accurate NeurAl networK engINe for Molecular Energies)
@@ -49,9 +50,6 @@ class ANIBase(Dataset):
         energy = sum(self._ELEMENT_ENERGIES[z] for z in atomic_numbers)
         return energy * ANIBase.HARTREE_TO_EV
 
-    def sample_iter(self, mol_ids=False):
-        raise NotImplementedError()
-
     def get_atomref(self, max_z=100):
         raise NotImplementedError()
 
@@ -63,36 +61,14 @@ class ANIBase(Dataset):
         pre_filter=None,
     ):
         self.name = self.__class__.__name__
-        super().__init__(root, transform, pre_transform, pre_filter)
-
-        idx_name, z_name, pos_name, y_name, neg_dy_name = self.processed_paths
-        self.idx_mm = np.memmap(idx_name, mode="r", dtype=np.int64)
-        self.z_mm = np.memmap(z_name, mode="r", dtype=np.int8)
-        self.pos_mm = np.memmap(
-            pos_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
+        super().__init__(
+            root,
+            transform,
+            pre_transform,
+            pre_filter,
+            remove_ref_energy=True,
+            properties=("y", "neg_dy"),
         )
-        self.y_mm = np.memmap(y_name, mode="r", dtype=np.float64)
-        self.neg_dy_mm = (
-            np.memmap(
-                neg_dy_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
-            )
-            if os.path.getsize(neg_dy_name) > 0
-            else None
-        )
-
-        assert self.idx_mm[0] == 0
-        assert self.idx_mm[-1] == len(self.z_mm)
-        assert len(self.idx_mm) == len(self.y_mm) + 1
-
-    @property
-    def processed_file_names(self):
-        return [
-            f"{self.name}.idx.mmap",
-            f"{self.name}.z.mmap",
-            f"{self.name}.pos.mmap",
-            f"{self.name}.y.mmap",
-            f"{self.name}.neg_dy.mmap",
-        ]
 
     def filter_and_pre_transform(self, data):
         if self.pre_filter is not None and not self.pre_filter(data):
@@ -102,107 +78,6 @@ class ANIBase(Dataset):
             data = self.pre_transform(data)
 
         return data
-
-    def process(self):
-        print("Gathering statistics...")
-        num_all_confs = 0
-        num_all_atoms = 0
-        for data in self.sample_iter():
-            num_all_confs += 1
-            num_all_atoms += data.z.shape[0]
-        has_neg_dy = "neg_dy" in data
-
-        print(f"  Total number of conformers: {num_all_confs}")
-        print(f"  Total number of atoms: {num_all_atoms}")
-        print(f"  Forces available: {has_neg_dy}")
-
-        idx_name, z_name, pos_name, y_name, neg_dy_name = self.processed_paths
-        idx_mm = np.memmap(
-            idx_name + ".tmp", mode="w+", dtype=np.int64, shape=(num_all_confs + 1,)
-        )
-        z_mm = np.memmap(
-            z_name + ".tmp", mode="w+", dtype=np.int8, shape=(num_all_atoms,)
-        )
-        pos_mm = np.memmap(
-            pos_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
-        )
-        y_mm = np.memmap(
-            y_name + ".tmp", mode="w+", dtype=np.float64, shape=(num_all_confs,)
-        )
-        neg_dy_mm = (
-            np.memmap(
-                neg_dy_name + ".tmp",
-                mode="w+",
-                dtype=np.float32,
-                shape=(num_all_atoms, 3),
-            )
-            if has_neg_dy
-            else open(neg_dy_name, "w")
-        )
-
-        print("Storing data...")
-        i_atom = 0
-        for i_conf, data in enumerate(self.sample_iter()):
-            i_next_atom = i_atom + data.z.shape[0]
-
-            idx_mm[i_conf] = i_atom
-            z_mm[i_atom:i_next_atom] = data.z.to(pt.int8)
-            pos_mm[i_atom:i_next_atom] = data.pos
-            y_mm[i_conf] = data.y
-            if has_neg_dy:
-                neg_dy_mm[i_atom:i_next_atom] = data.neg_dy
-
-            i_atom = i_next_atom
-
-        idx_mm[-1] = num_all_atoms
-        assert i_atom == num_all_atoms
-
-        idx_mm.flush()
-        z_mm.flush()
-        pos_mm.flush()
-        y_mm.flush()
-        if has_neg_dy:
-            neg_dy_mm.flush()
-
-        os.rename(idx_mm.filename, idx_name)
-        os.rename(z_mm.filename, z_name)
-        os.rename(pos_mm.filename, pos_name)
-        os.rename(y_mm.filename, y_name)
-        if has_neg_dy:
-            os.rename(neg_dy_mm.filename, neg_dy_name)
-
-    def len(self):
-        return len(self.y_mm)
-
-    def get(self, idx):
-        """Get a single sample from the dataset.
-
-        Data object contains the following attributes by default:
-
-        - :obj:`z` (:class:`torch.LongTensor`): Atomic numbers of shape :obj:`[num_nodes]`.
-        - :obj:`pos` (:class:`torch.FloatTensor`): Atomic positions of shape :obj:`[num_nodes, 3]`.
-        - :obj:`y` (:class:`torch.FloatTensor`): Energies of shape :obj:`[1, 1]`.
-        - :obj:`neg_dy` (:class:`torch.FloatTensor`, *optional*): Negative gradients of shape :obj:`[num_nodes, 3]`.
-
-        Args:
-            idx (int): Index of the sample.
-
-        Returns:
-            :class:`torch_geometric.data.Data`: The data object.
-        """
-        atoms = slice(self.idx_mm[idx], self.idx_mm[idx + 1])
-        z = pt.tensor(self.z_mm[atoms], dtype=pt.long)
-        pos = pt.tensor(self.pos_mm[atoms], dtype=pt.float32)
-        y = pt.tensor(self.y_mm[idx], dtype=pt.float32).view(
-            1, 1
-        )  # It would be better to use float64, but the trainer complaints
-        y -= self.compute_reference_energy(z)
-
-        if self.neg_dy_mm is None:
-            return Data(z=z, pos=pos, y=y)
-        else:
-            neg_dy = pt.tensor(self.neg_dy_mm[atoms], dtype=pt.float32)
-            return Data(z=z, pos=pos, y=y, neg_dy=neg_dy)
 
 
 class ANI1(ANIBase):
