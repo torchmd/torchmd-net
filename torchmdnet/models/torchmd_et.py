@@ -301,14 +301,20 @@ class EquivariantMultiHeadAttention(nn.Module):
     def reset_parameters(self):
         self.layernorm.reset_parameters()
         nn.init.xavier_uniform_(self.q_proj.weight)
+        self.q_proj.bias.data.fill_(0)
         nn.init.xavier_uniform_(self.k_proj.weight)
+        self.k_proj.bias.data.fill_(0)
         nn.init.xavier_uniform_(self.v_proj.weight)
+        self.v_proj.bias.data.fill_(0)
         nn.init.xavier_uniform_(self.o_proj.weight)
+        self.o_proj.bias.data.fill_(0)
         nn.init.xavier_uniform_(self.vec_proj.weight)
         if self.dk_proj:
             nn.init.xavier_uniform_(self.dk_proj.weight)
+            self.dk_proj.bias.data.fill_(0)
         if self.dv_proj:
             nn.init.xavier_uniform_(self.dv_proj.weight)
+            self.dv_proj.bias.data.fill_(0)
 
     def forward(self, x, vec, edge_index, r_ij, f_ij, d_ij):
         x = self.layernorm(x)
