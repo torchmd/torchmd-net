@@ -15,7 +15,6 @@ from torchmdnet.models.utils import (
 )
 from torchmdnet.utils import deprecated_class
 
-@deprecated_class
 class TorchMD_ET(nn.Module):
     r"""Equivariant Transformer's architecture. From
     Equivariant Transformers for Neural Network based Molecular Potentials; P. Tholke and G. de Fabritiis.
