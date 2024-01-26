@@ -86,6 +86,9 @@ class COMP6Base(MemmappedDataset):
                 all_neg_dy = pt.tensor(
                     mol["forces"][:] * self.HARTREE_TO_EV, dtype=pt.float32
                 )
+                all_neg_dy = (
+                    -all_neg_dy
+                )  # The COMP6 datasets accidentally have gradients as forces
                 all_y -= self.compute_reference_energy(z)
 
                 assert all_pos.shape[0] == all_y.shape[0]
