@@ -22,6 +22,7 @@ from .md22 import MD22
 from .qm9 import QM9
 from .qm9q import QM9q
 from .spice import SPICE
+from .genentech import GenentechTorsions
 
 __all__ = [
     "Ace",
@@ -36,6 +37,7 @@ __all__ = [
     "DrugBank",
     "GDB07to09",
     "GDB10to13",
+    "GenentechTorsions",
     "HDF5",
     "MD17",
     "MD22",
