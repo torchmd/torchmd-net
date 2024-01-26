@@ -58,3 +58,4 @@ weight_decay: 0.0
 box_vecs: null
 charge: false
 spin: false
+vector_cutoff: true
