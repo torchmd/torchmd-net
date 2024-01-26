@@ -13,7 +13,7 @@ from torchmdnet.models.utils import (
     act_class_mapping,
     scatter,
 )
-
+from torchmdnet.utils import deprecated_class
 
 class TorchMD_ET(nn.Module):
     r"""Equivariant Transformer's architecture. From
@@ -75,6 +75,8 @@ class TorchMD_ET(nn.Module):
             where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
             If this is omitted, periodic boundary conditions are not applied.
             (default: :obj:`None`)
+        vector_cutoff (bool, optional): Whether to apply the cutoff to the vector features. This prevents the energy from being discontinuous at the cutoff, but may hinder training.
+            (default: :obj:`False`)
         check_errors (bool, optional): Whether to check for errors in the distance module.
             (default: :obj:`True`)
 
@@ -98,6 +100,7 @@ class TorchMD_ET(nn.Module):
         max_num_neighbors=32,
         check_errors=True,
         box_vecs=None,
+        vector_cutoff=False,
         dtype=torch.float32,
     ):
         super(TorchMD_ET, self).__init__()
@@ -167,6 +170,7 @@ class TorchMD_ET(nn.Module):
                 attn_activation,
                 cutoff_lower,
                 cutoff_upper,
+                vector_cutoff,
                 dtype,
             )
             self.attention_layers.append(layer)
@@ -254,6 +258,7 @@ class EquivariantMultiHeadAttention(nn.Module):
         attn_activation,
         cutoff_lower,
         cutoff_upper,
+        vector_cutoff=False,
         dtype=torch.float32,
     ):
         super(EquivariantMultiHeadAttention, self).__init__()
@@ -288,6 +293,7 @@ class EquivariantMultiHeadAttention(nn.Module):
         self.dv_proj = None
         if distance_influence in ["values", "both"]:
             self.dv_proj = nn.Linear(num_rbf, hidden_channels * 3, dtype=dtype)
+        self.vector_cutoff = vector_cutoff
 
         self.reset_parameters()
 
@@ -387,8 +393,17 @@ class EquivariantMultiHeadAttention(nn.Module):
             attn = (q_i * k_j * dk).sum(dim=-1)
 
         # attention activation function
-        attn = self.attn_activation(attn) * self.cutoff(r_ij).unsqueeze(1)
+        cutoff = self.cutoff(r_ij).unsqueeze(1)
+        attn = self.attn_activation(attn)
 
+        # The original ET arquitecture only weights the attention with the cutoff function,
+        #  this causes a discontinuity in the energy at the cutoff, since the bias of the dv_proj
+        #  layer might be non-zero.
+        # This option makes it so that both the scalar and vector features are weighted with the cutoff.
+        if self.vector_cutoff:
+            v_j = v_j * cutoff.unsqueeze(2)
+        else:
+            attn = attn * cutoff
         # value pathway
         if dv is not None:
             v_j = v_j * dv

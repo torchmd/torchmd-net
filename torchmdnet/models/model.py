@@ -36,6 +36,9 @@ def create_model(args, prior_model=None, mean=None, std=None):
         args["check_errors"] = True
     if "static_shapes" not in args:
         args["static_shapes"] = False
+    if "vector_cutoff" not in args:
+        args["vector_cutoff"] = False
+
     shared_args = dict(
         hidden_channels=args["embedding_dimension"],
         num_layers=args["num_layers"],
@@ -85,6 +88,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
             num_heads=args["num_heads"],
             distance_influence=args["distance_influence"],
             neighbor_embedding=args["neighbor_embedding"],
+            vector_cutoff=args["vector_cutoff"],
             **shared_args,
         )
     elif args["model"] == "tensornet":
