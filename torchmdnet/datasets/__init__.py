@@ -4,7 +4,16 @@
 
 from .ace import Ace
 from .ani import ANI1, ANI1CCX, ANI1X, ANI2X
-from .comp6 import ANIMD, DrugBank, GDB07to09, GDB10to13, Tripeptides, S66X8, COMP6v1
+from .comp6 import (
+    ANIMD,
+    DrugBank,
+    GDB07to09,
+    GDB10to13,
+    Tripeptides,
+    S66X8,
+    COMP6v1,
+    COMP6v2,
+)
 from .custom import Custom
 from .water import WaterBox
 from .hdf import HDF5
@@ -22,6 +31,7 @@ __all__ = [
     "ANI1X",
     "ANI2X",
     "COMP6v1",
+    "COMP6v2",
     "Custom",
     "DrugBank",
     "GDB07to09",
