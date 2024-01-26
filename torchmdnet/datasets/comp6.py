@@ -8,6 +8,7 @@ import torch as pt
 from torch_geometric.data import Data, Dataset, download_url
 from torchmdnet.datasets.memdataset import MemmappedDataset
 from tqdm import tqdm
+import os
 
 """
 COmprehensive Machine-learning Potential (COMP6) Benchmark Suite
@@ -98,7 +99,7 @@ class COMP6Base(MemmappedDataset):
                     # Create a sample
                     args = dict(z=z, pos=pos, y=y.view(1, 1), neg_dy=neg_dy)
                     if mol_ids:
-                        args["mol_id"] = mol_id
+                        args["mol_id"] = f"{os.path.basename(path)}_{mol_id}"
                     data = Data(**args)
 
                     if self.pre_filter is not None and not self.pre_filter(data):
