@@ -144,11 +144,6 @@ class ANI1(ANIBase):
 
         return refs.view(-1, 1)
 
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def process(self):
-        super().process()
-
 
 class ANI1XBase(ANIBase):
     @property
@@ -225,16 +220,6 @@ class ANI1X(ANI1XBase):
                     if data := self.filter_and_pre_transform(data):
                         yield data
 
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def download(self):
-        super().download()
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def process(self):
-        super().process()
-
 
 class ANI1CCX(ANI1XBase):
     __doc__ = ANIBase.__doc__
@@ -266,16 +251,6 @@ class ANI1CCX(ANI1XBase):
 
                     if data := self.filter_and_pre_transform(data):
                         yield data
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def download(self):
-        super().download()
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def process(self):
-        super().process()
 
 
 class ANI2X(ANIBase):
@@ -352,8 +327,3 @@ class ANI2X(ANIBase):
             refs[key] = val * self.HARTREE_TO_EV
 
         return refs.view(-1, 1)
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def process(self):
-        super().process()

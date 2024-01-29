@@ -135,17 +135,6 @@ class ANIMD(COMP6Base):
     def raw_file_names(self):
         return ["ani_md_bench.h5"]
 
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def download(self):
-        super().download()
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def process(self):
-        super().process()
-
-
 class DrugBank(COMP6Base):
     """
     DrugBank Benchmark. This benchmark is developed through a subsampling of the
@@ -160,16 +149,6 @@ class DrugBank(COMP6Base):
     @property
     def raw_file_names(self):
         return ["drugbank_testset.h5"]
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def download(self):
-        super().download()
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def process(self):
-        super().process()
 
 
 class GDB07to09(COMP6Base):
@@ -186,16 +165,6 @@ class GDB07to09(COMP6Base):
     @property
     def raw_file_names(self):
         return ["gdb11_07_test500.h5", "gdb11_08_test500.h5", "gdb11_09_test500.h5"]
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def download(self):
-        super().download()
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def process(self):
-        super().process()
 
 
 class GDB10to13(COMP6Base):
@@ -216,16 +185,6 @@ class GDB10to13(COMP6Base):
             "gdb13_13_test1000.h5",
         ]
 
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def download(self):
-        super().download()
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def process(self):
-        super().process()
-
 
 class Tripeptides(COMP6Base):
     """
@@ -240,16 +199,6 @@ class Tripeptides(COMP6Base):
     @property
     def raw_file_names(self):
         return ["tripeptide_full.h5"]
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def download(self):
-        super().download()
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def process(self):
-        super().process()
 
 
 class S66X8(COMP6Base):
@@ -274,16 +223,6 @@ class S66X8(COMP6Base):
     def raw_file_names(self):
         return ["s66x8_wb97x6-31gd.h5"]
 
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def download(self):
-        super().download()
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def process(self):
-        super().process()
-
 
 class COMP6v1(Dataset):
     """
@@ -301,7 +240,7 @@ class COMP6v1(Dataset):
 
         self.subsets = [
             DS(root, transform, pre_transform, pre_filter)
-            for DS in (ANIMD, DrugBank, GDB07to09, GDB10to13, Tripeptides, S66X8)
+           for DS in (ANIMD, DrugBank, GDB07to09, GDB10to13, Tripeptides, S66X8)
         ]
 
         self.num_samples = sum(len(subset) for subset in self.subsets)
