@@ -196,7 +196,7 @@ def test_forward_output(model_name, output_model, overwrite_reference=False):
 
 @mark.parametrize("model_name", models.__all_models__)
 def test_gradients(model_name):
-    pl.seed_everything(1234)
+    pl.seed_everything(12345)
     precision = 64
     output_model = "Scalar"
     # create model and sample batch
