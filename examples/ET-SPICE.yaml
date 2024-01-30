@@ -8,7 +8,7 @@ cutoff_lower: 0.0
 cutoff_upper: 10.0
 dataset: SPICE
 dataset_arg:
-  version: 1.1.1
+  version: 1.1.4
 dataset_root: data
 derivative: true
 distance_influence: both
@@ -58,3 +58,4 @@ weight_decay: 0.0
 box_vecs: null
 charge: false
 spin: false
+vector_cutoff: true

@@ -59,4 +59,4 @@ box_vecs: null
 precision: 32
 charge: false
 spin: false
-
+vector_cutoff: true
