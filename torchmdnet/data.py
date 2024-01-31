@@ -15,31 +15,32 @@ from torchmdnet.utils import make_splits, MissingEnergyException
 from torchmdnet.models.utils import scatter
 from torchmdnet.models.utils import dtype_mapping
 
-
-class FloatCastDatasetWrapper(Dataset):
-    """A wrapper around a torch_geometric dataset that casts all floating point
-    tensors to a given dtype.
+class FloatCastDatasetWrapper:
     """
-
-    def __init__(self, dataset, dtype=torch.float64):
-        super(FloatCastDatasetWrapper, self).__init__(
-            dataset.root, dataset.transform, dataset.pre_transform, dataset.pre_filter
-        )
+    A helper class to modify the `get` method of a dataset for casting floating point tensors.
+    """
+    def __init__(self, dataset, dtype):
         self.dataset = dataset
         self.dtype = dtype
 
-    def len(self):
-        return len(self.dataset)
-
-    def get(self, idx):
+    def get_with_cast(self, idx):
+        """
+        A modified `get` method that casts floating point tensors to the specified dtype.
+        """
         data = self.dataset.get(idx)
-        for key, value in data:
+        for key, value in data.items():  # Assuming `data` is a dictionary
             if torch.is_tensor(value) and torch.is_floating_point(value):
-                setattr(data, key, value.to(self.dtype))
+                data[key] = value.to(self.dtype)
         return data
 
-    def __getattr__(self, name):
-        return getattr(self.dataset, name)
+def adapt_floats_for_dtype(dataset, dtype=torch.float64):
+    """
+    Modifies the `get` method of the given dataset to cast all floating point tensors to the specified dtype.
+    """
+    adapter = FloatCastDatasetWrapper(dataset, dtype)
+    # Replace the original get method with the new one
+    setattr(dataset, 'get', adapter.get_with_cast)
+    return dataset
 
 
 class DataModule(LightningDataModule):
@@ -82,7 +83,7 @@ class DataModule(LightningDataModule):
                     self.hparams["dataset_root"], **dataset_arg
                 )
 
-        self.dataset = FloatCastDatasetWrapper(
+        self.dataset = adapt_floats_for_dtype(
             self.dataset, dtype_mapping[self.hparams["precision"]]
         )
 
