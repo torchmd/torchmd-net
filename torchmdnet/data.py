@@ -39,12 +39,7 @@ class FloatCastDatasetWrapper(Dataset):
         return data
 
     def __getattr__(self, name):
-        # Check if the attribute exists in the underlying dataset
-        if hasattr(self.dataset, name):
-            return getattr(self.dataset, name)
-        raise AttributeError(
-            f"'{type(self).__name__}' and its underlying dataset have no attribute '{name}'"
-        )
+        return getattr(self.dataset, name)
 
 
 class DataModule(LightningDataModule):
