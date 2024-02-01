@@ -39,7 +39,7 @@ class FloatCastDatasetWrapper(Dataset):
         return data
 
     def __getattr__(self, __name):
-        return getattr(self.__dict__["_dataset"], __name)
+        return getattr(self.__getattribute__("_dataset"), __name)
 
 
 class DataModule(LightningDataModule):
