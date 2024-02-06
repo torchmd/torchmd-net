@@ -36,3 +36,9 @@ pos = torch.rand(6, 3)
 batch = torch.tensor([0, 0, 0, 1, 1, 1], dtype=torch.long)
 energies, forces = model(z, pos, batch)
 ```
+
+## Running MD simulations with OpenMM
+
+The example `openmm-integration.py` shows how to run an MD simulation using a pretrained TorchMD-Net module as a force field.
+The connection between OpenMM and TorchMD-Net is done via [OpenMM-Torch](https://github.com/openmm/openmm-torch).
+See the [documentation](https://torchmd-net.readthedocs.io/en/latest/models.html#neural-network-potentials) for more details on this integration.
