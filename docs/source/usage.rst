@@ -24,6 +24,8 @@ For example, to train the Equivariant Transformer on the QM9 dataset with the ar
 
 Run `torchmd-train --help` to see all available options and their descriptions.
 
+.. _pretrained-models:
+
 Pretrained Models
 =================
 
@@ -95,7 +97,8 @@ In order to train models on multiple nodes some environment variables have to be
 	  - Due to the way PyTorch Lightning calculates the number of required DDP processes, all nodes must use the same number of GPUs. Otherwise training will not start or crash.
 	  - We observe a 50x decrease in performance when mixing nodes with different GPU architectures (tested with RTX 2080 Ti and RTX 3090).
 	  - Some CUDA systems might hang during a multi-GPU parallel training. Try ``export NCCL_P2P_DISABLE=1``, which disables direct peer to peer GPU communication.
-	  
+
+
 Developer Guide
 ---------------
 

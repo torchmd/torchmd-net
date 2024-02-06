@@ -36,7 +36,95 @@ Once you have trained a model you should have a checkpoint that you can load for
 .. note:: Some models take additional inputs such as the charge :code:`q` and the spin :code:`s` of the atoms depending on the chosen priors/outputs. Check the documentation of the model you are using to see if this is the case.
 
 .. note:: When periodic boundary conditions are required, modules typically offer the possibility of providing the box vectors at construction and/or as an argument to the forward pass. Check the documentation of the class you are using to see if this is the case.
+
+
+
+
+Integration with MD packages
+-----------------------------
+
+It is possible to use the Neural Network Potentials in TorchMD-Net as force fields for Molecular Dynamics.
+
+OpenMM
+~~~~~~
+
+The `OpenMM-Torch <https:\\github.com\openmm\openmm-torch>`_ plugin can be used to load :ref:`pretrained-models` as force fields in `OpenMM <https:\\github.com\openmm\openmm>`_. In order to do that one needs a translation layer between :py:mod:`TorchMD_Net <torchmdnet.models.model.TorchMD_Net>` and `TorchForce <https://github.com/openmm/openmm-torch?tab=readme-ov-file#exporting-a-pytorch-model-for-use-in-openmm>`_. This wrapper needs to take into account the different parameters and units (depending on the :ref:`Dataset <Datasets>` used to train the model) in both.
+
+We provide here a minimal example of the wrapper class, but a complete example is provided under the `examples` folder.
+
+.. code:: python
+
+	import torch
+	from torch import Tensor, nn
+	import openmm
+	import openmmtorch
+	from torchmdnet.models.model import load_model
+	# This is a wrapper that links an OpenMM Force with a TorchMD-Net model
+	class Wrapper(nn.Module):
+	
+	    def __init__(self, embeddings: Tensor, checkpoint_path: str):
+	        super(Wrapper, self).__init__()
+		# The embeddings used to train the model, typically atomic numbers
+	        self.embeddings = embeddings
+		# We let OpenMM compute the forces from the energies
+	        self.model = load_model(checkpoint_path, derivative=False)
+	
+	    def forward(self, positions: Tensor) -> Tensor:
+	        # OpenMM works with nanometer positions and kilojoule per mole energies
+	        # Depending on the model, you might need to convert the units
+	        positions = positions.to(torch.float32) * 10.0 # nm -> A
+	        energy = self.model(z=self.embeddings, pos=positions)[0]
+	        return energy * 96.4916 # eV -> kJ/mol
+
+	model = Wrapper(embeddings=torch.tensor([1, 6, 7, 8, 9]), checkpoint_path="/path/to/checkpoint/my_checkpoint.ckpt")
+	model = torch.jit.script(model) # Models need to be scripted to be used in OpenMM
+	# The model can be used as a force field in OpenMM
+	force = openmmtorch.TorchForce(model)
+	# Add the force to an OpenMM system
+	system = openmm.System()
+	system.addForce(force)
+
+	
+.. note:: See :ref:`training <training>` for more information on how to train a model.
+
+.. warning:: The conversion factors are specific to the dataset used to train the model. Check the documentation of the dataset you are using to see if this is the case.
+
+.. note:: See the `OpenMM-Torch <https:\\github.com\openmm\openmm-torch>`_ documentation for more information on additional functionality (such as periodic boundary conditions or CUDA graph support).
+
+
+TorchMD
+~~~~~~~
+
+Integration with `TorchMD <https:\\github.com\torchmd\torchmd>`_ is carried out via :py:mod:`torchmdnet.calculators.External`. Refer to its documentation for more information on additional functionality.
+
+.. code:: python
+
+	import torch
+	import torchmd
+	from torchmdnet.calculators import External
+	# Load the model
+	embeddings = torch.tensor([1, 6, 7, 8, 9])
+	model = External("/path/to/checkpoint/my_checkpoint.ckpt, embeddings)
+	# Use the calculator in a TorchMD simulation
+	from torchmd.forces import Forces
+	parameters = # Your TorchMD parameters here
+	torchmd_forces = Forces(parameters, external=model)
+	# You can now pass torchmd_forces to a TorchMD Integrator
+
+Additionally, the calculator can be specified in the configuration file of a TorchMD simulation via the `external` key.
+
+
+.. code:: yaml
 	  
+	...
+	external:
+	  module: torchmdnet.calculators
+	  file: /path/to/checkpoint/my_checkpoint.ckpt
+	  embeddings: [1, 6, 7, 8, 9]
+	...
+
+.. warning:: Unit conversion might be required depending on the dataset used to train the model. Check the documentation of the dataset you are using to see if this is the case.
+
 Available Models
 ----------------
 
