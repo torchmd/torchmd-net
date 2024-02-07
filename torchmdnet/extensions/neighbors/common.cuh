@@ -10,6 +10,8 @@
 #include <c10/cuda/CUDAStream.h>
 #include <torch/extension.h>
 
+using at::BFloat16;
+using at::Half;
 using c10::cuda::CUDAStreamGuard;
 using c10::cuda::getCurrentCUDAStream;
 using torch::empty;
@@ -22,6 +24,9 @@ using torch::zeros;
 using torch::autograd::AutogradContext;
 using torch::autograd::Function;
 using torch::autograd::tensor_list;
+
+#define DISPATCH_FOR_ALL_FLOAT_TYPES(...)\
+  AT_DISPATCH_FLOATING_TYPES_AND2(at::ScalarType::Half, at::ScalarType::BFloat16, __VA_ARGS__)\
 
 template <typename scalar_t, int num_dims>
 using Accessor = torch::PackedTensorAccessor32<scalar_t, num_dims, torch::RestrictPtrTraits>;
@@ -52,6 +57,22 @@ template <> struct vec3<float> {
 
 template <> struct vec3<double> {
     using type = double3;
+};
+
+struct Half3 {
+    Half x, y, z;
+};
+
+template <> struct vec3<Half> {
+    using type = Half3;
+};
+
+struct BFloat163 {
+    BFloat16 x, y, z;
+};
+
+template <> struct vec3<BFloat16> {
+    using type = BFloat163;
 };
 
 template <typename scalar_t> using scalar3 = typename vec3<scalar_t>::type;
@@ -194,12 +215,12 @@ __device__ auto apply_pbc(scalar3<scalar_t> delta, const KernelAccessor<scalar_t
     return delta;
 }
 
-  template <typename scalar_t>
+template <typename scalar_t>
 __device__ auto compute_distance(scalar3<scalar_t> pos_i, scalar3<scalar_t> pos_j,
                                  bool use_periodic, const KernelAccessor<scalar_t, 2>& box) {
     scalar3<scalar_t> delta = {pos_i.x - pos_j.x, pos_i.y - pos_j.y, pos_i.z - pos_j.z};
     if (use_periodic) {
-      delta = apply_pbc(delta, box);
+        delta = apply_pbc(delta, box);
     }
     return delta;
 }
