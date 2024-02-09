@@ -42,6 +42,8 @@ class External:
         Whether to use CUDA graphs to speed up the calculation. Default: False
     cuda_graph_warmup_steps : int, optional
         Number of steps to run as warmup before recording the CUDA graph. Default: 12
+    dtype : torch.dtype, optional
+        Cast the input to this dtype if defined. Default: torch.float32
     """
 
     def __init__(
@@ -52,6 +54,7 @@ class External:
         output_transform=None,
         use_cuda_graph=False,
         cuda_graph_warmup_steps=12,
+        dtype = torch.float32
     ):
         if isinstance(netfile, str):
             self.model = load_model(netfile, device=device, derivative=True)
@@ -87,6 +90,7 @@ class External:
         self.forces = None
         self.box = None
         self.pos = None
+        self.dtype = dtype
 
     def _init_cuda_graph(self):
         stream = torch.cuda.Stream()
@@ -118,7 +122,9 @@ class External:
         forces : torch.Tensor
             Forces on the atoms in the system.
         """
-        pos = pos.to(self.device).type(torch.float32).reshape(-1, 3)
+        pos = pos.to(self.device).reshape(-1, 3)
+        if self.dtype is not None:
+            pos = pos.to(self.dtype)
         if self.use_cuda_graph:
             if self.pos is None:
                 self.pos = (
