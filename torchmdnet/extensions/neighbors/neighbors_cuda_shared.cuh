@@ -62,7 +62,7 @@ __global__ void forward_kernel_shared(uint32_t num_atoms, const Accessor<scalar_
                         delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
                     if (distance2 < cutoff_upper2 && distance2 >= cutoff_lower2) {
                         const bool requires_transpose = list.include_transpose && !(cur_j == id);
-                        const auto distance = sqrt_(distance2);
+                        const scalar_t distance = ::sqrt(distance2);
                         addAtomPairToList(list, id, cur_j, delta, distance, requires_transpose);
                     }
                 }

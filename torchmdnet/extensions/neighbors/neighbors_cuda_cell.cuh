@@ -270,7 +270,7 @@ __device__ void addNeighborPair(PairListAccessor<scalar_t>& list, const int i, c
     const int ni = max(i, j);
     const int nj = min(i, j);
     const scalar_t delta_sign = (ni == i) ? scalar_t(1.0) : scalar_t(-1.0);
-    const scalar_t distance = sqrt_(distance2);
+    const scalar_t distance = ::sqrt(distance2);
     delta = {delta_sign * delta.x, delta_sign * delta.y, delta_sign * delta.z};
     addAtomPairToList(list, ni, nj, delta, distance, requires_transpose);
 }
