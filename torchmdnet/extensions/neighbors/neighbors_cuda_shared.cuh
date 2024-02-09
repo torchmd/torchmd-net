@@ -104,21 +104,22 @@ forward_shared(const Tensor& positions, const Tensor& batch, const Tensor& in_bo
     const auto stream = getCurrentCUDAStream(positions.get_device());
     PairList list(num_pairs, positions.options(), loop, include_transpose, use_periodic);
     const CUDAStreamGuard guard(stream);
-    DISPATCH_FOR_ALL_FLOAT_TYPES(positions.scalar_type(), "get_neighbor_pairs_shared_forward", [&]() {
-        const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
-        const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();
-        auto box = triclinic::get_box_accessor<scalar_t>(box_vectors, use_periodic);
-        TORCH_CHECK(cutoff_upper_ > 0, "Expected \"cutoff\" to be positive");
-        constexpr int BLOCKSIZE = 64;
-        const int num_blocks = std::max((num_atoms + BLOCKSIZE - 1) / BLOCKSIZE, 1);
-        const int num_threads = BLOCKSIZE;
-        const int num_tiles = num_blocks;
-        PairListAccessor<scalar_t> list_accessor(list);
-        forward_kernel_shared<BLOCKSIZE><<<num_blocks, num_threads, 0, stream>>>(
-            num_atoms, get_accessor<scalar_t, 2>(positions), get_accessor<int64_t, 1>(batch),
-            cutoff_lower_ * cutoff_lower_, cutoff_upper_ * cutoff_upper_, list_accessor, num_tiles,
-            box);
-    });
+    DISPATCH_FOR_ALL_FLOAT_TYPES(
+        positions.scalar_type(), "get_neighbor_pairs_shared_forward", [&]() {
+            const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
+            const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();
+            auto box = triclinic::get_box_accessor<scalar_t>(box_vectors, use_periodic);
+            TORCH_CHECK(cutoff_upper_ > 0, "Expected \"cutoff\" to be positive");
+            constexpr int BLOCKSIZE = 64;
+            const int num_blocks = std::max((num_atoms + BLOCKSIZE - 1) / BLOCKSIZE, 1);
+            const int num_threads = BLOCKSIZE;
+            const int num_tiles = num_blocks;
+            PairListAccessor<scalar_t> list_accessor(list);
+            forward_kernel_shared<BLOCKSIZE><<<num_blocks, num_threads, 0, stream>>>(
+                num_atoms, get_accessor<scalar_t, 2>(positions), get_accessor<int64_t, 1>(batch),
+                cutoff_lower_ * cutoff_lower_, cutoff_upper_ * cutoff_upper_, list_accessor,
+                num_tiles, box);
+        });
     return {list.neighbors, list.deltas, list.distances, list.i_curr_pair};
 }
 
