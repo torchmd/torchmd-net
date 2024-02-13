@@ -51,14 +51,15 @@ When training:
 .. note:: Adding the Atomref prior makes it so that the reference energies are stored in the model checkpoint as a buffer.
    
 When loading for inference:
-1. Set the :py:mod:`torchmdnet.priors.Atomref` prior to enable.
+1. Set the :py:mod:`torchmdnet.priors.Atomref` prior to :code:`enable=True`.
 
 .. hint:: This can be achieved by setting the prior_model as enabled after its creation:
 	  
 	  .. code:: python
 		    
 		    model = load_model(checkpoint)
-		    model.prior_model[0].enable = True
+		    [prior.enable=True for prior in model.prior_model if isinstance(prior, torchmdnet.priors.Atomref)]
+
 		    
 		    
 Integration with MD packages
