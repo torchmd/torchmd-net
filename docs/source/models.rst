@@ -41,7 +41,7 @@ Once you have trained a model you should have a checkpoint that you can load for
 Training on relative energies
 -----------------------------
 
-It might be useful to train the model on relative energies but then make produce total energies when running inference.
+It might be useful to train the model on relative energies but then make the model produce total energies when running inference.
 TorchMD-Net supports this via a combination of a Dataset option and the :py:mod:`torchmdnet.priors.Atomref` prior. To enable this behavior you must:
 
 When training:
