@@ -157,7 +157,7 @@ def main():
     args.prior_args = [p.get_init_args() for p in prior_models]
 
     # initialize lightning module
-    model = LNNP(args, prior_model=prior_models, mean=data.mean, std=data.std)
+    model = LNNP(args, prior_model=prior_models, mean=data.mean, std=data.std, atomref=data.atomref)
 
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.log_dir,
