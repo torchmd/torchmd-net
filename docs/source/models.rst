@@ -38,8 +38,29 @@ Once you have trained a model you should have a checkpoint that you can load for
 .. note:: When periodic boundary conditions are required, modules typically offer the possibility of providing the box vectors at construction and/or as an argument to the forward pass. Check the documentation of the class you are using to see if this is the case.
 
 
+Training on relative energies
+-----------------------------
 
+It might be useful to train the model on relative energies but then make produce total energies when running inference.
+TorchMD-Net supports this via a combination of a Dataset option and the :py:mod:`torchmdnet.priors.Atomref` prior. To enable this behavior you must:
 
+When training:
+1. Set :code:`remove_ref_energy=True` as an argument to the :ref:`Dataset <Datasets>`.
+2. Add the :py:mod:`torchmdnet.priors.Atomref` prior passing it the :code:`enable=False` option.
+
+.. note:: Adding the Atomref prior makes it so that the reference energies are stored in the model checkpoint as a buffer.
+   
+When loading for inference:
+1. Set the :py:mod:`torchmdnet.priors.Atomref` prior to enable.
+
+.. hint:: This can be achieved by setting the prior_model as enabled after its creation:
+	  
+	  .. code:: python
+		    
+		    model = load_model(checkpoint)
+		    model.prior_model[0].enable = True
+		    
+		    
 Integration with MD packages
 -----------------------------
 
