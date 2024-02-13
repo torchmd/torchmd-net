@@ -17,9 +17,10 @@ import tempfile
 
 
 @mark.parametrize("model_name", models.__all_models__)
-def test_atomref(model_name):
+@mark.parametrize("enable_atomref", [True, False])
+def test_atomref(model_name, enable_atomref):
     dataset = DummyDataset(has_atomref=True)
-    atomref = Atomref(max_z=100, dataset=dataset)
+    atomref = Atomref(max_z=100, dataset=dataset, enable=enable_atomref)
     z, pos, batch = create_example_batch()
 
     # create model with atomref
@@ -36,7 +37,10 @@ def test_atomref(model_name):
     x_no_atomref, _ = model_no_atomref(z, pos, batch)
 
     # check if the output of both models differs by the expected atomref contribution
-    expected_offset = scatter(dataset.get_atomref().squeeze()[z], batch).unsqueeze(1)
+    if enable_atomref:
+        expected_offset = scatter(dataset.get_atomref().squeeze()[z], batch).unsqueeze(1)
+    else:
+        expected_offset = 0
     torch.testing.assert_allclose(x_atomref, x_no_atomref + expected_offset)
 
 def test_zbl():
