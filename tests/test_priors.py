@@ -43,6 +43,12 @@ def test_atomref(model_name, enable_atomref):
         expected_offset = 0
     torch.testing.assert_allclose(x_atomref, x_no_atomref + expected_offset)
 
+@mark.parametrize("trainable", [True, False])
+def test_atomref_trainable(trainable):
+    dataset = DummyDataset(has_atomref=True)
+    atomref = Atomref(max_z=100, dataset=dataset, trainable=trainable)
+    assert atomref.atomref.weight.requires_grad == trainable
+
 def test_zbl():
     pos = torch.tensor([[1.0, 0.0, 0.0], [2.5, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 0.0, -1.0]], dtype=torch.float32)  # Atom positions in Bohr
     types = torch.tensor([0, 1, 2, 1], dtype=torch.long)  # Atom types
