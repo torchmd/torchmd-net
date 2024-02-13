@@ -14,7 +14,7 @@ from torch_geometric.data import Dataset
 from torchmdnet.utils import make_splits, MissingEnergyException
 from torchmdnet.models.utils import scatter
 from torchmdnet.models.utils import dtype_mapping
-
+import warnings
 
 class FloatCastDatasetWrapper(Dataset):
     """A wrapper around a torch_geometric dataset that casts all floating point
@@ -104,6 +104,11 @@ class DataModule(LightningDataModule):
         self.test_dataset = Subset(self.dataset, self.idx_test)
 
         if self.hparams["standardize"]:
+            # Mark as deprecated
+            warnings.warn(
+                "The standardize option is deprecated and will be removed in the future. ",
+                DeprecationWarning,
+            )
             self._standardize()
 
     def train_dataloader(self):
