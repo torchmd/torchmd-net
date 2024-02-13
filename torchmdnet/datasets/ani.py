@@ -45,7 +45,6 @@ class ANIBase(MemmappedDataset):
     def raw_file_names(self):
         raise NotImplementedError
 
-
     def get_atomref(self, max_z=100):
         """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior."""
         self._ELEMENT_ENERGIES[1]
@@ -61,6 +60,7 @@ class ANIBase(MemmappedDataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
+        properties=("y", "neg_dy"),
     ):
         self.name = self.__class__.__name__
         super().__init__(
@@ -68,8 +68,7 @@ class ANIBase(MemmappedDataset):
             transform,
             pre_transform,
             pre_filter,
-            remove_ref_energy=True,
-            properties=("y", "neg_dy"),
+            properties=properties,
         )
 
     def filter_and_pre_transform(self, data):
@@ -84,6 +83,23 @@ class ANIBase(MemmappedDataset):
 
 class ANI1(ANIBase):
     __doc__ = ANIBase.__doc__
+
+    def __init__(
+        self,
+        root,
+        transform=None,
+        pre_transform=None,
+        pre_filter=None,
+    ):
+        self.name = self.__class__.__name__
+        super().__init__(
+            root,
+            transform,
+            pre_transform,
+            pre_filter,
+            properties=("y",),
+        )
+
     # Avoid sphinx from documenting this
     _ELEMENT_ENERGIES = {
         1: -0.500607632585,
@@ -203,6 +219,22 @@ class ANI1X(ANI1XBase):
 
 class ANI1CCX(ANI1XBase):
     __doc__ = ANIBase.__doc__
+
+    def __init__(
+        self,
+        root,
+        transform=None,
+        pre_transform=None,
+        pre_filter=None,
+    ):
+        self.name = self.__class__.__name__
+        super().__init__(
+            root,
+            transform,
+            pre_transform,
+            pre_filter,
+            properties=("y",),
+        )
 
     def sample_iter(self, mol_ids=False):
         assert len(self.raw_paths) == 1
