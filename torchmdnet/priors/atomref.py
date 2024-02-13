@@ -47,14 +47,20 @@ class Atomref(BasePrior):
         if atomref.ndim == 1:
             atomref = atomref.view(-1, 1)
         self.register_buffer("initial_atomref", atomref)
-        self.atomref = nn.Embedding(len(atomref), 1, _freeze=not trainable, _weight=atomref)
+        self.atomref = nn.Embedding(
+            len(atomref), 1, _freeze=not trainable, _weight=atomref
+        )
         self.enable = enable
 
     def reset_parameters(self):
         self.atomref.weight.data.copy_(self.initial_atomref)
 
     def get_init_args(self):
-        return dict(max_z=self.initial_atomref.size(0), trainable=self.atomref.weight.requires_grad, enable=self.enable)
+        return dict(
+            max_z=self.initial_atomref.size(0),
+            trainable=self.atomref.weight.requires_grad,
+            enable=self.enable,
+        )
 
     def pre_reduce(
         self,
