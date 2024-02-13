@@ -28,6 +28,27 @@ def test_datamodule_create(tmpdir):
     dl2 = data._get_dataloader(data.train_dataset, "train", store_dataloader=False)
     assert dl1 is not dl2
 
+def test_dataloader_get(tmpdir):
+    args = load_example_args("graph-network")
+    args["train_size"] = 800
+    args["val_size"] = 100
+    args["test_size"] = 100
+    args["log_dir"] = tmpdir
+
+    dataset = DummyDataset()
+    data = DataModule(args, dataset=dataset)
+    data.prepare_data()
+    data.setup("fit")
+    # Get the first element of the training set
+    assert data.train_dataloader().dataset[0] is not None
+    # Assert the elements are in there (z, pos, y, neg_dy)
+    item = data.train_dataloader().dataset[0]
+    assert "z" in item
+    assert "pos" in item
+    assert "y" in item
+    assert "neg_dy" in item
+    # Assert that the dataloader is not empty
+    assert len(data.train_dataloader()) > 0
 
 @mark.parametrize("energy,forces", [(True, True), (True, False), (False, True)])
 @mark.parametrize("has_atomref", [True, False])
