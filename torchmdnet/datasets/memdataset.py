@@ -110,9 +110,8 @@ class MemmappedDataset(Dataset):
             )
         }
 
-    @staticmethod
-    def compute_reference_energy(self):
-        raise NotImplementedError
+    def compute_reference_energy(self, atomic_numbers):
+        return self.get_atomref()[atomic_numbers].sum()
 
     def sample_iter(self, mol_ids=False):
         raise NotImplementedError()
