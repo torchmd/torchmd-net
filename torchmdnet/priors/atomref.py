@@ -26,9 +26,10 @@ class Atomref(BasePrior):
         max_z (int, optional): Maximum atomic number to consider. If `dataset` is not `None`, this argument is ignored.
         dataset (torch_geometric.data.Dataset, optional): A dataset from which to extract the atomref values.
         trainable (bool, optional): If `False`, the atomref values are not trainable. (default: `False`)
+        enable (bool, optional): If `False`, the prior is disabled. This is useful if you want to add the reference energies only during inference (or training) (default: `True`)
     """
 
-    def __init__(self, max_z=None, dataset=None, trainable=False):
+    def __init__(self, max_z=None, dataset=None, trainable=False, enable=True):
         super().__init__()
         if max_z is None and dataset is None:
             raise ValueError("Can't instantiate Atomref prior, all arguments are None.")
@@ -46,8 +47,9 @@ class Atomref(BasePrior):
         if atomref.ndim == 1:
             atomref = atomref.view(-1, 1)
         self.register_buffer("initial_atomref", atomref)
-        self.atomref = nn.Embedding(len(atomref), 1, freeze=trainable)
+        self.atomref = nn.Embedding(len(atomref), 1, freeze=trainable and not enable)
         self.atomref.weight.data.copy_(atomref)
+        self.enable = enable
 
     def reset_parameters(self):
         self.atomref.weight.data.copy_(self.initial_atomref)
@@ -71,6 +73,18 @@ class Atomref(BasePrior):
 
         .. note:: The atomref operation is an embedding lookup that can be trainable if the `trainable` argument is set to `False`.
 
+        .. note:: This call becomes a no-op if the `enable` argument is set to `False`.
+
+        Args:
+            x (Tensor): Input feature tensor.
+            z (Tensor): Atomic number tensor.
+            pos (Tensor): Atomic positions tensor. Unused.
+            batch (Tensor, optional): Batch tensor. Unused. (default: `None`).
+            extra_args (Dict[str, Tensor], optional): Extra arguments. Unused. (default: `None`)
+
 
         """
-        return x + self.atomref(z)
+        if self.enable:
+            return x + self.atomref(z)
+        else:
+            return x
