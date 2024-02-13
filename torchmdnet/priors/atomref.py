@@ -54,7 +54,7 @@ class Atomref(BasePrior):
         self.atomref.weight.data.copy_(self.initial_atomref)
 
     def get_init_args(self):
-        return dict(max_z=self.initial_atomref.size(0))
+        return dict(max_z=self.initial_atomref.size(0), trainable=self.atomref.weight.requires_grad, enable=self.enable)
 
     def pre_reduce(
         self,
