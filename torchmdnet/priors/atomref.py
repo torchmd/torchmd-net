@@ -11,11 +11,24 @@ from lightning_utilities.core.rank_zero import rank_zero_warn
 
 class Atomref(BasePrior):
     r"""Atomref prior model.
-    When using this in combination with some dataset, the dataset class must implement
-    the function `get_atomref`, which returns the atomic reference values as a tensor.
+
+    This prior model is used to add atomic reference values to the input features. The atomic reference values are stored in an embedding layer and are added to the input features as:
+
+    .. math::
+
+        x' = x + \\textrm{atomref}(z)
+
+    where :math:`x` is the input feature tensor, :math:`z` is the atomic number tensor, and :math:`\\textrm{atomref}` is the embedding layer. The atomic reference values are stored in the embedding layer and can be trainable.
+
+    When using this in combination with some dataset, the dataset class must implement the function `get_atomref`, which returns the atomic reference values as a tensor.
+
+    Args:
+        max_z (int, optional): Maximum atomic number to consider. If `dataset` is not `None`, this argument is ignored.
+        dataset (torch_geometric.data.Dataset, optional): A dataset from which to extract the atomref values.
+        trainable (bool, optional): If `False`, the atomref values are not trainable. (default: `False`)
     """
 
-    def __init__(self, max_z=None, dataset=None):
+    def __init__(self, max_z=None, dataset=None, trainable=False):
         super().__init__()
         if max_z is None and dataset is None:
             raise ValueError("Can't instantiate Atomref prior, all arguments are None.")
@@ -33,7 +46,7 @@ class Atomref(BasePrior):
         if atomref.ndim == 1:
             atomref = atomref.view(-1, 1)
         self.register_buffer("initial_atomref", atomref)
-        self.atomref = nn.Embedding(len(atomref), 1)
+        self.atomref = nn.Embedding(len(atomref), 1, freeze=trainable)
         self.atomref.weight.data.copy_(atomref)
 
     def reset_parameters(self):
@@ -42,12 +55,22 @@ class Atomref(BasePrior):
     def get_init_args(self):
         return dict(max_z=self.initial_atomref.size(0))
 
-    def pre_reduce(self, x: Tensor, z: Tensor, pos: Tensor, batch: Optional[Tensor] = None, extra_args: Optional[Dict[str, Tensor]] = None):
-        """Adds the stored atomref to the input as:
+    def pre_reduce(
+        self,
+        x: Tensor,
+        z: Tensor,
+        pos: Tensor,
+        batch: Optional[Tensor] = None,
+        extra_args: Optional[Dict[str, Tensor]] = None,
+    ):
+        """Applies the stored atomref to the input as:
 
         .. math::
 
             x' = x + \\textrm{atomref}(z)
+
+        .. note:: The atomref operation is an embedding lookup that can be trainable if the `trainable` argument is set to `False`.
+
 
         """
         return x + self.atomref(z)
