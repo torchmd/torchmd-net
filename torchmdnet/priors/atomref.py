@@ -47,8 +47,7 @@ class Atomref(BasePrior):
         if atomref.ndim == 1:
             atomref = atomref.view(-1, 1)
         self.register_buffer("initial_atomref", atomref)
-        self.atomref = nn.Embedding(len(atomref), 1, _freeze=not trainable)
-        self.atomref.weight.data.copy_(atomref)
+        self.atomref = nn.Embedding(len(atomref), 1, _freeze=not trainable, _weight=atomref)
         self.enable = enable
 
     def reset_parameters(self):
