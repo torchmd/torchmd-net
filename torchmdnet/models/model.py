@@ -230,7 +230,7 @@ def create_prior_models(args, dataset=None):
             else:
                 prior_names.append(prior)
                 prior_args.append({})
-        if "prior_args" in args:
+        if "prior_args" in args and args["prior_args"] is not None:
             prior_args = args["prior_args"]
             if not isinstance(prior_args, list):
                 prior_args = [prior_args]
