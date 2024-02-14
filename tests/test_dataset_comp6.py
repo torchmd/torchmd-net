@@ -39,7 +39,7 @@ def test_dataset_s66x8():
             ),
             atol=1e-4,
         )
-        assert pt.allclose(sample.y, pt.tensor([[-47.5919]]))
+        assert pt.allclose(sample.y, pt.tensor([[-5755.7288331]],dtype=pt.float64))
         assert pt.allclose(
             sample.neg_dy,
             -pt.tensor(
