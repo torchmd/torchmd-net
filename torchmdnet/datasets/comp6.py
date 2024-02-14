@@ -23,7 +23,7 @@ For more details check:
 
 
 class COMP6Base(MemmappedDataset):
-    ELEMENT_ENERGIES = {
+    _ELEMENT_ENERGIES = {
         1: -0.500607632585,
         6: -37.8302333826,
         7: -54.5680045287,
@@ -45,7 +45,6 @@ class COMP6Base(MemmappedDataset):
             transform,
             pre_transform,
             pre_filter,
-            remove_ref_energy=False,
             properties=("y", "neg_dy"),
         )
 
@@ -60,11 +59,13 @@ class COMP6Base(MemmappedDataset):
             f"{url_prefix}/{self.raw_url_name}/{name}" for name in self.raw_file_names
         ]
 
-    @staticmethod
-    def compute_reference_energy(atomic_numbers):
-        atomic_numbers = np.array(atomic_numbers)
-        energy = sum(COMP6Base.ELEMENT_ENERGIES[z] for z in atomic_numbers)
-        return energy * COMP6Base.HARTREE_TO_EV
+    def get_atomref(self, max_z=100):
+        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior."""
+        refs = pt.zeros(max_z)
+        for key, val in self._ELEMENT_ENERGIES.items():
+            refs[key] = val * self.HARTREE_TO_EV
+
+        return refs.view(-1, 1)
 
     def download(self):
         for url in self.raw_url:

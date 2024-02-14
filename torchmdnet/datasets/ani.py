@@ -45,11 +45,6 @@ class ANIBase(MemmappedDataset):
     def raw_file_names(self):
         raise NotImplementedError
 
-    def compute_reference_energy(self, atomic_numbers):
-        atomic_numbers = np.array(atomic_numbers)
-        energy = sum(self._ELEMENT_ENERGIES[z] for z in atomic_numbers)
-        return energy * ANIBase.HARTREE_TO_EV
-
     def get_atomref(self, max_z=100):
         raise NotImplementedError()
 
