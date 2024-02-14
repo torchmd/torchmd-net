@@ -344,8 +344,3 @@ class COMP6v2(ANIBase):
             refs[key] = val * self.HARTREE_TO_EV
 
         return refs.view(-1, 1)
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def process(self):
-        super().process()
