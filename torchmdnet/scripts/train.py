@@ -58,7 +58,7 @@ def get_argparse():
     parser.add_argument('--num-workers', type=int, default=4, help='Number of workers for data prefetch')
     parser.add_argument('--redirect', type=bool, default=False, help='Redirect stdout and stderr to log_dir/log')
     parser.add_argument('--gradient-clipping', type=float, default=0.0, help='Gradient clipping norm')
-
+    parser.add_argument('--remove-ref-energy', action='store_true', help='If true, remove the reference energy from the dataset for delta-learning. Total energy can still be predicted by the model during inference by turning this flag off when loading.  The dataset must be compatible with Atomref for this to be used.')
     # dataset specific
     parser.add_argument('--dataset', default=None, type=str, choices=datasets.__all__, help='Name of the torch_geometric dataset')
     parser.add_argument('--dataset-root', default='~/data', type=str, help='Data storage directory (not used if dataset is "CG")')
@@ -146,6 +146,13 @@ def get_args():
 
 def main():
     args = get_args()
+    if args.remove_ref_energy:
+        if args.prior_model is None:
+            args.prior_model = []
+        if not isinstance(args.prior_model, list):
+            args.prior_model = [args.prior_model]
+        args.prior_model.append({"Atomref":{"enable":False}})
+
     pl.seed_everything(args.seed, workers=True)
 
     # initialize data module
@@ -155,9 +162,8 @@ def main():
 
     prior_models = create_prior_models(vars(args), data.dataset)
     args.prior_args = [p.get_init_args() for p in prior_models]
-
     # initialize lightning module
-    model = LNNP(args, prior_model=prior_models, mean=data.mean, std=data.std, atomref=data.atomref)
+    model = LNNP(args, prior_model=prior_models, mean=data.mean, std=data.std)
 
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.log_dir,

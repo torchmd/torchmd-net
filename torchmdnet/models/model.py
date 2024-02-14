@@ -154,12 +154,19 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
     if args is None:
         args = ckpt["hyper_parameters"]
 
+    delta_learning = args["remove_ref_energy"] if "remove_ref_energy" in args else False
+
     for key, value in kwargs.items():
         if not key in args:
             warnings.warn(f"Unknown hyperparameter: {key}={value}")
         args[key] = value
 
     model = create_model(args)
+    if delta_learning and "remove_ref_energy" in kwargs:
+        if not kwargs["remove_ref_energy"]:
+            assert len(model.prior_model) > 0, "Atomref prior must be added during training (with enable=False) for total energy prediction."
+            # Set the Atomref prior to enabled
+            model.prior_model[-1].enable = True
 
     state_dict = {re.sub(r"^model\.", "", k): v for k, v in ckpt["state_dict"].items()}
     model.load_state_dict(state_dict)

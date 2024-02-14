@@ -54,10 +54,9 @@ class LNNP(LightningModule):
         prior_model (torchmdnet.priors.BasePrior): A prior model to use in the model.
         mean (torch.Tensor, optional): The mean of the dataset to normalize the input.
         std (torch.Tensor, optional): The standard deviation of the dataset to normalize the input.
-        atomref (torch.Tensor): A tensor containing the atom reference energies for each atom type.
     """
 
-    def __init__(self, hparams, prior_model=None, mean=None, std=None, atomref=None):
+    def __init__(self, hparams, prior_model=None, mean=None, std=None):
         super(LNNP, self).__init__()
         if "charge" not in hparams:
             hparams["charge"] = False
@@ -81,9 +80,8 @@ class LNNP(LightningModule):
 
         self.data_transform = FloatCastDatasetWrapper(dtype_mapping[self.hparams.precision])
         if self.hparams.remove_ref_energy:
-            assert atomref is not None, "Atomref must be provided if remove_ref_energy is True"
             self.data_transform = T.Compose(
-                [EnergyRefRemover(atomref), self.data_transform]
+                [EnergyRefRemover(self.model.prior_model[-1].initial_atomref), self.data_transform]
             )
 
     def configure_optimizers(self):
