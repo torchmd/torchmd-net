@@ -47,7 +47,6 @@ class ANIBase(MemmappedDataset):
 
     def get_atomref(self, max_z=100):
         """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior."""
-        self._ELEMENT_ENERGIES[1]
         refs = pt.zeros(max_z)
         for key, val in self._ELEMENT_ENERGIES.items():
             refs[key] = val * self.HARTREE_TO_EV
