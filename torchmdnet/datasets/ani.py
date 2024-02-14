@@ -218,6 +218,7 @@ class ANI1CCX(ANI1XBase):
         7: -54.67448347695333,
         8: -75.16043537275567,
     }
+
     def __init__(
         self,
         root,
