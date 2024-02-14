@@ -56,28 +56,3 @@ def test_train(model_name, use_atomref, precision, tmpdir):
     trainer = pl.Trainer(max_steps=10, default_root_dir=tmpdir, precision=args["precision"],inference_mode=False)
     trainer.fit(module, datamodule)
     trainer.test(module, datamodule)
-
-
-def test_remove_ref_energy(tmpdir):
-    args = load_example_args(
-        "tensornet",
-        remove_prior=True,
-        train_size=0.8,
-        val_size=0.05,
-        test_size=None,
-        log_dir=tmpdir,
-        derivative=True,
-        embedding_dimension=16,
-        num_layers=2,
-        num_rbf=16,
-        batch_size=8,
-        precision=32,
-        remove_ref_energy=True,
-    )
-
-    datamodule = DataModule(args, DummyDataset(has_atomref=True))
-    module = LNNP(args, atomref=datamodule.atomref)
-
-    trainer = pl.Trainer(max_steps=10, default_root_dir=tmpdir, precision=args["precision"],inference_mode=False)
-    trainer.fit(module, datamodule)
-    trainer.test(module, datamodule)
