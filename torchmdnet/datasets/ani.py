@@ -83,6 +83,12 @@ class ANIBase(MemmappedDataset):
 
 class ANI1(ANIBase):
     __doc__ = ANIBase.__doc__
+    _ELEMENT_ENERGIES = {
+        1: -0.500607632585,
+        6: -37.8302333826,
+        7: -54.5680045287,
+        8: -75.0362229210,
+    }
 
     def __init__(
         self,
@@ -99,14 +105,6 @@ class ANI1(ANIBase):
             pre_filter,
             properties=("y",),
         )
-
-    # Avoid sphinx from documenting this
-    _ELEMENT_ENERGIES = {
-        1: -0.500607632585,
-        6: -37.8302333826,
-        7: -54.5680045287,
-        8: -75.0362229210,
-    }  #::meta private:
 
     @property
     def raw_url(self):
@@ -154,6 +152,14 @@ class ANI1(ANIBase):
 
 
 class ANI1XBase(ANIBase):
+    __doc__ = ANIBase.__doc__
+    _ELEMENT_ENERGIES = {
+        1: -0.500607632585,
+        6: -37.8302333826,
+        7: -54.5680045287,
+        8: -75.0362229210,
+    }
+
     @property
     def raw_url(self):
         return "https://figshare.com/ndownloader/files/18112775"
@@ -169,17 +175,6 @@ class ANI1XBase(ANIBase):
 
 
 class ANI1X(ANI1XBase):
-    __doc__ = ANIBase.__doc__
-    _ELEMENT_ENERGIES = {
-        1: -0.500607632585,
-        6: -37.8302333826,
-        7: -54.5680045287,
-        8: -75.0362229210,
-    }
-    """
-
-    :meta private:
-    """
 
     def sample_iter(self, mol_ids=False):
         assert len(self.raw_paths) == 1
