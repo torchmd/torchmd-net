@@ -165,6 +165,7 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
     if delta_learning and "remove_ref_energy" in kwargs:
         if not kwargs["remove_ref_energy"]:
             assert len(model.prior_model) > 0, "Atomref prior must be added during training (with enable=False) for total energy prediction."
+            assert isinstance(model.prior_model[-1], priors.Atomref), "I expected the last prior to be Atomref."
             # Set the Atomref prior to enabled
             model.prior_model[-1].enable = True
 
