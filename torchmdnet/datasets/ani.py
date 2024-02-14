@@ -151,13 +151,6 @@ class ANI1(ANIBase):
 
 
 class ANI1XBase(ANIBase):
-    __doc__ = ANIBase.__doc__
-    _ELEMENT_ENERGIES = {
-        1: -0.600952980000,
-        6: -38.08316124000,
-        7: -54.70775770000,
-        8: -75.19446356000,
-    }
     @property
     def raw_url(self):
         return "https://figshare.com/ndownloader/files/18112775"
@@ -173,6 +166,13 @@ class ANI1XBase(ANIBase):
 
 
 class ANI1X(ANI1XBase):
+    __doc__ = ANIBase.__doc__
+    _ELEMENT_ENERGIES = {
+        1: -0.600952980000,
+        6: -38.08316124000,
+        7: -54.70775770000,
+        8: -75.19446356000,
+    }
 
     def sample_iter(self, mol_ids=False):
         assert len(self.raw_paths) == 1
