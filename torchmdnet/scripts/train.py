@@ -62,7 +62,7 @@ def get_argparse():
     # dataset specific
     parser.add_argument('--dataset', default=None, type=str, choices=datasets.__all__, help='Name of the torch_geometric dataset')
     parser.add_argument('--dataset-root', default='~/data', type=str, help='Data storage directory (not used if dataset is "CG")')
-    parser.add_argument('--dataset-arg', default=None, type=str, help='Additional dataset arguments, e.g. target property for QM9 or molecule for MD17. Need to be specified in JSON format i.e. \'{"molecules": "aspirin,benzene"}\'')
+    parser.add_argument('--dataset-arg', default=None, help='Additional dataset arguments. Needs to be a dictionary.')
     parser.add_argument('--coord-files', default=None, type=str, help='Custom coordinate files glob')
     parser.add_argument('--embed-files', default=None, type=str, help='Custom embedding files glob')
     parser.add_argument('--energy-files', default=None, type=str, help='Custom energy files glob')
@@ -74,7 +74,7 @@ def get_argparse():
     # model architecture
     parser.add_argument('--model', type=str, default='graph-network', choices=models.__all_models__, help='Which model to train')
     parser.add_argument('--output-model', type=str, default='Scalar', choices=output_modules.__all__, help='The type of output model')
-    parser.add_argument('--prior-model', type=str, default=None, choices=priors.__all__, help='Which prior model to use')
+    parser.add_argument('--prior-model', type=str, default=None, help='Which prior model to use. It can be a string, a dict if you want to add arguments for it or a dicts to add more than one prior. e.g. {"Atomref": {"max_z":100}, "Coulomb":{"max_num_neighs"=100, "alpha"=1}', action="extend", nargs="*")
 
     # architectural args
     parser.add_argument('--charge', type=bool, default=False, help='Model needs a total charge. Set this to True if your dataset contains charges and you want them passed down to the model.')
