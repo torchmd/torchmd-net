@@ -16,7 +16,7 @@ from torchmdnet.models.utils import dtype_mapping
 import torch_geometric.transforms as T
 
 class FloatCastDatasetWrapper(T.BaseTransform):
-    """A wrapper around a torch_geometric dataset that casts all floating point
+    """A transform that casts all floating point tensors to a given dtype.
     tensors to a given dtype.
     """
 
@@ -32,6 +32,9 @@ class FloatCastDatasetWrapper(T.BaseTransform):
 
 
 class EnergyRefRemover(T.BaseTransform):
+    """A transform that removes the atom reference energy from the energy of a
+    dataset.
+    """
 
     def __init__(self, atomref):
         super(EnergyRefRemover, self).__init__()
