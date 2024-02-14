@@ -37,7 +37,7 @@ Once you have trained a model you should have a checkpoint that you can load for
 
 .. note:: When periodic boundary conditions are required, modules typically offer the possibility of providing the box vectors at construction and/or as an argument to the forward pass. Check the documentation of the class you are using to see if this is the case.
 
-
+.. _delta-learning:
 Training on relative energies
 -----------------------------
 

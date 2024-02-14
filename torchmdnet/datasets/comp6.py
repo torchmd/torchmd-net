@@ -60,7 +60,14 @@ class COMP6Base(MemmappedDataset):
         ]
 
     def get_atomref(self, max_z=100):
-        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior."""
+        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior.
+
+	  Args:
+	      max_z (int): Maximum atomic number
+
+	  Returns:
+	      torch.Tensor: Atomic energy reference values for each element in the dataset.
+	"""
         refs = pt.zeros(max_z)
         for key, val in self._ELEMENT_ENERGIES.items():
             refs[key] = val * self.HARTREE_TO_EV
@@ -338,7 +345,14 @@ class COMP6v2(ANIBase):
                         yield data
 
     def get_atomref(self, max_z=100):
-        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior."""
+        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior.
+
+	  Args:
+	      max_z (int): Maximum atomic number
+
+	  Returns:
+	      torch.Tensor: Atomic energy reference values for each element in the dataset.
+	"""
         refs = pt.zeros(max_z)
         for key, val in self._ELEMENT_ENERGIES.items():
             refs[key] = val * self.HARTREE_TO_EV

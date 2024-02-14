@@ -33,20 +33,20 @@ class MemmappedDataset(Dataset):
         - :obj:`name.dp.mmap`: Dipole moment of each conformation.
 
     Args:
-    root (str): Root directory where the dataset should be stored.
-    transform (callable, optional): A function/transform that takes in an
-        :obj:`torch_geometric.data.Data` object and returns a transformed
-        version. The data object will be transformed before every access.
-    pre_transform (callable, optional): A function/transform that takes in an
-        :obj:`torch_geometric.data.Data` object and returns a transformed
-        version. The data object will be transformed before being saved to disk.
-    pre_filter (callable, optional): A function that takes in an
-        :obj:`torch_geometric.data.Data` object and returns a boolean value,
-        indicating whether the data object should be included in the final
-        dataset.
-    properties (tuple of str, optional): The properties to include in the
-        dataset. Can be any subset of :obj:`y`, :obj:`neg_dy`, :obj:`q`,
-        :obj:`pq`, and :obj:`dp`.
+        root (str): Root directory where the dataset should be stored.
+        transform (callable, optional): A function/transform that takes in an
+            :obj:`torch_geometric.data.Data` object and returns a transformed
+            version. The data object will be transformed before every access.
+        pre_transform (callable, optional): A function/transform that takes in an
+            :obj:`torch_geometric.data.Data` object and returns a transformed
+            version. The data object will be transformed before being saved to disk.
+        pre_filter (callable, optional): A function that takes in an
+            :obj:`torch_geometric.data.Data` object and returns a boolean value,
+            indicating whether the data object should be included in the final
+            dataset.
+        properties (tuple of str, optional): The properties to include in the
+            dataset. Can be any subset of :obj:`y`, :obj:`neg_dy`, :obj:`q`,
+            :obj:`pq`, and :obj:`dp`.
     """
 
     def __init__(
