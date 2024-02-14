@@ -90,7 +90,6 @@ class COMP6Base(MemmappedDataset):
                 all_neg_dy = (
                     -all_neg_dy
                 )  # The COMP6 datasets accidentally have gradients as forces
-                all_y -= self.compute_reference_energy(z)
 
                 assert all_pos.shape[0] == all_y.shape[0]
                 assert all_pos.shape[1] == z.shape[0]
