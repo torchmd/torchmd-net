@@ -153,12 +153,11 @@ class ANI1(ANIBase):
 class ANI1XBase(ANIBase):
     __doc__ = ANIBase.__doc__
     _ELEMENT_ENERGIES = {
-        1: -0.500607632585,
-        6: -37.8302333826,
-        7: -54.5680045287,
-        8: -75.0362229210,
+        1: -0.600952980000,
+        6: -38.08316124000,
+        7: -54.70775770000,
+        8: -75.19446356000,
     }
-
     @property
     def raw_url(self):
         return "https://figshare.com/ndownloader/files/18112775"
@@ -213,7 +212,12 @@ class ANI1X(ANI1XBase):
 
 class ANI1CCX(ANI1XBase):
     __doc__ = ANIBase.__doc__
-
+    _ELEMENT_ENERGIES = {
+        1: -0.5991501324919538,
+        6: -38.03750806057356,
+        7: -54.67448347695333,
+        8: -75.16043537275567,
+    }
     def __init__(
         self,
         root,
