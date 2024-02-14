@@ -1,3 +1,7 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+
 import pytest
 from pytest import mark
 import torch
@@ -6,13 +10,13 @@ from torchmdnet import models
 from torchmdnet.models.model import create_model, create_prior_models
 from torchmdnet.module import LNNP
 from torchmdnet.priors import Atomref, D2, ZBL, Coulomb
-from torch_scatter import scatter
+from torchmdnet.models.utils import scatter
 from utils import load_example_args, create_example_batch, DummyDataset
 from os.path import dirname, join
 import tempfile
 
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 def test_atomref(model_name):
     dataset = DummyDataset(has_atomref=True)
     atomref = Atomref(max_z=100, dataset=dataset)
@@ -45,7 +49,7 @@ def test_zbl():
     # Use the ZBL class to compute the energy.
 
     zbl = ZBL(10.0, 5, atomic_number, distance_scale=distance_scale, energy_scale=energy_scale)
-    energy = zbl.post_reduce(torch.zeros((1,)), types, pos, torch.zeros_like(types), {})[0]
+    energy = zbl.post_reduce(torch.zeros((1,)), types, pos, torch.zeros_like(types), None, {})[0]
 
     # Compare to the expected value.
 
@@ -75,7 +79,7 @@ def test_coulomb(dtype):
     # Use the Coulomb class to compute the energy.
 
     coulomb = Coulomb(alpha, 5, distance_scale=distance_scale, energy_scale=energy_scale)
-    energy = coulomb.post_reduce(torch.zeros((1,)), types, pos, torch.zeros_like(types), {'partial_charges':charge})[0]
+    energy = coulomb.post_reduce(torch.zeros((1,)), types, pos, torch.zeros_like(types), extra_args={'partial_charges':charge})[0]
 
     # Compare to the expected value.
 

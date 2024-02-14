@@ -1,0 +1,36 @@
+name: Build Documentation
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    branches:
+      - "main"
+
+
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Env
+      uses: mamba-org/setup-micromamba@v1
+      with:
+        environment-file: environment.yml
+        init-shell: bash
+        generate-run-shell: true
+
+    - name: Install docs dependencies
+      run: |
+        pip install -vv .
+        pip install -r docs/requirements.txt
+      shell: bash -el {0}
+      
+    - name: Build Sphinx Documentation
+      run: |
+        cd docs
+        make html
+      shell: bash -el {0}

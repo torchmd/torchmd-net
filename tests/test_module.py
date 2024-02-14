@@ -1,3 +1,7 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+
 from pytest import mark
 from glob import glob
 from os.path import dirname, join
@@ -12,7 +16,7 @@ from torchmdnet import priors
 from utils import load_example_args, DummyDataset
 
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 def test_create_model(model_name):
     LNNP(load_example_args(model_name), prior_model=Atomref(100))
 
@@ -22,7 +26,7 @@ def test_load_model():
     load_model(checkpoint)
 
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 @mark.parametrize("use_atomref", [True, False])
 @mark.parametrize("precision", [32, 64])
 def test_train(model_name, use_atomref, precision, tmpdir):

@@ -1,7 +1,13 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+
 import sys
 import os
+import yaml
 import argparse
 import logging
+import torch
 import lightning.pytorch as pl
 from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.loggers import WandbLogger, CSVLogger, TensorBoardLogger
@@ -19,7 +25,7 @@ from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, nu
 from lightning_utilities.core.rank_zero import rank_zero_warn
 
 
-def get_args():
+def get_argparse():
     # fmt: off
     parser = argparse.ArgumentParser(description='Training')
     parser.add_argument('--load-model', action=LoadFromCheckpoint, help='Restart training using a model checkpoint')  # keep first
@@ -56,22 +62,23 @@ def get_args():
     # dataset specific
     parser.add_argument('--dataset', default=None, type=str, choices=datasets.__all__, help='Name of the torch_geometric dataset')
     parser.add_argument('--dataset-root', default='~/data', type=str, help='Data storage directory (not used if dataset is "CG")')
-    parser.add_argument('--dataset-arg', default=None, type=str, help='Additional dataset arguments, e.g. target property for QM9 or molecule for MD17. Need to be specified in JSON format i.e. \'{"molecules": "aspirin,benzene"}\'')
+    parser.add_argument('--dataset-arg', default=None, help='Additional dataset arguments. Needs to be a dictionary.')
     parser.add_argument('--coord-files', default=None, type=str, help='Custom coordinate files glob')
     parser.add_argument('--embed-files', default=None, type=str, help='Custom embedding files glob')
     parser.add_argument('--energy-files', default=None, type=str, help='Custom energy files glob')
     parser.add_argument('--force-files', default=None, type=str, help='Custom force files glob')
+    parser.add_argument('--dataset-preload-limit', default=1024, type=int, help='Custom and HDF5 datasets will preload to RAM datasets that are less than this size in MB')
     parser.add_argument('--y-weight', default=1.0, type=float, help='Weighting factor for y label in the loss function')
     parser.add_argument('--neg-dy-weight', default=1.0, type=float, help='Weighting factor for neg_dy label in the loss function')
 
     # model architecture
-    parser.add_argument('--model', type=str, default='graph-network', choices=models.__all__, help='Which model to train')
+    parser.add_argument('--model', type=str, default='graph-network', choices=models.__all_models__, help='Which model to train')
     parser.add_argument('--output-model', type=str, default='Scalar', choices=output_modules.__all__, help='The type of output model')
-    parser.add_argument('--prior-model', type=str, default=None, choices=priors.__all__, help='Which prior model to use')
+    parser.add_argument('--prior-model', type=str, default=None, help='Which prior model to use. It can be a string, a dict if you want to add arguments for it or a dicts to add more than one prior. e.g. {"Atomref": {"max_z":100}, "Coulomb":{"max_num_neighs"=100, "alpha"=1}', action="extend", nargs="*")
 
     # architectural args
-    parser.add_argument('--charge', type=bool, default=False, help='Model needs a total charge')
-    parser.add_argument('--spin', type=bool, default=False, help='Model needs a spin state')
+    parser.add_argument('--charge', type=bool, default=False, help='Model needs a total charge. Set this to True if your dataset contains charges and you want them passed down to the model.')
+    parser.add_argument('--spin', type=bool, default=False, help='Model needs a spin state. Set this to True if your dataset contains spin states and you want them passed down to the model.')
     parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
     parser.add_argument('--num-layers', type=int, default=6, help='Number of interaction layers in the model')
     parser.add_argument('--num-rbf', type=int, default=64, help='Number of radial basis functions in model')
@@ -86,10 +93,20 @@ def get_args():
     parser.add_argument('--attn-activation', default='silu', choices=list(act_class_mapping.keys()), help='Attention activation function')
     parser.add_argument('--num-heads', type=int, default=8, help='Number of attention heads')
 
+    # Equivariant Transformer specific
+    parser.add_argument('--vector-cutoff', type=bool, default=False, help='If true, the vector features are weighted by the cutoff function during message passing, forcing the energy to be continuous at the cutoff.')
+
     # TensorNet specific
     parser.add_argument('--equivariance-invariance-group', type=str, default='O(3)', help='Equivariance and invariance group of TensorNet')
+    parser.add_argument('--box-vecs', type=lambda x: list(yaml.safe_load(x)), default=None, help="""Box vectors for periodic boundary conditions. The vectors `a`, `b`, and `c` represent a triclinic box and must satisfy
+        certain requirements:
+        `a[1] = a[2] = b[2] = 0`;`a[0] >= 2*cutoff, b[1] >= 2*cutoff, c[2] >= 2*cutoff`;`a[0] >= 2*b[0]`;`a[0] >= 2*c[0]`;`b[1] >= 2*c[1]`;
+        These requirements correspond to a particular rotation of the system and reduced form of the vectors, as well as the requirement that the cutoff be no larger than half the box width.
+    Example: [[1,0,0],[0,1,0],[0,0,1]]""")
+    parser.add_argument('--static_shapes', type=bool, default=False, help='If true, TensorNet will use statically shaped tensors for the network, making it capturable into a CUDA graphs. In some situations static shapes can lead to a speedup, but it increases memory usage.')
 
     # other args
+    parser.add_argument('--check_errors', type=bool, default=True, help='Will check if max_num_neighbors is not enough to contain all neighbors. This is incompatible with CUDA graphs.')
     parser.add_argument('--derivative', default=False, type=bool, help='If true, take the derivative of the prediction w.r.t coordinates')
     parser.add_argument('--cutoff-lower', type=float, default=0.0, help='Lower cutoff in model')
     parser.add_argument('--cutoff-upper', type=float, default=5.0, help='Upper cutoff in model')
@@ -105,9 +122,12 @@ def get_args():
     parser.add_argument('--tensorboard-use', default=False, type=bool, help='Defines if tensor board is used or not')
 
     # fmt: on
+    return parser
 
+
+def get_args():
+    parser = get_argparse()
     args = parser.parse_args()
-
     if args.redirect:
         sys.stdout = open(os.path.join(args.log_dir, "log"), "w")
         sys.stderr = sys.stdout
@@ -118,6 +138,7 @@ def get_args():
     if args.inference_batch_size is None:
         args.inference_batch_size = args.batch_size
 
+    os.makedirs(os.path.abspath(args.log_dir), exist_ok=True)
     save_argparse(args, os.path.join(args.log_dir, "input.yaml"), exclude=["conf"])
 
     return args
@@ -164,7 +185,7 @@ def main():
 
     if args.tensorboard_use:
         tb_logger = TensorBoardLogger(
-            args.log_dir, name="tensorbord", version="", default_hp_metric=False
+            args.log_dir, name="tensorboard", version="", default_hp_metric=False
         )
         _logger.append(tb_logger)
     if args.test_interval > 0:
@@ -173,7 +194,7 @@ def main():
         )
 
     trainer = pl.Trainer(
-        strategy=DDPStrategy(find_unused_parameters=False),
+        strategy="auto",
         max_epochs=args.num_epochs,
         accelerator="auto",
         devices=args.ngpus,

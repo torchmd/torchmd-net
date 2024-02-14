@@ -1,18 +1,39 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+
 from typing import Optional, Tuple
 import torch
 from torch import Tensor, nn
-from torch_geometric.nn import MessagePassing
 from torchmdnet.models.utils import (
     NeighborEmbedding,
     CosineCutoff,
     OptimizedDistance,
     rbf_class_mapping,
     act_class_mapping,
+    scatter,
 )
-from torch_scatter import scatter
+from torchmdnet.utils import deprecated_class
 
+
+@deprecated_class
 class TorchMD_T(nn.Module):
     r"""The TorchMD Transformer architecture.
+        This function optionally supports periodic boundary conditions with
+        arbitrary triclinic boxes.  The box vectors `a`, `b`, and `c` must satisfy
+        certain requirements:
+
+        `a[1] = a[2] = b[2] = 0`
+        `a[0] >= 2*cutoff, b[1] >= 2*cutoff, c[2] >= 2*cutoff`
+        `a[0] >= 2*b[0]`
+        `a[0] >= 2*c[0]`
+        `b[1] >= 2*c[1]`
+
+        These requirements correspond to a particular rotation of the system and
+        reduced form of the vectors, as well as the requirement that the cutoff be
+        no larger than half the box width.
+    This model is considered deprecated and will be removed in a future release.
+    Please refer to https://github.com/torchmd/torchmd-net/pull/240 for more details.
 
     Args:
         hidden_channels (int, optional): Hidden embedding size.
@@ -48,6 +69,14 @@ class TorchMD_T(nn.Module):
             higher values if they are using higher upper distance cutoffs and expect more
             than 32 neighbors per node/atom.
             (default: :obj:`32`)
+        box_vecs (Tensor, optional):
+            The vectors defining the periodic box.  This must have shape `(3, 3)`,
+            where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
+            If this is omitted, periodic boundary conditions are not applied.
+            (default: :obj:`None`)
+        check_errors (bool, optional): Whether to check for errors in the distance module.
+            (default: :obj:`True`)
+
     """
 
     def __init__(
@@ -64,9 +93,11 @@ class TorchMD_T(nn.Module):
         distance_influence="both",
         cutoff_lower=0.0,
         cutoff_upper=5.0,
+        check_errors=True,
         max_z=100,
         max_num_neighbors=32,
-        dtype=torch.float
+        dtype=torch.float,
+        box_vecs=None,
     ):
         super(TorchMD_T, self).__init__()
 
@@ -100,15 +131,27 @@ class TorchMD_T(nn.Module):
         self.embedding = nn.Embedding(self.max_z, hidden_channels, dtype=dtype)
 
         self.distance = OptimizedDistance(
-            cutoff_lower, cutoff_upper, max_num_pairs=-max_num_neighbors, loop=True
+            cutoff_lower,
+            cutoff_upper,
+            max_num_pairs=-max_num_neighbors,
+            loop=True,
+            box=box_vecs,
+            long_edge_index=True,
+            check_errors=check_errors,
         )
+
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf, dtype=dtype
         )
         self.neighbor_embedding = (
             NeighborEmbedding(
-                hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z, dtype=dtype
-            ).jittable()
+                hidden_channels,
+                num_rbf,
+                cutoff_lower,
+                cutoff_upper,
+                self.max_z,
+                dtype=dtype,
+            )
             if neighbor_embedding
             else None
         )
@@ -125,7 +168,7 @@ class TorchMD_T(nn.Module):
                 cutoff_lower,
                 cutoff_upper,
                 dtype=dtype,
-            ).jittable()
+            )
             self.attention_layers.append(layer)
 
         self.out_norm = nn.LayerNorm(hidden_channels, dtype=dtype)
@@ -146,20 +189,20 @@ class TorchMD_T(nn.Module):
         z: Tensor,
         pos: Tensor,
         batch: Tensor,
+        box: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
-
         x = self.embedding(z)
 
-        edge_index, edge_weight, _ = self.distance(pos, batch)
+        edge_index, edge_weight, _ = self.distance(pos, batch, box)
         edge_attr = self.distance_expansion(edge_weight)
 
         if self.neighbor_embedding is not None:
             x = self.neighbor_embedding(z, x, edge_index, edge_weight, edge_attr)
 
         for attn in self.attention_layers:
-            x = x + attn(x, edge_index, edge_weight, edge_attr)
+            x = x + attn(x, edge_index, edge_weight, edge_attr, z.shape[0])
         x = self.out_norm(x)
 
         return x, None, z, pos, batch
@@ -182,7 +225,12 @@ class TorchMD_T(nn.Module):
         )
 
 
-class MultiHeadAttention(MessagePassing):
+class MultiHeadAttention(nn.Module):
+    """Multi-head attention layer.
+
+    :meta private:
+    """
+
     def __init__(
         self,
         hidden_channels,
@@ -195,7 +243,7 @@ class MultiHeadAttention(MessagePassing):
         cutoff_upper,
         dtype=torch.float,
     ):
-        super(MultiHeadAttention, self).__init__(aggr="add", node_dim=0)
+        super(MultiHeadAttention, self).__init__()
         assert hidden_channels % num_heads == 0, (
             f"The number of hidden channels ({hidden_channels}) "
             f"must be evenly divisible by the number of "
@@ -243,7 +291,9 @@ class MultiHeadAttention(MessagePassing):
             nn.init.xavier_uniform_(self.dv_proj.weight)
             self.dv_proj.bias.data.fill_(0)
 
-    def forward(self, x, edge_index, r_ij, f_ij):
+    def forward(
+        self, x: Tensor, edge_index: Tensor, r_ij: Tensor, f_ij: Tensor, n_atoms: int
+    ) -> Tensor:
         head_shape = (-1, self.num_heads, self.head_dim)
 
         x = self.layernorm(x)
@@ -261,15 +311,24 @@ class MultiHeadAttention(MessagePassing):
             if self.dv_proj is not None
             else None
         )
-
-        # propagate_type: (q: Tensor, k: Tensor, v: Tensor, dk: Tensor, dv: Tensor, r_ij: Tensor)
-        out = self.propagate(
-            edge_index, q=q, k=k, v=v, dk=dk, dv=dv, r_ij=r_ij, size=None
-        )
+        msg = self.message(edge_index, q, k, v, dk, dv, r_ij)
+        out = scatter(msg, edge_index[0], dim=0, dim_size=n_atoms)
         out = self.o_proj(out.reshape(-1, self.num_heads * self.head_dim))
         return out
 
-    def message(self, q_i, k_j, v_j, dk, dv, r_ij):
+    def message(
+        self,
+        edge_index: Tensor,
+        q: Tensor,
+        k: Tensor,
+        v: Tensor,
+        dk: Optional[Tensor],
+        dv: Optional[Tensor],
+        r_ij: Tensor,
+    ) -> Tensor:
+        q_i = q.index_select(0, edge_index[0])
+        k_j = k.index_select(0, edge_index[1])
+        v_j = v.index_select(0, edge_index[1])
         # compute attention matrix
         if dk is None:
             attn = (q_i * k_j).sum(dim=-1)

@@ -1,3 +1,7 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+
 from os.path import join
 from tqdm import tqdm
 import torch
@@ -8,38 +12,47 @@ from lightning_utilities.core.rank_zero import rank_zero_warn
 from torchmdnet import datasets
 from torch_geometric.data import Dataset
 from torchmdnet.utils import make_splits, MissingEnergyException
-from torch_scatter import scatter
+from torchmdnet.models.utils import scatter
 from torchmdnet.models.utils import dtype_mapping
 
 
 class FloatCastDatasetWrapper(Dataset):
+    """A wrapper around a torch_geometric dataset that casts all floating point
+    tensors to a given dtype.
+    """
+
     def __init__(self, dataset, dtype=torch.float64):
         super(FloatCastDatasetWrapper, self).__init__(
             dataset.root, dataset.transform, dataset.pre_transform, dataset.pre_filter
         )
-        self.dataset = dataset
-        self.dtype = dtype
+        self._dataset = dataset
+        self._dtype = dtype
 
     def len(self):
-        return len(self.dataset)
+        return len(self._dataset)
 
     def get(self, idx):
-        data = self.dataset.get(idx)
+        data = self._dataset.get(idx)
         for key, value in data:
             if torch.is_tensor(value) and torch.is_floating_point(value):
-                setattr(data, key, value.to(self.dtype))
+                setattr(data, key, value.to(self._dtype))
         return data
 
-    def __getattr__(self, name):
-        # Check if the attribute exists in the underlying dataset
-        if hasattr(self.dataset, name):
-            return getattr(self.dataset, name)
-        raise AttributeError(
-            f"'{type(self).__name__}' and its underlying dataset have no attribute '{name}'"
-        )
+    def __getattr__(self, __name):
+        return getattr(self.__getattribute__("_dataset"), __name)
 
 
 class DataModule(LightningDataModule):
+    """A LightningDataModule for loading datasets from the torchmdnet.datasets module.
+
+    Args:
+        hparams (dict): A dictionary containing the hyperparameters of the
+            dataset. See the documentation of the torchmdnet.datasets module
+            for details.
+        dataset (torch_geometric.data.Dataset): A dataset to use instead of
+            loading a new one from the torchmdnet.datasets module.
+    """
+
     def __init__(self, hparams, dataset=None):
         super(DataModule, self).__init__()
         self.save_hyperparameters(hparams)
@@ -55,14 +68,20 @@ class DataModule(LightningDataModule):
                     self.hparams["embed_files"],
                     self.hparams["energy_files"],
                     self.hparams["force_files"],
+                    self.hparams["dataset_preload_limit"],
                 )
             else:
                 dataset_arg = {}
                 if self.hparams["dataset_arg"] is not None:
                     dataset_arg = self.hparams["dataset_arg"]
+                if self.hparams["dataset"] == "HDF5":
+                    dataset_arg["dataset_preload_limit"] = self.hparams[
+                        "dataset_preload_limit"
+                    ]
                 self.dataset = getattr(datasets, self.hparams["dataset"])(
                     self.hparams["dataset_root"], **dataset_arg
                 )
+
         self.dataset = FloatCastDatasetWrapper(
             self.dataset, dtype_mapping[self.hparams["precision"]]
         )
@@ -104,16 +123,19 @@ class DataModule(LightningDataModule):
 
     @property
     def atomref(self):
+        """Returns the atomref of the dataset if it has one, otherwise None."""
         if hasattr(self.dataset, "get_atomref"):
             return self.dataset.get_atomref()
         return None
 
     @property
     def mean(self):
+        """Returns the mean of the dataset if it has one, otherwise None."""
         return self._mean
 
     @property
     def std(self):
+        """Returns the standard deviation of the dataset if it has one, otherwise None."""
         return self._std
 
     def _is_test_during_training_epoch(self):
@@ -130,15 +152,15 @@ class DataModule(LightningDataModule):
 
         if stage == "train":
             batch_size = self.hparams["batch_size"]
-            shuffle = True
         elif stage in ["val", "test"]:
             batch_size = self.hparams["inference_batch_size"]
-            shuffle = False
 
+        shuffle = stage == "train"
         dl = DataLoader(
             dataset=dataset,
             batch_size=batch_size,
             num_workers=self.hparams["num_workers"],
+            persistent_workers=True,
             pin_memory=True,
             shuffle=shuffle,
         )

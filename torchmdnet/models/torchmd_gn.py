@@ -1,26 +1,50 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+
 from typing import Optional, Tuple
 import torch
 from torch import Tensor, nn
-from torch_geometric.nn import MessagePassing
 from torchmdnet.models.utils import (
     NeighborEmbedding,
     CosineCutoff,
     OptimizedDistance,
     rbf_class_mapping,
     act_class_mapping,
+    scatter,
 )
 
 
 class TorchMD_GN(nn.Module):
-    r"""The TorchMD Graph Network architecture.
-    Code adapted from https://github.com/rusty1s/pytorch_geometric/blob/d7d8e5e2edada182d820bbb1eec5f016f50db1e0/torch_geometric/nn/models/schnet.py#L38
+    r"""Graph Network architecture.
+        Code adapted from https://github.com/rusty1s/pytorch_geometric/blob/d7d8e5e2edada182d820bbb1eec5f016f50db1e0/torch_geometric/nn/models/schnet.py#L38
+        and used at
+        Machine learning coarse-grained potentials of protein thermodynamics; M. Majewski et al.
+        Nature Communications (2023)
+
+        .. math::
+            \mathbf{x}^{\prime}_i = \sum_{j \in \mathcal{N}(i)} \mathbf{x}_j \odot
+            h_{\mathbf{\Theta}} ( \exp(-\gamma(\mathbf{e}_{j,i} - \mathbf{\mu}))),
+
+        here :math:`h_{\mathbf{\Theta}}` denotes an MLP and
+        :math:`\mathbf{e}_{j,i}` denotes the interatomic distances between atoms.
+
+
+    This function optionally supports periodic boundary conditions with arbitrary triclinic boxes.
+    For a given cutoff, :math:`r_c`, the box vectors :math:`\vec{a},\vec{b},\vec{c}` must satisfy
+    certain requirements:
 
     .. math::
-        \mathbf{x}^{\prime}_i = \sum_{j \in \mathcal{N}(i)} \mathbf{x}_j \odot
-        h_{\mathbf{\Theta}} ( \exp(-\gamma(\mathbf{e}_{j,i} - \mathbf{\mu}))),
 
-    here :math:`h_{\mathbf{\Theta}}` denotes an MLP and
-    :math:`\mathbf{e}_{j,i}` denotes the interatomic distances between atoms.
+      \begin{align*}
+      a_y = a_z = b_z &= 0 \\
+      a_x, b_y, c_z &\geq 2 r_c \\
+      a_x &\geq 2  b_x \\
+      a_x &\geq 2  c_x \\
+      b_y &\geq 2  c_y
+      \end{align*}
+
+    These requirements correspond to a particular rotation of the system and reduced form of the vectors, as well as the requirement that the cutoff be no larger than half the box width.
 
     Args:
         hidden_channels (int, optional): Hidden embedding size.
@@ -55,6 +79,14 @@ class TorchMD_GN(nn.Module):
             convolution ouput. Can be one of 'add', 'mean', or 'max' (see
             https://pytorch-geometric.readthedocs.io/en/latest/notes/create_gnn.html
             for more details). (default: :obj:`"add"`)
+        box_vecs (Tensor, optional):
+            The vectors defining the periodic box.  This must have shape `(3, 3)`,
+            where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
+            If this is omitted, periodic boundary conditions are not applied.
+            (default: :obj:`None`)
+        check_errors (bool, optional): Whether to check for errors in the distance module.
+            (default: :obj:`True`)
+
     """
 
     def __init__(
@@ -71,8 +103,10 @@ class TorchMD_GN(nn.Module):
         cutoff_upper=5.0,
         max_z=100,
         max_num_neighbors=32,
+        check_errors=True,
         aggr="add",
-        dtype=torch.float32
+        dtype=torch.float32,
+        box_vecs=None,
     ):
         super(TorchMD_GN, self).__init__()
 
@@ -108,15 +142,26 @@ class TorchMD_GN(nn.Module):
         self.embedding = nn.Embedding(self.max_z, hidden_channels, dtype=dtype)
 
         self.distance = OptimizedDistance(
-            cutoff_lower, cutoff_upper, max_num_pairs=-max_num_neighbors
+            cutoff_lower,
+            cutoff_upper,
+            max_num_pairs=-max_num_neighbors,
+            box=box_vecs,
+            long_edge_index=True,
+            check_errors=check_errors,
         )
+
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf, dtype=dtype
         )
         self.neighbor_embedding = (
             NeighborEmbedding(
-                hidden_channels, num_rbf, cutoff_lower, cutoff_upper, self.max_z, dtype=dtype
-            ).jittable()
+                hidden_channels,
+                num_rbf,
+                cutoff_lower,
+                cutoff_upper,
+                self.max_z,
+                dtype=dtype,
+            )
             if neighbor_embedding
             else None
         )
@@ -131,7 +176,7 @@ class TorchMD_GN(nn.Module):
                 cutoff_lower,
                 cutoff_upper,
                 aggr=self.aggr,
-                dtype=dtype
+                dtype=dtype,
             )
             self.interactions.append(block)
 
@@ -150,20 +195,22 @@ class TorchMD_GN(nn.Module):
         z: Tensor,
         pos: Tensor,
         batch: Tensor,
+        box: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
-
         x = self.embedding(z)
 
-        edge_index, edge_weight, _ = self.distance(pos, batch)
+        edge_index, edge_weight, _ = self.distance(pos, batch, box)
         edge_attr = self.distance_expansion(edge_weight)
 
         if self.neighbor_embedding is not None:
             x = self.neighbor_embedding(z, x, edge_index, edge_weight, edge_attr)
 
         for interaction in self.interactions:
-            x = x + interaction(x, edge_index, edge_weight, edge_attr)
+            x = x + interaction(
+                x, edge_index, edge_weight, edge_attr, n_atoms=z.shape[0]
+            )
 
         return x, None, z, pos, batch
 
@@ -185,6 +232,11 @@ class TorchMD_GN(nn.Module):
 
 
 class InteractionBlock(nn.Module):
+    """Interaction block for the TorchMD Graph Network architecture.
+
+    :meta private:
+    """
+
     def __init__(
         self,
         hidden_channels,
@@ -194,7 +246,7 @@ class InteractionBlock(nn.Module):
         cutoff_lower,
         cutoff_upper,
         aggr="add",
-        dtype=torch.float32
+        dtype=torch.float32,
     ):
         super(InteractionBlock, self).__init__()
         self.mlp = nn.Sequential(
@@ -210,8 +262,8 @@ class InteractionBlock(nn.Module):
             cutoff_lower,
             cutoff_upper,
             aggr=aggr,
-            dtype=dtype
-        ).jittable()
+            dtype=dtype,
+        )
         self.act = activation()
         self.lin = nn.Linear(hidden_channels, hidden_channels, dtype=dtype)
 
@@ -226,14 +278,26 @@ class InteractionBlock(nn.Module):
         nn.init.xavier_uniform_(self.lin.weight)
         self.lin.bias.data.fill_(0)
 
-    def forward(self, x, edge_index, edge_weight, edge_attr):
-        x = self.conv(x, edge_index, edge_weight, edge_attr)
+    def forward(
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        edge_weight: Tensor,
+        edge_attr: Tensor,
+        n_atoms: Optional[int] = None,
+    ) -> Tensor:
+        x = self.conv(x, edge_index, edge_weight, edge_attr, n_atoms)
         x = self.act(x)
         x = self.lin(x)
         return x
 
 
-class CFConv(MessagePassing):
+class CFConv(nn.Module):
+    """Continuous-filter convolution layer for the TorchMD Graph Network architecture.
+
+    :meta private:
+    """
+
     def __init__(
         self,
         in_channels,
@@ -243,14 +307,14 @@ class CFConv(MessagePassing):
         cutoff_lower,
         cutoff_upper,
         aggr="add",
-        dtype=torch.float32
+        dtype=torch.float32,
     ):
-        super(CFConv, self).__init__(aggr=aggr)
+        super(CFConv, self).__init__()
         self.lin1 = nn.Linear(in_channels, num_filters, bias=False, dtype=dtype)
         self.lin2 = nn.Linear(num_filters, out_channels, bias=True, dtype=dtype)
         self.net = net
         self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)
-
+        self.aggr = aggr
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -258,15 +322,19 @@ class CFConv(MessagePassing):
         nn.init.xavier_uniform_(self.lin2.weight)
         self.lin2.bias.data.fill_(0)
 
-    def forward(self, x, edge_index, edge_weight, edge_attr):
+    def forward(
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        edge_weight: Tensor,
+        edge_attr: Tensor,
+        n_atoms: Optional[int] = None,
+    ) -> Tensor:
         C = self.cutoff(edge_weight)
         W = self.net(edge_attr) * C.view(-1, 1)
 
         x = self.lin1(x)
-        # propagate_type: (x: Tensor, W: Tensor)
-        x = self.propagate(edge_index, x=x, W=W, size=None)
+        msg = W * x.index_select(0, edge_index[1])
+        x = scatter(msg, edge_index[0], dim=0, dim_size=n_atoms, reduce=self.aggr)
         x = self.lin2(x)
         return x
-
-    def message(self, x_j, W):
-        return x_j * W

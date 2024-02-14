@@ -1,3 +1,7 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+
 from torchmdnet.priors import D2
 import torch as pt
 from pytest import mark
@@ -80,6 +84,6 @@ def test_d2(test_case):
     batch = pt.tensor(data["batch"])
 
     y_init = pt.zeros_like(y_ref)
-    y_res = prior.post_reduce(y_init, z, pos, batch, {})
+    y_res = prior.post_reduce(y_init, z, pos, batch)
 
     pt.testing.assert_allclose(y_res, y_ref)

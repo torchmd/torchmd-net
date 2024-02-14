@@ -1,9 +1,15 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+
 import h5py
 import numpy as np
-import os
 import torch as pt
-from torch_geometric.data import Data, Dataset, download_url
+from torch_geometric.data import Data, Dataset, download_url, extract_tar
+from torchmdnet.datasets.memdataset import MemmappedDataset
 from tqdm import tqdm
+from torchmdnet.datasets.ani import ANIBase
+import os
 
 """
 COmprehensive Machine-learning Potential (COMP6) Benchmark Suite
@@ -16,8 +22,7 @@ For more details check:
 """
 
 
-class COMP6Base(Dataset):
-
+class COMP6Base(MemmappedDataset):
     ELEMENT_ENERGIES = {
         1: -0.500607632585,
         6: -37.8302333826,
@@ -35,22 +40,14 @@ class COMP6Base(Dataset):
         pre_filter=None,
     ):
         self.name = self.__class__.__name__
-        super().__init__(root, transform, pre_transform, pre_filter)
-
-        idx_name, z_name, pos_name, y_name, neg_dy_name = self.processed_paths
-        self.idx_mm = np.memmap(idx_name, mode="r", dtype=np.int64)
-        self.z_mm = np.memmap(z_name, mode="r", dtype=np.int8)
-        self.pos_mm = np.memmap(
-            pos_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
+        super().__init__(
+            root,
+            transform,
+            pre_transform,
+            pre_filter,
+            remove_ref_energy=False,
+            properties=("y", "neg_dy"),
         )
-        self.y_mm = np.memmap(y_name, mode="r", dtype=np.float64)
-        self.neg_dy_mm = np.memmap(
-            neg_dy_name, mode="r", dtype=np.float32, shape=(self.z_mm.shape[0], 3)
-        )
-
-        assert self.idx_mm[0] == 0
-        assert self.idx_mm[-1] == len(self.z_mm)
-        assert len(self.idx_mm) == len(self.y_mm) + 1
 
     @property
     def raw_url_name(self):
@@ -73,18 +70,7 @@ class COMP6Base(Dataset):
         for url in self.raw_url:
             download_url(url, self.raw_dir)
 
-    @property
-    def processed_file_names(self):
-        return [
-            f"{self.name}.idx.mmap",
-            f"{self.name}.z.mmap",
-            f"{self.name}.pos.mmap",
-            f"{self.name}.y.mmap",
-            f"{self.name}.neg_dy.mmap",
-        ]
-
     def sample_iter(self, mol_ids=False):
-
         for path in tqdm(self.raw_paths, desc="Files"):
             molecules = list(h5py.File(path).values())[0].items()
 
@@ -100,6 +86,9 @@ class COMP6Base(Dataset):
                 all_neg_dy = pt.tensor(
                     mol["forces"][:] * self.HARTREE_TO_EV, dtype=pt.float32
                 )
+                all_neg_dy = (
+                    -all_neg_dy
+                )  # The COMP6 datasets accidentally have gradients as forces
                 all_y -= self.compute_reference_energy(z)
 
                 assert all_pos.shape[0] == all_y.shape[0]
@@ -111,11 +100,10 @@ class COMP6Base(Dataset):
                 assert all_neg_dy.shape[2] == 3
 
                 for pos, y, neg_dy in zip(all_pos, all_y, all_neg_dy):
-
                     # Create a sample
                     args = dict(z=z, pos=pos, y=y.view(1, 1), neg_dy=neg_dy)
                     if mol_ids:
-                        args["mol_id"] = mol_id
+                        args["mol_id"] = f"{os.path.basename(path)}_{mol_id}"
                     data = Data(**args)
 
                     if self.pre_filter is not None and not self.pre_filter(data):
@@ -125,78 +113,6 @@ class COMP6Base(Dataset):
                         data = self.pre_transform(data)
 
                     yield data
-
-    def process(self):
-
-        print("Gathering statistics...")
-        num_all_confs = 0
-        num_all_atoms = 0
-        for data in self.sample_iter():
-            num_all_confs += 1
-            num_all_atoms += data.z.shape[0]
-
-        print(f"  Total number of conformers: {num_all_confs}")
-        print(f"  Total number of atoms: {num_all_atoms}")
-
-        idx_name, z_name, pos_name, y_name, neg_dy_name = self.processed_paths
-        idx_mm = np.memmap(
-            idx_name + ".tmp", mode="w+", dtype=np.int64, shape=(num_all_confs + 1,)
-        )
-        z_mm = np.memmap(
-            z_name + ".tmp", mode="w+", dtype=np.int8, shape=(num_all_atoms,)
-        )
-        pos_mm = np.memmap(
-            pos_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
-        )
-        y_mm = np.memmap(
-            y_name + ".tmp", mode="w+", dtype=np.float64, shape=(num_all_confs,)
-        )
-        neg_dy_mm = np.memmap(
-            neg_dy_name + ".tmp", mode="w+", dtype=np.float32, shape=(num_all_atoms, 3)
-        )
-
-        print("Storing data...")
-        i_atom = 0
-        for i_conf, data in enumerate(self.sample_iter()):
-            i_next_atom = i_atom + data.z.shape[0]
-
-            idx_mm[i_conf] = i_atom
-            z_mm[i_atom:i_next_atom] = data.z.to(pt.int8)
-            pos_mm[i_atom:i_next_atom] = data.pos
-            y_mm[i_conf] = data.y
-            neg_dy_mm[i_atom:i_next_atom] = data.neg_dy
-
-            i_atom = i_next_atom
-
-        idx_mm[-1] = num_all_atoms
-        assert i_atom == num_all_atoms
-
-        idx_mm.flush()
-        z_mm.flush()
-        pos_mm.flush()
-        y_mm.flush()
-        neg_dy_mm.flush()
-
-        os.rename(idx_mm.filename, idx_name)
-        os.rename(z_mm.filename, z_name)
-        os.rename(pos_mm.filename, pos_name)
-        os.rename(y_mm.filename, y_name)
-        os.rename(neg_dy_mm.filename, neg_dy_name)
-
-    def len(self):
-        return len(self.y_mm)
-
-    def get(self, idx):
-
-        atoms = slice(self.idx_mm[idx], self.idx_mm[idx + 1])
-        z = pt.tensor(self.z_mm[atoms], dtype=pt.long)
-        pos = pt.tensor(self.pos_mm[atoms], dtype=pt.float32)
-        y = pt.tensor(self.y_mm[idx], dtype=pt.float32).view(
-            1, 1
-        )  # It would be better to use float64, but the trainer complaints
-        neg_dy = pt.tensor(self.neg_dy_mm[atoms], dtype=pt.float32)
-
-        return Data(z=z, pos=pos, y=y, neg_dy=neg_dy)
 
 
 class ANIMD(COMP6Base):
@@ -219,17 +135,6 @@ class ANIMD(COMP6Base):
     def raw_file_names(self):
         return ["ani_md_bench.h5"]
 
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def download(self):
-        super().download()
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def process(self):
-        super().process()
-
-
 class DrugBank(COMP6Base):
     """
     DrugBank Benchmark. This benchmark is developed through a subsampling of the
@@ -244,16 +149,6 @@ class DrugBank(COMP6Base):
     @property
     def raw_file_names(self):
         return ["drugbank_testset.h5"]
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def download(self):
-        super().download()
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def process(self):
-        super().process()
 
 
 class GDB07to09(COMP6Base):
@@ -270,16 +165,6 @@ class GDB07to09(COMP6Base):
     @property
     def raw_file_names(self):
         return ["gdb11_07_test500.h5", "gdb11_08_test500.h5", "gdb11_09_test500.h5"]
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def download(self):
-        super().download()
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def process(self):
-        super().process()
 
 
 class GDB10to13(COMP6Base):
@@ -300,16 +185,6 @@ class GDB10to13(COMP6Base):
             "gdb13_13_test1000.h5",
         ]
 
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def download(self):
-        super().download()
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def process(self):
-        super().process()
-
 
 class Tripeptides(COMP6Base):
     """
@@ -324,16 +199,6 @@ class Tripeptides(COMP6Base):
     @property
     def raw_file_names(self):
         return ["tripeptide_full.h5"]
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def download(self):
-        super().download()
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def process(self):
-        super().process()
 
 
 class S66X8(COMP6Base):
@@ -358,16 +223,6 @@ class S66X8(COMP6Base):
     def raw_file_names(self):
         return ["s66x8_wb97x6-31gd.h5"]
 
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def download(self):
-        super().download()
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def process(self):
-        super().process()
-
 
 class COMP6v1(Dataset):
     """
@@ -385,7 +240,7 @@ class COMP6v1(Dataset):
 
         self.subsets = [
             DS(root, transform, pre_transform, pre_filter)
-            for DS in (ANIMD, DrugBank, GDB07to09, GDB10to13, Tripeptides, S66X8)
+           for DS in (ANIMD, DrugBank, GDB07to09, GDB10to13, Tripeptides, S66X8)
         ]
 
         self.num_samples = sum(len(subset) for subset in self.subsets)
@@ -402,3 +257,90 @@ class COMP6v1(Dataset):
     def get(self, idx):
         i_subset, i_sample = self.subset_indices[idx]
         return self.subsets[i_subset][i_sample]
+
+
+class COMP6v2(ANIBase):
+    """Dataset for the COmprehensive Machine-learning Potential (COMP6) Benchmark Suite version 2.0
+
+    COMP6v2 is a data set of density functional properties for molecules containing H, C, N, O, S, F, and Cl.
+    It is available at different levels of theory but here we use wB97X/631Gd which was used in evaluating ANI-2x.
+
+    References:
+
+    - https://pubs.acs.org/doi/10.1021/acs.jctc.0c00121
+    """
+
+    # Taken from https://github.com/isayev/ASE_ANI/blob/master/ani_models/ani-2x_8x/sae_linfit.dat
+    _ELEMENT_ENERGIES = {
+        1: -0.5978583943827134,  # H
+        6: -38.08933878049795,  # C
+        7: -54.711968298621066,  # N
+        8: -75.19106774742086,  # O
+        9: -99.80348506781634,  # F
+        16: -398.1577125334925,  # S
+        17: -460.1681939421027,  # Cl
+    }
+
+    @property
+    def raw_url(self):
+        return "https://zenodo.org/records/10126157/files/COMP6v2_wB97X-631Gd.tar.gz"
+
+    @property
+    def raw_file_names(self):
+        return [os.path.join("comp6v2_final_h5", "COMP6v2_wB97X-631Gd.h5")]
+
+    def download(self):
+        archive = download_url(self.raw_url, self.raw_dir)
+        extract_tar(archive, self.raw_dir)
+        os.remove(archive)
+
+    def sample_iter(self, mol_ids=False):
+        """
+        In [14]: list(molecules)
+        Out[14]:
+        [('cm5_atomic_charges', <HDF5 dataset "cm5_atomic_charges": shape (128, 313), type "<f4">),
+        ('coordinates', <HDF5 dataset "coordinates": shape (128, 312, 3), type "<f4">),
+        ('energies', <HDF5 dataset "energies": shape (128,), type "<f8">),
+        ('forces', <HDF5 dataset "forces": shape (128, 312, 3), type "<f4">),
+        ('hirshfeld_atomic_charges', <HDF5 dataset "hirshfeld_atomic_charges": shape (128, 313), type "<f4">),
+        ('hirshfeld_atomic_dipoles', <HDF5 dataset "hirshfeld_atomic_dipoles": shape (128, 313, 3), type "<f4">),
+        ('species', <HDF5 dataset "species": shape (128, 312), type "<i8">)]
+        """
+        assert len(self.raw_paths) == 1
+        with h5py.File(self.raw_paths[0]) as h5data:
+            for key, data in tqdm(h5data.items(), desc="Molecule Group", leave=False):
+                all_z = pt.tensor(data["species"][:], dtype=pt.long)
+                all_pos = pt.tensor(data["coordinates"][:], dtype=pt.float32)
+                all_y = pt.tensor(
+                    data["energies"][:] * self.HARTREE_TO_EV, dtype=pt.float64
+                )
+                all_neg_dy = pt.tensor(
+                    data["forces"][:] * self.HARTREE_TO_EV, dtype=pt.float32
+                )
+                n_mols = all_pos.shape[0]
+                n_atoms = all_pos.shape[1]
+
+                assert all_y.shape[0] == n_mols
+                assert all_z.shape == (n_mols, n_atoms)
+                assert all_pos.shape == (n_mols, n_atoms, 3)
+                assert all_neg_dy.shape == (n_mols, n_atoms, 3)
+
+                for i, (pos, y, z, neg_dy) in enumerate(
+                    zip(all_pos, all_y, all_z, all_neg_dy)
+                ):
+                    # Create a sample
+                    args = dict(z=z, pos=pos, y=y.view(1, 1), neg_dy=neg_dy)
+                    if mol_ids:
+                        args["mol_id"] = f"{key}_{i}"
+                    data = Data(**args)
+
+                    if data := self.filter_and_pre_transform(data):
+                        yield data
+
+    def get_atomref(self, max_z=100):
+        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior."""
+        refs = pt.zeros(max_z)
+        for key, val in self._ELEMENT_ENERGIES.items():
+            refs[key] = val * self.HARTREE_TO_EV
+
+        return refs.view(-1, 1)

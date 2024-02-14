@@ -1,3 +1,7 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+
 import torch
 from torchmdnet.models.model import load_model
 
@@ -19,8 +23,8 @@ tranforms = {
 
 
 class External:
-    """
-    This is an adapter to use TorchMD-Net models in TorchMD.
+    """This is an adapter to use TorchMD-Net models in TorchMD.
+
     Parameters
     ----------
     netfile : str or torch.nn.Module
@@ -81,6 +85,7 @@ class External:
         self.cuda_graph = None
         self.energy = None
         self.forces = None
+        self.box = None
         self.pos = None
 
     def _init_cuda_graph(self):
@@ -89,14 +94,30 @@ class External:
         with torch.cuda.stream(stream):
             for _ in range(self.cuda_graph_warmup_steps):
                 self.energy, self.forces = self.model(
-                    self.embeddings, self.pos, self.batch
+                    self.embeddings, self.pos, self.batch, self.box
                 )
             with torch.cuda.graph(self.cuda_graph):
                 self.energy, self.forces = self.model(
-                    self.embeddings, self.pos, self.batch
+                    self.embeddings, self.pos, self.batch, self.box
                 )
 
-    def calculate(self, pos, box):
+    def calculate(self, pos, box = None):
+        """Calculate the energy and forces of the system.
+
+        Parameters
+        ----------
+        pos : torch.Tensor
+            Positions of the atoms in the system.
+        box : torch.Tensor, optional
+            Box vectors of the system. Default: None
+
+        Returns
+        -------
+        energy : torch.Tensor
+            Energy of the system.
+        forces : torch.Tensor
+            Forces on the atoms in the system.
+        """
         pos = pos.to(self.device).type(torch.float32).reshape(-1, 3)
         if self.use_cuda_graph:
             if self.pos is None:
@@ -106,14 +127,18 @@ class External:
                     .detach()
                     .requires_grad_(pos.requires_grad)
                 )
+            if self.box is None and box is not None:
+                self.box = box.clone().to(self.device).detach()
             if self.cuda_graph is None:
                 self._init_cuda_graph()
             assert self.cuda_graph is not None, "CUDA graph is not initialized. This should not had happened."
             with torch.no_grad():
                 self.pos.copy_(pos)
+                if box is not None:
+                    self.box.copy_(box)
                 self.cuda_graph.replay()
         else:
-            self.energy, self.forces = self.model(self.embeddings, pos, self.batch)
+            self.energy, self.forces = self.model(self.embeddings, pos, self.batch, box)
         assert self.forces is not None, "The model is not returning forces"
         assert self.energy is not None, "The model is not returning energy"
         return self.output_transformer(

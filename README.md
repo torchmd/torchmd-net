@@ -1,9 +1,15 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![CI](https://github.com/torchmd/torchmd-net/actions/workflows/CI.yml/badge.svg)](https://github.com/torchmd/torchmd-net/actions/workflows/CI.yml)
+[![Documentation Status](https://readthedocs.org/projects/torchmd-net/badge/?version=latest)](https://torchmd-net.readthedocs.io/en/latest/?badge=latest)  
 
 # TorchMD-NET
 
 TorchMD-NET provides state-of-the-art neural networks potentials (NNPs) and a mechanism to train them. It offers efficient and fast implementations if several NNPs and it is integrated in GPU-accelerated molecular dynamics code like [ACEMD](https://www.acellera.com/products/molecular-dynamics-software-gpu-acemd/), [OpenMM](https://www.openmm.org) and [TorchMD](https://github.com/torchmd/torchmd). TorchMD-NET exposes its NNPs as [PyTorch](https://pytorch.org) modules.
+
+
+## Documentation
+
+Documentation is available at https://torchmd-net.readthedocs.io  
 
 ## Available architectures
 
@@ -13,28 +19,17 @@ TorchMD-NET provides state-of-the-art neural networks potentials (NNPs) and a me
 - [TensorNet](https://arxiv.org/abs/2306.06482)
 
 
-## Installation
 
-1. Clone the repository:
-    ```shell
-    git clone https://github.com/torchmd/torchmd-net.git
-    cd torchmd-net
-    ```
+## Installation  
+TorchMD-Net is available in [conda-forge](https://conda-forge.org/) and can be installed with:  
+```shell
+mamba install torchmd-net
+```
+We recommend using [Mamba](https://github.com/conda-forge/miniforge/#mambaforge) instead of conda.  
 
-2. Install [Mambaforge](https://github.com/conda-forge/miniforge/#mambaforge). We recommend to use `mamba` rather than `conda`.
+### Install from source  
 
-3. Create an environment and activate it:
-    ```shell
-    mamba env create -f environment.yml
-    mamba activate torchmd-net
-    ```
-
-4. Install TorchMD-NET into the environment:
-    ```shell
-    pip install -e .
-    ```
-This will install TorchMD-NET in editable mode, so that changes to the source code are immediately available.
-Besides making all python utilities available environment-wide, this will also install the `torchmd-train` command line utility.
+TorchMD-Net is installed using pip, but you will need to install some dependencies before. Check [this documentation page](https://torchmd-net.readthedocs.io/en/latest/installation.html#install-from-source).  
 
 ## Usage
 Specifying training arguments can either be done via a configuration yaml file or through command line arguments directly. Several examples of architectural and training specifications for some models and datasets can be found in [examples/](https://github.com/torchmd/torchmd-net/tree/main/examples). Note that if a parameter is present both in the yaml file and the command line, the command line version takes precedence.
@@ -84,6 +79,7 @@ CUDA_VISIBLE_DEVICES=0,1 torchmd-train --conf torchmd-net/examples/ET-QM9.yaml.y
 ### Known Limitations
 - Due to the way PyTorch Lightning calculates the number of required DDP processes, all nodes must use the same number of GPUs. Otherwise training will not start or crash.
 - We observe a 50x decrease in performance when mixing nodes with different GPU architectures (tested with RTX 2080 Ti and RTX 3090).
+- Some CUDA systems might hang during a multi-GPU parallel training. Try `export NCCL_P2P_DISABLE=1`, which disables direct peer to peer GPU communication.
 
 
 ## Cite
@@ -104,26 +100,30 @@ url={https://openreview.net/forum?id=zNHzqZ9wrRB}
 #### Graph Network 
 
 ```
-@misc{majewski2022machine,
-      title={Machine Learning Coarse-Grained Potentials of Protein Thermodynamics}, 
-      author={Maciej Majewski and Adrià Pérez and Philipp Thölke and Stefan Doerr and Nicholas E. Charron and Toni Giorgino and Brooke E. Husic and Cecilia Clementi and Frank Noé and Gianni De Fabritiis},
-      year={2022},
-      eprint={2212.07492},
-      archivePrefix={arXiv},
-      primaryClass={q-bio.BM}
+@article{Majewski2023,
+  title = {Machine learning coarse-grained potentials of protein thermodynamics},
+  volume = {14},
+  ISSN = {2041-1723},
+  url = {http://dx.doi.org/10.1038/s41467-023-41343-1},
+  DOI = {10.1038/s41467-023-41343-1},
+  number = {1},
+  journal = {Nature Communications},
+  publisher = {Springer Science and Business Media LLC},
+  author = {Majewski,  Maciej and Pérez,  Adrià and Th\"{o}lke,  Philipp and Doerr,  Stefan and Charron,  Nicholas E. and Giorgino,  Toni and Husic,  Brooke E. and Clementi,  Cecilia and Noé,  Frank and De Fabritiis,  Gianni},
+  year = {2023},
+  month = sep 
 }
 ```
 
 #### TensorNet
 
 ```
-@misc{simeon2023tensornet,
-      title={TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials}, 
-      author={Guillem Simeon and Gianni de Fabritiis},
-      year={2023},
-      eprint={2306.06482},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG}
+@inproceedings{simeon2023tensornet,
+title={TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials},
+author={Guillem Simeon and Gianni De Fabritiis},
+booktitle={Thirty-seventh Conference on Neural Information Processing Systems},
+year={2023},
+url={https://openreview.net/forum?id=BEHlPdBZ2e}
 }
 ```
 

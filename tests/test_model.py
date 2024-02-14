@@ -1,3 +1,7 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
+
 import pytest
 from pytest import mark
 import pickle
@@ -12,7 +16,7 @@ from torchmdnet.models.utils import dtype_mapping
 from utils import load_example_args, create_example_batch
 
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 @mark.parametrize("use_batch", [True, False])
 @mark.parametrize("explicit_q_s", [True, False])
 @mark.parametrize("precision", [32, 64])
@@ -27,7 +31,7 @@ def test_forward(model_name, use_batch, explicit_q_s, precision):
         model(z, pos, batch=batch)
 
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 @mark.parametrize("output_model", output_modules.__all__)
 @mark.parametrize("precision", [32,64])
 def test_forward_output_modules(model_name, output_model, precision):
@@ -37,7 +41,7 @@ def test_forward_output_modules(model_name, output_model, precision):
     model(z, pos, batch=batch)
 
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 @mark.parametrize("device", ["cpu", "cuda"])
 def test_torchscript(model_name, device):
     if device == "cuda" and not torch.cuda.is_available():
@@ -57,7 +61,7 @@ def test_torchscript(model_name, device):
         grad_outputs=grad_outputs,
     )[0]
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 @mark.parametrize("device", ["cpu", "cuda"])
 def test_torchscript_dynamic_shapes(model_name, device):
     if device == "cuda" and not torch.cuda.is_available():
@@ -103,6 +107,8 @@ def test_cuda_graph_compatible(model_name):
             "prior_model": None,
             "atom_filter": -1,
             "derivative": True,
+            "check_error": False,
+            "static_shapes": True,
             "output_model": "Scalar",
             "reduce_op": "sum",
             "precision": 32 }
@@ -124,7 +130,7 @@ def test_cuda_graph_compatible(model_name):
     assert torch.allclose(y, y2)
     assert torch.allclose(neg_dy, neg_dy2, atol=1e-5, rtol=1e-5)
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 def test_seed(model_name):
     args = load_example_args(model_name, remove_prior=True)
     pl.seed_everything(1234)
@@ -135,7 +141,7 @@ def test_seed(model_name):
     for p1, p2 in zip(m1.parameters(), m2.parameters()):
         assert (p1 == p2).all(), "Parameters don't match although using the same seed."
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 @mark.parametrize(
     "output_model",
     output_modules.__all__,
@@ -181,16 +187,16 @@ def test_forward_output(model_name, output_model, overwrite_reference=False):
         ), f"Set new reference outputs for {model_name} with output model {output_model}."
 
     # compare actual ouput with reference
-    torch.testing.assert_allclose(pred, expected[model_name][output_model]["pred"])
+    torch.testing.assert_close(pred, expected[model_name][output_model]["pred"], atol=1e-5, rtol=1e-5)
     if derivative:
-        torch.testing.assert_allclose(
-            deriv, expected[model_name][output_model]["deriv"]
+        torch.testing.assert_close(
+            deriv, expected[model_name][output_model]["deriv"], atol=1e-5, rtol=1e-5
         )
 
 
-@mark.parametrize("model_name", models.__all__)
+@mark.parametrize("model_name", models.__all_models__)
 def test_gradients(model_name):
-    pl.seed_everything(1234)
+    pl.seed_everything(12345)
     precision = 64
     output_model = "Scalar"
     # create model and sample batch
