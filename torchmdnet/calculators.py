@@ -122,9 +122,7 @@ class External:
         forces : torch.Tensor
             Forces on the atoms in the system.
         """
-        pos = pos.to(self.device).reshape(-1, 3)
-        if self.dtype is not None:
-            pos = pos.to(self.dtype)
+        pos = pos.to(self.device).to(self.dtype).reshape(-1, 3)
         if self.use_cuda_graph:
             if self.pos is None:
                 self.pos = (
