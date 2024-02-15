@@ -13,33 +13,6 @@ from torchmdnet import datasets
 from torch_geometric.data import Dataset
 from torchmdnet.utils import make_splits, MissingEnergyException
 from torchmdnet.models.utils import scatter
-from torchmdnet.models.utils import dtype_mapping
-
-
-class FloatCastDatasetWrapper(Dataset):
-    """A wrapper around a torch_geometric dataset that casts all floating point
-    tensors to a given dtype.
-    """
-
-    def __init__(self, dataset, dtype=torch.float64):
-        super(FloatCastDatasetWrapper, self).__init__(
-            dataset.root, dataset.transform, dataset.pre_transform, dataset.pre_filter
-        )
-        self._dataset = dataset
-        self._dtype = dtype
-
-    def len(self):
-        return len(self._dataset)
-
-    def get(self, idx):
-        data = self._dataset.get(idx)
-        for key, value in data:
-            if torch.is_tensor(value) and torch.is_floating_point(value):
-                setattr(data, key, value.to(self._dtype))
-        return data
-
-    def __getattr__(self, __name):
-        return getattr(self.__getattribute__("_dataset"), __name)
 
 
 class DataModule(LightningDataModule):
@@ -81,10 +54,6 @@ class DataModule(LightningDataModule):
                 self.dataset = getattr(datasets, self.hparams["dataset"])(
                     self.hparams["dataset_root"], **dataset_arg
                 )
-
-        self.dataset = FloatCastDatasetWrapper(
-            self.dataset, dtype_mapping[self.hparams["precision"]]
-        )
 
         self.idx_train, self.idx_val, self.idx_test = make_splits(
             len(self.dataset),

@@ -12,11 +12,48 @@ from typing import Optional, Dict, Tuple
 
 from lightning import LightningModule
 from torchmdnet.models.model import create_model, load_model
+from torchmdnet.models.utils import dtype_mapping
+import torch_geometric.transforms as T
 
+class FloatCastDatasetWrapper(T.BaseTransform):
+    """A transform that casts all floating point tensors to a given dtype.
+    tensors to a given dtype.
+    """
+
+    def __init__(self, dtype=torch.float64):
+        super(FloatCastDatasetWrapper, self).__init__()
+        self._dtype = dtype
+
+    def forward(self, data):
+        for key, value in data:
+            if torch.is_tensor(value) and torch.is_floating_point(value):
+                setattr(data, key, value.to(self._dtype))
+        return data
+
+
+class EnergyRefRemover(T.BaseTransform):
+    """A transform that removes the atom reference energy from the energy of a
+    dataset.
+    """
+
+    def __init__(self, atomref):
+        super(EnergyRefRemover, self).__init__()
+        self._atomref = atomref
+
+    def forward(self, data):
+        if "y" in data:
+            data.y -= self._atomref[data.z].sum()
+        return data
 
 class LNNP(LightningModule):
     """
     Lightning wrapper for the Neural Network Potentials in TorchMD-Net.
+
+    Args:
+        hparams (dict): A dictionary containing the hyperparameters of the model.
+        prior_model (torchmdnet.priors.BasePrior): A prior model to use in the model.
+        mean (torch.Tensor, optional): The mean of the dataset to normalize the input.
+        std (torch.Tensor, optional): The standard deviation of the dataset to normalize the input.
     """
 
     def __init__(self, hparams, prior_model=None, mean=None, std=None):
@@ -40,6 +77,12 @@ class LNNP(LightningModule):
         # initialize loss collection
         self.losses = None
         self._reset_losses_dict()
+
+        self.data_transform = FloatCastDatasetWrapper(dtype_mapping[self.hparams.precision])
+        if self.hparams.remove_ref_energy:
+            self.data_transform = T.Compose(
+                [EnergyRefRemover(self.model.prior_model[-1].initial_atomref), self.data_transform]
+            )
 
     def configure_optimizers(self):
         optimizer = AdamW(
@@ -145,6 +188,7 @@ class LNNP(LightningModule):
         #   total_loss: sum of all losses (weighted by the loss weights) for the last loss function in the provided list
         assert len(loss_fn_list) > 0
         assert self.losses is not None
+        batch = self.data_transform(batch)
         with torch.set_grad_enabled(stage == "train" or self.hparams.derivative):
             extra_args = batch.to_dict()
             for a in ("y", "neg_dy", "z", "pos", "batch", "box", "q", "s"):

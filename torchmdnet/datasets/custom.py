@@ -24,16 +24,9 @@ class Custom(Dataset):
         forceglob (string, optional): Glob path for force files. Stored as "neg_dy".
             (default: :obj:`None`)
         preload_memory_limit (int, optional): If the dataset is smaller than this limit (in MB), preload it into CPU memory.
-        transform (callable, optional): A function/transform that takes in an
-        :obj:`torch_geometric.data.Data` object and returns a transformed
-        version. The data object will be transformed before every access.
-    pre_transform (callable, optional): A function/transform that takes in an
-        :obj:`torch_geometric.data.Data` object and returns a transformed
-        version. The data object will be transformed before being saved to disk.
-    pre_filter (callable, optional): A function that takes in an
-        :obj:`torch_geometric.data.Data` object and returns a boolean value,
-        indicating whether the data object should be included in the final
-        dataset.
+        transform (callable, optional): A function/transform that takes in an :obj:`torch_geometric.data.Data` object and returns a transformed version. The data object will be transformed before every access.
+        pre_transform (callable, optional): A function/transform that takes in an :obj:`torch_geometric.data.Data` object and returns a transformed version. The data object will be transformed before being saved to disk.
+        pre_filter (callable, optional): A function that takes in an :obj:`torch_geometric.data.Data` object and returns a boolean value, indicating whether the data object should be included in the final dataset.
 
 
     Example:
