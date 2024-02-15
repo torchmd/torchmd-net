@@ -154,42 +154,65 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
     if args is None:
         args = ckpt["hyper_parameters"]
 
+    delta_learning = args["remove_ref_energy"] if "remove_ref_energy" in args else False
+
     for key, value in kwargs.items():
         if not key in args:
             warnings.warn(f"Unknown hyperparameter: {key}={value}")
         args[key] = value
 
     model = create_model(args)
+    if delta_learning and "remove_ref_energy" in kwargs:
+        if not kwargs["remove_ref_energy"]:
+            assert len(model.prior_model) > 0, "Atomref prior must be added during training (with enable=False) for total energy prediction."
+            assert isinstance(model.prior_model[-1], priors.Atomref), "I expected the last prior to be Atomref."
+            # Set the Atomref prior to enabled
+            model.prior_model[-1].enable = True
 
     state_dict = {re.sub(r"^model\.", "", k): v for k, v in ckpt["state_dict"].items()}
-    # The following are for backward compatibility with models created when atomref was
-    # the only supported prior.
-    if "prior_model.initial_atomref" in state_dict:
-        warnings.warn(
-            "prior_model.initial_atomref is deprecated and will be removed in a future version. Use prior_model.0.initial_atomref instead.",
-            category=DeprecationWarning,
-            stacklevel=2,
-        )
-        state_dict["prior_model.0.initial_atomref"] = state_dict[
-            "prior_model.initial_atomref"
-        ]
-        del state_dict["prior_model.initial_atomref"]
-    if "prior_model.atomref.weight" in state_dict:
-        warnings.warn(
-            "prior_model.atomref.weight is deprecated and will be removed in a future version. Use prior_model.0.atomref.weight instead.",
-            category=DeprecationWarning,
-            stacklevel=2,
-        )
-        state_dict["prior_model.0.atomref.weight"] = state_dict[
-            "prior_model.atomref.weight"
-        ]
-        del state_dict["prior_model.atomref.weight"]
     model.load_state_dict(state_dict)
     return model.to(device)
 
 
 def create_prior_models(args, dataset=None):
-    """Parse the prior_model configuration option and create the prior models."""
+    """Parse the prior_model configuration option and create the prior models.
+
+    The information can be passed in different ways via the args dictionary, which must contain at least the key "prior_model".
+
+    1. A single prior model name and its arguments as a dictionary:
+
+    ```python
+    args = {
+        "prior_model": "Atomref",
+        "prior_args": {"max_z": 100}
+    }
+    ```
+    2. A list of prior model names and their arguments as a list of dictionaries:
+
+    ```python
+
+    args = {
+        "prior_model": ["Atomref", "D2"],
+        "prior_args": [{"max_z": 100}, {"max_z": 100}]
+    }
+    ```
+
+    3. A list of prior model names and their arguments as a dictionary:
+
+    ```python
+    args = {
+        "prior_model": [{"Atomref": {"max_z": 100}}, {"D2": {"max_z": 100}}]
+    }
+    ```
+
+    Args:
+        args (dict): Arguments for the model.
+        dataset (torch_geometric.data.Dataset, optional): A dataset from which to extract the atomref values. Defaults to None.
+
+    Returns:
+        list: A list of prior models.
+
+    """
     prior_models = []
     if args["prior_model"]:
         prior_model = args["prior_model"]
@@ -208,7 +231,7 @@ def create_prior_models(args, dataset=None):
             else:
                 prior_names.append(prior)
                 prior_args.append({})
-        if "prior_args" in args:
+        if "prior_args" in args and args["prior_args"] is not None:
             prior_args = args["prior_args"]
             if not isinstance(prior_args, list):
                 prior_args = [prior_args]

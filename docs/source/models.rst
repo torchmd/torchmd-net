@@ -37,6 +37,45 @@ Once you have trained a model you should have a checkpoint that you can load for
 
 .. note:: When periodic boundary conditions are required, modules typically offer the possibility of providing the box vectors at construction and/or as an argument to the forward pass. Check the documentation of the class you are using to see if this is the case.
 
+.. _delta-learning:
+Training on relative energies
+-----------------------------
+
+It might be useful to train the model on relative energies but then make the model produce total energies when running inference.
+TorchMD-Net supports delta training via the :code:`remove_ref_energy` option. Passing this option when training (either via the :ref:`configuration-file` or using the :ref:`torchmd-train` command line interface) will subtract the reference energy from each atom in a sample before passing it to the model.
+
+.. note:: Delta learning requires a :ref:`dataset <Datasets>` that is compatible with :py:mod:`torchmdnet.priors.Atomref`.
+
+If :code:`remove_ref_energy` is turned on, the reference energy is stored in the checkpoint file and is added back to the output of the model during inference if the model is loaded with :code:`remove_ref_energy=False`.
+
+.. note:: The reference energies are stored as an :py:mod:`torchmdnet.priors.Atomref` prior with :code:`enable=False`.
+
+Example
+~~~~~~~
+
+First we train a model with the :code:`remove_ref_energy` option turned on:
+
+.. code:: shell
+
+	  torchmd-train --config /path/to/config.yaml --remove_ref_energy
+
+Then we load the model for inference:
+
+.. code:: python
+
+	  import torch
+	  from torchmdnet.models.model import load_model
+	  checkpoint = "/path/to/checkpoint/my_checkpoint.ckpt"  
+	  model = load_model(checkpoint, remove_ref_energy=False)
+
+	  # An arbitrary set of inputs for the model
+	  n_atoms = 10   
+	  zs = torch.tensor([1, 6, 7, 8, 9], dtype=torch.long)
+	  z = zs[torch.randint(0, len(zs), (n_atoms,))]
+	  pos = torch.randn(len(z), 3)
+	  batch = torch.zeros(len(z), dtype=torch.long)
+
+	  y, neg_dy = model(z, pos, batch)
 
 
 

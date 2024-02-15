@@ -23,7 +23,7 @@ For more details check:
 
 
 class COMP6Base(MemmappedDataset):
-    ELEMENT_ENERGIES = {
+    _ELEMENT_ENERGIES = {
         1: -0.500607632585,
         6: -37.8302333826,
         7: -54.5680045287,
@@ -45,7 +45,6 @@ class COMP6Base(MemmappedDataset):
             transform,
             pre_transform,
             pre_filter,
-            remove_ref_energy=False,
             properties=("y", "neg_dy"),
         )
 
@@ -60,11 +59,20 @@ class COMP6Base(MemmappedDataset):
             f"{url_prefix}/{self.raw_url_name}/{name}" for name in self.raw_file_names
         ]
 
-    @staticmethod
-    def compute_reference_energy(atomic_numbers):
-        atomic_numbers = np.array(atomic_numbers)
-        energy = sum(COMP6Base.ELEMENT_ENERGIES[z] for z in atomic_numbers)
-        return energy * COMP6Base.HARTREE_TO_EV
+    def get_atomref(self, max_z=100):
+        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior.
+
+	  Args:
+	      max_z (int): Maximum atomic number
+
+	  Returns:
+	      torch.Tensor: Atomic energy reference values for each element in the dataset.
+	"""
+        refs = pt.zeros(max_z)
+        for key, val in self._ELEMENT_ENERGIES.items():
+            refs[key] = val * self.HARTREE_TO_EV
+
+        return refs.view(-1, 1)
 
     def download(self):
         for url in self.raw_url:
@@ -89,7 +97,6 @@ class COMP6Base(MemmappedDataset):
                 all_neg_dy = (
                     -all_neg_dy
                 )  # The COMP6 datasets accidentally have gradients as forces
-                all_y -= self.compute_reference_energy(z)
 
                 assert all_pos.shape[0] == all_y.shape[0]
                 assert all_pos.shape[1] == z.shape[0]
@@ -338,14 +345,16 @@ class COMP6v2(ANIBase):
                         yield data
 
     def get_atomref(self, max_z=100):
-        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior."""
+        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior.
+
+	  Args:
+	      max_z (int): Maximum atomic number
+
+	  Returns:
+	      torch.Tensor: Atomic energy reference values for each element in the dataset.
+	"""
         refs = pt.zeros(max_z)
         for key, val in self._ELEMENT_ENERGIES.items():
             refs[key] = val * self.HARTREE_TO_EV
 
         return refs.view(-1, 1)
-
-    # Circumvent https://github.com/pyg-team/pytorch_geometric/issues/4567
-    # TODO remove when fixed
-    def process(self):
-        super().process()

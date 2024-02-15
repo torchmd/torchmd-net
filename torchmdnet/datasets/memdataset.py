@@ -32,6 +32,21 @@ class MemmappedDataset(Dataset):
         - :obj:`name.pq.mmap`: Partial charges of all the atoms.
         - :obj:`name.dp.mmap`: Dipole moment of each conformation.
 
+    Args:
+        root (str): Root directory where the dataset should be stored.
+        transform (callable, optional): A function/transform that takes in an
+            :obj:`torch_geometric.data.Data` object and returns a transformed
+            version. The data object will be transformed before every access.
+        pre_transform (callable, optional): A function/transform that takes in an
+            :obj:`torch_geometric.data.Data` object and returns a transformed
+            version. The data object will be transformed before being saved to disk.
+        pre_filter (callable, optional): A function that takes in an
+            :obj:`torch_geometric.data.Data` object and returns a boolean value,
+            indicating whether the data object should be included in the final
+            dataset.
+        properties (tuple of str, optional): The properties to include in the
+            dataset. Can be any subset of :obj:`y`, :obj:`neg_dy`, :obj:`q`,
+            :obj:`pq`, and :obj:`dp`.
     """
 
     def __init__(
@@ -40,11 +55,9 @@ class MemmappedDataset(Dataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
-        remove_ref_energy=False,
         properties=("y", "neg_dy", "q", "pq", "dp"),
     ):
         self.name = self.__class__.__name__
-        self.remove_ref_energy = remove_ref_energy
         self.properties = properties
         super().__init__(root, transform, pre_transform, pre_filter)
 
@@ -91,10 +104,6 @@ class MemmappedDataset(Dataset):
                 ["idx", "z", "pos"] + list(self.properties), self.processed_paths
             )
         }
-
-    @staticmethod
-    def compute_reference_energy(self):
-        raise NotImplementedError
 
     def sample_iter(self, mol_ids=False):
         raise NotImplementedError()
@@ -236,20 +245,17 @@ class MemmappedDataset(Dataset):
         """
         atoms = slice(self.idx_mm[idx], self.idx_mm[idx + 1])
         z = pt.tensor(self.z_mm[atoms], dtype=pt.long)
-        pos = pt.tensor(self.pos_mm[atoms], dtype=pt.float32)
+        pos = pt.tensor(self.pos_mm[atoms])
 
         props = {}
         if "y" in self.properties:
-            y = self.y_mm[idx]
-            if self.remove_ref_energy:
-                y -= self.compute_reference_energy(z)
-            props["y"] = pt.tensor(y, dtype=pt.float32).view(1, 1)
+            props["y"] = pt.tensor(self.y_mm[idx]).view(1, 1)
         if "neg_dy" in self.properties:
-            props["neg_dy"] = pt.tensor(self.neg_dy_mm[atoms], dtype=pt.float32)
+            props["neg_dy"] = pt.tensor(self.neg_dy_mm[atoms])
         if "q" in self.properties:
             props["q"] = pt.tensor(self.q_mm[idx], dtype=pt.long)
         if "pq" in self.properties:
-            props["pq"] = pt.tensor(self.pq_mm[atoms], dtype=pt.float32)
+            props["pq"] = pt.tensor(self.pq_mm[atoms])
         if "dp" in self.properties:
-            props["dp"] = pt.tensor(self.dp_mm[idx], dtype=pt.float32)
+            props["dp"] = pt.tensor(self.dp_mm[idx])
         return Data(z=z, pos=pos, **props)

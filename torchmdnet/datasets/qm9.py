@@ -28,6 +28,14 @@ class QM9(QM9_geometric):
         super(QM9, self).__init__(root, transform=transform)
 
     def get_atomref(self, max_z=100):
+        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior.
+
+	  Args:
+	      max_z (int): Maximum atomic number
+
+	  Returns:
+	      torch.Tensor: Atomic energy reference values for each element in the dataset.
+	"""
         atomref = self.atomref(self.label_idx)
         if atomref is None:
             return None

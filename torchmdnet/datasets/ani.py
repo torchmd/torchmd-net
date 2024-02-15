@@ -45,13 +45,20 @@ class ANIBase(MemmappedDataset):
     def raw_file_names(self):
         raise NotImplementedError
 
-    def compute_reference_energy(self, atomic_numbers):
-        atomic_numbers = np.array(atomic_numbers)
-        energy = sum(self._ELEMENT_ENERGIES[z] for z in atomic_numbers)
-        return energy * ANIBase.HARTREE_TO_EV
-
     def get_atomref(self, max_z=100):
-        raise NotImplementedError()
+        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior.
+
+	  Args:
+	      max_z (int): Maximum atomic number
+
+	  Returns:
+	      torch.Tensor: Atomic energy reference values for each element in the dataset.
+	"""
+        refs = pt.zeros(max_z)
+        for key, val in self._ELEMENT_ENERGIES.items():
+            refs[key] = val * self.HARTREE_TO_EV
+
+        return refs.view(-1, 1)
 
     def __init__(
         self,
@@ -59,6 +66,7 @@ class ANIBase(MemmappedDataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
+        properties=("y", "neg_dy"),
     ):
         self.name = self.__class__.__name__
         super().__init__(
@@ -66,8 +74,7 @@ class ANIBase(MemmappedDataset):
             transform,
             pre_transform,
             pre_filter,
-            remove_ref_energy=True,
-            properties=("y", "neg_dy"),
+            properties=properties,
         )
 
     def filter_and_pre_transform(self, data):
@@ -82,13 +89,28 @@ class ANIBase(MemmappedDataset):
 
 class ANI1(ANIBase):
     __doc__ = ANIBase.__doc__
-    # Avoid sphinx from documenting this
     _ELEMENT_ENERGIES = {
         1: -0.500607632585,
         6: -37.8302333826,
         7: -54.5680045287,
         8: -75.0362229210,
-    }  #::meta private:
+    }
+
+    def __init__(
+        self,
+        root,
+        transform=None,
+        pre_transform=None,
+        pre_filter=None,
+    ):
+        self.name = self.__class__.__name__
+        super().__init__(
+            root,
+            transform,
+            pre_transform,
+            pre_filter,
+            properties=("y",),
+        )
 
     @property
     def raw_url(self):
@@ -134,16 +156,6 @@ class ANI1(ANIBase):
                     if data := self.filter_and_pre_transform(data):
                         yield data
 
-    def get_atomref(self, max_z=100):
-        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior."""
-        refs = pt.zeros(max_z)
-        refs[1] = -0.500607632585 * self.HARTREE_TO_EV  # H
-        refs[6] = -37.8302333826 * self.HARTREE_TO_EV  # C
-        refs[7] = -54.5680045287 * self.HARTREE_TO_EV  # N
-        refs[8] = -75.0362229210 * self.HARTREE_TO_EV  # O
-
-        return refs.view(-1, 1)
-
 
 class ANI1XBase(ANIBase):
     @property
@@ -159,31 +171,15 @@ class ANI1XBase(ANIBase):
         assert len(self.raw_paths) == 1
         os.rename(file, self.raw_paths[0])
 
-    def get_atomref(self, max_z=100):
-        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior."""
-        warnings.warn("Atomic references from the ANI-1 dataset are used!")
-
-        refs = pt.zeros(max_z)
-        refs[1] = -0.500607632585 * self.HARTREE_TO_EV  # H
-        refs[6] = -37.8302333826 * self.HARTREE_TO_EV  # C
-        refs[7] = -54.5680045287 * self.HARTREE_TO_EV  # N
-        refs[8] = -75.0362229210 * self.HARTREE_TO_EV  # O
-
-        return refs.view(-1, 1)
-
 
 class ANI1X(ANI1XBase):
     __doc__ = ANIBase.__doc__
     _ELEMENT_ENERGIES = {
-        1: -0.500607632585,
-        6: -37.8302333826,
-        7: -54.5680045287,
-        8: -75.0362229210,
+        1: -0.600952980000,
+        6: -38.08316124000,
+        7: -54.70775770000,
+        8: -75.19446356000,
     }
-    """
-
-    :meta private:
-    """
 
     def sample_iter(self, mol_ids=False):
         assert len(self.raw_paths) == 1
@@ -223,6 +219,28 @@ class ANI1X(ANI1XBase):
 
 class ANI1CCX(ANI1XBase):
     __doc__ = ANIBase.__doc__
+    _ELEMENT_ENERGIES = {
+        1: -0.5991501324919538,
+        6: -38.03750806057356,
+        7: -54.67448347695333,
+        8: -75.16043537275567,
+    }
+
+    def __init__(
+        self,
+        root,
+        transform=None,
+        pre_transform=None,
+        pre_filter=None,
+    ):
+        self.name = self.__class__.__name__
+        super().__init__(
+            root,
+            transform,
+            pre_transform,
+            pre_filter,
+            properties=("y",),
+        )
 
     def sample_iter(self, mol_ids=False):
         assert len(self.raw_paths) == 1
@@ -319,11 +337,3 @@ class ANI2X(ANIBase):
 
                     if data := self.filter_and_pre_transform(data):
                         yield data
-
-    def get_atomref(self, max_z=100):
-        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior."""
-        refs = pt.zeros(max_z)
-        for key, val in self._ELEMENT_ENERGIES.items():
-            refs[key] = val * self.HARTREE_TO_EV
-
-        return refs.view(-1, 1)

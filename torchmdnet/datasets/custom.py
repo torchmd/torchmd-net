@@ -24,6 +24,10 @@ class Custom(Dataset):
         forceglob (string, optional): Glob path for force files. Stored as "neg_dy".
             (default: :obj:`None`)
         preload_memory_limit (int, optional): If the dataset is smaller than this limit (in MB), preload it into CPU memory.
+        transform (callable, optional): A function/transform that takes in an :obj:`torch_geometric.data.Data` object and returns a transformed version. The data object will be transformed before every access.
+        pre_transform (callable, optional): A function/transform that takes in an :obj:`torch_geometric.data.Data` object and returns a transformed version. The data object will be transformed before being saved to disk.
+        pre_filter (callable, optional): A function that takes in an :obj:`torch_geometric.data.Data` object and returns a boolean value, indicating whether the data object should be included in the final dataset.
+
 
     Example:
         >>> data = Custom(coordglob="coords_files*npy", embedglob="embed_files*npy")
@@ -45,8 +49,11 @@ class Custom(Dataset):
         energyglob=None,
         forceglob=None,
         preload_memory_limit=1024,
+        transform=None,
+        pre_transform=None,
+        pre_filter=None,
     ):
-        super(Custom, self).__init__()
+        super().__init__(None, transform, pre_transform, pre_filter)
         assert energyglob is not None or forceglob is not None, (
             "Either energies, forces or both must " "be specified as the target"
         )
