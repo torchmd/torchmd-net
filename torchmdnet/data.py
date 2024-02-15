@@ -73,6 +73,11 @@ class DataModule(LightningDataModule):
         self.test_dataset = Subset(self.dataset, self.idx_test)
 
         if self.hparams["standardize"]:
+            # Mark as deprecated
+            warnings.warn(
+                "The standardize option is deprecated and will be removed in the future. ",
+                DeprecationWarning,
+            )
             self._standardize()
 
     def train_dataloader(self):
