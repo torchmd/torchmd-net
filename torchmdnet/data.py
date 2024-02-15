@@ -10,10 +10,9 @@ from torch_geometric.loader import DataLoader
 from lightning import LightningDataModule
 from lightning_utilities.core.rank_zero import rank_zero_warn
 from torchmdnet import datasets
-from torch_geometric.data import Dataset
 from torchmdnet.utils import make_splits, MissingEnergyException
 from torchmdnet.models.utils import scatter
-
+import warnings
 
 class DataModule(LightningDataModule):
     """A LightningDataModule for loading datasets from the torchmdnet.datasets module.
