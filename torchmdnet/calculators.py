@@ -132,7 +132,7 @@ class External:
                     .requires_grad_(pos.requires_grad)
                 )
             if self.box is None and box is not None:
-                self.box = box.clone().to(self.device).detach()
+                self.box = box.clone().to(self.device).to(self.dtype).detach()
             if self.cuda_graph is None:
                 self._init_cuda_graph()
             assert self.cuda_graph is not None, "CUDA graph is not initialized. This should not had happened."
