@@ -61,6 +61,18 @@ def test_torchscript(model_name, device):
         grad_outputs=grad_outputs,
     )[0]
 
+def test_torchscript_output_modification():
+    model = create_model(load_example_args("tensornet", remove_prior=True, derivative=True))
+    class MyModel(torch.nn.Module):
+        def __init__(self):
+            super(MyModel, self).__init__()
+            self.model = model
+        def forward(self, z, pos, batch):
+            y, neg_dy = self.model(z, pos, batch=batch)
+            # A TorchScript bug is triggered if we modify an output of model marked as Optional[Tensor]
+            return y, 2*neg_dy
+    torch.jit.script(MyModel())
+
 @mark.parametrize("model_name", models.__all_models__)
 @mark.parametrize("device", ["cpu", "cuda"])
 def test_torchscript_dynamic_shapes(model_name, device):
