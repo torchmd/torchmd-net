@@ -34,6 +34,7 @@ class Atomref(BasePrior):
         if max_z is None and dataset is None:
             raise ValueError("Can't instantiate Atomref prior, all arguments are None.")
         if dataset is None:
+            assert max_z is not None, "max_z must be provided if dataset is None."
             atomref = torch.zeros(max_z, 1)
         else:
             atomref = dataset.get_atomref()
