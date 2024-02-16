@@ -129,7 +129,7 @@ class External:
         """
         pos = pos.to(self.device).to(self.dtype).reshape(-1, 3)
         if box is not None:
-            box = box.to(self.device).to(self.dtype).reshape(-1, 3, 3)
+            box = box.to(self.device).to(self.dtype).reshape(-1, 3)
         if self.use_cuda_graph:
             if self.pos is None:
                 self.pos = (
