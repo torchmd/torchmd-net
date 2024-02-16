@@ -415,9 +415,7 @@ class TorchMD_Net(nn.Module):
                 create_graph=self.training,
                 retain_graph=self.training,
             )[0]
-            if dy is None:
-                raise RuntimeError("Autograd returned None for the force prediction.")
-
+            assert dy is not None, "Autograd returned None for the force prediction."
             return y, -dy
         # TODO: return only `out` once Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
         return y, None
