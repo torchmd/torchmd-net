@@ -333,7 +333,7 @@ class TorchMD_Net(nn.Module):
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
         extra_args: Optional[Dict[str, Tensor]] = None,
-    ) -> Tuple[Tensor, Optional[Tensor]]:
+    ) -> Tuple[Tensor, Tensor]:
         """
         Compute the output of the model.
 
@@ -417,5 +417,6 @@ class TorchMD_Net(nn.Module):
             )[0]
             assert dy is not None, "Autograd returned None for the force prediction."
             return y, -dy
-        # TODO: return only `out` once Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
-        return y, None
+        # Returning an empty tensor allows to decorate this method as always returning two tensors.
+        # This is required to overcome a TorchScript limitation, xref https://github.com/openmm/openmm-torch/issues/135
+        return y, torch.empty(0)
