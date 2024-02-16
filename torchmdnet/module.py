@@ -15,6 +15,7 @@ from torchmdnet.models.model import create_model, load_model
 from torchmdnet.models.utils import dtype_mapping
 import torch_geometric.transforms as T
 
+
 class FloatCastDatasetWrapper(T.BaseTransform):
     """A transform that casts all floating point tensors to a given dtype.
     tensors to a given dtype.
@@ -41,9 +42,11 @@ class EnergyRefRemover(T.BaseTransform):
         self._atomref = atomref
 
     def forward(self, data):
+        self._atomref = self._atomref.to(data.z.device)
         if "y" in data:
             data.y -= self._atomref[data.z].sum()
         return data
+
 
 class LNNP(LightningModule):
     """
@@ -78,10 +81,15 @@ class LNNP(LightningModule):
         self.losses = None
         self._reset_losses_dict()
 
-        self.data_transform = FloatCastDatasetWrapper(dtype_mapping[self.hparams.precision])
+        self.data_transform = FloatCastDatasetWrapper(
+            dtype_mapping[self.hparams.precision]
+        )
         if self.hparams.remove_ref_energy:
             self.data_transform = T.Compose(
-                [EnergyRefRemover(self.model.prior_model[-1].initial_atomref), self.data_transform]
+                [
+                    EnergyRefRemover(self.model.prior_model[-1].initial_atomref),
+                    self.data_transform,
+                ]
             )
 
     def configure_optimizers(self):
