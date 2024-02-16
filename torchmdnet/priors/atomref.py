@@ -96,7 +96,6 @@ class Atomref(BasePrior):
             return x
 
 
-
 class LearnableAtomref(Atomref):
     r"""LearnableAtomref prior model.
 
