@@ -41,6 +41,7 @@ class EnergyRefRemover(T.BaseTransform):
         self._atomref = atomref
 
     def forward(self, data):
+        self._atomref = self._atomref.to(data.z.device)
         if "y" in data:
             data.y -= self._atomref[data.z].sum()
         return data
