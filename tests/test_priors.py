@@ -9,7 +9,7 @@ import lightning as pl
 from torchmdnet import models
 from torchmdnet.models.model import create_model, create_prior_models
 from torchmdnet.module import LNNP
-from torchmdnet.priors import Atomref, D2, ZBL, Coulomb
+from torchmdnet.priors import Atomref, LearnableAtomref, D2, ZBL, Coulomb
 from torchmdnet.models.utils import scatter
 from utils import load_example_args, create_example_batch, DummyDataset
 from os.path import dirname, join
@@ -48,6 +48,10 @@ def test_atomref_trainable(trainable):
     dataset = DummyDataset(has_atomref=True)
     atomref = Atomref(max_z=100, dataset=dataset, trainable=trainable)
     assert atomref.atomref.weight.requires_grad == trainable
+
+def test_learnableatomref():
+    atomref = LearnableAtomref(max_z=100)
+    assert atomref.atomref.weight.requires_grad == True
 
 def test_zbl():
     pos = torch.tensor([[1.0, 0.0, 0.0], [2.5, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 0.0, -1.0]], dtype=torch.float32)  # Atom positions in Bohr
