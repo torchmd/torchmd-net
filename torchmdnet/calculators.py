@@ -42,8 +42,8 @@ class External:
         Whether to use CUDA graphs to speed up the calculation. Default: False
     cuda_graph_warmup_steps : int, optional
         Number of steps to run as warmup before recording the CUDA graph. Default: 12
-    dtype : torch.dtype, optional
-        Cast the input to this dtype if defined. Default: torch.float32
+    dtype : torch.dtype or str, optional
+        Cast the input to this dtype if defined. If passed as a string it should be a valid torch dtype. Default: torch.float32
     """
 
     def __init__(
@@ -54,7 +54,7 @@ class External:
         output_transform=None,
         use_cuda_graph=False,
         cuda_graph_warmup_steps=12,
-        dtype = torch.float32
+        dtype=torch.float32,
     ):
         if isinstance(netfile, str):
             self.model = load_model(netfile, device=device, derivative=True)
@@ -90,6 +90,11 @@ class External:
         self.forces = None
         self.box = None
         self.pos = None
+        if isinstance(dtype, str):
+            try:
+                dtype = getattr(torch, dtype)
+            except AttributeError:
+                raise ValueError(f"Unknown torch dtype {dtype}")
         self.dtype = dtype
 
     def _init_cuda_graph(self):
@@ -105,7 +110,7 @@ class External:
                     self.embeddings, self.pos, self.batch, self.box
                 )
 
-    def calculate(self, pos, box = None):
+    def calculate(self, pos, box=None):
         """Calculate the energy and forces of the system.
 
         Parameters
@@ -135,7 +140,9 @@ class External:
                 self.box = box.clone().to(self.device).to(self.dtype).detach()
             if self.cuda_graph is None:
                 self._init_cuda_graph()
-            assert self.cuda_graph is not None, "CUDA graph is not initialized. This should not had happened."
+            assert (
+                self.cuda_graph is not None
+            ), "CUDA graph is not initialized. This should not had happened."
             with torch.no_grad():
                 self.pos.copy_(pos)
                 if box is not None:
