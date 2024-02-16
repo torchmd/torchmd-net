@@ -94,3 +94,24 @@ class Atomref(BasePrior):
             return x + self.atomref(z)
         else:
             return x
+
+
+
+class LearnableAtomref(Atomref):
+    r"""LearnableAtomref prior model.
+
+    This prior model is used to add learned atomic reference values to the input features. The atomic reference values are learned as an embedding layer and are added to the input features as:
+
+    .. math::
+
+        x' = x + \\textrm{atomref}(z)
+
+    where :math:`x` is the input feature tensor, :math:`z` is the atomic number tensor, and :math:`\\textrm{atomref}` is the embedding layer.
+
+
+    Args:
+        max_z (int, optional): Maximum atomic number to consider.
+    """
+
+    def __init__(self, max_z=None):
+        super().__init__(max_z, trainable=True, enable=True)
