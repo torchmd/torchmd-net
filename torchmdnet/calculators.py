@@ -4,6 +4,7 @@
 
 import torch
 from torchmdnet.models.model import load_model
+import warnings
 
 # dict of preset transforms
 tranforms = {
@@ -62,6 +63,9 @@ class External:
         if isinstance(netfile, str):
             extra_args = kwargs
             if use_cuda_graph:
+                warnings.warn(
+                    "CUDA graphs are enabled, setting static_shapes=True and check_errors=False"
+                )
                 extra_args["static_shapes"] = True
                 extra_args["check_errors"] = False
             self.model = load_model(
@@ -71,6 +75,10 @@ class External:
                 **extra_args,
             )
         elif isinstance(netfile, torch.nn.Module):
+            if kwargs:
+                warnings.warn(
+                    "Warning: extra arguments are being ignored when passing a torch.nn.Module"
+                )
             self.model = netfile
         else:
             raise ValueError(
