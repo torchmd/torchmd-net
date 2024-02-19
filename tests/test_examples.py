@@ -19,7 +19,7 @@ def test_example_yamls(fname):
         args = yaml.load(f, Loader=yaml.FullLoader)
 
     prior = None
-    if args["prior_model"] is not None:
+    if "prior_model" in args and args["prior_model"] is not None:
         dataset = DummyDataset(has_atomref=True)
         prior = getattr(priors, args["prior_model"])(dataset=dataset)
 
