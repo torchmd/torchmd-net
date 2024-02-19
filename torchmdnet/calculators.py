@@ -44,6 +44,8 @@ class External:
         Number of steps to run as warmup before recording the CUDA graph. Default: 12
     dtype : torch.dtype or str, optional
         Cast the input to this dtype if defined. If passed as a string it should be a valid torch dtype. Default: torch.float32
+    kwargs : dict, optional
+        Extra arguments to pass to the model when loading it.
     """
 
     def __init__(
@@ -55,9 +57,19 @@ class External:
         use_cuda_graph=False,
         cuda_graph_warmup_steps=12,
         dtype=torch.float32,
+        **kwargs,
     ):
         if isinstance(netfile, str):
-            self.model = load_model(netfile, device=device, derivative=True)
+            extra_args = kwargs
+            if use_cuda_graph:
+                extra_args["static_shapes"] = True
+                extra_args["check_errors"] = False
+            self.model = load_model(
+                netfile,
+                device=device,
+                derivative=True,
+                **extra_args,
+            )
         elif isinstance(netfile, torch.nn.Module):
             self.model = netfile
         else:
