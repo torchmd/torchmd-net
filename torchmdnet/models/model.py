@@ -7,13 +7,14 @@ from typing import Optional, List, Tuple, Dict
 import torch
 from torch.autograd import grad
 from torch import nn, Tensor
+import torchmdnet
 from torchmdnet.models import output_modules
 from torchmdnet.models.wrappers import AtomFilter
 from torchmdnet.models.utils import dtype_mapping
 from torchmdnet import priors
 from lightning_utilities.core.rank_zero import rank_zero_warn
 import warnings
-
+from packaging import version
 
 def create_model(args, prior_model=None, mean=None, std=None):
     """Create a model from the given arguments.
@@ -156,6 +157,13 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
     if args is None:
         args = ckpt["hyper_parameters"]
 
+    # Check the version that the checkpoint was created with
+    ckpt_version = ckpt.get("version", 0.15.2) # Default to the first version that introduced the version key
+    current_version = torchmdnet.__version__
+    if version.parse(ckpt_version) != version.parse(current_version):
+        warnings.warn(
+            f"Checkpoint was created with version {version}, current version is {current_version}."
+        )
     delta_learning = args["remove_ref_energy"] if "remove_ref_energy" in args else False
 
     for key, value in kwargs.items():

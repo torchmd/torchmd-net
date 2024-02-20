@@ -9,8 +9,9 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.functional import local_response_norm, mse_loss, l1_loss
 from torch import Tensor
 from typing import Optional, Dict, Tuple
-
+import warnings
 from lightning import LightningModule
+import torchmdnet
 from torchmdnet.models.model import create_model, load_model
 from torchmdnet.models.utils import dtype_mapping
 import torch_geometric.transforms as T
@@ -65,7 +66,8 @@ class LNNP(LightningModule):
             hparams["charge"] = False
         if "spin" not in hparams:
             hparams["spin"] = False
-
+        if "version" not in hparams:
+            hparams.version = torchmdnet.__version__
         self.save_hyperparameters(hparams)
 
         if self.hparams.load_model:
