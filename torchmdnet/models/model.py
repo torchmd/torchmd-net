@@ -158,7 +158,7 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
         args = ckpt["hyper_parameters"]
 
     # Check the version that the checkpoint was created with
-    ckpt_version = ckpt.get("version", 0.15.2) # Default to the first version that introduced the version key
+    ckpt_version = ckpt.get("version", "0.15.2") # Default to the first version that introduced the version key
     current_version = torchmdnet.__version__
     if version.parse(ckpt_version) != version.parse(current_version):
         warnings.warn(

@@ -2,7 +2,7 @@ import importlib.metadata
 import subprocess
 
 try:
-    __version__ = importlib.metadata.version("your_package_name")
+    __version__ = importlib.metadata.version("torchmd-net")
 except importlib.metadata.PackageNotFoundError:
     try:
         __version__ = (
@@ -12,4 +12,4 @@ except importlib.metadata.PackageNotFoundError:
         )
     except:
         print("Failed to retrieve the current version, defaulting to 0")
-        version = "0"
+        __version__ = "0"
