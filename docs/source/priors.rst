@@ -31,11 +31,12 @@ It is possible to configure more than one prior in this way:
 	     
 .. code:: yaml
 
-	  prior_model:
-	     Atomref: {} # No additional arguments
-	     Coulomb:
-	          alpha: 1
-		  max_num_neighbors: 10		  
+    prior_model:
+        Atomref: {} # No additional arguments
+        Coulomb:
+            lower_switch_distance: 4
+            upper_switch_distance: 8
+            max_num_neighbors: 128
 
 
 	  
