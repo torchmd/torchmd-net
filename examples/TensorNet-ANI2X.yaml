@@ -39,6 +39,7 @@ num_rbf: 32
 num_workers: 4
 output_model: Scalar
 precision: 32
+prior_model: null
 remove_ref_energy: true
 rbf_type: expnorm
 redirect: false
