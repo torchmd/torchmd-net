@@ -88,11 +88,12 @@ def test_coulomb(dtype):
     types = torch.tensor([0, 1, 2, 1], dtype=torch.long)  # Atom types
     distance_scale = 1e-9  # Convert nm to meters
     energy_scale = 1000.0/6.02214076e23  # Convert kJ/mol to Joules
-    alpha = 1.8
+    lower_switch_distance = 0.9
+    upper_switch_distance = 1.3
 
     # Use the Coulomb class to compute the energy.
 
-    coulomb = Coulomb(alpha, 5, distance_scale=distance_scale, energy_scale=energy_scale)
+    coulomb = Coulomb(lower_switch_distance, upper_switch_distance, 5, distance_scale=distance_scale, energy_scale=energy_scale)
     energy = coulomb.post_reduce(torch.zeros((1,)), types, pos, torch.zeros_like(types), extra_args={'partial_charges':charge})[0]
 
     # Compare to the expected value.
@@ -100,7 +101,12 @@ def test_coulomb(dtype):
     def compute_interaction(pos1, pos2, z1, z2):
         delta = pos1-pos2
         r = torch.sqrt(torch.dot(delta, delta))
-        return torch.erf(alpha*r)*138.935*z1*z2/r
+        if r < lower_switch_distance:
+            return 0
+        energy = 138.935*z1*z2/r
+        if r < upper_switch_distance:
+            energy *= 0.5-0.5*torch.cos(torch.pi*(r-lower_switch_distance)/(upper_switch_distance-lower_switch_distance))
+        return energy
 
     expected = 0
     for i in range(len(pos)):
