@@ -67,7 +67,7 @@ class LNNP(LightningModule):
         if "spin" not in hparams:
             hparams["spin"] = False
         if "version" not in hparams:
-            hparams.version = torchmdnet.__version__
+            hparams["version"] = torchmdnet.__version__
         self.save_hyperparameters(hparams)
 
         if self.hparams.load_model:
