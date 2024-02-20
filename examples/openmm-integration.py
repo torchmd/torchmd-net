@@ -51,8 +51,8 @@ torch_force = openmmtorch.TorchForce(model)
 
 system = System()
 # Create an OpenMM system and add the TorchForce
-for i in range(pdb.topology.getNumAtoms()):
-    system.addParticle(1.0)
+for atom in pdb.topology.atoms():
+    system.addParticle(atom.element.mass)
 system.addForce(torch_force)
 integrator = LangevinMiddleIntegrator(298.15*kelvin, 1/picosecond, 2*femtosecond)
 platform = Platform.getPlatformByName('CPU')
