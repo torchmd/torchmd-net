@@ -120,6 +120,9 @@ class TensorNet(nn.Module):
             (default: :obj:`True`)
         check_errors (bool, optional): Whether to check for errors in the distance module.
             (default: :obj:`True`)
+        extra_embedding (tuple, optional): the names of extra fields to append to the embedding
+            vector for each atom
+            (default: :obj:`None`)
     """
 
     def __init__(
@@ -139,6 +142,7 @@ class TensorNet(nn.Module):
         check_errors=True,
         dtype=torch.float32,
         box_vecs=None,
+        extra_embedding=None
     ):
         super(TensorNet, self).__init__()
 
@@ -163,6 +167,7 @@ class TensorNet(nn.Module):
         self.activation = activation
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
+        self.extra_embedding = extra_embedding
         act_class = act_class_mapping[activation]
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
@@ -176,6 +181,7 @@ class TensorNet(nn.Module):
             trainable_rbf,
             max_z,
             dtype,
+            extra_embedding
         )
 
         self.layers = nn.ModuleList()
@@ -228,6 +234,7 @@ class TensorNet(nn.Module):
         box: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
+        extra_embedding_args: [Optional[Tuple[Tensor]]] = None
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
         # Obtain graph, with distances and relative position vectors
         edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
@@ -258,7 +265,7 @@ class TensorNet(nn.Module):
         # Normalizing edge vectors by their length can result in NaNs, breaking Autograd.
         # I avoid dividing by zero by setting the weight of self edges and self loops to 1
         edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
-        X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr)
+        X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr, extra_embedding_args)
         for layer in self.layers:
             X = layer(X, edge_index, edge_weight, edge_attr, q)
         I, A, S = decompose_tensor(X)
@@ -287,6 +294,7 @@ class TensorEmbedding(nn.Module):
         trainable_rbf=False,
         max_z=128,
         dtype=torch.float32,
+        extra_embedding=None
     ):
         super(TensorEmbedding, self).__init__()
 
@@ -297,6 +305,10 @@ class TensorEmbedding(nn.Module):
         self.cutoff = CosineCutoff(cutoff_lower, cutoff_upper)
         self.max_z = max_z
         self.emb = nn.Embedding(max_z, hidden_channels, dtype=dtype)
+        if extra_embedding is not None:
+            self.reshape_embedding = nn.Linear(hidden_channels+len(extra_embedding), hidden_channels, dtype=dtype)
+        else:
+            self.reshape_embedding = None
         self.emb2 = nn.Linear(2 * hidden_channels, hidden_channels, dtype=dtype)
         self.act = activation()
         self.linears_tensor = nn.ModuleList()
@@ -319,6 +331,8 @@ class TensorEmbedding(nn.Module):
         self.distance_proj2.reset_parameters()
         self.distance_proj3.reset_parameters()
         self.emb.reset_parameters()
+        if self.reshape_embedding is not None:
+            self.reshape_embedding.reset_parameters()
         self.emb2.reset_parameters()
         for linear in self.linears_tensor:
             linear.reset_parameters()
@@ -326,8 +340,11 @@ class TensorEmbedding(nn.Module):
             linear.reset_parameters()
         self.init_norm.reset_parameters()
 
-    def _get_atomic_number_message(self, z: Tensor, edge_index: Tensor) -> Tensor:
+    def _get_atomic_number_message(self, z: Tensor, edge_index: Tensor, extra_embedding_args: Optional[Tuple[Tensor]]) -> Tensor:
         Z = self.emb(z)
+        if self.reshape_embedding is not None:
+            Z = torch.cat((Z,)+tuple(t.unsqueeze(1) for t in extra_embedding_args), dim=1)
+            Z = self.reshape_embedding(Z)
         Zij = self.emb2(
             Z.index_select(0, edge_index.t().reshape(-1)).view(
                 -1, self.hidden_channels * 2
@@ -362,8 +379,9 @@ class TensorEmbedding(nn.Module):
         edge_weight: Tensor,
         edge_vec_norm: Tensor,
         edge_attr: Tensor,
+        extra_embedding_args: Optional[Tuple[Tensor]]
     ) -> Tensor:
-        Zij = self._get_atomic_number_message(z, edge_index)
+        Zij = self._get_atomic_number_message(z, edge_index, extra_embedding_args)
         Iij, Aij, Sij = self._get_tensor_messages(
             Zij, edge_weight, edge_vec_norm, edge_attr
         )

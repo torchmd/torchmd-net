@@ -76,7 +76,9 @@ class TorchMD_T(nn.Module):
             (default: :obj:`None`)
         check_errors (bool, optional): Whether to check for errors in the distance module.
             (default: :obj:`True`)
-
+        extra_embedding (tuple, optional): the names of extra fields to append to the embedding
+            vector for each atom
+            (default: :obj:`None`)
     """
 
     def __init__(
@@ -98,6 +100,7 @@ class TorchMD_T(nn.Module):
         max_num_neighbors=32,
         dtype=torch.float,
         box_vecs=None,
+        extra_embedding=None
     ):
         super(TorchMD_T, self).__init__()
 
@@ -124,11 +127,16 @@ class TorchMD_T(nn.Module):
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         self.max_z = max_z
+        self.extra_embedding = extra_embedding
 
         act_class = act_class_mapping[activation]
         attn_act_class = act_class_mapping[attn_activation]
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels, dtype=dtype)
+        if extra_embedding is not None:
+            self.reshape_embedding = nn.Linear(hidden_channels+len(extra_embedding), hidden_channels, dtype=dtype)
+        else:
+            self.reshape_embedding = None
 
         self.distance = OptimizedDistance(
             cutoff_lower,
@@ -177,6 +185,8 @@ class TorchMD_T(nn.Module):
 
     def reset_parameters(self):
         self.embedding.reset_parameters()
+        if self.reshape_embedding is not None:
+            self.reshape_embedding.reset_parameters()
         self.distance_expansion.reset_parameters()
         if self.neighbor_embedding is not None:
             self.neighbor_embedding.reset_parameters()
@@ -192,8 +202,12 @@ class TorchMD_T(nn.Module):
         box: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
+        extra_embedding_args: [Optional[Tuple[Tensor]]] = None
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
         x = self.embedding(z)
+        if self.reshape_embedding is not None:
+            x = torch.cat((x,)+tuple(t.unsqueeze(1) for t in extra_embedding_args), dim=1)
+            x = self.reshape_embedding(x)
 
         edge_index, edge_weight, _ = self.distance(pos, batch, box)
         edge_attr = self.distance_expansion(edge_weight)

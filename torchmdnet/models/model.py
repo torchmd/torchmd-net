@@ -38,6 +38,12 @@ def create_model(args, prior_model=None, mean=None, std=None):
         args["static_shapes"] = False
     if "vector_cutoff" not in args:
         args["vector_cutoff"] = False
+    if "extra_embedding" not in args:
+        extra_embedding = None
+    elif isinstance(args["extra_embedding"], str):
+        extra_embedding = [args["extra_embedding"]]
+    else:
+        extra_embedding = args["extra_embedding"]
 
     shared_args = dict(
         hidden_channels=args["embedding_dimension"],
@@ -57,6 +63,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
             else None
         ),
         dtype=dtype,
+        extra_embedding=extra_embedding
     )
 
     # representation network
@@ -370,7 +377,7 @@ class TorchMD_Net(nn.Module):
             If this is omitted, periodic boundary conditions are not applied.
             q (Tensor, optional): Atomic charges in the molecule. Shape: (N,).
             s (Tensor, optional): Atomic spins in the molecule. Shape: (N,).
-            extra_args (Dict[str, Tensor], optional): Extra arguments to pass to the prior model.
+            extra_args (Dict[str, Tensor], optional): Extra arguments to pass to the model.
 
         Returns:
             Tuple[Tensor, Optional[Tensor]]: The output of the model and the derivative of the output with respect to the positions if derivative is True, None otherwise.
@@ -380,9 +387,19 @@ class TorchMD_Net(nn.Module):
 
         if self.derivative:
             pos.requires_grad_(True)
+        if self.representation_model.extra_embedding is None:
+            extra_embedding_args = None
+        else:
+            extra = []
+            for arg in self.representation_model.extra_embedding:
+                t = extra_args[arg]
+                if t.shape != z.shape:
+                    t = t[batch]
+                extra.append(t)
+            extra_embedding_args = tuple(extra)
         # run the potentially wrapped representation model
         x, v, z, pos, batch = self.representation_model(
-            z, pos, batch, box=box, q=q, s=s
+            z, pos, batch, box=box, q=q, s=s, extra_embedding_args=extra_embedding_args
         )
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch)
