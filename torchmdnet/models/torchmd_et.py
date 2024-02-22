@@ -206,7 +206,7 @@ class TorchMD_ET(nn.Module):
         box: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
-        extra_embedding_args: [Optional[Tuple[Tensor]]] = None
+        extra_embedding_args: Optional[Tuple[Tensor]] = None
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
         x = self.embedding(z)
         if self.reshape_embedding is not None:

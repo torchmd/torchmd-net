@@ -208,7 +208,7 @@ class TorchMD_GN(nn.Module):
         box: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
-        extra_embedding_args: [Optional[Tuple[Tensor]]] = None
+        extra_embedding_args: Optional[Tuple[Tensor]] = None
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
         x = self.embedding(z)
         if self.reshape_embedding is not None:

@@ -33,6 +33,7 @@ class TorchMD_GN_optimized(pt.nn.Module):
 
         super().__init__()
         self.model = model
+        self.extra_embedding = model.extra_embedding
 
         self.neighbors = CFConvNeighbors(self.model.cutoff_upper)
 
@@ -58,12 +59,16 @@ class TorchMD_GN_optimized(pt.nn.Module):
         box: Optional[pt.Tensor] = None,
         q: Optional[pt.Tensor] = None,
         s: Optional[pt.Tensor] = None,
+        extra_embedding_args: Optional[Tuple[pt.Tensor]] = None
     ) -> Tuple[pt.Tensor, Optional[pt.Tensor], pt.Tensor, pt.Tensor, pt.Tensor]:
 
         assert pt.all(batch == 0)
         assert box is None, "Box is not supported"
 
         x = self.model.embedding(z)
+        if self.model.reshape_embedding is not None:
+            x = pt.cat((x,)+tuple(t.unsqueeze(1) for t in extra_embedding_args), dim=1)
+            x = self.model.reshape_embedding(x)
 
         self.neighbors.build(pos)
         for inter, conv in zip(self.model.interactions, self.convs):
