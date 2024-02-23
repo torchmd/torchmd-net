@@ -2,7 +2,7 @@
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
-from setuptools import setup
+from setuptools import setup, find_packages
 import torch
 from torch.utils.cpp_extension import (
     BuildExtension,
@@ -52,6 +52,13 @@ extensions = ExtensionType(
 if __name__ == "__main__":
     buildext = BuildExtension.with_options(no_python_abi_suffix=True, use_ninja=False)
     setup(
+        name="torchmd-net",
+        packages=find_packages(),
+        include_package_data=True,
+        entry_points={
+            "console_scripts": ["torchmd-train = torchmdnet.scripts.train:main"]
+        },
+        package_data={"torchmdnet": ["extensions/torchmdnet_extensions.so"]},
         ext_modules=[extensions],
         version=versioneer.get_version(),
         cmdclass=versioneer.get_cmdclass({"build_ext": buildext}),
