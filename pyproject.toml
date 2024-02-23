@@ -1,7 +1,7 @@
 [project]
 name = "torchmd-net"
 description = "TorchMD-Net package"
-authors = [{ name = "Acellera", email = "info@acellera.com" }]
+authors = [{ name = "CompScienceLab", email = "gianni.defabritiis@upf.edu" }]
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.8"
