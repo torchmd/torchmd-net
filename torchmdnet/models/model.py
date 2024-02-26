@@ -387,9 +387,10 @@ class TorchMD_Net(nn.Module):
 
         if self.derivative:
             pos.requires_grad_(True)
-        if self.representation_model.extra_embedding is None or extra_args is None:
+        if self.representation_model.extra_embedding is None:
             extra_embedding_args = None
         else:
+            assert extra_args is not None
             extra_embedding_args = []
             for arg in self.representation_model.extra_embedding:
                 t = extra_args[arg]
