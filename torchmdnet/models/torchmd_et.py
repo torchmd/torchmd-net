@@ -2,7 +2,7 @@
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
-from typing import Optional, Tuple
+from typing import Optional, List, Tuple
 import torch
 from torch import Tensor, nn
 from torchmdnet.models.utils import (
@@ -206,11 +206,14 @@ class TorchMD_ET(nn.Module):
         box: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
-        extra_embedding_args: Optional[Tuple[Tensor]] = None
+        extra_embedding_args: Optional[List[Tensor]] = None
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
         x = self.embedding(z)
-        if self.reshape_embedding is not None:
-            x = torch.cat((x,)+tuple(t.unsqueeze(1) for t in extra_embedding_args), dim=1)
+        if self.reshape_embedding is not None and extra_embedding_args is not None:
+            tensors = [x]
+            for t in extra_embedding_args:
+                tensors.append(t.unsqueeze(1))
+            x = torch.cat(tensors, dim=1)
             x = self.reshape_embedding(x)
 
         edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)

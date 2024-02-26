@@ -387,16 +387,15 @@ class TorchMD_Net(nn.Module):
 
         if self.derivative:
             pos.requires_grad_(True)
-        if self.representation_model.extra_embedding is None:
+        if self.representation_model.extra_embedding is None or extra_args is None:
             extra_embedding_args = None
         else:
-            extra = []
+            extra_embedding_args = []
             for arg in self.representation_model.extra_embedding:
                 t = extra_args[arg]
                 if t.shape != z.shape:
                     t = t[batch]
-                extra.append(t)
-            extra_embedding_args = tuple(extra)
+                extra_embedding_args.append(t)
         # run the potentially wrapped representation model
         x, v, z, pos, batch = self.representation_model(
             z, pos, batch, box=box, q=q, s=s, extra_embedding_args=extra_embedding_args

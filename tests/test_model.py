@@ -98,6 +98,16 @@ def test_torchscript_dynamic_shapes(model_name, device):
             grad_outputs=grad_outputs,
         )[0]
 
+@mark.parametrize("model_name", models.__all_models__)
+@mark.parametrize("device", ["cpu", "cuda"])
+def test_torchscript_extra_embedding(model_name, device):
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    args = load_example_args(model_name, remove_prior=True)
+    args["extra_embedding"] = "atomic"
+    model = create_model(args)
+    torch.jit.script(model).to(device=device)
+
 #Currently only tensornet is CUDA graph compatible
 @mark.parametrize("model_name", ["tensornet"])
 def test_cuda_graph_compatible(model_name):

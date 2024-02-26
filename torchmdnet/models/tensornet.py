@@ -3,7 +3,7 @@
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
 import torch
-from typing import Optional, Tuple
+from typing import Optional, List, Tuple
 from torch import Tensor, nn
 from torchmdnet.models.utils import (
     CosineCutoff,
@@ -234,7 +234,7 @@ class TensorNet(nn.Module):
         box: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
-        extra_embedding_args: Optional[Tuple[Tensor]] = None
+        extra_embedding_args: Optional[List[Tensor]] = None
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
         # Obtain graph, with distances and relative position vectors
         edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
@@ -340,10 +340,13 @@ class TensorEmbedding(nn.Module):
             linear.reset_parameters()
         self.init_norm.reset_parameters()
 
-    def _get_atomic_number_message(self, z: Tensor, edge_index: Tensor, extra_embedding_args: Optional[Tuple[Tensor]]) -> Tensor:
+    def _get_atomic_number_message(self, z: Tensor, edge_index: Tensor, extra_embedding_args: Optional[List[Tensor]]) -> Tensor:
         Z = self.emb(z)
-        if self.reshape_embedding is not None:
-            Z = torch.cat((Z,)+tuple(t.unsqueeze(1) for t in extra_embedding_args), dim=1)
+        if self.reshape_embedding is not None and extra_embedding_args is not None:
+            tensors = [Z]
+            for t in extra_embedding_args:
+                tensors.append(t.unsqueeze(1))
+            Z = torch.cat(tensors, dim=1)
             Z = self.reshape_embedding(Z)
         Zij = self.emb2(
             Z.index_select(0, edge_index.t().reshape(-1)).view(
@@ -379,7 +382,7 @@ class TensorEmbedding(nn.Module):
         edge_weight: Tensor,
         edge_vec_norm: Tensor,
         edge_attr: Tensor,
-        extra_embedding_args: Optional[Tuple[Tensor]]
+        extra_embedding_args: Optional[List[Tensor]]
     ) -> Tensor:
         Zij = self._get_atomic_number_message(z, edge_index, extra_embedding_args)
         Iij, Aij, Sij = self._get_tensor_messages(
