@@ -10,6 +10,36 @@ Cite
 If you use TorchMD-NET in your research, please cite the following papers:
 
 Main reference
+~~~~~~~~~
+
+.. code-block:: bibtex
+
+    @misc{
+    pelaez2024torchmdnet,
+    title={TorchMD-Net 2.0: Fast Neural Network Potentials for Molecular Simulations},
+    author={Raul P. Pelaez and Guillem Simeon and Raimondas Galvelis and Antonio Mirarchi and Peter Eastman and Stefan Doerr and Philipp Thölke and Thomas E. Markland and Gianni De Fabritiis},
+    year={2024},
+    eprint={2402.17660},
+    archivePrefix={arXiv},
+    primaryClass={cs.LG}
+    }
+
+TensorNet
+~~~~~~~~~
+
+.. code-block:: bibtex
+
+    @inproceedings{
+    simeon2023tensornet,
+    title={TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials},
+    author={Guillem Simeon and Gianni De Fabritiis},
+    booktitle={Thirty-seventh Conference on Neural Information Processing Systems},
+    year={2023},
+    url={https://openreview.net/forum?id=BEHlPdBZ2e}
+    }
+
+
+Equivariant Transformer
 ~~~~~~~~~~~~~~
 
 .. code-block:: bibtex
@@ -42,20 +72,6 @@ Graph Network
   year = {2023},
   month = sep 
   }
-
-TensorNet
-~~~~~~~~~
-
-.. code-block:: bibtex
-
-    @inproceedings{
-    simeon2023tensornet,
-    title={TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials},
-    author={Guillem Simeon and Gianni De Fabritiis},
-    booktitle={Thirty-seventh Conference on Neural Information Processing Systems},
-    year={2023},
-    url={https://openreview.net/forum?id=BEHlPdBZ2e}
-    }
 
 
 .. toctree::
