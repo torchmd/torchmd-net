@@ -86,6 +86,31 @@ CUDA_VISIBLE_DEVICES=0,1 torchmd-train --conf torchmd-net/examples/ET-QM9.yaml.y
 If you use TorchMD-NET in your research, please cite the following papers:
 
 #### Main reference
+
+```
+@misc{pelaez2024torchmdnet,
+title={TorchMD-Net 2.0: Fast Neural Network Potentials for Molecular Simulations}, 
+author={Raul P. Pelaez and Guillem Simeon and Raimondas Galvelis and Antonio Mirarchi and Peter Eastman and Stefan Doerr and Philipp Thölke and Thomas E. Markland and Gianni De Fabritiis},
+year={2024},
+eprint={2402.17660},
+archivePrefix={arXiv},
+primaryClass={cs.LG}
+}
+```
+
+#### TensorNet
+
+```
+@inproceedings{simeon2023tensornet,
+title={TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials},
+author={Guillem Simeon and Gianni De Fabritiis},
+booktitle={Thirty-seventh Conference on Neural Information Processing Systems},
+year={2023},
+url={https://openreview.net/forum?id=BEHlPdBZ2e}
+}
+```
+
+#### Equivariant Transformer
 ```
 @inproceedings{
 tholke2021equivariant,
@@ -112,18 +137,6 @@ url={https://openreview.net/forum?id=zNHzqZ9wrRB}
   author = {Majewski,  Maciej and Pérez,  Adrià and Th\"{o}lke,  Philipp and Doerr,  Stefan and Charron,  Nicholas E. and Giorgino,  Toni and Husic,  Brooke E. and Clementi,  Cecilia and Noé,  Frank and De Fabritiis,  Gianni},
   year = {2023},
   month = sep 
-}
-```
-
-#### TensorNet
-
-```
-@inproceedings{simeon2023tensornet,
-title={TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials},
-author={Guillem Simeon and Gianni De Fabritiis},
-booktitle={Thirty-seventh Conference on Neural Information Processing Systems},
-year={2023},
-url={https://openreview.net/forum?id=BEHlPdBZ2e}
 }
 ```
 
