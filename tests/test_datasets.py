@@ -8,7 +8,7 @@ from pytest import mark, raises
 from os.path import join
 import numpy as np
 import psutil
-from torchmdnet.datasets import Custom, HDF5
+from torchmdnet.datasets import Custom, HDF5, Ace
 from torchmdnet.utils import write_as_hdf5
 import h5py
 import glob
@@ -202,3 +202,59 @@ def test_hdf5_multiprocessing(tmpdir, num_entries=100):
     dset = HDF5(join(tmpdir, "test_hdf5_multiprocessing.h5"))
 
     assert len(proc.open_files()) == n_open, "creating the dataset object opened a file"
+
+def test_ace(tmpdir):
+    #Test Version 1.0
+    tmpfilename = join(tmpdir, "molecule.h5")
+    f = h5py.File(tmpfilename, 'w')
+    f.attrs["layout"] = "Ace"
+    f.attrs["layout_version"] = "1.0"
+    f.attrs["name"] = "sample_molecule_data"
+    for m in range(3):  # Three molecules
+        mol = f.create_group(f"mol_{m+1}")
+        mol["atomic_numbers"] = [1, 6, 8]  # H, C, O
+        mol["formal_charges"] = [0, 0, 0]  # Neutral charges
+        confs = mol.create_group("conformations")
+        for i in range(2):  # Two conformations
+            conf = confs.create_group(f"conf_{i+1}")
+            conf["positions"] = np.random.random((3, 3))
+            conf["positions"].attrs["units"] = "Å"
+            conf["formation_energy"] = np.random.random()
+            conf["formation_energy"].attrs["units"] = "eV"
+            conf["forces"] = np.random.random((3, 3))
+            conf["forces"].attrs["units"] = "eV/Å"
+            conf["partial_charges"] = np.random.random(3)
+            conf["partial_charges"].attrs["units"] = "e"
+            conf["dipole_moment"] = np.random.random(3)
+            conf["dipole_moment"].attrs["units"] = "e*Å"
+                
+    dataset = Ace(root=tmpdir, paths=tmpfilename)
+    assert len(dataset) == 6
+    f.flush()
+    f.close()
+    # Test Version 2.0 
+    tmpfilename_v2 = join(tmpdir, "molecule_v2.h5")
+    f2 = h5py.File(tmpfilename_v2, 'w')
+    f2.attrs["layout"] = "Ace"
+    f2.attrs["layout_version"] = "2.0"
+    f2.attrs["name"] = "sample_molecule_data_v2"
+    master_mol_group = f2.create_group("master_molecule_group")
+    for m in range(3):  # Three molecules
+        mol = master_mol_group.create_group(f"mol_{m+1}")
+        mol["atomic_numbers"] = [1, 6, 8]  # H, C, O
+        mol["formal_charges"] = [0, 0, 0]  # Neutral charges
+        mol["positions"] = np.random.random((2, 3, 3))  # Two conformations
+        mol["positions"].attrs["units"] = "Å"
+        mol["formation_energies"] = np.random.random(2)
+        mol["formation_energies"].attrs["units"] = "eV"
+        mol["forces"] = np.random.random((2, 3, 3))
+        mol["forces"].attrs["units"] = "eV/Å"
+        mol["partial_charges"] = np.random.random((2, 3))
+        mol["partial_charges"].attrs["units"] = "e"
+        mol["dipole_moment"] = np.random.random((2, 3))
+        mol["dipole_moment"].attrs["units"] = "e*Å"
+    dataset_v2 = Ace(root=tmpdir, paths=tmpfilename_v2)
+    assert len(dataset_v2) == 6
+    f2.flush()
+    f2.close()
+            
