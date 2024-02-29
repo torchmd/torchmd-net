@@ -56,7 +56,6 @@ class MemmappedDataset(Dataset):
         pre_transform=None,
         pre_filter=None,
         properties=("y", "neg_dy", "q", "pq", "dp"),
-        remove_ref_energy=False,
     ):
         self.name = self.__class__.__name__
         self.properties = properties
