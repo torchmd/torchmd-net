@@ -146,7 +146,6 @@ class Ace(MemmappedDataset):
             transform,
             pre_transform,
             pre_filter,
-            remove_ref_energy=False,
             properties=("y", "neg_dy", "q", "pq", "dp"),
         )
 
