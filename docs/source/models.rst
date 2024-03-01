@@ -4,13 +4,87 @@ Neural Network Potentials
 =========================
 
 
+.. figure:: img/tmdnet_model.*	    
+   :align: center
+      
+   Schematic representation of the TorchMD-Net model.
+
+
+In TorchMD-Net a model, abstracted by the :py:mod:`torchmdnet.models.model.TorchMD_Net` class, is composed of three main components:
+
+1. **A representation model** that takes atomic numbers and positions (and optionally other per-sample or per-atom properties that the particular model might make use of) as input and outputs a series of per-atom features. The representation model is responsible for encoding the local environment of each atom.
+
+2. **An output model** that takes the per-atom features and outputs a single per-batch label (i.e. total energy).
+   
+3. Optionally, :ref:`priors <Priors>` can be used to add additional constraints to the output model. For instance, a prior can be used to add a reference energy to the output of the model, or add a :ref:`Coulomb potential <:py:mod:torchmdnet.priors.Coulomb>` to the output of the model.
+
+The resulting model can also be used to compute the negative gradient of the output with respect to the input positions (i.e. forces) via backpropagation with `autograd <https://pytorch.org/tutorials/beginner/blitz/autograd_tutorial.html>`_. This is done by setting the :code:`derivative` flag to :code:`True` when creating the model.
+
+.. hint:: Given the large amount of configuration options available, one typically does not instantiate :py:mod:`torchmdnet.models.model.TorchMD_Net` directly, but uses the :py:mod:`torchmdnet.models.model.create_model` function.
+
+.. hint:: It is possible to use the :py:mod:`torchmdnet.models.model.TorchMD_Net` class directly instead of using the :py:mod:`torchmdnet.models.model.create_model` function. This can be useful if, for instance, you want to make use of the default parameters of the representation model and output model.
+	  
+	  .. code:: python
+
+	     from torchmdnet.models.model import TorchMD_Net
+	     from torchmdnet.models.tensornet import TensorNet
+	     from torchmdnet.models.output_modules import Scalar
+
+	     model = TorchMD_Net(
+	     representation_model=TensorNet(),
+	     output_model=Scalar(hidden_channels=32),
+	     )
+
+
 Training a model
 ----------------
 
 The typical workflow to obtain a neural network potential in TorchMD-Net starts with :ref:`training <training>` one of the `Available Models`_. During this process you will get a checkpoint file that can be used to load the model for inference.
 
+Custom training loops
+~~~~~~~~~~~~~~~~~~~~~
 
+If you want to use a custom training loop, you can use the :py:mod:`torchmdnet.models.model.TorchMD_Net` class directly. This class is a wrapper around the representation model, output model and priors that takes care of putting the pieces together.
+In order to do this you need to follow these steps:
 
+1. Create a new instance of :py:mod:`torchmdnet.models.model.TorchMD_Net` with the representation model, output model and priors you want to use. We provide the :py:mod:`torchmdnet.models.model.create_model` function to help you with this. Check :ref:`torchmd-train` for a list and description of the parameters.
+
+2. Use one of the available :ref:`Datasets` to prepare your data, or create a custom one. You may then use a `pytorch DataLoader <https://pytorch.org/tutorials/beginner/basics/data_tutorial.html#preparing-your-data-for-training-with-dataloaders>`_ to iterate over the data.
+
+3. Train the model using a custom training loop. See for instance the `PyTorch tutorial on training loops <https://pytorch.org/tutorials/beginner/introyt/trainingyt.html#optimizer>`_.
+
+This is a minimal example of a custom training loop:
+
+.. code:: python
+
+  import torch
+  from torchmdnet.models.model import create_model
+  from torchmdnet.datasets import MD17
+  from torch_geometric.loader import DataLoader
+  import yaml
+  
+  args = yaml.load(open("TensorNet-rMD17.yaml"), Loader=yaml.FullLoader)
+  model = create_model(args, prior_model=None)
+  dataset = MD17(root="~/data", molecules="revised_aspirin")
+  if torch.cuda.is_available():
+      model = model.to("cuda")
+      dataset = dataset.to("cuda")
+  dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+  optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+  criterion = torch.nn.MSELoss()
+  for epoch in range(10):
+      for batch in dataloader:
+          args = batch.to_dict()
+          optimizer.zero_grad()
+          y, neg_dy = model(args["z"], args["pos"], args["batch"])
+          # A simple loss function that uses the energy and forces to train the model
+          loss = criterion(y, args["y"]) + criterion(neg_dy, args["neg_dy"])
+          loss.backward()
+          optimizer.step()
+  
+   
+	  
+   
 Loading a model for inference
 -----------------------------
 
@@ -36,6 +110,7 @@ Once you have trained a model you should have a checkpoint that you can load for
 .. note:: Some models take additional inputs such as the charge :code:`q` and the spin :code:`s` of the atoms depending on the chosen priors/outputs. Check the documentation of the model you are using to see if this is the case.
 
 .. note:: When periodic boundary conditions are required, modules typically offer the possibility of providing the box vectors at construction and/or as an argument to the forward pass. Check the documentation of the class you are using to see if this is the case.
+
 
 .. _delta-learning:
 Training on relative energies
