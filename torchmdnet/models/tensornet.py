@@ -48,6 +48,10 @@ def vector_to_symtensor(vector):
     S = 0.5 * (tensor + tensor.transpose(-2, -1)) - I
     return S
 
+def skewtensor_to_vector(tensor):
+    '''Converts a skew-symmetric tensor to a vector.'''
+    return torch.stack((tensor[:, :, 1, 2], tensor[:, :, 2, 0], tensor[:, :, 0, 1]), dim=-1)
+
 
 def decompose_tensor(tensor):
     """Full tensor decomposition into irreducible components."""
@@ -265,10 +269,13 @@ class TensorNet(nn.Module):
         x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
         x = self.out_norm(x)
         x = self.act(self.linear((x)))
+        v = skewtensor_to_vector(A)
+        v = v.transpose(1, 2)
         # # Remove the extra atom
         if self.static_shapes:
             x = x[:-1]
-        return x, None, z, pos, batch
+            v = v[:-1]
+        return x, v, z, pos, batch
 
 
 class TensorEmbedding(nn.Module):
