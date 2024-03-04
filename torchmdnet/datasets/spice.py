@@ -13,7 +13,6 @@ from tqdm import tqdm
 
 
 class SPICE(MemmappedDataset):
-
     """
     SPICE dataset (https://github.com/openmm/spice-dataset)
 
@@ -65,6 +64,10 @@ class SPICE(MemmappedDataset):
             "url": "https://zenodo.org/record/7606550/files",
             "file": "SPICE-1.1.3.hdf5",
         },
+        "1.1.4": {
+            "url": "https://zenodo.org/records/8222043/files",
+            "file": "SPICE-1.1.4.hdf5",
+        },
     }
 
     @property
@@ -103,7 +106,6 @@ class SPICE(MemmappedDataset):
             transform,
             pre_transform,
             pre_filter,
-            remove_ref_energy=False,
             properties=("y", "neg_dy"),
         )
 
