@@ -379,7 +379,7 @@ class TorchMD_Net(nn.Module):
         batch = torch.zeros_like(z) if batch is None else batch
 
         # trick to incorporate SPICE pqs
-        # set charge: true in yaml
+        # set charge: true in yaml ((?) currently I do it)
         q = extra_args["pq"]
         
         if self.derivative:
