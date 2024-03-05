@@ -239,7 +239,8 @@ class TensorNet(nn.Module):
         # Total charge q is a molecule-wise property. We transform it into an atom-wise property, with all atoms belonging to the same molecule being assigned the same charge q
         if q is None:
             q = torch.zeros_like(z, device=z.device, dtype=z.dtype)
-        else:
+        # if not atom-wise, make atom-wise (pq is already atom-wise)
+        if z.shape != q.shape:
             q = q[batch]
         zp = z
         if self.static_shapes:
