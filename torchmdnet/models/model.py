@@ -378,6 +378,10 @@ class TorchMD_Net(nn.Module):
         assert z.dim() == 1 and z.dtype == torch.long
         batch = torch.zeros_like(z) if batch is None else batch
 
+        # trick to incorporate SPICE pqs
+        # set charge: true in yaml
+        q = extra_args["pq"]
+        
         if self.derivative:
             pos.requires_grad_(True)
         # run the potentially wrapped representation model
