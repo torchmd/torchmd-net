@@ -2,7 +2,7 @@
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 import torch
 from torch import Tensor, nn
 from torchmdnet.models.utils import (
@@ -102,6 +102,7 @@ class TorchMD_ET(nn.Module):
         box_vecs=None,
         vector_cutoff=False,
         dtype=torch.float32,
+        extra_fields=None,
     ):
         super(TorchMD_ET, self).__init__()
 
@@ -194,8 +195,7 @@ class TorchMD_ET(nn.Module):
         pos: Tensor,
         batch: Tensor,
         box: Optional[Tensor] = None,
-        q: Optional[Tensor] = None,
-        s: Optional[Tensor] = None,
+        extra_fields_args: Optional[Dict[str, Tensor]] = None,
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
         x = self.embedding(z)
 
