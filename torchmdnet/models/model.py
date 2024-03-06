@@ -348,7 +348,7 @@ class TorchMD_Net(nn.Module):
         pos: Tensor,
         batch: Optional[Tensor] = None,
         box: Optional[Tensor] = None,
-        extra_args: Optional[Dict[str, Optional[Tensor]]] = None,
+        extra_args: Optional[Dict[str, Tensor]] = None,
         extra_fields: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Tensor, Tensor]:
         """
