@@ -57,6 +57,15 @@ class HDF5(Dataset):
                             self.fields.append(
                                 ("partial_charges", "partial_charges", torch.float32)
                             )
+                        # total charge and spin, will be load as 'q' and 's' respectively to keep the same naming convention
+                        if "total_charge" in group:
+                            self.fields.append(
+                                ("total_charge", "total_charge", torch.float32)
+                            )
+                        if "spin" in group:
+                            self.fields.append(
+                                ("spin", "spin", torch.float32)
+                            )
                         assert ("energy" in group) or (
                             "forces" in group
                         ), "Each group must contain at least energies or forces"
