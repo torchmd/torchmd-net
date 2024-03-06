@@ -410,7 +410,6 @@ class TorchMD_Net(nn.Module):
             pos,
             batch,
             box=box,
-            extra_args=extra_args,
             extra_fields_args=extra_fields_args,
         )
         # apply the output network
