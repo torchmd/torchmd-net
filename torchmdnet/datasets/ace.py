@@ -273,7 +273,7 @@ class Ace(MemmappedDataset):
 
                     # Create a sample
                     args = dict(
-                        z=z, pos=pos, y=y.view(1, 1), neg_dy=neg_dy, q=q, pq=pq, dp=dp
+                        z=z, pos=pos, y=y.view(1, 1), neg_dy=neg_dy, total_charge=q, partial_charges=pq, dipole_moment=dp
                     )
                     if mol_ids:
                         args["mol_id"] = mol_id
