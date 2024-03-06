@@ -60,6 +60,7 @@ def get_argparse():
     parser.add_argument('--gradient-clipping', type=float, default=0.0, help='Gradient clipping norm')
     parser.add_argument('--remove-ref-energy', action='store_true', help='If true, remove the reference energy from the dataset for delta-learning. Total energy can still be predicted by the model during inference by turning this flag off when loading.  The dataset must be compatible with Atomref for this to be used.')
     # dataset specific
+    parser.add_argument('--extra-fields', default=None, help='Extra fields of the dataset to pass to the model, it could be a list of fields or a dictionary with the field name and addtionals arguments')
     parser.add_argument('--dataset', default=None, type=str, choices=datasets.__all__, help='Name of the torch_geometric dataset')
     parser.add_argument('--dataset-root', default='~/data', type=str, help='Data storage directory (not used if dataset is "CG")')
     parser.add_argument('--dataset-arg', default=None, help='Additional dataset arguments. Needs to be a dictionary.')
