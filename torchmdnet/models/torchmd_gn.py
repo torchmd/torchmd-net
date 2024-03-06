@@ -140,7 +140,7 @@ class TorchMD_GN(nn.Module):
         self.cutoff_upper = cutoff_upper
         self.max_z = max_z
         self.aggr = aggr
-
+        self.extra_fields = extra_fields
         act_class = act_class_mapping[activation]
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels, dtype=dtype)

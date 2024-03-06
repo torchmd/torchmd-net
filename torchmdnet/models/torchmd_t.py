@@ -128,6 +128,7 @@ class TorchMD_T(nn.Module):
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         self.max_z = max_z
+        self.extra_fields = extra_fields
 
         act_class = act_class_mapping[activation]
         attn_act_class = act_class_mapping[attn_activation]
