@@ -80,7 +80,7 @@ class TorchMD_ET(nn.Module):
         check_errors (bool, optional): Whether to check for errors in the distance module.
             (default: :obj:`True`)
         extra_fields (Dict[str, Any], optional): Extra fields to be passed to the model, the value could be a dict with some extra args to be passed to the model, 
-            for example extra_labels={'total_charge': {initial_value: 0.0, learnable: True}} or maybe extra_labels={'total_charge': {embedding_dims: 64}. 
+            for example extra_fields={'total_charge': {initial_value: 0.0, learnable: True}} or maybe extra_fields={'total_charge': {embedding_dims: 64}. 
             default: :obj:`None`)
 
     """
