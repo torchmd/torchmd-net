@@ -3,7 +3,7 @@
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
 import re
-from typing import Optional, List, Tuple, Dict
+from typing import Optional, List, Tuple, Dict, Any
 import torch
 from torch.autograd import grad
 from torch import nn, Tensor
@@ -38,7 +38,18 @@ def create_model(args, prior_model=None, mean=None, std=None):
         args["static_shapes"] = False
     if "vector_cutoff" not in args:
         args["vector_cutoff"] = False
-
+    
+    # Here we introduce the extra_fields_args, which is Dict[str, Any]
+    # These could be used from each model to initialize nn.embedding layers, nn.Parameter, etc.
+    if "extra_fields" not in args:
+        extra_fields = None
+    elif isinstance(args["extra_fields"], str):
+        extra_fields = {args["extra_fields"]: None}
+    elif isinstance(args["extra_fields"], list):
+        extra_fields = {label: None for label in args["extra_fields"]}
+    else:
+        extra_fields = args["extra_fields"]
+    
     shared_args = dict(
         hidden_channels=args["embedding_dimension"],
         num_layers=args["num_layers"],
@@ -57,6 +68,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
             else None
         ),
         dtype=dtype,
+        extra_fields=extra_fields,
     )
 
     # representation network
@@ -263,8 +275,8 @@ class TorchMD_Net(nn.Module):
     Parameters
     ----------
     representation_model : nn.Module
-        A model that takes as input the atomic numbers, positions, batch indices, and optionally
-        charges and spins. It must return a tuple of the form (x, v, z, pos, batch), where x
+        A model that takes as input the atomic numbers, positions, batch indices.
+        It must return a tuple of the form (x, v, z, pos, batch), where x
         are the atom features, v are the vector features (if any), z are the atomic numbers,
         pos are the positions, and batch are the batch indices. See TorchMD_ET for more details.
     output_model : nn.Module
@@ -336,9 +348,8 @@ class TorchMD_Net(nn.Module):
         pos: Tensor,
         batch: Optional[Tensor] = None,
         box: Optional[Tensor] = None,
-        q: Optional[Tensor] = None,
-        s: Optional[Tensor] = None,
-        extra_args: Optional[Dict[str, Tensor]] = None,
+        extra_args: Optional[Dict[str, Optional[Tensor]]] = None,
+        extra_fields: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Tensor, Tensor]:
         """
         Compute the output of the model.
@@ -368,9 +379,8 @@ class TorchMD_Net(nn.Module):
             The vectors defining the periodic box.  This must have shape `(3, 3)`,
             where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
             If this is omitted, periodic boundary conditions are not applied.
-            q (Tensor, optional): Atomic charges in the molecule. Shape: (N,).
-            s (Tensor, optional): Atomic spins in the molecule. Shape: (N,).
-            extra_args (Dict[str, Tensor], optional): Extra arguments to pass to the prior model.
+            extra_args (Dict[str, Tensor], optional): Extra arguments to pass to the prior model or to the representation model.
+            extra_fields (Dict[str, Tensor], optional): Extra fields to pass to the representation model.
 
         Returns:
             Tuple[Tensor, Optional[Tensor]]: The output of the model and the derivative of the output with respect to the positions if derivative is True, None otherwise.
@@ -378,15 +388,30 @@ class TorchMD_Net(nn.Module):
         assert z.dim() == 1 and z.dtype == torch.long
         batch = torch.zeros_like(z) if batch is None else batch
 
-        # trick to incorporate SPICE pqs
-        # set charge: true in yaml ((?) currently I do it)
-        q = extra_args["pq"]
-        
         if self.derivative:
             pos.requires_grad_(True)
+            
+        # recover the extra_fields_args from the extra_fields
+        if self.representation_model.extra_fields is None:
+            extra_fields_args = None
+        else:
+            assert extra_args is not None, "Extra fields are required but not provided."
+            extra_fields_args = {}
+            for field in extra_fields.keys():
+                t = extra_args[field]
+                if t.shape != z.shape:
+                    # expand molecular label to atom labels
+                    t = t[batch]
+                extra_fields_args[field] = t    
+                    
         # run the potentially wrapped representation model
         x, v, z, pos, batch = self.representation_model(
-            z, pos, batch, box=box, q=q, s=s
+            z,
+            pos,
+            batch,
+            box=box,
+            extra_args=extra_args,
+            extra_fields_args=extra_fields_args,
         )
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch)
