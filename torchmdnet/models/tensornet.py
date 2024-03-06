@@ -3,7 +3,7 @@
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
 import torch
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 from torch import Tensor, nn
 from torchmdnet.models.utils import (
     CosineCutoff,
@@ -15,7 +15,6 @@ from torchmdnet.models.utils import (
 __all__ = ["TensorNet"]
 torch.set_float32_matmul_precision("high")
 torch.backends.cuda.matmul.allow_tf32 = True
-
 
 def vector_to_skewtensor(vector):
     """Creates a skew-symmetric tensor from a vector."""
@@ -120,6 +119,9 @@ class TensorNet(nn.Module):
             (default: :obj:`True`)
         check_errors (bool, optional): Whether to check for errors in the distance module.
             (default: :obj:`True`)
+        extra_fields (Dict[str, Any], optional): Extra fields to be passed to the model, the value could be a dict with some extra args to be passed to the model, 
+            for example extra_fields={'total_charge': {initial_value: 0.0, learnable: True}} or maybe extra_fields={'total_charge': {embedding_dims: 64}. 
+            default: :obj:`None`)
     """
 
     def __init__(
@@ -139,6 +141,7 @@ class TensorNet(nn.Module):
         check_errors=True,
         dtype=torch.float32,
         box_vecs=None,
+        extra_fields=None,
     ):
         super(TensorNet, self).__init__()
 
@@ -163,6 +166,7 @@ class TensorNet(nn.Module):
         self.activation = activation
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
+        self.extra_fields = extra_fields
         act_class = act_class_mapping[activation]
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
@@ -176,6 +180,7 @@ class TensorNet(nn.Module):
             trainable_rbf,
             max_z,
             dtype,
+            extra_fields,
         )
 
         self.layers = nn.ModuleList()
@@ -226,8 +231,7 @@ class TensorNet(nn.Module):
         pos: Tensor,
         batch: Tensor,
         box: Optional[Tensor] = None,
-        q: Optional[Tensor] = None,
-        s: Optional[Tensor] = None,
+        extra_fields_args: Dict[str, Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
         # Obtain graph, with distances and relative position vectors
         edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
@@ -236,17 +240,10 @@ class TensorNet(nn.Module):
             edge_vec is not None
         ), "Distance module did not return directional information"
         # Distance module returns -1 for non-existing edges, to avoid having to resize the tensors when we want to ensure static shapes (for CUDA graphs) we make all non-existing edges pertain to a ghost atom
-        # Total charge q is a molecule-wise property. We transform it into an atom-wise property, with all atoms belonging to the same molecule being assigned the same charge q
-        if q is None:
-            q = torch.zeros_like(z, device=z.device, dtype=z.dtype)
-        # if not atom-wise, make atom-wise (pq is already atom-wise)
-        if z.shape != q.shape:
-            q = q[batch]
         zp = z
         if self.static_shapes:
             mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
             zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
-            q = torch.cat((q, torch.zeros(1, device=q.device, dtype=q.dtype)), dim=0)
             # I trick the model into thinking that the masked edges pertain to the extra atom
             # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
             edge_index = edge_index.masked_fill(mask, z.shape[0])
@@ -259,9 +256,9 @@ class TensorNet(nn.Module):
         # Normalizing edge vectors by their length can result in NaNs, breaking Autograd.
         # I avoid dividing by zero by setting the weight of self edges and self loops to 1
         edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
-        X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr)
+        X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr, extra_fields_args)
         for layer in self.layers:
-            X = layer(X, edge_index, edge_weight, edge_attr, q)
+            X = layer(X, edge_index, edge_weight, edge_attr, extra_fields_args)
         I, A, S = decompose_tensor(X)
         x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
         x = self.out_norm(x)
@@ -288,6 +285,7 @@ class TensorEmbedding(nn.Module):
         trainable_rbf=False,
         max_z=128,
         dtype=torch.float32,
+        extra_fields=None,
     ):
         super(TensorEmbedding, self).__init__()
 
@@ -327,7 +325,7 @@ class TensorEmbedding(nn.Module):
             linear.reset_parameters()
         self.init_norm.reset_parameters()
 
-    def _get_atomic_number_message(self, z: Tensor, edge_index: Tensor) -> Tensor:
+    def _get_atomic_number_message(self, z: Tensor, edge_index: Tensor, extra_fields_args: Optional[Dict[str, Tensor]]) -> Tensor:
         Z = self.emb(z)
         Zij = self.emb2(
             Z.index_select(0, edge_index.t().reshape(-1)).view(
@@ -363,8 +361,9 @@ class TensorEmbedding(nn.Module):
         edge_weight: Tensor,
         edge_vec_norm: Tensor,
         edge_attr: Tensor,
+        extra_fields_args: Dict[str, Any] = None,
     ) -> Tensor:
-        Zij = self._get_atomic_number_message(z, edge_index)
+        Zij = self._get_atomic_number_message(z, edge_index, extra_fields_args)
         Iij, Aij, Sij = self._get_tensor_messages(
             Zij, edge_weight, edge_vec_norm, edge_attr
         )
@@ -457,7 +456,7 @@ class Interaction(nn.Module):
         edge_index: Tensor,
         edge_weight: Tensor,
         edge_attr: Tensor,
-        q: Tensor,
+        extra_fields_args: Optional[Dict[str, Tensor]] = None,
     ) -> Tensor:
         C = self.cutoff(edge_weight)
         for linear_scalar in self.linears_scalar:
@@ -484,7 +483,7 @@ class Interaction(nn.Module):
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(msg, Y)
             B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor((1 + 0.1 * q[..., None, None, None]) * (A + B))
+            I, A, S = decompose_tensor((1) * (A + B))
         if self.equivariance_invariance_group == "SO(3)":
             B = torch.matmul(Y, msg)
             I, A, S = decompose_tensor(2 * B)
@@ -494,5 +493,5 @@ class Interaction(nn.Module):
         A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         dX = I + A + S
-        X = X + dX + (1 + 0.1 * q[..., None, None, None]) * torch.matrix_power(dX, 2)
+        X = X + dX + (1) * torch.matrix_power(dX, 2)
         return X
