@@ -2,7 +2,7 @@
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 import torch
 from torch import Tensor, nn
 from torchmdnet.models.utils import (
@@ -76,6 +76,9 @@ class TorchMD_T(nn.Module):
             (default: :obj:`None`)
         check_errors (bool, optional): Whether to check for errors in the distance module.
             (default: :obj:`True`)
+        extra_fields (Dict[str, Any], optional): Extra fields to be passed to the model, the value could be a dict with some extra args to be passed to the model, 
+            for example extra_fields={'total_charge': {initial_value: 0.0, learnable: True}} or maybe extra_fields={'total_charge': {embedding_dims: 64}. 
+            default: :obj:`None`)
 
     """
 
@@ -98,6 +101,7 @@ class TorchMD_T(nn.Module):
         max_num_neighbors=32,
         dtype=torch.float,
         box_vecs=None,
+        extra_fields=None
     ):
         super(TorchMD_T, self).__init__()
 
@@ -190,8 +194,7 @@ class TorchMD_T(nn.Module):
         pos: Tensor,
         batch: Tensor,
         box: Optional[Tensor] = None,
-        s: Optional[Tensor] = None,
-        q: Optional[Tensor] = None,
+        extra_fields_args: Optional[Dict[str, Tensor]] = None
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
         x = self.embedding(z)
 
