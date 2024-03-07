@@ -10,7 +10,7 @@ from torch_geometric.data import Dataset, Data
 
 def load_example_args(model_name, remove_prior=False, config_file=None, **kwargs):
     if config_file is None:
-        if model_name == "tensornet":
+        if model_name == "tensornet" or model_name == "equivariant-tensornet":
             config_file = join(dirname(dirname(__file__)), "examples", "TensorNet-QM9.yaml")
         else:
             config_file = join(dirname(dirname(__file__)), "examples", "ET-QM9.yaml")

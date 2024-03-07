@@ -124,6 +124,7 @@ class TensorNet(nn.Module):
             (default: :obj:`True`)
         check_errors (bool, optional): Whether to check for errors in the distance module.
             (default: :obj:`True`)
+        vector_output (bool, optional): Whether to return 
     """
 
     def __init__(
@@ -143,6 +144,7 @@ class TensorNet(nn.Module):
         check_errors=True,
         dtype=torch.float32,
         box_vecs=None,
+        vector_output=False
     ):
         super(TensorNet, self).__init__()
 
@@ -214,6 +216,7 @@ class TensorNet(nn.Module):
             box=box_vecs,
             long_edge_index=True,
         )
+        self.vector_output = vector_output
 
         self.reset_parameters()
 
@@ -269,12 +272,21 @@ class TensorNet(nn.Module):
         x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
         x = self.out_norm(x)
         x = self.act(self.linear((x)))
-        v = skewtensor_to_vector(A)
-        v = v.transpose(1, 2)
-        # # Remove the extra atom
+        # Remove the extra atom
         if self.static_shapes:
             x = x[:-1]
-            v = v[:-1]
+
+        # calculate vector_output if needed
+        v = None
+        if self.vector_output:
+            # (n_atoms, hidden_channels, 3, 3) -> (n_atoms, hidden_channels, 3)
+            v = skewtensor_to_vector(A)
+            # (n_atoms, hidden_channels, 3) -> (n_atoms, 3, hidden_channels)
+            v = v.transpose(1, 2)
+
+            if self.static_shapes:
+                v = v[:-1]
+
         return x, v, z, pos, batch
 
 
