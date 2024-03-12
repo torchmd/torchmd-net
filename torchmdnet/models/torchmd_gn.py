@@ -143,7 +143,7 @@ class TorchMD_GN(nn.Module):
         self.aggr = aggr
         self.additional_labels = additional_labels
         self.allowed_additional_labels = None
-        self.provided_additional_methods = None        
+        self.additional_methods = None        
         
         act_class = act_class_mapping[activation]
 
