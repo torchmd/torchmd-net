@@ -196,7 +196,7 @@ class TorchMD_T(nn.Module):
         pos: Tensor,
         batch: Tensor,
         box: Optional[Tensor] = None,
-        extra_fields_args: Optional[Dict[str, Tensor]] = None
+        extra_args: Optional[Dict[str, Tensor]] = None
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
         x = self.embedding(z)
 
