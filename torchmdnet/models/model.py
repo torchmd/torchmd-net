@@ -40,16 +40,15 @@ def create_model(args, prior_model=None, mean=None, std=None):
         args["vector_cutoff"] = False
     
     # Here we introduce the extra_fields_args, which is Dict[str, Any]
-    # These could be used from each model to initialize nn.embedding layers, nn.Parameter, etc.
-    if "extra_fields" not in args:
-        extra_fields = None
-    elif isinstance(args["extra_fields"], str):
-        extra_fields = {args["extra_fields"]: None}
-    elif isinstance(args["extra_fields"], list):
-        extra_fields = {label: None for label in args["extra_fields"]}
+    # This could be used from each model to initialize nn.embedding layers, nn.Parameter, etc.
+    if "additional_labels" not in args:
+        additional_labels = None
+    elif isinstance(args["additional_labels"], dict):
+        additional_labels = args["additional_labels"]
     else:
-        extra_fields = args["extra_fields"]
-    
+        additional_labels = None
+        warnings.warn("Extra fields should be a dictionary. Ignoring extra fields.")
+        
     shared_args = dict(
         hidden_channels=args["embedding_dimension"],
         num_layers=args["num_layers"],
@@ -68,7 +67,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
             else None
         ),
         dtype=dtype,
-        extra_fields=extra_fields,
+        additional_labels=additional_labels,
     )
 
     # representation network
