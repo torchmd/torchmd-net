@@ -167,7 +167,7 @@ class TensorNet(nn.Module):
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         self.additional_labels = additional_labels
-        # initialize additional methods as None if not provided
+        # initialize additional methods as None if not provided, also used by module.py 
         self.additional_methods = None
         
         if additional_labels is not None:
@@ -345,7 +345,7 @@ class TensorEmbedding(nn.Module):
             linear.reset_parameters()
         self.init_norm.reset_parameters()
 
-    def _get_atomic_number_message(self, z: Tensor, edge_index: Tensor, extra_fields_args: Optional[Dict[str, Tensor]]) -> Tensor:
+    def _get_atomic_number_message(self, z: Tensor, edge_index: Tensor) -> Tensor:
         Z = self.emb(z)
         Zij = self.emb2(
             Z.index_select(0, edge_index.t().reshape(-1)).view(
