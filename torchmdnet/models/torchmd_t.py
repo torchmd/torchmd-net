@@ -130,7 +130,7 @@ class TorchMD_T(nn.Module):
         self.max_z = max_z
         self.additional_labels = additional_labels
         self.allowed_additional_labels = None
-        self.provided_additional_methods = None
+        self.additional_methods = None
         act_class = act_class_mapping[activation]
         attn_act_class = act_class_mapping[attn_activation]
 
