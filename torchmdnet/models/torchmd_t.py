@@ -76,10 +76,10 @@ class TorchMD_T(nn.Module):
             (default: :obj:`None`)
         check_errors (bool, optional): Whether to check for errors in the distance module.
             (default: :obj:`True`)
-        extra_fields (Dict[str, Any], optional): Extra fields to be passed to the model, the value could be a dict with some extra args to be passed to the model, 
-            for example extra_fields={'total_charge': {initial_value: 0.0, learnable: True}} or maybe extra_fields={'total_charge': {embedding_dims: 64}. 
-            default: :obj:`None`)
-
+        additional_labels (Dict[str, Any], optional): Additional labels to be passed to the forward method of the model: 
+            example: 
+            additional_labels = {method_name: {label_name1: values, label_name2: values, ...}, ...}
+            (default: :obj:`None`)
     """
 
     def __init__(
@@ -101,7 +101,7 @@ class TorchMD_T(nn.Module):
         max_num_neighbors=32,
         dtype=torch.float,
         box_vecs=None,
-        extra_fields=None
+        additional_labels=None
     ):
         super(TorchMD_T, self).__init__()
 
@@ -128,8 +128,9 @@ class TorchMD_T(nn.Module):
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         self.max_z = max_z
-        self.extra_fields = extra_fields
-
+        self.additional_labels = additional_labels
+        self.allowed_additional_labels = None
+        self.provided_additional_methods = None
         act_class = act_class_mapping[activation]
         attn_act_class = act_class_mapping[attn_activation]
 
