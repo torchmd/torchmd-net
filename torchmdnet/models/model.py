@@ -348,7 +348,6 @@ class TorchMD_Net(nn.Module):
         batch: Optional[Tensor] = None,
         box: Optional[Tensor] = None,
         extra_args: Optional[Dict[str, Tensor]] = None,
-        extra_fields: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Tensor, Tensor]:
         """
         Compute the output of the model.
@@ -378,8 +377,7 @@ class TorchMD_Net(nn.Module):
             The vectors defining the periodic box.  This must have shape `(3, 3)`,
             where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
             If this is omitted, periodic boundary conditions are not applied.
-            extra_args (Dict[str, Tensor], optional): Extra arguments to pass to the prior model or to the representation model.
-            extra_fields (Dict[str, Tensor], optional): Extra fields to pass to the representation model.
+            extra_args (Dict[str, Tensor], optional): Extra arguments to pass to the prior model and to the representation model.
 
         Returns:
             Tuple[Tensor, Optional[Tensor]]: The output of the model and the derivative of the output with respect to the positions if derivative is True, None otherwise.
@@ -389,27 +387,14 @@ class TorchMD_Net(nn.Module):
 
         if self.derivative:
             pos.requires_grad_(True)
-            
-        # recover the extra_fields_args from the extra_fields
-        if self.representation_model.extra_fields is None:
-            extra_fields_args = None
-        else:
-            assert extra_args is not None, "Extra fields are required but not provided."
-            extra_fields_args = {}
-            for field in extra_fields.keys():
-                t = extra_args[field]
-                if t.shape != z.shape:
-                    # expand molecular label to atom labels
-                    t = t[batch]
-                extra_fields_args[field] = t    
-                    
+        
         # run the potentially wrapped representation model
         x, v, z, pos, batch = self.representation_model(
             z,
             pos,
             batch,
             box=box,
-            extra_fields_args=extra_fields_args,
+            extra_args=extra_args,
         )
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch)
