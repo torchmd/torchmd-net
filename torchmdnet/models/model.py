@@ -388,7 +388,9 @@ class TorchMD_Net(nn.Module):
         if self.derivative:
             pos.requires_grad_(True)
         
-        if self.representation_model.additional_methods is not None:
+        if self.representation_model.additional_methods is None:
+            extra_args_nnp = None 
+        else:
             extra_args_nnp = {}
             # force the label to be atom wise
             for label, t in extra_args.items():
