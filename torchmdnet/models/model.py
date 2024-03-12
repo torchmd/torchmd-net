@@ -47,7 +47,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         additional_labels = args["additional_labels"]
     else:
         additional_labels = None
-        warnings.warn("Extra fields should be a dictionary. Ignoring extra fields.")
+        warnings.warn("Additional labels should be a dictionary. Ignoring additional labels.")
         
     shared_args = dict(
         hidden_channels=args["embedding_dimension"],
