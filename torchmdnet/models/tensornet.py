@@ -522,8 +522,6 @@ class Interaction(nn.Module):
         A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2) # shape: (natoms, hidden_channels, 3, 3)
         dX = I + A + S
-        for label in self.additional_labels.keys():
-            assert label in extra_args, f"Extra field {label} not found in extra_args"
         X = X + dX + (prefactor) * torch.matrix_power(dX, 2)
         return X
 
