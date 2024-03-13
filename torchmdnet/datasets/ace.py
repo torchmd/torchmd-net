@@ -47,7 +47,7 @@ class Ace(MemmappedDataset):
     - `positions`: Atomic positions. Units: Angstrom.
     - `forces`: Forces on the atoms. Units: eV/Å.
     - `partial_charges`: Atomic partial charges. Units: electron charges.
-    - `dipole_moment` (version 1.0) or `dipole_moments` (version 2.0): Dipole moment (a vector of three components). Units: e*Å.
+    - `dipole_moment` (version 1.0) or `dipole_moment` (version 2.0): Dipole moment (a vector of three components). Units: e*Å.
     - `formation_energy` (version 1.0) or `formation_energies` (version 2.0): Formation energy. Units: eV.
 
     Each dataset should also have an `units` attribute specifying its units (i.e., `Å`, `eV`, `e*Å`).
@@ -146,7 +146,7 @@ class Ace(MemmappedDataset):
             transform,
             pre_transform,
             pre_filter,
-            properties=("y", "neg_dy", "q", "pq", "dp"),
+            properties=("y", "neg_dy", "total_charge", "partial_charges", "dipole_moment"),
         )
 
     @property
@@ -188,14 +188,14 @@ class Ace(MemmappedDataset):
             assert neg_dy.shape == pos.shape
 
             assert conf["partial_charges"].attrs["units"] == "e"
-            pq = pt.tensor(conf["partial_charges"][:], dtype=pt.float32)
-            assert pq.shape == (n_atoms,)
+            partial_charges = pt.tensor(conf["partial_charges"][:], dtype=pt.float32)
+            assert partial_charges.shape == (n_atoms,)
 
             assert conf["dipole_moment"].attrs["units"] == "e*Å"
-            dp = pt.tensor(conf["dipole_moment"][:], dtype=pt.float32)
-            assert dp.shape == (3,)
+            dipole_moment = pt.tensor(conf["dipole_moment"][:], dtype=pt.float32)
+            assert dipole_moment.shape == (3,)
 
-            yield pos, y, neg_dy, pq, dp
+            yield pos, y, neg_dy, partial_charges, dipole_moment
 
     @staticmethod
     def _load_confs_2_0(mol, n_atoms):
@@ -213,19 +213,19 @@ class Ace(MemmappedDataset):
         assert all_neg_dy.shape == all_pos.shape
 
         assert mol["partial_charges"].attrs["units"] == "e"
-        all_pq = pt.tensor(mol["partial_charges"][...], dtype=pt.float32)
-        assert all_pq.shape == (n_confs, n_atoms)
+        all_partial_charges = pt.tensor(mol["partial_charges"][...], dtype=pt.float32)
+        assert all_partial_charges.shape == (n_confs, n_atoms)
 
         assert mol["dipole_moments"].attrs["units"] == "e*Å"
-        all_dp = pt.tensor(mol["dipole_moments"][...], dtype=pt.float32)
-        assert all_dp.shape == (n_confs, 3)
+        all_dipole_moment = pt.tensor(mol["dipole_moments"][...], dtype=pt.float32)
+        assert all_dipole_moment.shape == (n_confs, 3)
 
-        for pos, y, neg_dy, pq, dp in zip(all_pos, all_y, all_neg_dy, all_pq, all_dp):
+        for pos, y, neg_dy, partial_charges, dipole_moment in zip(all_pos, all_y, all_neg_dy, all_partial_charges, all_dipole_moment):
             # Skip failed calculations
             if y.isnan():
                 continue
 
-            yield pos, y, neg_dy, pq, dp
+            yield pos, y, neg_dy, partial_charges, dipole_moment
 
     def sample_iter(self, mol_ids=False):
         assert self.subsample_molecules > 0
@@ -261,9 +261,9 @@ class Ace(MemmappedDataset):
 
                 z = pt.tensor(mol["atomic_numbers"], dtype=pt.long)
                 fq = pt.tensor(mol["formal_charges"], dtype=pt.long)
-                q = fq.sum()
+                total_charge = fq.sum()
 
-                for i_conf, (pos, y, neg_dy, pq, dp) in enumerate(
+                for i_conf, (pos, y, neg_dy, partial_charges, dipole_moment) in enumerate(
                     load_confs(mol, n_atoms=len(z))
                 ):
                     # Skip samples with large forces
@@ -273,7 +273,7 @@ class Ace(MemmappedDataset):
 
                     # Create a sample
                     args = dict(
-                        z=z, pos=pos, y=y.view(1, 1), neg_dy=neg_dy, total_charge=q, partial_charges=pq, dipole_moment=dp
+                        z=z, pos=pos, y=y.view(1, 1), neg_dy=neg_dy, total_charge=total_charge, partial_charges=partial_charges, dipole_moment=dipole_moment
                     )
                     if mol_ids:
                         args["mol_id"] = mol_id
