@@ -120,7 +120,7 @@ class TensorNet(nn.Module):
         check_errors (bool, optional): Whether to check for errors in the distance module.
             (default: :obj:`True`)
         additional_labels (Dict[str, Any], optional): Define the additional method to be used by the model, and the parameters to initialize it.
-            additional_labels = {method_name: {label_name1: values, label_name2: values, ...}, ...}
+            additional_labels = {method_name1: {label_name1: values}, method_name2:{ label_name2: values}, ...}
             (default: :obj:`None`)
     """
 
