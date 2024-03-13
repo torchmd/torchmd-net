@@ -503,7 +503,7 @@ class Interaction(nn.Module):
         )
         msg = Im + Am + Sm
         
-        prefactor = 1 if self.addtional_methods is not None else torch.ones_like(msg)
+        prefactor = 1 if self.addtional_methods is not None else torch.ones_like(msg).to(msg.device).to(msg.dtype)
         if self.addtional_methods is not None:
             for label, method in self.addtional_methods.items():
                 tmp_ = method.forward(extra_args[label][..., None, None, None])
