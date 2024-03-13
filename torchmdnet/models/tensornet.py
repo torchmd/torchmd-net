@@ -529,10 +529,9 @@ class Interaction(nn.Module):
 class TensornetQ(nn.Module):
   def __init__(self, init_value, additional_label='total_charge', learnable=False):
     super().__init__()
-    self.prmtr = nn.Parameter(init_value, requires_grad=learnable, dtype=torch.float32)
+    self.prmtr = nn.Parameter(torch.tensor(init_value), requires_grad=learnable)
     self.allowed_labels = ['total_charge', 'partial_charges']
     assert additional_label in self.allowed_labels, f"Label {additional_label} not allowed for this method"
-    self.additional_label = additional_label
-
+    
   def forward(self, X):
     return self.prmtr * X
