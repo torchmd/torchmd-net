@@ -507,7 +507,7 @@ class Interaction(nn.Module):
         if self.addtional_methods is not None:
             for label, method in self.addtional_methods.items():
                 tmp_ = method.forward(extra_args[label][..., None, None, None])
-                prefactor *=  tmp_
+                prefactor +=  tmp_
                 
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(msg, Y)
