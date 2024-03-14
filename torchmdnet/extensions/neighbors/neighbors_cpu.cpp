@@ -117,12 +117,16 @@ forward_impl(const std::string& strategy, const Tensor& positions, const Tensor&
     }
     Tensor num_pairs_found = torch::empty(1, distances.options().dtype(kInt32));
     num_pairs_found[0] = distances.size(0);
-    //This seems wasteful, but it allows to enable torch.compile by guaranteeing that the output of this operator has a predictable size
-    //Resize to max_num_pairs, add zeros if necessary
-    deltas = torch::vstack({deltas, torch::zeros({max_num_pairs.toLong() - num_pairs_found[0].item<int>(), 3}, deltas.options())});
-    distances = torch::hstack({distances, torch::zeros({max_num_pairs.toLong() - num_pairs_found[0].item<int>()}, distances.options())});
-    //For the neighbors add (-1,-1) pairs to fill the tensor
-    neighbors = torch::hstack({neighbors, torch::full({2, max_num_pairs.toLong() - num_pairs_found[0].item<int>()}, -1, neighbors.options().dtype(kInt32))});
+    // This seems wasteful, but it allows to enable torch.compile by guaranteeing that the output of
+    // this operator has a predictable size Resize to max_num_pairs, add zeros if necessary
+    int64_t extension = std::max(max_num_pairs.toLong() - distances.size(0), (int64_t)0);
+    if (extension > 0) {
+        deltas = torch::vstack({deltas, torch::zeros({extension, 3}, deltas.options())});
+        distances = torch::hstack({distances, torch::zeros({extension}, distances.options())});
+        // For the neighbors add (-1,-1) pairs to fill the tensor
+        neighbors = torch::hstack(
+            {neighbors, torch::full({2, extension}, -1, neighbors.options().dtype(kInt32))});
+    }
     return {neighbors, deltas, distances, num_pairs_found};
 }
 
