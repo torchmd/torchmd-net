@@ -8,6 +8,7 @@
 import os.path as osp
 import torch
 import importlib.machinery
+from torch import Tensor
 from typing import Tuple
 
 
@@ -45,18 +46,17 @@ def is_current_stream_capturing():
 
 def get_neighbor_pairs_kernel(
     strategy: str,
-    positions: torch.Tensor,
-    batch: torch.Tensor,
-    box_vectors: torch.Tensor,
+    positions: Tensor,
+    batch: Tensor,
+    box_vectors: Tensor,
     use_periodic: bool,
     cutoff_lower: float,
     cutoff_upper: float,
     max_num_pairs: int,
     loop: bool,
     include_transpose: bool,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
     """Computes the neighbor pairs for a given set of atomic positions.
-
     The list is generated as a list of pairs (i,j) without any enforced ordering.
     The list is padded with -1 to the maximum number of pairs.
 
@@ -64,11 +64,11 @@ def get_neighbor_pairs_kernel(
     ----------
     strategy : str
         Strategy to use for computing the neighbor list. Can be one of :code:`["shared", "brute", "cell"]`.
-    positions : torch.Tensor
+    positions : Tensor
         A tensor with shape (N, 3) representing the atomic positions.
-    batch : torch.Tensor
+    batch : Tensor
         A tensor with shape (N,). Specifies the batch for each atom.
-    box_vectors : torch.Tensor
+    box_vectors : Tensor
         The vectors defining the periodic box with shape `(3, 3)` or `(max(batch)+1, 3, 3)` if a different box is used for each sample.
     use_periodic : bool
         Whether to apply periodic boundary conditions.
@@ -85,13 +85,13 @@ def get_neighbor_pairs_kernel(
 
     Returns
     -------
-    neighbors : torch.Tensor
+    neighbors : Tensor
         List of neighbors for each atom. Shape (2, max_num_pairs).
-    distances : torch.Tensor
+    distances : Tensor
         List of distances for each atom. Shape (max_num_pairs,).
-    distance_vecs : torch.Tensor
+    distance_vecs : Tensor
         List of distance vectors for each atom. Shape (max_num_pairs, 3).
-    num_pairs : torch.Tensor
+    num_pairs : Tensor
         The number of pairs found.
 
     Notes
