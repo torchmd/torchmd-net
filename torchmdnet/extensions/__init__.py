@@ -30,6 +30,8 @@ def _load_library(library):
 
 _load_library("torchmdnet_extensions")
 
+__all__ = ["is_current_stream_capturing", "get_neighbor_pairs_kernel"]
+
 
 def is_current_stream_capturing():
     """Returns True if the current CUDA stream is capturing.
