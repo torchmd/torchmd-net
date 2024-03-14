@@ -187,7 +187,6 @@ class TensorNet(nn.Module):
             act_class,
             cutoff_lower,
             cutoff_upper,
-            trainable_rbf,
             max_z,
             dtype,
         )
@@ -303,7 +302,6 @@ class TensorEmbedding(nn.Module):
         activation,
         cutoff_lower,
         cutoff_upper,
-        trainable_rbf=False,
         max_z=128,
         dtype=torch.float32,
     ):
