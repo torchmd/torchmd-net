@@ -258,7 +258,13 @@ class TensorNet(nn.Module):
         ), "Distance module did not return directional information"
         # Distance module returns -1 for non-existing edges, to avoid having to resize the tensors when we want to ensure static shapes (for CUDA graphs) we make all non-existing edges pertain to a ghost atom
         zp = z
- 
+        if extra_args is not None:
+            # we are assuming that extra args will be used, see model.py forward method how extra_args is passed
+            for label, t in extra_args.items():
+                # molecule wise --> atom wise 
+                if t.shape != z.shape:
+                    extra_args[label] = t[batch]
+            
         if self.static_shapes:
             mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
             zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
