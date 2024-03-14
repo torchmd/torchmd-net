@@ -76,10 +76,11 @@ class TorchMD_T(nn.Module):
             (default: :obj:`None`)
         check_errors (bool, optional): Whether to check for errors in the distance module.
             (default: :obj:`True`)
-        additional_labels (Dict[str, Any], optional): Additional labels to be passed to the forward method of the model: 
-            example: 
-            additional_labels = {method_name: {label_name1: values, label_name2: values, ...}, ...}
-            (default: :obj:`None`)
+        additional_labels (Dict[str, Any], optional): Define the additional method to be used by the model, and the parameters to initialize it.
+            example:
+            additional_labels = {method_name1: {label_name: 'extra_arg_label', 'method_prm1': method_prm1,  'method_prm2': method_prm2}, 
+                                 method_name2: {label_name: 'extra_arg_label', 'method_prm1': method_prm1,  'method_prm2': method_prm2},
+                                 ...}
     """
 
     def __init__(
