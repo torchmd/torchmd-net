@@ -387,25 +387,14 @@ class TorchMD_Net(nn.Module):
 
         if self.derivative:
             pos.requires_grad_(True)
-        
-        if self.representation_model.additional_methods is None:
-            extra_args_nnp = None 
-        else:
-            extra_args_nnp = {}
-            # force the label to be atom wise
-            for label, t in extra_args.items():
-                if label in self.representation_model.additional_methods.keys():
-                    if t.shape != z.shape:
-                        t = t[batch]
-                    extra_args_nnp[label] = t
-                    
+                   
         # run the potentially wrapped representation model
         x, v, z, pos, batch = self.representation_model(
             z,
             pos,
             batch,
             box=box,
-            extra_args=extra_args_nnp,
+            extra_args=extra_args if self.representation_model.additional_methods else None,
         )
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch)
