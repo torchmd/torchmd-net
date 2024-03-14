@@ -175,7 +175,7 @@ class TensorNet(nn.Module):
             for method_name, method_args in additional_labels.items():
                 # the key of the additional_methods is the label of the method (total_charge, partial_charges, etc.)
                 # this will be useful for static shapes processing if needed
-                self.additional_methods[method_args['label']] = self.initialize_additional_method(method_name, method_args)
+                self.additional_methods[method_args['label']] = {'name': method_name, 'method':self.initialize_additional_method(method_name, method_args)}
 
         act_class = act_class_mapping[activation]
         self.distance_expansion = rbf_class_mapping[rbf_type](
@@ -505,10 +505,13 @@ class Interaction(nn.Module):
         
         prefactor = 1 if self.addtional_methods is not None else torch.ones_like(msg, device=msg.device, dtype=msg.dtype)
         if self.addtional_methods is not None:
-            for label, method in self.addtional_methods.items():
-                tmp_ = method.forward(extra_args[label][..., None, None, None])
-                prefactor +=  tmp_
-                
+            for label, method_dict in self.addtional_methods.items():
+                # appending to this list all the methods will be working in this way    
+                if method_dict['name'] in ['tensornet_q']:
+                    tmp_ = method_dict['method'](extra_args[label][..., None, None, None])
+                    #TODO: how do we want to handle prefactor if multiple methods are used here?
+                    prefactor +=  tmp_
+    
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(msg, Y)
             B = torch.matmul(Y, msg)
