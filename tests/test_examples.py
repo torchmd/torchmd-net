@@ -5,6 +5,7 @@
 from pytest import mark
 import yaml
 import glob
+import torch
 from os.path import dirname, join
 from torchmdnet.models.model import create_model
 from torchmdnet import priors
@@ -27,4 +28,4 @@ def test_example_yamls(fname):
 
     z, pos, batch = create_example_batch()
     model(z, pos, batch)
-    model(z, pos, batch, q=None, s=None)
+    model(z, pos, batch, extra_args={"total_charge": torch.zeros_like(z)})
