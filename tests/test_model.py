@@ -29,7 +29,6 @@ def test_forward(model_name, use_batch, use_extra_args, precision, additional_la
     if use_extra_args:
         model(z, pos, batch=batch, extra_args={'total_charge': torch.zeros_like(z)})
     else:
-        print("No Extra Args provided")
         model(z, pos, batch=batch)
 
 
