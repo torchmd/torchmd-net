@@ -2,7 +2,7 @@
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 import torch as pt
 from NNPOps.CFConv import CFConv
 from NNPOps.CFConvNeighbors import CFConvNeighbors
@@ -56,8 +56,7 @@ class TorchMD_GN_optimized(pt.nn.Module):
         pos: pt.Tensor,
         batch: pt.Tensor,
         box: Optional[pt.Tensor] = None,
-        q: Optional[pt.Tensor] = None,
-        s: Optional[pt.Tensor] = None,
+        extra_args: Optional[Dict[str, pt.Tensor]] = None,
     ) -> Tuple[pt.Tensor, Optional[pt.Tensor], pt.Tensor, pt.Tensor, pt.Tensor]:
 
         assert pt.all(batch == 0)
