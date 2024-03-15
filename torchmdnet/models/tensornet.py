@@ -478,6 +478,7 @@ class Interaction(nn.Module):
             linear.reset_parameters()
         for linear in self.linears_tensor:
             linear.reset_parameters()
+        # TODO: should we reset the parameters of the additional methods here?
 
     def forward(
         self,
@@ -511,7 +512,7 @@ class Interaction(nn.Module):
         msg = Im + Am + Sm
         
         prefactor = 1 if self.addtional_methods is not None else torch.ones_like(msg, device=msg.device, dtype=msg.dtype)
-        if self.addtional_methods is not None:
+        if self.addtional_methods is not None and extra_args is not None:
             for label, method_dict in self.addtional_methods.items():
                 # appending to this list all the methods will be working in this way    
                 if method_dict['name'] in ['tensornet_q']:
