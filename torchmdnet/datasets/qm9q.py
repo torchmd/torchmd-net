@@ -46,7 +46,7 @@ class QM9q(MemmappedDataset):
             transform,
             pre_transform,
             pre_filter,
-            properties=("y", "neg_dy", "q", "pq", "dp"),
+            properties=("y", "neg_dy", "total_charge", "partial_charges", "dipole_moment"),
         )
 
     @property
