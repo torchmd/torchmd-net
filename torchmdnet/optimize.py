@@ -33,7 +33,7 @@ class TorchMD_GN_optimized(pt.nn.Module):
 
         super().__init__()
         self.model = model
-        self.additional_methods = None
+        self.label_callbacks = None
         self.neighbors = CFConvNeighbors(self.model.cutoff_upper)
 
         offset = self.model.distance_expansion.offset

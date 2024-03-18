@@ -272,11 +272,10 @@ class TorchMD_Net(nn.Module):
     Parameters
     ----------
     representation_model : nn.Module
-        A model that takes as input the atomic numbers, positions, batch indices and extra_args. The extra_args 
-        are optional and will be used only if the representation model has additional_methods. It must return a 
-        tuple of the form (x, v, z, pos, batch), where x are the atom features, v are the vector features (if any),
-        z are the atomic numbers, pos are the positions, and batch are the batch indices. See TorchMD_ET for more 
-        details.
+        A model that takes as input the atomic numbers, positions, batch indices and extra_args(optional). It must 
+        return a tuple of the form (x, v, z, pos, batch), where x are the atom features, v are the vector features 
+        (if any), z are the atomic numbers, pos are the positions, and batch are the batch indices. See TorchMD_ET 
+        for more details.
     output_model : nn.Module
         A model that takes as input the atom features, vector features (if any), atomic numbers,
         positions, and batch indices. See OutputModel for more details.

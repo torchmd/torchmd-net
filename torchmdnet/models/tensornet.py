@@ -180,14 +180,14 @@ class TensorNet(nn.Module):
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         self.additional_labels = additional_labels
-        self.additional_methods = None
+        self.label_callbacks = None
 
         if additional_labels is not None:
-            self.additional_methods = {}
+            self.label_callbacks = {}
             for method_name, method_args in additional_labels.items():
-                # the key of the additional_methods is the label of the method (total_charge, partial_charges, etc.)
+                # the key of the label_callbacks is the label of the method (total_charge, partial_charges, etc.)
                 # this will be useful for static shapes processing if needed
-                self.additional_methods[method_args["label"]] = {
+                self.label_callbacks[method_args["label"]] = {
                     "name": method_name,
                     "method": initialize_additional_method(method_name, method_args),
                 }
@@ -217,7 +217,7 @@ class TensorNet(nn.Module):
                         cutoff_upper,
                         equivariance_invariance_group,
                         dtype,
-                        self.additional_methods,
+                        self.label_callbacks,
                     )
                 )
         self.linear = nn.Linear(3 * hidden_channels, hidden_channels, dtype=dtype)
@@ -265,9 +265,9 @@ class TensorNet(nn.Module):
         # Distance module returns -1 for non-existing edges, to avoid having to resize the tensors when we want to ensure static shapes (for CUDA graphs) we make all non-existing edges pertain to a ghost atom
         zp = z
 
-        if self.additional_methods is not None:
+        if self.label_callbacks is not None:
             assert extra_args is not None
-            for label in self.additional_methods.keys():
+            for label in self.label_callbacks.keys():
                 assert (
                     label in extra_args
                 ), f"TensorNet expects {label} to be provided as part of extra_args"
@@ -462,7 +462,7 @@ class Interaction(nn.Module):
         cutoff_upper,
         equivariance_invariance_group,
         dtype=torch.float32,
-        additional_methods=None,
+        label_callbacks=None,
     ):
         super(Interaction, self).__init__()
 
@@ -486,7 +486,7 @@ class Interaction(nn.Module):
             )
         self.act = activation()
         self.equivariance_invariance_group = equivariance_invariance_group
-        self.additional_methods = additional_methods
+        self.label_callbacks = label_callbacks
 
         self.reset_parameters()
 
@@ -495,9 +495,9 @@ class Interaction(nn.Module):
             linear.reset_parameters()
         for linear in self.linears_tensor:
             linear.reset_parameters()
-        if self.additional_methods is not None:
-            for method in self.additional_methods:
-                self.additional_methods[method]["method"].reset_parameters()
+        if self.label_callbacks is not None:
+            for method in self.label_callbacks:
+                self.label_callbacks[method]["method"].reset_parameters()
 
     def forward(
         self,
@@ -531,8 +531,8 @@ class Interaction(nn.Module):
         msg = Im + Am + Sm
 
         prefactor = torch.tensor([1], device=X.device, dtype=X.dtype) 
-        if self.additional_methods is not None and extra_args is not None:
-            tensorq_labels = [callback['method'](extra_args[label]) for label, callback in self.additional_methods.items() if callback['name'] == 'tensornet_q']
+        if self.label_callbacks is not None and extra_args is not None:
+            tensorq_labels = [callback['method'](extra_args[label]) for label, callback in self.label_callbacks.items() if callback['name'] == 'tensornet_q']
             if len(tensorq_labels) > 0:
                 prefactor = prefactor + torch.prod(torch.stack(tensorq_labels), dim=0)
                     

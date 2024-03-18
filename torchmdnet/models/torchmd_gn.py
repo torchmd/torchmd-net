@@ -143,7 +143,7 @@ class TorchMD_GN(nn.Module):
         self.max_z = max_z
         self.aggr = aggr
         self.additional_labels = additional_labels
-        self.additional_methods = None        
+        self.label_callbacks = None        
         assert additional_labels is None, "graph-network does not support this feature"
         act_class = act_class_mapping[activation]
 

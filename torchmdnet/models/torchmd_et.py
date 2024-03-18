@@ -140,7 +140,7 @@ class TorchMD_ET(nn.Module):
         self.max_z = max_z
         self.dtype = dtype
         self.additional_labels = additional_labels
-        self.additional_methods = None
+        self.label_callbacks = None
         assert additional_labels is None, "equivariant-transformer does not support this feature"
         act_class = act_class_mapping[activation]
 
