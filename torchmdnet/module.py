@@ -8,7 +8,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.functional import local_response_norm, mse_loss, l1_loss
 from torch import Tensor
-from typing import Optional, Dict, Tuple, Any
+from typing import Optional, Dict, Tuple
 
 from lightning import LightningModule
 from torchmdnet.models.model import create_model, load_model
