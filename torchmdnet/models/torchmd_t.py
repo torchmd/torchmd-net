@@ -131,7 +131,8 @@ class TorchMD_T(nn.Module):
         self.max_z = max_z
         self.additional_labels = additional_labels
         self.label_callbacks = None
-        assert additional_labels is None, "transformer does not support this feature"
+        if additional_labels is not None:
+            Warning("Found additional_labels, transformer still does not support additional labels. Ignoring them.")
         act_class = act_class_mapping[activation]
         attn_act_class = act_class_mapping[attn_activation]
 

@@ -140,7 +140,8 @@ class TorchMD_ET(nn.Module):
         self.dtype = dtype
         self.additional_labels = additional_labels
         self.label_callbacks = None
-        assert additional_labels is None, "equivariant-transformer does not support this feature"
+        if additional_labels is not None:
+            Warning("Found additional_labels, equivariant-transformer still does not support additional labels. Ignoring them.")
         act_class = act_class_mapping[activation]
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels, dtype=dtype)

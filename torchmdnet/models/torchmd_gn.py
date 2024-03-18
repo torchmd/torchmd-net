@@ -144,7 +144,8 @@ class TorchMD_GN(nn.Module):
         self.aggr = aggr
         self.additional_labels = additional_labels
         self.label_callbacks = None        
-        assert additional_labels is None, "graph-network does not support this feature"
+        if additional_labels is not None:
+            Warning("Found additional_labels, graph-network still does not support additional labels. Ignoring them.")
         act_class = act_class_mapping[activation]
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels, dtype=dtype)
