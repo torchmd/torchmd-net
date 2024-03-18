@@ -434,9 +434,17 @@ class TorchMD_Net(nn.Module):
 
 
 class Ensemble(torch.nn.ModuleList):
-    """Average predictions over an ensemble of TorchMD-Net models"""
+    """Average predictions over an ensemble of TorchMD-Net models.
 
-    def __init__(self, modules):
+       This module behaves like a single TorchMD-Net model, but its forward method returns the average and standard deviation of the predictions over all models it was initialized with.
+
+    Args:
+        modules (List[nn.Module]): List of :py:mod:`TorchMD_Net` models to average predictions over.
+    """
+
+    def __init__(self, modules: List[nn.Module]):
+        for module in modules:
+            assert isinstance(module, TorchMD_Net)
         super().__init__(modules)
 
     def forward(
