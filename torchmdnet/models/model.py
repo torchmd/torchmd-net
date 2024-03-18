@@ -151,6 +151,10 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
     Returns:
         nn.Module: An instance of the TorchMD_Net model.
     """
+    if isinstance(filepath, (list, tuple)):
+        return Ensemble(
+            [load_model(f, args=args, device=device, **kwargs) for f in filepath]
+        )
 
     ckpt = torch.load(filepath, map_location="cpu")
     if args is None:
@@ -426,3 +430,38 @@ class TorchMD_Net(nn.Module):
         # Returning an empty tensor allows to decorate this method as always returning two tensors.
         # This is required to overcome a TorchScript limitation, xref https://github.com/openmm/openmm-torch/issues/135
         return y, torch.empty(0)
+
+
+class Ensemble(torch.nn.ModuleList):
+    """Average predictions over an ensemble of TorchMD-Net models"""
+
+    def __init__(self, modules):
+        super().__init__(modules)
+
+    def forward(
+        self,
+        z: Tensor,
+        pos: Tensor,
+        batch: Optional[Tensor] = None,
+        box: Optional[Tensor] = None,
+        q: Optional[Tensor] = None,
+        s: Optional[Tensor] = None,
+        extra_args: Optional[Dict[str, Tensor]] = None,
+    ):
+        y = []
+        neg_dy = []
+        for model in self:
+            res = model(
+                z=z, pos=pos, batch=batch, box=box, q=q, s=s, extra_args=extra_args
+            )
+            y.append(res[0])
+            neg_dy.append(res[1])
+
+        y = torch.stack(y)
+        print(y, neg_dy)
+        neg_dy = torch.stack(neg_dy)
+        y_mean = torch.mean(y, axis=0)
+        neg_dy_mean = torch.mean(neg_dy, axis=0)
+        y_std = torch.std(y, axis=0)
+        neg_dy_std = torch.std(neg_dy, axis=0)
+        return y_mean, neg_dy_mean, y_std, neg_dy_std
