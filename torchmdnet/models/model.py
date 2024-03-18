@@ -39,13 +39,9 @@ def create_model(args, prior_model=None, mean=None, std=None):
     if "vector_cutoff" not in args:
         args["vector_cutoff"] = False
     
-    # Here we introduce the extra_fields_args, which is Dict[str, Any]
-    # This could be used from each model to initialize nn.embedding layers, nn.Parameter, etc.
-    if "additional_labels" not in args:
-        additional_labels = None
-    elif isinstance(args["additional_labels"], dict):
-        additional_labels = args["additional_labels"]
-    else:
+    # additional labels for the representation model
+    additional_labels = args.get("additional_labels")
+    if additional_labels is not None and not isinstance(additional_labels, dict):
         additional_labels = None
         warnings.warn("Additional labels should be a dictionary. Ignoring additional labels.")
         
