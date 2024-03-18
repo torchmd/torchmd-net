@@ -180,7 +180,6 @@ class TensorNet(nn.Module):
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         self.additional_labels = additional_labels
-        # initialize additional methods as None if not provided, also used by module.py
         self.additional_methods = None
 
         if additional_labels is not None:
