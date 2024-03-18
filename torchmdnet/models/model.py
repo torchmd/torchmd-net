@@ -38,13 +38,15 @@ def create_model(args, prior_model=None, mean=None, std=None):
         args["static_shapes"] = False
     if "vector_cutoff" not in args:
         args["vector_cutoff"] = False
-    
+
     # additional labels for the representation model
     additional_labels = args.get("additional_labels")
     if additional_labels is not None and not isinstance(additional_labels, dict):
         additional_labels = None
-        warnings.warn("Additional labels should be a dictionary. Ignoring additional labels.")
-        
+        warnings.warn(
+            "Additional labels should be a dictionary. Ignoring additional labels."
+        )
+
     shared_args = dict(
         hidden_channels=args["embedding_dimension"],
         num_layers=args["num_layers"],
@@ -384,14 +386,18 @@ class TorchMD_Net(nn.Module):
 
         if self.derivative:
             pos.requires_grad_(True)
-                   
+
         # run the potentially wrapped representation model
         x, v, z, pos, batch = self.representation_model(
             z,
             pos,
             batch,
             box=box,
-            extra_args = extra_args if self.representation_model.additional_methods is not None else None,
+            extra_args=(
+                extra_args
+                if self.representation_model.additional_methods is not None
+                else None
+            ),
         )
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch)
