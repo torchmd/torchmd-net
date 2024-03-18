@@ -3,7 +3,7 @@
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
 import torch
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple, Dict
 from torch import Tensor, nn
 from torchmdnet.models.utils import (
     CosineCutoff,
