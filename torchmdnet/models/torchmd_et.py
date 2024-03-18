@@ -13,7 +13,6 @@ from torchmdnet.models.utils import (
     act_class_mapping,
     scatter,
 )
-from torchmdnet.utils import deprecated_class
 
 class TorchMD_ET(nn.Module):
     r"""Equivariant Transformer's architecture. From
