@@ -47,7 +47,7 @@ class Ace(MemmappedDataset):
     - `positions`: Atomic positions. Units: Angstrom.
     - `forces`: Forces on the atoms. Units: eV/Å.
     - `partial_charges`: Atomic partial charges. Units: electron charges.
-    - `dipole_moment` (version 1.0) or `dipole_moment` (version 2.0): Dipole moment (a vector of three components). Units: e*Å.
+    - `dipole_moment` (version 1.0) or `dipole_moments` (version 2.0): Dipole moment (a vector of three components). Units: e*Å.
     - `formation_energy` (version 1.0) or `formation_energies` (version 2.0): Formation energy. Units: eV.
 
     Each dataset should also have an `units` attribute specifying its units (i.e., `Å`, `eV`, `e*Å`).
