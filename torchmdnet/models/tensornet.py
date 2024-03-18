@@ -16,6 +16,7 @@ __all__ = ["TensorNet"]
 torch.set_float32_matmul_precision("high")
 torch.backends.cuda.matmul.allow_tf32 = True
 
+
 def vector_to_skewtensor(vector):
     """Creates a skew-symmetric tensor from a vector."""
     batch_size = vector.size(0)
@@ -62,11 +63,15 @@ def tensor_norm(tensor):
     """Computes Frobenius norm."""
     return (tensor**2).sum((-2, -1))
 
+
 def initialize_additional_method(method, args):
-    if method == 'tensornet_q':
-        return TensornetQ(args['init_value'], args['label'], args['learnable'])
+    """Initialize additional methods to be used by the model. The additional methods are used to handle the extra_args provided to the model
+    using the addtional_labels argument."""
+    if method == "tensornet_q":
+        return TensornetQ(args["init_value"], args["label"], args["learnable"])
     else:
-        raise NotImplementedError(f"Method {method} not implemented")   
+        raise NotImplementedError(f"Method {method} not implemented")
+
 
 class TensorNet(nn.Module):
     r"""TensorNet's architecture. From
@@ -175,15 +180,18 @@ class TensorNet(nn.Module):
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         self.additional_labels = additional_labels
-        # initialize additional methods as None if not provided, also used by module.py 
+        # initialize additional methods as None if not provided, also used by module.py
         self.additional_methods = None
-        
+
         if additional_labels is not None:
             self.additional_methods = {}
             for method_name, method_args in additional_labels.items():
                 # the key of the additional_methods is the label of the method (total_charge, partial_charges, etc.)
                 # this will be useful for static shapes processing if needed
-                self.additional_methods[method_args['label']] = {'name': method_name, 'method': initialize_additional_method(method_name, method_args)}
+                self.additional_methods[method_args["label"]] = {
+                    "name": method_name,
+                    "method": initialize_additional_method(method_name, method_args),
+                }
 
         act_class = act_class_mapping[activation]
         self.distance_expansion = rbf_class_mapping[rbf_type](
@@ -233,7 +241,7 @@ class TensorNet(nn.Module):
         )
 
         self.reset_parameters()
-    
+
     def reset_parameters(self):
         self.tensor_embedding.reset_parameters()
         for layer in self.layers:
@@ -257,20 +265,32 @@ class TensorNet(nn.Module):
         ), "Distance module did not return directional information"
         # Distance module returns -1 for non-existing edges, to avoid having to resize the tensors when we want to ensure static shapes (for CUDA graphs) we make all non-existing edges pertain to a ghost atom
         zp = z
-        
+
         if self.additional_labels is not None:
             assert extra_args is not None
         for label in self.additional_labels:
-            assert label in extra_args, f"TensorNet expects {label} to be provided as part of extra_args"
+            assert (
+                label in extra_args
+            ), f"TensorNet expects {label} to be provided as part of extra_args"
             if extra_args[label].shape != z.shape:
                 extra_args[label] = extra_args[label][batch]
                 if self.static_shapes:
-                    extra_args[label] = torch.cat((extra_args[label], torch.zeros(1, device=extra_args[label].device, dtype=extra_args[label].dtype)), dim=0)
-                       
+                    extra_args[label] = torch.cat(
+                        (
+                            extra_args[label],
+                            torch.zeros(
+                                1,
+                                device=extra_args[label].device,
+                                dtype=extra_args[label].dtype,
+                            ),
+                        ),
+                        dim=0,
+                    )
+
         if self.static_shapes:
             mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
             zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
-                    
+
             # I trick the model into thinking that the masked edges pertain to the extra atom
             # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
             edge_index = edge_index.masked_fill(mask, z.shape[0])
@@ -386,7 +406,7 @@ class TensorEmbedding(nn.Module):
         edge_weight: Tensor,
         edge_vec_norm: Tensor,
         edge_attr: Tensor,
-        ) -> Tensor:
+    ) -> Tensor:
         Zij = self._get_atomic_number_message(z, edge_index)
         Iij, Aij, Sij = self._get_tensor_messages(
             Zij, edge_weight, edge_vec_norm, edge_attr
@@ -443,7 +463,7 @@ class Interaction(nn.Module):
         cutoff_upper,
         equivariance_invariance_group,
         dtype=torch.float32,
-        addtional_methods = None,
+        addtional_methods=None,
     ):
         super(Interaction, self).__init__()
 
@@ -468,7 +488,7 @@ class Interaction(nn.Module):
         self.act = activation()
         self.equivariance_invariance_group = equivariance_invariance_group
         self.addtional_methods = addtional_methods
-        
+
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -478,7 +498,7 @@ class Interaction(nn.Module):
             linear.reset_parameters()
         if self.addtional_methods is not None:
             for method in self.addtional_methods:
-                self.addtional_methods[method]['method'].reset_parameters()
+                self.addtional_methods[method]["method"].reset_parameters()
 
     def forward(
         self,
@@ -510,16 +530,22 @@ class Interaction(nn.Module):
             edge_index, edge_attr[..., 2, None, None], S, X.shape[0]
         )
         msg = Im + Am + Sm
-        
-        prefactor = 1 if self.addtional_methods is not None else torch.ones_like(msg, device=msg.device, dtype=msg.dtype)
+
+        prefactor = (
+            1
+            if self.addtional_methods is not None
+            else torch.ones_like(msg, device=msg.device, dtype=msg.dtype)
+        )
         if self.addtional_methods is not None and extra_args is not None:
             for label, method_dict in self.addtional_methods.items():
-                # appending to this list all the methods will be working in this way    
-                if method_dict['name'] in ['tensornet_q']:
-                    tmp_ = method_dict['method'](extra_args[label][..., None, None, None])
-                    #TODO: how do we want to handle prefactor if multiple methods are used here?
-                    prefactor +=  tmp_
-    
+                # appending to this list all the methods will be working in this way
+                if method_dict["name"] in ["tensornet_q"]:
+                    tmp_ = method_dict["method"](
+                        extra_args[label][..., None, None, None]
+                    )
+                    # TODO: how do we want to handle prefactor if multiple methods are used here?
+                    prefactor += tmp_
+
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(msg, Y)
             B = torch.matmul(Y, msg)
@@ -531,21 +557,25 @@ class Interaction(nn.Module):
         I, A, S = I / normp1, A / normp1, S / normp1
         I = self.linears_tensor[3](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2) # shape: (natoms, hidden_channels, 3, 3)
+        S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(
+            0, 3, 1, 2
+        )  # shape: (natoms, hidden_channels, 3, 3)
         dX = I + A + S
         X = X + dX + (prefactor) * torch.matrix_power(dX, 2)
         return X
 
 
 class TensornetQ(nn.Module):
-    def __init__(self, init_value, additional_label='total_charge', learnable=False):
+    def __init__(self, init_value, additional_label="total_charge", learnable=False):
         super().__init__()
         self.prmtr = nn.Parameter(torch.tensor(init_value), requires_grad=learnable)
         self.learnable = learnable
         self.init_value = init_value
-        self.allowed_labels = ['total_charge', 'partial_charges']
-        assert additional_label in self.allowed_labels, f"Label {additional_label} not allowed for this method"
-    
+        self.allowed_labels = ["total_charge", "partial_charges"]
+        assert (
+            additional_label in self.allowed_labels
+        ), f"Label {additional_label} not allowed for this method"
+
     def forward(self, X):
         return self.prmtr * X
 
