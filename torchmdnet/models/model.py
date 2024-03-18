@@ -393,11 +393,7 @@ class TorchMD_Net(nn.Module):
             pos,
             batch,
             box=box,
-            extra_args=(
-                extra_args
-                if self.representation_model.additional_methods is not None
-                else None
-            ),
+            extra_args=extra_args,
         )
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch)
