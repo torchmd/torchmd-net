@@ -142,8 +142,9 @@ def create_model(args, prior_model=None, mean=None, std=None):
 def load_model(filepath, args=None, device="cpu", **kwargs):
     """Load a model from a checkpoint file.
 
+       If a list of paths is given, an :py:mod:`Ensemble` model is returned.
     Args:
-        filepath (str): Path to the checkpoint file.
+        filepath (str or list): Path to the checkpoint file or a list of paths.
         args (dict, optional): Arguments for the model. Defaults to None.
         device (str, optional): Device on which the model should be loaded. Defaults to "cpu".
         **kwargs: Extra keyword arguments for the model.
