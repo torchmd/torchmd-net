@@ -266,11 +266,9 @@ class TensorNet(nn.Module):
         zp = z
 
         if self.label_callbacks is not None:
-            assert extra_args is not None
+            assert extra_args is not None, "TensorNet expects extra_args to be provided when additional_labels are used"
             for label in self.label_callbacks.keys():
-                assert (
-                    label in extra_args
-                ), f"TensorNet expects {label} to be provided as part of extra_args"
+                assert (label in extra_args), f"TensorNet expects {label} to be provided as part of extra_args"
                 if extra_args[label].shape != z.shape:
                     extra_args[label] = extra_args[label][batch]
                     if self.static_shapes:
@@ -285,7 +283,7 @@ class TensorNet(nn.Module):
                             ),
                             dim=0,
                         )
-
+        
         if self.static_shapes:
             mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
             zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
