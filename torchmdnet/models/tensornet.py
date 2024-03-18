@@ -64,9 +64,9 @@ def tensor_norm(tensor):
     return (tensor**2).sum((-2, -1))
 
 
-def initialize_additional_method(method, args):
-    """Initialize additional methods to be used by the model. The additional methods are used to handle the extra_args provided to the model
-    using the additional_labels argument."""
+def additional_labels_handler(method, args):
+    """ Handler for additional labels. It returns the method to be used for the specific additional label 
+    and the parameters to initialize it."""
     if method == "tensornet_q":
         return TensornetQ(args["init_value"], args["label"], args["learnable"])
     else:
@@ -189,7 +189,7 @@ class TensorNet(nn.Module):
                 # this will be useful for static shapes processing if needed
                 self.label_callbacks[method_args["label"]] = {
                     "name": method_name,
-                    "method": initialize_additional_method(method_name, method_args),
+                    "method": additional_labels_handler(method_name, method_args),
                 }
 
         act_class = act_class_mapping[activation]
