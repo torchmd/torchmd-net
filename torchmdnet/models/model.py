@@ -3,7 +3,7 @@
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
 import re
-from typing import Optional, List, Tuple, Dict, Any
+from typing import Optional, List, Tuple, Dict
 import torch
 from torch.autograd import grad
 from torch import nn, Tensor
