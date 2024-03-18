@@ -62,6 +62,11 @@ def tensor_norm(tensor):
     """Computes Frobenius norm."""
     return (tensor**2).sum((-2, -1))
 
+def initialize_additional_method(method, args):
+    if method == 'tensornet_q':
+        return TensornetQ(args['init_value'], args['label'], args['learnable'])
+    else:
+        raise NotImplementedError(f"Method {method} not implemented")   
 
 class TensorNet(nn.Module):
     r"""TensorNet's architecture. From
@@ -178,7 +183,7 @@ class TensorNet(nn.Module):
             for method_name, method_args in additional_labels.items():
                 # the key of the additional_methods is the label of the method (total_charge, partial_charges, etc.)
                 # this will be useful for static shapes processing if needed
-                self.additional_methods[method_args['label']] = {'name': method_name, 'method':self.initialize_additional_method(method_name, method_args)}
+                self.additional_methods[method_args['label']] = {'name': method_name, 'method': initialize_additional_method(method_name, method_args)}
 
         act_class = act_class_mapping[activation]
         self.distance_expansion = rbf_class_mapping[rbf_type](
@@ -228,12 +233,6 @@ class TensorNet(nn.Module):
         )
 
         self.reset_parameters()
-
-    def initialize_additional_method(self, method, args):
-        if method == 'tensornet_q':
-            return TensornetQ(args['init_value'], args['label'], args['learnable'])
-        else:
-            raise NotImplementedError(f"Method {method} not implemented")    
     
     def reset_parameters(self):
         self.tensor_embedding.reset_parameters()
