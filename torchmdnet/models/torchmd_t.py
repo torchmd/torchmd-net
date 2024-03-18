@@ -130,8 +130,8 @@ class TorchMD_T(nn.Module):
         self.cutoff_upper = cutoff_upper
         self.max_z = max_z
         self.additional_labels = additional_labels
-        self.allowed_additional_labels = None
         self.additional_methods = None
+        assert additional_labels is None, "transformer does not support this feature"
         act_class = act_class_mapping[activation]
         attn_act_class = act_class_mapping[attn_activation]
 

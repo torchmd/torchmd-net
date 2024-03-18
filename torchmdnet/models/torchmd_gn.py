@@ -143,9 +143,8 @@ class TorchMD_GN(nn.Module):
         self.max_z = max_z
         self.aggr = aggr
         self.additional_labels = additional_labels
-        self.allowed_additional_labels = None
         self.additional_methods = None        
-        
+        assert additional_labels is None, "graph-network does not support this feature"
         act_class = act_class_mapping[activation]
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels, dtype=dtype)
