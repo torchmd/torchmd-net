@@ -257,20 +257,19 @@ class TensorNet(nn.Module):
         ), "Distance module did not return directional information"
         # Distance module returns -1 for non-existing edges, to avoid having to resize the tensors when we want to ensure static shapes (for CUDA graphs) we make all non-existing edges pertain to a ghost atom
         zp = z
-        if extra_args is not None:
-            # we are assuming that extra args will be used, see model.py forward method how extra_args is passed
-            for label, t in extra_args.items():
-                # molecule wise --> atom wise 
-                if t.shape != z.shape:
-                    extra_args[label] = t[batch]
-            
+        
+        if self.additional_labels is not None:
+            assert extra_args is not None
+        for label in self.additional_labels:
+            assert label in extra_args, f"TensorNet expects {label} to be provided as part of extra_args"
+            if extra_args[label].shape != z.shape:
+                extra_args[label] = extra_args[label][batch]
+                if self.static_shapes:
+                    extra_args[label] = torch.cat((extra_args[label], torch.zeros(1, device=extra_args[label].device, dtype=extra_args[label].dtype)), dim=0)
+                       
         if self.static_shapes:
             mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
             zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
-            if self.additional_labels is not None:
-                for label in self.additional_methods.keys():
-                    assert label in extra_args, f"Extra field {label} not found in extra_args"
-                    extra_args[label] = torch.cat((extra_args[label], torch.zeros(1, device=extra_args[label].device, dtype=extra_args[label].dtype)), dim=0)
                     
             # I trick the model into thinking that the masked edges pertain to the extra atom
             # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
