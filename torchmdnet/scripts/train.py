@@ -78,6 +78,8 @@ def get_argparse():
     parser.add_argument('--prior-model', type=str, default=None, help='Which prior model to use. It can be a string, a dict if you want to add arguments for it or a dicts to add more than one prior. e.g. {"Atomref": {"max_z":100}, "Coulomb":{"max_num_neighs"=100, "lower_switch_distance"=4, "upper_switch_distance"=8}', action="extend", nargs="*")
 
     # architectural args
+    parser.add_argument('--charge', type=bool, default=False, help='DEPRECATED: This argument is no longer in use and is maintained only for retro-compatibility')
+    parser.add_argument('--spin', type=bool, default=False, help='DEPRECATED: This argument is no longer in use and is maintained only for retro-compatibility')
     parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
     parser.add_argument('--num-layers', type=int, default=6, help='Number of interaction layers in the model')
     parser.add_argument('--num-rbf', type=int, default=64, help='Number of radial basis functions in model')
@@ -138,7 +140,7 @@ def get_args():
         args.inference_batch_size = args.batch_size
 
     os.makedirs(os.path.abspath(args.log_dir), exist_ok=True)
-    save_argparse(args, os.path.join(args.log_dir, "input.yaml"), exclude=["conf"])
+    save_argparse(args, os.path.join(args.log_dir, "input.yaml"), exclude=["conf", "charge", "spin"])
 
     return args
 
