@@ -532,7 +532,10 @@ class Interaction(nn.Module):
 
         prefactor = torch.tensor([1], device=X.device, dtype=X.dtype) 
         if self.label_callbacks is not None and extra_args is not None:
-            tensorq_labels = [callback['method'](extra_args[label]) for label, callback in self.label_callbacks.items() if callback['name'] == 'tensornet_q']
+            tensorq_labels = []
+            for label, callback in self.label_callbacks.items():
+                if callback['name'] == 'tensornet_q':
+                    tensorq_labels.append(callback['method'](extra_args[label]))
             if len(tensorq_labels) > 0:
                 prefactor = prefactor + torch.prod(torch.stack(tensorq_labels), dim=0)
                     
