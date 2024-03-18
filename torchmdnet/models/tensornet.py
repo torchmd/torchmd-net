@@ -476,7 +476,9 @@ class Interaction(nn.Module):
             linear.reset_parameters()
         for linear in self.linears_tensor:
             linear.reset_parameters()
-        # TODO: should we reset the parameters of the additional methods here?
+        if self.addtional_methods is not None:
+            for method in self.addtional_methods:
+                self.addtional_methods[method]['method'].reset_parameters()
 
     def forward(
         self,
@@ -536,11 +538,17 @@ class Interaction(nn.Module):
 
 
 class TensornetQ(nn.Module):
-  def __init__(self, init_value, additional_label='total_charge', learnable=False):
-    super().__init__()
-    self.prmtr = nn.Parameter(torch.tensor(init_value), requires_grad=learnable)
-    self.allowed_labels = ['total_charge', 'partial_charges']
-    assert additional_label in self.allowed_labels, f"Label {additional_label} not allowed for this method"
+    def __init__(self, init_value, additional_label='total_charge', learnable=False):
+        super().__init__()
+        self.prmtr = nn.Parameter(torch.tensor(init_value), requires_grad=learnable)
+        self.learnable = learnable
+        self.init_value = init_value
+        self.allowed_labels = ['total_charge', 'partial_charges']
+        assert additional_label in self.allowed_labels, f"Label {additional_label} not allowed for this method"
     
-  def forward(self, X):
-    return self.prmtr * X
+    def forward(self, X):
+        return self.prmtr * X
+
+    def reset_parameters(self):
+        if self.learnable:
+            self.prmtr = nn.Parameter(torch.tensor(self.init_value))
