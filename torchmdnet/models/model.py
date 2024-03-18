@@ -458,7 +458,6 @@ class Ensemble(torch.nn.ModuleList):
             neg_dy.append(res[1])
 
         y = torch.stack(y)
-        print(y, neg_dy)
         neg_dy = torch.stack(neg_dy)
         y_mean = torch.mean(y, axis=0)
         neg_dy_mean = torch.mean(neg_dy, axis=0)
