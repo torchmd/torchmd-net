@@ -26,10 +26,11 @@ def test_forward(model_name, use_batch, use_extra_args, precision, additional_la
     pos = pos.to(dtype=dtype_mapping[precision])
     model = create_model(load_example_args(model_name, prior_model=None, precision=precision, additional_labels=additional_labels))
     batch = batch if use_batch else None
-    if use_extra_args:
-        model(z, pos, batch=batch, extra_args={'total_charge': torch.zeros_like(z)})
-    else:
+    if not use_extra_args and additional_labels is None:
         model(z, pos, batch=batch)
+    else:
+        model(z, pos, batch=batch, extra_args={'total_charge': torch.zeros_like(z)})
+
 
 
 @mark.parametrize("model_name", models.__all_models__)
