@@ -139,7 +139,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
     return model
 
 
-def load_model(filepath, args=None, device="cpu", **kwargs):
+def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
     """Load a model from a checkpoint file.
 
        If a list of paths is given, an :py:mod:`Ensemble` model is returned.
@@ -147,6 +147,7 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
         filepath (str or list): Path to the checkpoint file or a list of paths.
         args (dict, optional): Arguments for the model. Defaults to None.
         device (str, optional): Device on which the model should be loaded. Defaults to "cpu".
+        return_std (bool, optional): Whether to return the standard deviation of an Ensemble model. Defaults to False.
         **kwargs: Extra keyword arguments for the model.
 
     Returns:
@@ -154,7 +155,8 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
     """
     if isinstance(filepath, (list, tuple)):
         return Ensemble(
-            [load_model(f, args=args, device=device, **kwargs) for f in filepath]
+            [load_model(f, args=args, device=device, **kwargs) for f in filepath],
+            return_std=return_std,
         )
 
     ckpt = torch.load(filepath, map_location="cpu")
@@ -440,12 +442,14 @@ class Ensemble(torch.nn.ModuleList):
 
     Args:
         modules (List[nn.Module]): List of :py:mod:`TorchMD_Net` models to average predictions over.
+        return_std (bool, optional): Whether to return the standard deviation of the predictions. Defaults to False. If set to True, the model returns 4 arguments (mean_y, mean_neg_dy, std_y, std_neg_dy) instead of 2 (mean_y, mean_neg_dy).
     """
 
-    def __init__(self, modules: List[nn.Module]):
+    def __init__(self, modules: List[nn.Module], return_std: bool = False):
         for module in modules:
             assert isinstance(module, TorchMD_Net)
         super().__init__(modules)
+        self.return_std = return_std
 
     def forward(
         self,
@@ -472,4 +476,8 @@ class Ensemble(torch.nn.ModuleList):
         neg_dy_mean = torch.mean(neg_dy, axis=0)
         y_std = torch.std(y, axis=0)
         neg_dy_std = torch.std(neg_dy, axis=0)
-        return y_mean, neg_dy_mean, y_std, neg_dy_std
+
+        if self.return_std:
+            return y_mean, neg_dy_mean, y_std, neg_dy_std
+        else:
+            return y_mean, neg_dy_mean
