@@ -121,7 +121,7 @@ def test_cuda_graph_compatible(model_name):
             "prior_model": None,
             "atom_filter": -1,
             "derivative": True,
-            "check_error": False,
+            "check_errors": False,
             "static_shapes": True,
             "output_model": "Scalar",
             "reduce_op": "sum",
