@@ -461,6 +461,12 @@ class Ensemble(torch.nn.ModuleList):
     ):
         """Average predictions over all models in the ensemble.
         The arguments to this function are simply relayed to the forward method of each :py:mod:`TorchMD_Net` model in the ensemble.
+        Args:
+            *args: Positional arguments to forward to the models.
+            **kwargs: Keyword arguments to forward to the models.
+        Returns:
+            Tuple[Tensor, Optional[Tensor]] or Tuple[Tensor, Optional[Tensor], Tensor, Optional[Tensor]]: The average and standard deviation of the predictions over all models in the ensemble. If return_std is False, the output is a tuple (mean_y, mean_neg_dy). If return_std is True, the output is a tuple (mean_y, mean_neg_dy, std_y, std_neg_dy).
+
         """
         y = []
         neg_dy = []
