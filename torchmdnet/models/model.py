@@ -453,23 +453,18 @@ class Ensemble(torch.nn.ModuleList):
 
     def forward(
         self,
-        z: Tensor,
-        pos: Tensor,
-        batch: Optional[Tensor] = None,
-        box: Optional[Tensor] = None,
-        q: Optional[Tensor] = None,
-        s: Optional[Tensor] = None,
-        extra_args: Optional[Dict[str, Tensor]] = None,
+        *args,
+        **kwargs,
     ):
+        """Average predictions over all models in the ensemble.
+        The arguments to this function are simply relayed to the forward method of each :py:mod:`TorchMD_Net` model in the ensemble.
+        """
         y = []
         neg_dy = []
         for model in self:
-            res = model(
-                z=z, pos=pos, batch=batch, box=box, q=q, s=s, extra_args=extra_args
-            )
+            res = model(*args, **kwargs)
             y.append(res[0])
             neg_dy.append(res[1])
-
         y = torch.stack(y)
         neg_dy = torch.stack(neg_dy)
         y_mean = torch.mean(y, axis=0)
