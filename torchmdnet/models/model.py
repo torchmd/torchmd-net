@@ -139,18 +139,25 @@ def create_model(args, prior_model=None, mean=None, std=None):
     return model
 
 
-def load_model(filepath, args=None, device="cpu", **kwargs):
+def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
     """Load a model from a checkpoint file.
 
+       If a list of paths is given, an :py:mod:`Ensemble` model is returned.
     Args:
-        filepath (str): Path to the checkpoint file.
+        filepath (str or list): Path to the checkpoint file or a list of paths.
         args (dict, optional): Arguments for the model. Defaults to None.
         device (str, optional): Device on which the model should be loaded. Defaults to "cpu".
+        return_std (bool, optional): Whether to return the standard deviation of an Ensemble model. Defaults to False.
         **kwargs: Extra keyword arguments for the model.
 
     Returns:
         nn.Module: An instance of the TorchMD_Net model.
     """
+    if isinstance(filepath, (list, tuple)):
+        return Ensemble(
+            [load_model(f, args=args, device=device, **kwargs) for f in filepath],
+            return_std=return_std,
+        )
 
     ckpt = torch.load(filepath, map_location="cpu")
     if args is None:
@@ -187,29 +194,32 @@ def create_prior_models(args, dataset=None):
 
     1. A single prior model name and its arguments as a dictionary:
 
-    ```python
-    args = {
-        "prior_model": "Atomref",
-        "prior_args": {"max_z": 100}
-    }
-    ```
+    .. code:: python
+
+      args = {
+          "prior_model": "Atomref",
+          "prior_args": {"max_z": 100}
+      }
+
+
     2. A list of prior model names and their arguments as a list of dictionaries:
 
-    ```python
+    .. code:: python
 
-    args = {
-        "prior_model": ["Atomref", "D2"],
-        "prior_args": [{"max_z": 100}, {"max_z": 100}]
-    }
-    ```
+      args = {
+          "prior_model": ["Atomref", "D2"],
+          "prior_args": [{"max_z": 100}, {"max_z": 100}]
+      }
+
 
     3. A list of prior model names and their arguments as a dictionary:
 
-    ```python
-    args = {
-        "prior_model": [{"Atomref": {"max_z": 100}}, {"D2": {"max_z": 100}}]
-    }
-    ```
+    .. code:: python
+
+      args = {
+          "prior_model": [{"Atomref": {"max_z": 100}}, {"D2": {"max_z": 100}}]
+      }
+
 
     Args:
         args (dict): Arguments for the model.
@@ -426,3 +436,52 @@ class TorchMD_Net(nn.Module):
         # Returning an empty tensor allows to decorate this method as always returning two tensors.
         # This is required to overcome a TorchScript limitation, xref https://github.com/openmm/openmm-torch/issues/135
         return y, torch.empty(0)
+
+
+class Ensemble(torch.nn.ModuleList):
+    """Average predictions over an ensemble of TorchMD-Net models.
+
+       This module behaves like a single TorchMD-Net model, but its forward method returns the average and standard deviation of the predictions over all models it was initialized with.
+
+    Args:
+        modules (List[nn.Module]): List of :py:mod:`TorchMD_Net` models to average predictions over.
+        return_std (bool, optional): Whether to return the standard deviation of the predictions. Defaults to False. If set to True, the model returns 4 arguments (mean_y, mean_neg_dy, std_y, std_neg_dy) instead of 2 (mean_y, mean_neg_dy).
+    """
+
+    def __init__(self, modules: List[nn.Module], return_std: bool = False):
+        for module in modules:
+            assert isinstance(module, TorchMD_Net)
+        super().__init__(modules)
+        self.return_std = return_std
+
+    def forward(
+        self,
+        *args,
+        **kwargs,
+    ):
+        """Average predictions over all models in the ensemble.
+        The arguments to this function are simply relayed to the forward method of each :py:mod:`TorchMD_Net` model in the ensemble.
+        Args:
+            *args: Positional arguments to forward to the models.
+            **kwargs: Keyword arguments to forward to the models.
+        Returns:
+            Tuple[Tensor, Optional[Tensor]] or Tuple[Tensor, Optional[Tensor], Tensor, Optional[Tensor]]: The average and standard deviation of the predictions over all models in the ensemble. If return_std is False, the output is a tuple (mean_y, mean_neg_dy). If return_std is True, the output is a tuple (mean_y, mean_neg_dy, std_y, std_neg_dy).
+
+        """
+        y = []
+        neg_dy = []
+        for model in self:
+            res = model(*args, **kwargs)
+            y.append(res[0])
+            neg_dy.append(res[1])
+        y = torch.stack(y)
+        neg_dy = torch.stack(neg_dy)
+        y_mean = torch.mean(y, axis=0)
+        neg_dy_mean = torch.mean(neg_dy, axis=0)
+        y_std = torch.std(y, axis=0)
+        neg_dy_std = torch.std(neg_dy, axis=0)
+
+        if self.return_std:
+            return y_mean, neg_dy_mean, y_std, neg_dy_std
+        else:
+            return y_mean, neg_dy_mean
