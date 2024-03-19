@@ -98,6 +98,16 @@ def test_torchscript_dynamic_shapes(model_name, device):
             grad_outputs=grad_outputs,
         )[0]
 
+@mark.parametrize("model_name", models.__all_models__)
+@mark.parametrize("device", ["cpu", "cuda"])
+def test_torchscript_extra_embedding(model_name, device):
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    args = load_example_args(model_name, remove_prior=True)
+    args["extra_embedding"] = "atomic"
+    model = create_model(args)
+    torch.jit.script(model).to(device=device)
+
 #Currently only tensornet is CUDA graph compatible
 @mark.parametrize("model_name", ["tensornet"])
 def test_cuda_graph_compatible(model_name):
@@ -227,3 +237,14 @@ def test_gradients(model_name):
     torch.autograd.gradcheck(
         model, (z, pos, batch), eps=1e-4, atol=1e-3, rtol=1e-2, nondet_tol=1e-3
     )
+
+
+@mark.parametrize("model_name", models.__all_models__)
+@mark.parametrize("use_batch", [True, False])
+def test_extra_embedding(model_name, use_batch):
+    z, pos, batch = create_example_batch()
+    args = load_example_args(model_name, prior_model=None)
+    args["extra_embedding"] = ["atomic", "global"]
+    model = create_model(args)
+    batch = batch if use_batch else None
+    model(z, pos, batch=batch, extra_args={'atomic':torch.rand(6), 'global':torch.rand(2)})

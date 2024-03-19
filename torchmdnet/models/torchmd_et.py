@@ -2,7 +2,7 @@
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
-from typing import Optional, Tuple
+from typing import Optional, List, Tuple
 import torch
 from torch import Tensor, nn
 from torchmdnet.models.utils import (
@@ -79,7 +79,9 @@ class TorchMD_ET(nn.Module):
             (default: :obj:`False`)
         check_errors (bool, optional): Whether to check for errors in the distance module.
             (default: :obj:`True`)
-
+        extra_embedding (tuple, optional): the names of extra fields to append to the embedding
+            vector for each atom
+            (default: :obj:`None`)
     """
 
     def __init__(
@@ -102,6 +104,7 @@ class TorchMD_ET(nn.Module):
         box_vecs=None,
         vector_cutoff=False,
         dtype=torch.float32,
+        extra_embedding=None
     ):
         super(TorchMD_ET, self).__init__()
 
@@ -133,10 +136,15 @@ class TorchMD_ET(nn.Module):
         self.cutoff_upper = cutoff_upper
         self.max_z = max_z
         self.dtype = dtype
+        self.extra_embedding = extra_embedding
 
         act_class = act_class_mapping[activation]
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels, dtype=dtype)
+        if extra_embedding is not None:
+            self.reshape_embedding = nn.Linear(hidden_channels+len(extra_embedding), hidden_channels, dtype=dtype)
+        else:
+            self.reshape_embedding = None
 
         self.distance = OptimizedDistance(
             cutoff_lower,
@@ -181,6 +189,8 @@ class TorchMD_ET(nn.Module):
 
     def reset_parameters(self):
         self.embedding.reset_parameters()
+        if self.reshape_embedding is not None:
+            self.reshape_embedding.reset_parameters()
         self.distance_expansion.reset_parameters()
         if self.neighbor_embedding is not None:
             self.neighbor_embedding.reset_parameters()
@@ -196,8 +206,15 @@ class TorchMD_ET(nn.Module):
         box: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
+        extra_embedding_args: Optional[List[Tensor]] = None
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
         x = self.embedding(z)
+        if self.reshape_embedding is not None and extra_embedding_args is not None:
+            tensors = [x]
+            for t in extra_embedding_args:
+                tensors.append(t.unsqueeze(1))
+            x = torch.cat(tensors, dim=1)
+            x = self.reshape_embedding(x)
 
         edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
         # This assert must be here to convince TorchScript that edge_vec is not None
