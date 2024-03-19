@@ -194,29 +194,32 @@ def create_prior_models(args, dataset=None):
 
     1. A single prior model name and its arguments as a dictionary:
 
-    ```python
-    args = {
-        "prior_model": "Atomref",
-        "prior_args": {"max_z": 100}
-    }
-    ```
+    .. code:: python
+
+      args = {
+          "prior_model": "Atomref",
+          "prior_args": {"max_z": 100}
+      }
+
+
     2. A list of prior model names and their arguments as a list of dictionaries:
 
-    ```python
+    .. code:: python
 
-    args = {
-        "prior_model": ["Atomref", "D2"],
-        "prior_args": [{"max_z": 100}, {"max_z": 100}]
-    }
-    ```
+      args = {
+          "prior_model": ["Atomref", "D2"],
+          "prior_args": [{"max_z": 100}, {"max_z": 100}]
+      }
+
 
     3. A list of prior model names and their arguments as a dictionary:
 
-    ```python
-    args = {
-        "prior_model": [{"Atomref": {"max_z": 100}}, {"D2": {"max_z": 100}}]
-    }
-    ```
+    .. code:: python
+
+      args = {
+          "prior_model": [{"Atomref": {"max_z": 100}}, {"D2": {"max_z": 100}}]
+      }
+
 
     Args:
         args (dict): Arguments for the model.
