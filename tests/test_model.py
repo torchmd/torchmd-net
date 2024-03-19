@@ -250,7 +250,7 @@ def test_gradients(model_name):
 def test_ensemble():
     ckpts = [join(dirname(dirname(__file__)), "tests", "example.ckpt")] * 3
     model = load_model(ckpts[0])
-    ensemble_model = load_model(ckpts)
+    ensemble_model = load_model(ckpts, return_std=True)
     z, pos, batch = create_example_batch(n_atoms=5)
 
     pred, deriv = model(z, pos, batch)
