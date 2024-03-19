@@ -191,7 +191,10 @@ class TensorNet(nn.Module):
                     "name": method_name,
                     "method": additional_labels_handler(method_name, method_args),
                 }
-
+        self.tensorq_labels = None
+        if self.label_callbacks is not None:
+            self.tensorq_labels = [label for label, callback in self.label_callbacks.items() if callback['name'] == 'tensornet_q']
+        
         act_class = act_class_mapping[activation]
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
@@ -217,7 +220,6 @@ class TensorNet(nn.Module):
                         cutoff_upper,
                         equivariance_invariance_group,
                         dtype,
-                        self.label_callbacks,
                     )
                 )
         self.linear = nn.Linear(3 * hidden_channels, hidden_channels, dtype=dtype)
@@ -247,6 +249,9 @@ class TensorNet(nn.Module):
             layer.reset_parameters()
         self.linear.reset_parameters()
         self.out_norm.reset_parameters()
+        if self.label_callbacks is not None:
+            for callback in self.label_callbacks:
+                self.label_callbacks[callback]["method"].reset_parameters()
 
     def forward(
         self,
@@ -271,19 +276,9 @@ class TensorNet(nn.Module):
                 assert (label in extra_args), f"TensorNet expects {label} to be provided as part of extra_args"
                 if extra_args[label].shape != z.shape:
                     extra_args[label] = extra_args[label][batch]
-                    if self.static_shapes:
-                        extra_args[label] = torch.cat(
-                            (
-                                extra_args[label],
-                                torch.zeros(
-                                    1,
-                                    device=extra_args[label].device,
-                                    dtype=extra_args[label].dtype,
-                                ),
-                            ),
-                            dim=0,
-                        )
-        
+                if self.static_shapes:
+                        extra_args[label] = torch.cat((extra_args[label], torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
+
         if self.static_shapes:
             mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
             zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
@@ -300,9 +295,17 @@ class TensorNet(nn.Module):
         # Normalizing edge vectors by their length can result in NaNs, breaking Autograd.
         # I avoid dividing by zero by setting the weight of self edges and self loops to 1
         edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
+        
+        prefactor = torch.ones(1, device=z.device, dtype=z.dtype)
+        if self.tensorq_labels is not None:
+            for label in self.tensorq_labels:
+                prefactor = prefactor * self.label_callbacks[label]["method"](extra_args[label]) 
+            prefactor += 1
+       
         X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr)
+        
         for layer in self.layers:
-            X = layer(X, edge_index, edge_weight, edge_attr, extra_args)
+            X = layer(X, edge_index, edge_weight, edge_attr, prefactor)
         I, A, S = decompose_tensor(X)
         x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
         x = self.out_norm(x)
@@ -460,7 +463,6 @@ class Interaction(nn.Module):
         cutoff_upper,
         equivariance_invariance_group,
         dtype=torch.float32,
-        label_callbacks=None,
     ):
         super(Interaction, self).__init__()
 
@@ -484,7 +486,6 @@ class Interaction(nn.Module):
             )
         self.act = activation()
         self.equivariance_invariance_group = equivariance_invariance_group
-        self.label_callbacks = label_callbacks
 
         self.reset_parameters()
 
@@ -493,9 +494,6 @@ class Interaction(nn.Module):
             linear.reset_parameters()
         for linear in self.linears_tensor:
             linear.reset_parameters()
-        if self.label_callbacks is not None:
-            for method in self.label_callbacks:
-                self.label_callbacks[method]["method"].reset_parameters()
 
     def forward(
         self,
@@ -503,7 +501,7 @@ class Interaction(nn.Module):
         edge_index: Tensor,
         edge_weight: Tensor,
         edge_attr: Tensor,
-        extra_args: Optional[Dict[str, Tensor]] = None,
+        prefactor: Tensor,
     ) -> Tensor:
         C = self.cutoff(edge_weight)
         for linear_scalar in self.linears_scalar:
@@ -527,15 +525,6 @@ class Interaction(nn.Module):
             edge_index, edge_attr[..., 2, None, None], S, X.shape[0]
         )
         msg = Im + Am + Sm
-
-        prefactor = torch.tensor([1], device=X.device, dtype=X.dtype) 
-        if self.label_callbacks is not None and extra_args is not None:
-            tensorq_labels = []
-            for label, callback in self.label_callbacks.items():
-                if callback['name'] == 'tensornet_q':
-                    tensorq_labels.append(callback['method'](extra_args[label]))
-            if len(tensorq_labels) > 0:
-                prefactor = prefactor + torch.prod(torch.stack(tensorq_labels), dim=0)
                     
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(msg, Y)
@@ -571,5 +560,4 @@ class TensornetQ(nn.Module):
         return self.prmtr * X[..., None, None, None]
 
     def reset_parameters(self):
-        if self.learnable:
-            self.prmtr = nn.Parameter(torch.tensor(self.init_value))
+        self.prmtr.data = torch.tensor(self.init_value)
