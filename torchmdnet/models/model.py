@@ -39,6 +39,14 @@ def create_model(args, prior_model=None, mean=None, std=None):
     if "vector_cutoff" not in args:
         args["vector_cutoff"] = False
 
+    # additional labels for the representation model
+    additional_labels = args.get("additional_labels")
+    if additional_labels is not None and not isinstance(additional_labels, dict):
+        additional_labels = None
+        warnings.warn(
+            "Additional labels should be a dictionary. Ignoring additional labels."
+        )
+
     shared_args = dict(
         hidden_channels=args["embedding_dimension"],
         num_layers=args["num_layers"],
@@ -57,6 +65,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
             else None
         ),
         dtype=dtype,
+        additional_labels=additional_labels,
     )
 
     # representation network
@@ -263,10 +272,10 @@ class TorchMD_Net(nn.Module):
     Parameters
     ----------
     representation_model : nn.Module
-        A model that takes as input the atomic numbers, positions, batch indices, and optionally
-        charges and spins. It must return a tuple of the form (x, v, z, pos, batch), where x
-        are the atom features, v are the vector features (if any), z are the atomic numbers,
-        pos are the positions, and batch are the batch indices. See TorchMD_ET for more details.
+        A model that takes as input the atomic numbers, positions, batch indices and extra_args(optional). It must 
+        return a tuple of the form (x, v, z, pos, batch), where x are the atom features, v are the vector features 
+        (if any), z are the atomic numbers, pos are the positions, and batch are the batch indices. See TorchMD_ET 
+        for more details.
     output_model : nn.Module
         A model that takes as input the atom features, vector features (if any), atomic numbers,
         positions, and batch indices. See OutputModel for more details.
@@ -336,8 +345,6 @@ class TorchMD_Net(nn.Module):
         pos: Tensor,
         batch: Optional[Tensor] = None,
         box: Optional[Tensor] = None,
-        q: Optional[Tensor] = None,
-        s: Optional[Tensor] = None,
         extra_args: Optional[Dict[str, Tensor]] = None,
     ) -> Tuple[Tensor, Tensor]:
         """
@@ -368,9 +375,7 @@ class TorchMD_Net(nn.Module):
             The vectors defining the periodic box.  This must have shape `(3, 3)`,
             where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
             If this is omitted, periodic boundary conditions are not applied.
-            q (Tensor, optional): Atomic charges in the molecule. Shape: (N,).
-            s (Tensor, optional): Atomic spins in the molecule. Shape: (N,).
-            extra_args (Dict[str, Tensor], optional): Extra arguments to pass to the prior model.
+            extra_args (Dict[str, Tensor], optional): Extra arguments to pass to the prior model and to the representation model.
 
         Returns:
             Tuple[Tensor, Optional[Tensor]]: The output of the model and the derivative of the output with respect to the positions if derivative is True, None otherwise.
@@ -380,9 +385,14 @@ class TorchMD_Net(nn.Module):
 
         if self.derivative:
             pos.requires_grad_(True)
+
         # run the potentially wrapped representation model
         x, v, z, pos, batch = self.representation_model(
-            z, pos, batch, box=box, q=q, s=s
+            z,
+            pos,
+            batch,
+            box=box,
+            extra_args=extra_args,
         )
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch)

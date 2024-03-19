@@ -2,7 +2,7 @@
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 import torch
 from torch import Tensor, nn
 from torchmdnet.models.utils import (
@@ -76,7 +76,11 @@ class TorchMD_T(nn.Module):
             (default: :obj:`None`)
         check_errors (bool, optional): Whether to check for errors in the distance module.
             (default: :obj:`True`)
-
+        additional_labels (Dict[str, Any], optional): Define the additional method to be used by the model, and the parameters to initialize it.
+            example:
+            additional_labels = {method_name1: {label_name: 'extra_arg_label', 'method_prm1': method_prm1,  'method_prm2': method_prm2}, 
+                                 method_name2: {label_name: 'extra_arg_label', 'method_prm1': method_prm1,  'method_prm2': method_prm2},
+                                 ...}
     """
 
     def __init__(
@@ -98,6 +102,7 @@ class TorchMD_T(nn.Module):
         max_num_neighbors=32,
         dtype=torch.float,
         box_vecs=None,
+        additional_labels=None
     ):
         super(TorchMD_T, self).__init__()
 
@@ -124,7 +129,10 @@ class TorchMD_T(nn.Module):
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         self.max_z = max_z
-
+        self.additional_labels = additional_labels
+        self.label_callbacks = None
+        if additional_labels is not None:
+            Warning("Found additional_labels, transformer still does not support additional labels. Ignoring them.")
         act_class = act_class_mapping[activation]
         attn_act_class = act_class_mapping[attn_activation]
 
@@ -190,8 +198,7 @@ class TorchMD_T(nn.Module):
         pos: Tensor,
         batch: Tensor,
         box: Optional[Tensor] = None,
-        s: Optional[Tensor] = None,
-        q: Optional[Tensor] = None,
+        extra_args: Optional[Dict[str, Tensor]] = None
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
         x = self.embedding(z)
 
