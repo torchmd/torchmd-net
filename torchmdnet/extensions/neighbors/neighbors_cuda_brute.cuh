@@ -40,7 +40,7 @@ __global__ void forward_kernel_brute(uint32_t num_all_pairs, const Accessor<scal
         const auto delta = triclinic::compute_distance(pos_i, pos_j, list.use_periodic, box_row);
         const scalar_t distance2 = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
         if (distance2 < cutoff_upper2 && distance2 >= cutoff_lower2) {
-            const scalar_t r2 = sqrt_(distance2);
+            const scalar_t r2 = ::sqrt(distance2);
             addAtomPairToList(list, row, column, delta, r2, list.include_transpose);
         }
     }
@@ -100,7 +100,7 @@ forward_brute(const Tensor& positions, const Tensor& batch, const Tensor& in_box
     const uint64_t num_all_pairs = num_atoms * (num_atoms - 1UL) / 2UL;
     const uint64_t num_threads = 128;
     const uint64_t num_blocks = std::max((num_all_pairs + num_threads - 1UL) / num_threads, 1UL);
-    AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "get_neighbor_pairs_forward", [&]() {
+    DISPATCH_FOR_ALL_FLOAT_TYPES(positions.scalar_type(), "get_neighbor_pairs_forward", [&]() {
         PairListAccessor<scalar_t> list_accessor(list);
         auto box = triclinic::get_box_accessor<scalar_t>(box_vectors, use_periodic);
         const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();

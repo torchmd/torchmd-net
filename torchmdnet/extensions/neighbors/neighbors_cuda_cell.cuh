@@ -116,7 +116,7 @@ static auto sortAtomsByCellIndex(const Tensor& positions, const Tensor& box_size
     const int threads = 128;
     const int blocks = (num_atoms + threads - 1) / threads;
     auto stream = at::cuda::getCurrentCUDAStream();
-    AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "assignHash", [&] {
+    DISPATCH_FOR_ALL_FLOAT_TYPES(positions.scalar_type(), "assignHash", [&] {
         scalar_t cutoff_ = cutoff.to<scalar_t>();
         scalar3<scalar_t> box_size_ = {box_size[0][0].item<scalar_t>(),
                                        box_size[1][1].item<scalar_t>(),
@@ -229,7 +229,7 @@ CellList constructCellList(const Tensor& positions, const Tensor& batch, const T
     cl.sorted_batch = batch.index_select(0, cl.sorted_indices);
     // Step 3
     int3 cell_dim;
-    AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "computeCellDim", [&] {
+    DISPATCH_FOR_ALL_FLOAT_TYPES(positions.scalar_type(), "computeCellDim", [&] {
         scalar_t cutoff_ = cutoff.to<scalar_t>();
         scalar3<scalar_t> box_size_ = {box_size[0][0].item<scalar_t>(),
                                        box_size[1][1].item<scalar_t>(),
@@ -270,7 +270,7 @@ __device__ void addNeighborPair(PairListAccessor<scalar_t>& list, const int i, c
     const int ni = max(i, j);
     const int nj = min(i, j);
     const scalar_t delta_sign = (ni == i) ? scalar_t(1.0) : scalar_t(-1.0);
-    const scalar_t distance = sqrt_(distance2);
+    const scalar_t distance = ::sqrt(distance2);
     delta = {delta_sign * delta.x, delta_sign * delta.y, delta_sign * delta.z};
     addAtomPairToList(list, ni, nj, delta, distance, requires_transpose);
 }
@@ -368,7 +368,7 @@ forward_cell(const Tensor& positions, const Tensor& batch, const Tensor& in_box_
     const auto stream = getCurrentCUDAStream(positions.get_device());
     { // Traverse the cell list to find the neighbors
         const CUDAStreamGuard guard(stream);
-        AT_DISPATCH_FLOATING_TYPES(positions.scalar_type(), "forward", [&] {
+        DISPATCH_FOR_ALL_FLOAT_TYPES(positions.scalar_type(), "forward", [&] {
             const scalar_t cutoff_upper_ = cutoff_upper.to<scalar_t>();
             TORCH_CHECK(cutoff_upper_ > 0, "Expected cutoff_upper to be positive");
             const scalar_t cutoff_lower_ = cutoff_lower.to<scalar_t>();

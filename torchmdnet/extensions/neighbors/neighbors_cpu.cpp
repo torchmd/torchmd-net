@@ -95,7 +95,7 @@ forward(const Tensor& positions, const Tensor& batch, const Tensor& in_box_vecto
         deltas.index_put_({Slice(), 0}, deltas.index({Slice(), 0}) -
                                             scale1 * box_vectors.index({pair_batch, 0, 0}));
     }
-    distances = frobenius_norm(deltas, 1);
+    distances = torch::linalg::norm(deltas, c10::nullopt, 1, false, c10::nullopt);
     mask = (distances < cutoff_upper) * (distances >= cutoff_lower);
     neighbors = neighbors.index({Slice(), mask});
     deltas = deltas.index({mask, Slice()});
