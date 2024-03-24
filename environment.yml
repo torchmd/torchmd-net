@@ -17,3 +17,4 @@ dependencies:
   - pytest
   - psutil
   - gxx<12
+  - versioneer==0.28
