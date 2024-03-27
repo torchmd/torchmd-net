@@ -144,7 +144,7 @@ def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
 
        If a list of paths is given, an :py:mod:`Ensemble` model is returned.
     Args:
-        filepath (str or list): Path to the checkpoint file or a list of paths.
+        filepath (str or list): Path to the checkpoint file or a list of paths or a zip of checkpoints.
         args (dict, optional): Arguments for the model. Defaults to None.
         device (str, optional): Device on which the model should be loaded. Defaults to "cpu".
         return_std (bool, optional): Whether to return the standard deviation of an Ensemble model. Defaults to False.
@@ -158,6 +158,23 @@ def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
             [load_model(f, args=args, device=device, **kwargs) for f in filepath],
             return_std=return_std,
         )
+
+    if filepath.endswith(".zip"):
+        import zipfile
+        import tempfile
+        from glob import glob
+        import os
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with zipfile.ZipFile(filepath, "r") as z:
+                z.extractall(tmpdir)
+
+            filepath = glob(os.path.join(tmpdir, "*.ckpt"))
+
+            return Ensemble(
+                [load_model(f, args=args, device=device, **kwargs) for f in filepath],
+                return_std=return_std,
+            )
 
     ckpt = torch.load(filepath, map_location="cpu")
     if args is None:
