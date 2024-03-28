@@ -1,8 +1,10 @@
 # Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
-
+from glob import glob
+import os
 import re
+import tempfile
 from typing import Optional, List, Tuple, Dict
 import torch
 from torch.autograd import grad
@@ -13,6 +15,7 @@ from torchmdnet.models.utils import dtype_mapping
 from torchmdnet import priors
 from lightning_utilities.core.rank_zero import rank_zero_warn
 import warnings
+import zipfile
 
 
 def create_model(args, prior_model=None, mean=None, std=None):
@@ -139,6 +142,47 @@ def create_model(args, prior_model=None, mean=None, std=None):
     return model
 
 
+def load_ensemble(filepath, args=None, device="cpu", return_std=False, **kwargs):
+    """Load an ensemble of models from a list of checkpoint files or a zip file.
+
+    Args:
+        filepath (str or list): Can be any of the following:
+
+            - Path to a zip file containing multiple checkpoint files.
+            - List of paths to checkpoint files.
+
+        args (dict, optional): Arguments for the model. Defaults to None.
+        device (str, optional): Device on which the model should be loaded. Defaults to "cpu".
+        return_std (bool, optional): Whether to return the standard deviation of the predictions. Defaults to False.
+        **kwargs: Extra keyword arguments for the model, will be passed to :py:mod:`load_model`.
+
+    Returns:
+        nn.Module: An instance of :py:mod:`Ensemble`.
+    """
+    if isinstance(filepath, (list, tuple)):
+        assert all(isinstance(f, str) for f in filepath), "Invalid filepath list."
+        model_list = [
+            load_model(f, args=args, device=device, **kwargs) for f in filepath
+        ]
+    elif filepath.endswith(".zip"):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with zipfile.ZipFile(filepath, "r") as z:
+                z.extractall(tmpdir)
+            ckpt_list = glob(os.path.join(tmpdir, "*.ckpt"))
+            assert len(ckpt_list) > 0, "No checkpoint files found in zip file."
+            model_list = [
+                load_model(f, args=args, device=device, **kwargs) for f in ckpt_list
+            ]
+    else:
+        raise ValueError(
+            "Invalid filepath. Must be a list of paths or a path to a zip file."
+        )
+    return Ensemble(
+        model_list,
+        return_std=return_std,
+    )
+
+
 def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
     """Load a model from a checkpoint file.
 
@@ -158,29 +202,12 @@ def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
     Returns:
         nn.Module: An instance of the TorchMD_Net model or an Ensemble model.
     """
-    if isinstance(filepath, (list, tuple)):
-        return Ensemble(
-            [load_model(f, args=args, device=device, **kwargs) for f in filepath],
-            return_std=return_std,
+    isEnsemble = isinstance(filepath, (list, tuple)) or filepath.endswith(".zip")
+    if isEnsemble:
+        return load_ensemble(
+            filepath, args=args, device=device, return_std=return_std, **kwargs
         )
-
-    if filepath.endswith(".zip"):
-        import zipfile
-        import tempfile
-        from glob import glob
-        import os
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with zipfile.ZipFile(filepath, "r") as z:
-                z.extractall(tmpdir)
-
-            filepath = glob(os.path.join(tmpdir, "*.ckpt"))
-
-            return Ensemble(
-                [load_model(f, args=args, device=device, **kwargs) for f in filepath],
-                return_std=return_std,
-            )
-
+    assert isinstance(filepath, str)
     ckpt = torch.load(filepath, map_location="cpu")
     if args is None:
         args = ckpt["hyper_parameters"]
