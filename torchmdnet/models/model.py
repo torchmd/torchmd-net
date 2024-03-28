@@ -142,16 +142,21 @@ def create_model(args, prior_model=None, mean=None, std=None):
 def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
     """Load a model from a checkpoint file.
 
-       If a list of paths is given, an :py:mod:`Ensemble` model is returned.
+       If a list of paths or a path to a zip file is given, an :py:mod:`Ensemble` model is returned.
     Args:
-        filepath (str or list): Path to the checkpoint file or a list of paths or a zip of checkpoints.
+        filepath (str or list): Can be any of the following:
+
+            - Path to a checkpoint file. In this case, a :py:mod:`TorchMD_Net` model is returned.
+            - Path to a zip file containing multiple checkpoint files. In this case, an :py:mod:`Ensemble` model is returned.
+            - List of paths to checkpoint files. In this case, an :py:mod:`Ensemble` model is returned.
+
         args (dict, optional): Arguments for the model. Defaults to None.
         device (str, optional): Device on which the model should be loaded. Defaults to "cpu".
         return_std (bool, optional): Whether to return the standard deviation of an Ensemble model. Defaults to False.
         **kwargs: Extra keyword arguments for the model.
 
     Returns:
-        nn.Module: An instance of the TorchMD_Net model.
+        nn.Module: An instance of the TorchMD_Net model or an Ensemble model.
     """
     if isinstance(filepath, (list, tuple)):
         return Ensemble(
