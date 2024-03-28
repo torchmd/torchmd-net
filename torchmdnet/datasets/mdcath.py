@@ -140,19 +140,18 @@ class mdCATH(Dataset):
         with h5py.File(file, 'r') as f:
             z = f[pdb]['z'][()]
             group = f[pdb][f'sims{group_info[0]}K'][group_info[1]]
+            coords = group['coords'][()][::self.skipFrames, :, :]
+            forces = group['forces'][()][::self.skipFrames, :, :]
             # if any assertion fail print the same message 
             # coords and forces shape (num_frames, num_atoms, 3)
             
-            assert group['coords'].shape[0] == group['forces'].shape[0], f"Number of frames mismatch between coords and forces: {group['coords'].shape[0]} vs {group['forces'].shape[0]}"
-            assert group['coords'].shape[1] == z.shape[0], f"Number of atoms mismatch between coords and z: {group['coords'].shape[1]} vs {z.shape[0]}"
-            assert group['forces'].shape[1] == z.shape[0], f"Number of atoms mismatch between forces and z: {group['forces'].shape[1]} vs {z.shape[0]}"
+            assert coords.shape[0] == forces.shape[0], f"Number of frames mismatch between coords and forces: {group['coords'].shape[0]} vs {group['forces'].shape[0]}"
+            assert coords.shape[1] == z.shape[0], f"Number of atoms mismatch between coords and z: {group['coords'].shape[1]} vs {z.shape[0]}"
+            assert forces.shape[1] == z.shape[0], f"Number of atoms mismatch between forces and z: {group['forces'].shape[1]} vs {z.shape[0]}"
             assert group['coords'].attrs['unit'] == 'Angstrom', f"Coords unit is not Angstrom: {group['coords'].attrs['unit']}"
             assert group['forces'].attrs['unit'] == 'kcal/mol/Angstrom', f"Forces unit is not kcal/mol/Angstrom: {group['forces'].attrs['unit']}"
             
-            coords = torch.tensor(group['coords'][()])[::self.skipFrames, :, :]
-            forces = torch.tensor(group['forces'][()])[::self.skipFrames, :, :]
-            z = torch.tensor(z)
-            return Data(pos=coords, neg_dy=forces, z=z)
+            return [z, coords, forces]
     
     def _setup_idx(self):
         files = [opj(self.root,f"cath_dataset_{pdb_id}.h5") for pdb_id in self.to_download.keys()]
@@ -160,14 +159,17 @@ class mdCATH(Dataset):
         for i, (pdb, group_info) in enumerate(self.to_download.items()):
             for temp, replica in group_info:
                 data = self.process_specific_group(pdb, files[i], (temp, replica))
-                self.idx.extend([(data.pos[frame], data.neg_dy[frame], data.z) for frame in range(data.pos.shape[0])])
+                conformer_indices = range(data[1].shape[0])
+                self.idx.extend([tuple([data[0], data[1][j], data[2][j], [j]]) for j in conformer_indices])
         assert len(self.idx) == self.num_conformers, f"Mismatch between number of conformers and idxs: {self.num_conformers} vs {len(self.idx)}"
     
     def get(self, idx):
         data = Data()
         if self.idx is None:
             self._setup_idx()
-        data.pos = self.idx[idx][0]
-        data.neg_dy = self.idx[idx][1]
-        data.z = self.idx[idx][2]
+        *fields_data, i = self.idx[idx]
+        print(fields_data)
+        data.z = torch.tensor(fields_data[0][i], dtype=torch.long)
+        data.pos = torch.tensor(fields_data[1][i], dtype=torch.float32)
+        data.neg_dy = torch.tensor(fields_data[2][i], dtype=torch.float32)
         return data
