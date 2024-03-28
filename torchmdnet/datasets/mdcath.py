@@ -168,7 +168,6 @@ class mdCATH(Dataset):
         if self.idx is None:
             self._setup_idx()
         *fields_data, i = self.idx[idx]
-        print(fields_data)
         data.z = torch.tensor(fields_data[0][i], dtype=torch.long)
         data.pos = torch.tensor(fields_data[1][i], dtype=torch.float32)
         data.neg_dy = torch.tensor(fields_data[2][i], dtype=torch.float32)
