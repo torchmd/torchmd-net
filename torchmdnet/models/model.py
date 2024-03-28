@@ -1,8 +1,10 @@
 # Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
-
+from glob import glob
+import os
 import re
+import tempfile
 from typing import Optional, List, Tuple, Dict
 import torch
 from torch.autograd import grad
@@ -13,6 +15,7 @@ from torchmdnet.models.utils import dtype_mapping
 from torchmdnet import priors
 from lightning_utilities.core.rank_zero import rank_zero_warn
 import warnings
+import zipfile
 
 
 def create_model(args, prior_model=None, mean=None, std=None):
@@ -139,19 +142,72 @@ def create_model(args, prior_model=None, mean=None, std=None):
     return model
 
 
-def load_model(filepath, args=None, device="cpu", **kwargs):
-    """Load a model from a checkpoint file.
+def load_ensemble(filepath, args=None, device="cpu", return_std=False, **kwargs):
+    """Load an ensemble of models from a list of checkpoint files or a zip file.
 
     Args:
-        filepath (str): Path to the checkpoint file.
+        filepath (str or list): Can be any of the following:
+
+            - Path to a zip file containing multiple checkpoint files.
+            - List of paths to checkpoint files.
+
         args (dict, optional): Arguments for the model. Defaults to None.
         device (str, optional): Device on which the model should be loaded. Defaults to "cpu".
+        return_std (bool, optional): Whether to return the standard deviation of the predictions. Defaults to False.
+        **kwargs: Extra keyword arguments for the model, will be passed to :py:mod:`load_model`.
+
+    Returns:
+        nn.Module: An instance of :py:mod:`Ensemble`.
+    """
+    if isinstance(filepath, (list, tuple)):
+        assert all(isinstance(f, str) for f in filepath), "Invalid filepath list."
+        model_list = [
+            load_model(f, args=args, device=device, **kwargs) for f in filepath
+        ]
+    elif filepath.endswith(".zip"):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with zipfile.ZipFile(filepath, "r") as z:
+                z.extractall(tmpdir)
+            ckpt_list = glob(os.path.join(tmpdir, "*.ckpt"))
+            assert len(ckpt_list) > 0, "No checkpoint files found in zip file."
+            model_list = [
+                load_model(f, args=args, device=device, **kwargs) for f in ckpt_list
+            ]
+    else:
+        raise ValueError(
+            "Invalid filepath. Must be a list of paths or a path to a zip file."
+        )
+    return Ensemble(
+        model_list,
+        return_std=return_std,
+    )
+
+
+def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
+    """Load a model from a checkpoint file.
+
+       If a list of paths or a path to a zip file is given, an :py:mod:`Ensemble` model is returned.
+    Args:
+        filepath (str or list): Can be any of the following:
+
+            - Path to a checkpoint file. In this case, a :py:mod:`TorchMD_Net` model is returned.
+            - Path to a zip file containing multiple checkpoint files. In this case, an :py:mod:`Ensemble` model is returned.
+            - List of paths to checkpoint files. In this case, an :py:mod:`Ensemble` model is returned.
+
+        args (dict, optional): Arguments for the model. Defaults to None.
+        device (str, optional): Device on which the model should be loaded. Defaults to "cpu".
+        return_std (bool, optional): Whether to return the standard deviation of an Ensemble model. Defaults to False.
         **kwargs: Extra keyword arguments for the model.
 
     Returns:
-        nn.Module: An instance of the TorchMD_Net model.
+        nn.Module: An instance of the TorchMD_Net model or an Ensemble model.
     """
-
+    isEnsemble = isinstance(filepath, (list, tuple)) or filepath.endswith(".zip")
+    if isEnsemble:
+        return load_ensemble(
+            filepath, args=args, device=device, return_std=return_std, **kwargs
+        )
+    assert isinstance(filepath, str)
     ckpt = torch.load(filepath, map_location="cpu")
     if args is None:
         args = ckpt["hyper_parameters"]
@@ -187,29 +243,32 @@ def create_prior_models(args, dataset=None):
 
     1. A single prior model name and its arguments as a dictionary:
 
-    ```python
-    args = {
-        "prior_model": "Atomref",
-        "prior_args": {"max_z": 100}
-    }
-    ```
+    .. code:: python
+
+      args = {
+          "prior_model": "Atomref",
+          "prior_args": {"max_z": 100}
+      }
+
+
     2. A list of prior model names and their arguments as a list of dictionaries:
 
-    ```python
+    .. code:: python
 
-    args = {
-        "prior_model": ["Atomref", "D2"],
-        "prior_args": [{"max_z": 100}, {"max_z": 100}]
-    }
-    ```
+      args = {
+          "prior_model": ["Atomref", "D2"],
+          "prior_args": [{"max_z": 100}, {"max_z": 100}]
+      }
+
 
     3. A list of prior model names and their arguments as a dictionary:
 
-    ```python
-    args = {
-        "prior_model": [{"Atomref": {"max_z": 100}}, {"D2": {"max_z": 100}}]
-    }
-    ```
+    .. code:: python
+
+      args = {
+          "prior_model": [{"Atomref": {"max_z": 100}}, {"D2": {"max_z": 100}}]
+      }
+
 
     Args:
         args (dict): Arguments for the model.
@@ -426,3 +485,52 @@ class TorchMD_Net(nn.Module):
         # Returning an empty tensor allows to decorate this method as always returning two tensors.
         # This is required to overcome a TorchScript limitation, xref https://github.com/openmm/openmm-torch/issues/135
         return y, torch.empty(0)
+
+
+class Ensemble(torch.nn.ModuleList):
+    """Average predictions over an ensemble of TorchMD-Net models.
+
+       This module behaves like a single TorchMD-Net model, but its forward method returns the average and standard deviation of the predictions over all models it was initialized with.
+
+    Args:
+        modules (List[nn.Module]): List of :py:mod:`TorchMD_Net` models to average predictions over.
+        return_std (bool, optional): Whether to return the standard deviation of the predictions. Defaults to False. If set to True, the model returns 4 arguments (mean_y, mean_neg_dy, std_y, std_neg_dy) instead of 2 (mean_y, mean_neg_dy).
+    """
+
+    def __init__(self, modules: List[nn.Module], return_std: bool = False):
+        for module in modules:
+            assert isinstance(module, TorchMD_Net)
+        super().__init__(modules)
+        self.return_std = return_std
+
+    def forward(
+        self,
+        *args,
+        **kwargs,
+    ):
+        """Average predictions over all models in the ensemble.
+        The arguments to this function are simply relayed to the forward method of each :py:mod:`TorchMD_Net` model in the ensemble.
+        Args:
+            *args: Positional arguments to forward to the models.
+            **kwargs: Keyword arguments to forward to the models.
+        Returns:
+            Tuple[Tensor, Optional[Tensor]] or Tuple[Tensor, Optional[Tensor], Tensor, Optional[Tensor]]: The average and standard deviation of the predictions over all models in the ensemble. If return_std is False, the output is a tuple (mean_y, mean_neg_dy). If return_std is True, the output is a tuple (mean_y, mean_neg_dy, std_y, std_neg_dy).
+
+        """
+        y = []
+        neg_dy = []
+        for model in self:
+            res = model(*args, **kwargs)
+            y.append(res[0])
+            neg_dy.append(res[1])
+        y = torch.stack(y)
+        neg_dy = torch.stack(neg_dy)
+        y_mean = torch.mean(y, axis=0)
+        neg_dy_mean = torch.mean(neg_dy, axis=0)
+        y_std = torch.std(y, axis=0)
+        neg_dy_std = torch.std(neg_dy, axis=0)
+
+        if self.return_std:
+            return y_mean, neg_dy_mean, y_std, neg_dy_std
+        else:
+            return y_mean, neg_dy_mean
