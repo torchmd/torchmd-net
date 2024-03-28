@@ -33,8 +33,27 @@ bool is_current_stream_capturing() {
 #endif
 }
 
+#define TORCH_VERSION_CODE(MAJOR, MINOR, PATCH) ((MAJOR)*10000 + (MINOR)*100 + (PATCH))
+#define TORCH_VERSION_COMPARE_LE(MAJOR, MINOR, PATCH) \
+    (TORCH_VERSION_CODE(TORCH_VERSION_MAJOR, TORCH_VERSION_MINOR, TORCH_VERSION_PATCH) >= \
+     TORCH_VERSION_CODE(MAJOR, MINOR, PATCH))
 
 TORCH_LIBRARY(torchmdnet_extensions, m) {
     m.def("is_current_stream_capturing", is_current_stream_capturing);
-    m.def("get_neighbor_pairs(str strategy, Tensor positions, Tensor batch, Tensor box_vectors, bool use_periodic, Scalar cutoff_lower, Scalar cutoff_upper, Scalar max_num_pairs, bool loop, bool include_transpose) -> (Tensor neighbors, Tensor distances, Tensor distance_vecs, Tensor num_pairs)");
+#if TORCH_VERSION_COMPARE_LE(2, 2, 0)
+    //This line is required to signal to torch that the meta registration is implemented in python.
+    // Specifically, it will look for them in the torchmdnet.extensions module.
+    m.impl_abstract_pystub("torchmdnet.extensions");
+#endif
+    m.def("get_neighbor_pairs(str strategy, Tensor positions, Tensor batch, Tensor box_vectors, "
+          "bool use_periodic, Scalar cutoff_lower, Scalar cutoff_upper, Scalar max_num_pairs, bool "
+          "loop, bool include_transpose) -> (Tensor neighbors, Tensor distances, Tensor "
+          "distance_vecs, Tensor num_pairs)");
+    //The individual fwd and bkwd functions must be exposed in order to register their meta implementations python side.
+    m.def("get_neighbor_pairs_fwd(str strategy, Tensor positions, Tensor batch, Tensor box_vectors, "
+          "bool use_periodic, Scalar cutoff_lower, Scalar cutoff_upper, Scalar max_num_pairs, bool "
+          "loop, bool include_transpose) -> (Tensor neighbors, Tensor distances, Tensor "
+          "distance_vecs, Tensor num_pairs)");
+    m.def("get_neighbor_pairs_bkwd(Tensor grad_edge_vec, Tensor grad_edge_weight, Tensor edge_index, "
+	  "Tensor edge_vec, Tensor edge_weight, int num_atoms) -> Tensor");
 }

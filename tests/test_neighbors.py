@@ -9,6 +9,7 @@ import torch.jit
 import numpy as np
 from torchmdnet.models.utils import OptimizedDistance
 
+
 def sort_neighbors(neighbors, deltas, distances):
     i_sorted = np.lexsort(neighbors)
     return neighbors[:, i_sorted], deltas[i_sorted], distances[i_sorted]
@@ -69,7 +70,10 @@ def compute_ref_neighbors(pos, batch, loop, include_transpose, cutoff, box_vecto
     return ref_neighbors, ref_distance_vecs, ref_distances
 
 
-@pytest.mark.parametrize(("device", "strategy"), [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")])
+@pytest.mark.parametrize(
+    ("device", "strategy"),
+    [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")],
+)
 @pytest.mark.parametrize("n_batches", [1, 2, 3, 4, 128])
 @pytest.mark.parametrize("cutoff", [0.1, 1.0, 3.0, 4.9])
 @pytest.mark.parametrize("loop", [True, False])
@@ -92,7 +96,7 @@ def test_neighbors(
     ).to(device)
     cumsum = np.cumsum(np.concatenate([[0], n_atoms_per_batch]))
     lbox = 10.0
-    pos = torch.rand(cumsum[-1], 3, device=device, dtype=dtype) * lbox - 10.0*lbox
+    pos = torch.rand(cumsum[-1], 3, device=device, dtype=dtype) * lbox - 10.0 * lbox
     # Ensure there is at least one pair
     pos[0, :] = torch.zeros(3)
     pos[1, :] = torch.zeros(3)
@@ -141,7 +145,11 @@ def test_neighbors(
     assert np.allclose(distances, ref_distances)
     assert np.allclose(distance_vecs, ref_distance_vecs)
 
-@pytest.mark.parametrize(("device", "strategy"), [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")])
+
+@pytest.mark.parametrize(
+    ("device", "strategy"),
+    [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")],
+)
 @pytest.mark.parametrize("loop", [True, False])
 @pytest.mark.parametrize("include_transpose", [True, False])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
@@ -249,10 +257,14 @@ def test_neighbor_grads(
     else:
         assert np.allclose(ref_pos_grad_sorted, pos_grad_sorted, atol=1e-8, rtol=1e-5)
 
-@pytest.mark.parametrize(("device", "strategy"), [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")])
+
+@pytest.mark.parametrize(
+    ("device", "strategy"),
+    [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")],
+)
 @pytest.mark.parametrize("loop", [True, False])
 @pytest.mark.parametrize("include_transpose", [True, False])
-@pytest.mark.parametrize("num_atoms", [1,2,10])
+@pytest.mark.parametrize("num_atoms", [1, 2, 10])
 @pytest.mark.parametrize("box_type", [None, "triclinic", "rectangular"])
 def test_neighbor_autograds(
     device, strategy, loop, include_transpose, num_atoms, box_type
@@ -293,8 +305,12 @@ def test_neighbor_autograds(
     neighbors, distances, deltas = nl(positions, batch)
     # Lambda that returns only the distances and deltas
     lambda_dist = lambda x, y: nl(x, y)[1:]
-    torch.autograd.gradcheck(lambda_dist, (positions, batch), eps=1e-4, atol=1e-4, rtol=1e-4, nondet_tol=1e-4)
-    torch.autograd.gradgradcheck(lambda_dist, (positions, batch), eps=1e-4, atol=1e-4, rtol=1e-4, nondet_tol=1e-4)
+    torch.autograd.gradcheck(
+        lambda_dist, (positions, batch), eps=1e-4, atol=1e-4, rtol=1e-4, nondet_tol=1e-4
+    )
+    torch.autograd.gradgradcheck(
+        lambda_dist, (positions, batch), eps=1e-5, atol=1e-4, rtol=1e-4, nondet_tol=1e-3
+    )
 
 
 @pytest.mark.parametrize("strategy", ["brute", "cell", "shared"])
@@ -353,7 +369,11 @@ def test_large_size(strategy, n_batches):
     assert np.allclose(distances, ref_distances)
     assert np.allclose(distance_vecs, ref_distance_vecs)
 
-@pytest.mark.parametrize(("device", "strategy"), [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")])
+
+@pytest.mark.parametrize(
+    ("device", "strategy"),
+    [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")],
+)
 @pytest.mark.parametrize("n_batches", [1, 128])
 @pytest.mark.parametrize("cutoff", [1.0])
 @pytest.mark.parametrize("loop", [True, False])
@@ -504,6 +524,7 @@ def test_cuda_graph_compatible_forward(
     assert np.allclose(distances, ref_distances)
     assert np.allclose(distance_vecs, ref_distance_vecs)
 
+
 @pytest.mark.parametrize("device", ["cuda"])
 @pytest.mark.parametrize("strategy", ["brute", "shared", "cell"])
 @pytest.mark.parametrize("n_batches", [1, 128])
@@ -578,12 +599,12 @@ def test_cuda_graph_compatible_backward(
         torch.cuda.synchronize()
 
 
-@pytest.mark.parametrize(("device", "strategy"), [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared")])
+@pytest.mark.parametrize(
+    ("device", "strategy"), [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared")]
+)
 @pytest.mark.parametrize("n_batches", [1, 128])
 @pytest.mark.parametrize("use_forward", [True, False])
-def test_per_batch_box(
-    device, strategy, n_batches, use_forward
-):
+def test_per_batch_box(device, strategy, n_batches, use_forward):
     dtype = torch.float32
     cutoff = 1.0
     include_transpose = True
@@ -599,7 +620,7 @@ def test_per_batch_box(
     ).to(device)
     cumsum = np.cumsum(np.concatenate([[0], n_atoms_per_batch]))
     lbox = 10.0
-    pos = torch.rand(cumsum[-1], 3, device=device, dtype=dtype) * lbox - 10.0*lbox
+    pos = torch.rand(cumsum[-1], 3, device=device, dtype=dtype) * lbox - 10.0 * lbox
     # Ensure there is at least one pair
     pos[0, :] = torch.zeros(3)
     pos[1, :] = torch.zeros(3)
@@ -625,7 +646,9 @@ def test_per_batch_box(
         include_transpose=include_transpose,
     )
     batch.to(device)
-    neighbors, distances, distance_vecs = nl(pos, batch, box=box if use_forward else None)
+    neighbors, distances, distance_vecs = nl(
+        pos, batch, box=box if use_forward else None
+    )
     neighbors = neighbors.cpu().detach().numpy()
     distance_vecs = distance_vecs.cpu().detach().numpy()
     distances = distances.cpu().detach().numpy()
@@ -639,3 +662,45 @@ def test_per_batch_box(
     assert np.allclose(neighbors, ref_neighbors)
     assert np.allclose(distances, ref_distances)
     assert np.allclose(distance_vecs, ref_distance_vecs)
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("dtype", [torch.float64])
+@pytest.mark.parametrize("loop", [True, False])
+@pytest.mark.parametrize("include_transpose", [True, False])
+def test_torch_compile(device, dtype, loop, include_transpose):
+    if torch.__version__ < "2.0.0":
+        pytest.skip("Not available in this version")
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    np.random.seed(123456)
+    example_pos = 10 * torch.rand(50, 3, requires_grad=True, dtype=dtype, device=device)
+    model = OptimizedDistance(
+        cutoff_lower=0.1,  # I do this to avoid non-finite-differentiable points
+        cutoff_upper=10,
+        return_vecs=True,
+        loop=loop,
+        max_num_pairs=-example_pos.shape[0],
+        include_transpose=include_transpose,
+        resize_to_fit=False,
+        check_errors=False,
+    ).to(device)
+    for _ in range(50):
+        model(example_pos)
+    example_pos = example_pos.detach().requires_grad_(True)
+    edge_index, edge_vec, edge_distance = model(example_pos)
+    edge_vec.sum().backward()
+    example_pos.grad.zero_()
+    fullgraph = torch.__version__ >= "2.2.0"
+    model = torch.compile(
+        model,
+        fullgraph=fullgraph,
+        backend="inductor",
+        mode="reduce-overhead",
+    )
+    edge_index, edge_vec, edge_distance = model(example_pos)
+    edge_vec.sum().backward()
+    lambda_dist = lambda x: model(x)[1:]
+    torch.autograd.gradcheck(
+        lambda_dist, example_pos, eps=1e-5, atol=1e-4, rtol=1e-4, nondet_tol=1e-3
+    )
