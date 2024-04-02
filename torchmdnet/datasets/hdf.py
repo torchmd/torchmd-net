@@ -89,7 +89,7 @@ class HDF5(Dataset):
                         # Watchout for the 1D case, embed can be shared for all samples
                         tmp = torch.tensor(np.array(data), dtype=dtype)
                         if tmp.ndim == 1:
-                            tmp = tmp.unsqueeze(0).expand(size, -1)
+                            tmp = tmp.unsqueeze(-1)
                         self.stored_data[field].append(tmp)
                     self.index.extend(list(zip([i] * size, range(size))))
                     i += 1
