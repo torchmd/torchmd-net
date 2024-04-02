@@ -142,7 +142,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
     return model
 
 
-def load_ensemble(filepath, args=None, device="cpu", return_std=False, **kwargs):
+def load_ensemble(filepath, args=None, device="cpu", **kwargs):
     """Load an ensemble of models from a list of checkpoint files or a zip file.
 
     Args:
@@ -153,7 +153,6 @@ def load_ensemble(filepath, args=None, device="cpu", return_std=False, **kwargs)
 
         args (dict, optional): Arguments for the model. Defaults to None.
         device (str, optional): Device on which the model should be loaded. Defaults to "cpu".
-        return_std (bool, optional): Whether to return the standard deviation of the predictions. Defaults to False.
         **kwargs: Extra keyword arguments for the model, will be passed to :py:mod:`load_model`.
 
     Returns:
@@ -179,11 +178,10 @@ def load_ensemble(filepath, args=None, device="cpu", return_std=False, **kwargs)
         )
     return Ensemble(
         model_list,
-        return_std=return_std,
     )
 
 
-def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
+def load_model(filepath, args=None, device="cpu", **kwargs):
     """Load a model from a checkpoint file.
 
        If a list of paths or a path to a zip file is given, an :py:mod:`Ensemble` model is returned.
@@ -196,7 +194,6 @@ def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
 
         args (dict, optional): Arguments for the model. Defaults to None.
         device (str, optional): Device on which the model should be loaded. Defaults to "cpu".
-        return_std (bool, optional): Whether to return the standard deviation of an Ensemble model. Defaults to False.
         **kwargs: Extra keyword arguments for the model.
 
     Returns:
@@ -205,7 +202,7 @@ def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
     isEnsemble = isinstance(filepath, (list, tuple)) or filepath.endswith(".zip")
     if isEnsemble:
         return load_ensemble(
-            filepath, args=args, device=device, return_std=return_std, **kwargs
+            filepath, args=args, device=device, **kwargs
         )
     assert isinstance(filepath, str)
     ckpt = torch.load(filepath, map_location="cpu")
@@ -494,14 +491,12 @@ class Ensemble(torch.nn.ModuleList):
 
     Args:
         modules (List[nn.Module]): List of :py:mod:`TorchMD_Net` models to average predictions over.
-        return_std (bool, optional): Whether to return the standard deviation of the predictions. Defaults to False. If set to True, the model returns the standard deviation of model ouputs and derivatives.
     """
 
-    def __init__(self, modules: List[nn.Module], return_std: bool = False):
+    def __init__(self, modules: List[nn.Module]):
         for module in modules:
             assert isinstance(module, TorchMD_Net)
         super().__init__(modules)
-        self.return_std = return_std
 
     def forward(
         self,
@@ -546,7 +541,7 @@ class Ensemble(torch.nn.ModuleList):
             extra_args (Dict[str, Tensor], optional): Extra arguments to pass to the prior model.
 
         Returns:
-            Tuple[Tensor, Optional[Tensor], Optional[Tensor], Optional[Tensor]]: The mean output of the models, the mean derivatives, the std of the outputs if return_std is true, the std of the derivatives if return_std is true. 
+            Tuple[Tensor, Tensor, Tensor, Tensor]: The mean output of the models, the mean derivatives, the std of the outputs, and the std of the derivatives.
             
         """
             
@@ -564,7 +559,5 @@ class Ensemble(torch.nn.ModuleList):
         y_std = torch.std(y, dim=0)
         neg_dy_std = torch.std(neg_dy, dim=0)
 
-        if self.return_std:
-            return y_mean, neg_dy_mean, y_std, neg_dy_std
-        else:
-            return y_mean, neg_dy_mean, None, None
+        return y_mean, neg_dy_mean, y_std, neg_dy_std
+
