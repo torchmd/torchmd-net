@@ -487,7 +487,7 @@ class TorchMD_Net(nn.Module):
 class Ensemble(torch.nn.ModuleList):
     """Average predictions over an ensemble of TorchMD-Net models.
 
-       This module behaves like a single TorchMD-Net model, but its forward method returns the average and standard deviation of the predictions over all models it was initialized with.
+       This module behaves similarly to a single TorchMD-Net model, but its forward method returns the average and standard deviation of the predictions over all models it was initialized with.
 
     Args:
         modules (List[nn.Module]): List of :py:mod:`TorchMD_Net` models to average predictions over.
@@ -507,9 +507,11 @@ class Ensemble(torch.nn.ModuleList):
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
         extra_args: Optional[Dict[str, Tensor]] = None,
-    ) -> Tuple[Tensor, Tensor, Optional[Tensor], Optional[Tensor]]:
+    ) -> Tuple[Tensor, Optional[Tensor], Tensor, Optional[Tensor]]:
         """
-        Compute the output of the model.
+        Compute the output of the ensemble of models.
+
+        The predictions are the average over all models in the ensemble.
 
         This function optionally supports periodic boundary conditions with
         arbitrary triclinic boxes.  The box vectors `a`, `b`, and `c` must satisfy
@@ -541,11 +543,10 @@ class Ensemble(torch.nn.ModuleList):
             extra_args (Dict[str, Tensor], optional): Extra arguments to pass to the prior model.
 
         Returns:
-            Tuple[Tensor, Tensor, Tensor, Tensor]: The mean output of the models, the mean derivatives, the std of the outputs, and the std of the derivatives.
+            Tuple[Tensor, Optional[Tensor], Tensor, Optional[Tensor]]: The mean output of the models, the mean negative derivatives, the std of the outputs, and the std of the negative derivatives.
             
         """
             
-
         y = []
         neg_dy = []
         for model in self:

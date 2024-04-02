@@ -246,11 +246,15 @@ def test_gradients(model_name):
         model, (z, pos, batch), eps=1e-4, atol=1e-3, rtol=1e-2, nondet_tol=1e-3
     )
 
-
-def test_ensemble():
+@mark.parametrize("check_script", [True, False])
+def test_ensemble(check_script):
     ckpts = [join(dirname(dirname(__file__)), "tests", "example.ckpt")] * 3
     model = load_model(ckpts[0])
-    ensemble_model = load_model(ckpts, return_std=True)
+
+    if check_script:
+        ensemble_model = torch.jit.script(load_model(ckpts))
+    else:
+        ensemble_model = load_model(ckpts)
     z, pos, batch = create_example_batch(n_atoms=5)
 
     pred, deriv = model(z, pos, batch)
@@ -271,7 +275,11 @@ def test_ensemble():
         with zipfile.ZipFile(ensemble_zip, "w") as zipf:
             for i, ckpt in enumerate(ckpts):
                 zipf.write(ckpt, f"model_{i}.ckpt")
-        ensemble_model = load_model(ensemble_zip, return_std=True)
+
+        if check_script:
+            ensemble_model = torch.jit.script(load_model(ckpts))
+        else:
+            ensemble_model = load_model(ensemble_zip)
         pred_ensemble, deriv_ensemble, y_std, neg_dy_std = ensemble_model(z, pos, batch)
 
     torch.testing.assert_close(pred, pred_ensemble, atol=1e-5, rtol=1e-5)
