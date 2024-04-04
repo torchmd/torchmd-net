@@ -86,6 +86,11 @@ class mdCATH(Dataset):
         # Otherwise, return the list of HDF5 files that passed the filtering criteria
         return [f"cath_dataset_{pdb_id}.h5" for pdb_id in self.to_download.keys()]
 
+    @property
+    def raw_dir(self):
+        # Override the raw_dir property to prevent the creation of a 'raw' directory
+        # The files will be downloaded to the root directory
+        return self.root
     def download(self):
         if not hasattr(self, "to_download") or not self.to_download:
             download_url(opj(self.url, "mdCATH_source.h5"), self.root)
