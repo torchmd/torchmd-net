@@ -76,6 +76,7 @@ class mdCATH(Dataset):
         self.max_gyration_radius = max_gyration_radius
         self.alpha_beta_coil = alpha_beta_coil
         self.numFrames = numFrames
+        self.solid_ss = solid_ss
         self.idx = None
         self.process_data_source()
         # Calculate the total size of the dataset in MB
