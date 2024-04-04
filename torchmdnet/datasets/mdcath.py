@@ -56,6 +56,8 @@ class mdCATH(Dataset):
             Maximum gyration radius (in nm) of the protein structure. Default is None.
         alpha_beta_coil: tuple
             Tuple with the minimum percentage of alpha-helix, beta-sheet and coil residues in the protein structure. Default is None.
+        solid_ss: float
+            minimum percentage of solid secondary structure in the protein structure (alpha + beta)/total_residues * 100. Default is None.
         numFrames: int
             Minimum number of frames in the trajectory in order to be considered. Default is None.
         """
