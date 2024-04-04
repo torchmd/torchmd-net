@@ -76,8 +76,12 @@ class mdCATH(Dataset):
         self.numFrames = numFrames
         self.idx = None
         self.process_data_source()
+        # Calculate the total size of the dataset in MB
+        self.total_size_mb = self.calculate_dataset_size()
+        
         print(f"Total number of domains: {len(self.to_download.keys())}")
         print(f"Total number of conformers: {self.num_conformers}")
+        print(f"Total size of dataset: {self.total_size_mb} MB")
 
     @property
     def raw_file_names(self):
@@ -97,8 +101,13 @@ class mdCATH(Dataset):
             download_url(opj(self.url, "mdCATH_source.h5"), self.root)
             return
         for pdb_id in self.to_download.keys():
-            download_url(opj(self.url, f"cath_dataset_{pdb_id}.h5"), self.root)
-
+    def calculate_dataset_size(self):
+        total_size_bytes = 0
+        for pdb_id in self.to_download.keys():
+            file_name = f"cath_noh_dataset_{pdb_id}.h5" if self.noh_mode else f"cath_dataset_{pdb_id}.h5"
+            total_size_bytes += os.path.getsize(opj(self.root, file_name))
+        total_size_mb = round(total_size_bytes / (1024 * 1024), 4)
+        return total_size_mb
     def process_data_source(self):
         print("Processing mdCATH source")
         data_info_path = opj(self.root, "mdCATH_source.h5")
