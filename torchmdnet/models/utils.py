@@ -434,6 +434,49 @@ class CosineCutoff(nn.Module):
             return cutoffs
 
 
+class MLP(nn.Module):
+    """A simple multi-layer perceptron with a given number of layers and hidden channels.
+
+    Args:
+        in_channels (int): Number of input features.
+        out_channels (int): Number of output features.
+        hidden_channels (int): Number of hidden features.
+        activation (str): Activation function to use.
+        num_layers (int, optional): Number of layers. Defaults to 0.
+        dtype (torch.dtype, optional): Data type to use. Defaults to torch.float32.
+    """
+
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        hidden_channels,
+        activation,
+        num_layers=0,
+        dtype=torch.float32,
+    ):
+        super(MLP, self).__init__()
+        act_class = act_class_mapping[activation]
+        self.act = act_class()
+        self.layers = nn.Sequential()
+        self.layers.append(nn.Linear(in_channels, hidden_channels, dtype=dtype))
+        self.layers.append(self.act)
+        for _ in range(num_layers):
+            self.layers.append(nn.Linear(hidden_channels, hidden_channels, dtype=dtype))
+            self.layers.append(self.act)
+        self.layers.append(nn.Linear(hidden_channels, out_channels, dtype=dtype))
+
+    def reset_parameters(self):
+        for layer in self.layers:
+            if isinstance(layer, nn.Linear):
+                nn.init.xavier_uniform_(layer.weight)
+                layer.bias.data.fill_(0)
+
+    def forward(self, x):
+        x = self.layers(x)
+        return x
+
+
 class GatedEquivariantBlock(nn.Module):
     """Gated Equivariant Block as defined in Schütt et al. (2021):
     Equivariant message passing for the prediction of tensorial properties and molecular spectra
@@ -462,21 +505,20 @@ class GatedEquivariantBlock(nn.Module):
         )
 
         act_class = act_class_mapping[activation]
-        self.update_net = nn.Sequential(
-            nn.Linear(hidden_channels * 2, intermediate_channels, dtype=dtype),
-            act_class(),
-            nn.Linear(intermediate_channels, out_channels * 2, dtype=dtype),
+        self.update_net = MLP(
+            in_channels=hidden_channels * 2,
+            out_channels=out_channels * 2,
+            hidden_channels=intermediate_channels,
+            activation=activation,
+            num_layers=0,
+            dtype=dtype,
         )
-
         self.act = act_class() if scalar_activation else None
 
     def reset_parameters(self):
         nn.init.xavier_uniform_(self.vec1_proj.weight)
         nn.init.xavier_uniform_(self.vec2_proj.weight)
-        nn.init.xavier_uniform_(self.update_net[0].weight)
-        self.update_net[0].bias.data.fill_(0)
-        nn.init.xavier_uniform_(self.update_net[2].weight)
-        self.update_net[2].bias.data.fill_(0)
+        self.update_net.reset_parameters()
 
     def forward(self, x, v):
         vec1_buffer = self.vec1_proj(v)

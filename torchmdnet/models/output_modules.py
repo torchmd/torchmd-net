@@ -6,7 +6,12 @@ from abc import abstractmethod, ABCMeta
 from typing import Optional
 import torch
 from torch import nn
-from torchmdnet.models.utils import act_class_mapping, GatedEquivariantBlock, scatter
+from torchmdnet.models.utils import (
+    act_class_mapping,
+    GatedEquivariantBlock,
+    scatter,
+    MLP,
+)
 from torchmdnet.utils import atomic_masses
 from torchmdnet.extensions import is_current_stream_capturing
 from warnings import warn
@@ -60,24 +65,23 @@ class Scalar(OutputModel):
         allow_prior_model=True,
         reduce_op="sum",
         dtype=torch.float,
+        **kwargs
     ):
         super(Scalar, self).__init__(
             allow_prior_model=allow_prior_model, reduce_op=reduce_op
         )
-        act_class = act_class_mapping[activation]
-        self.output_network = nn.Sequential(
-            nn.Linear(hidden_channels, hidden_channels // 2, dtype=dtype),
-            act_class(),
-            nn.Linear(hidden_channels // 2, 1, dtype=dtype),
+        self.output_network = MLP(
+            in_channels=hidden_channels,
+            out_channels=1,
+            hidden_channels=hidden_channels // 2,
+            activation=activation,
+            num_layers=kwargs.get("num_layers", 0),
+            dtype=dtype,
         )
-
         self.reset_parameters()
 
     def reset_parameters(self):
-        nn.init.xavier_uniform_(self.output_network[0].weight)
-        self.output_network[0].bias.data.fill_(0)
-        nn.init.xavier_uniform_(self.output_network[2].weight)
-        self.output_network[2].bias.data.fill_(0)
+        self.output_network.reset_parameters()
 
     def pre_reduce(self, x, v: Optional[torch.Tensor], z, pos, batch):
         return self.output_network(x)
@@ -91,10 +95,13 @@ class EquivariantScalar(OutputModel):
         allow_prior_model=True,
         reduce_op="sum",
         dtype=torch.float,
+        **kwargs
     ):
         super(EquivariantScalar, self).__init__(
             allow_prior_model=allow_prior_model, reduce_op=reduce_op
         )
+        if kwargs.get("num_layers", 0) > 0:
+            warn("num_layers is not used in EquivariantScalar")
         self.output_network = nn.ModuleList(
             [
                 GatedEquivariantBlock(
@@ -125,7 +132,12 @@ class EquivariantScalar(OutputModel):
 
 class DipoleMoment(Scalar):
     def __init__(
-        self, hidden_channels, activation="silu", reduce_op="sum", dtype=torch.float
+        self,
+        hidden_channels,
+        activation="silu",
+        reduce_op="sum",
+        dtype=torch.float,
+        **kwargs
     ):
         super(DipoleMoment, self).__init__(
             hidden_channels,
@@ -133,6 +145,7 @@ class DipoleMoment(Scalar):
             allow_prior_model=False,
             reduce_op=reduce_op,
             dtype=dtype,
+            **kwargs
         )
         atomic_mass = torch.from_numpy(atomic_masses).to(dtype)
         self.register_buffer("atomic_mass", atomic_mass)
@@ -152,7 +165,12 @@ class DipoleMoment(Scalar):
 
 class EquivariantDipoleMoment(EquivariantScalar):
     def __init__(
-        self, hidden_channels, activation="silu", reduce_op="sum", dtype=torch.float
+        self,
+        hidden_channels,
+        activation="silu",
+        reduce_op="sum",
+        dtype=torch.float,
+        **kwargs
     ):
         super(EquivariantDipoleMoment, self).__init__(
             hidden_channels,
@@ -160,6 +178,7 @@ class EquivariantDipoleMoment(EquivariantScalar):
             allow_prior_model=False,
             reduce_op=reduce_op,
             dtype=dtype,
+            **kwargs
         )
         atomic_mass = torch.from_numpy(atomic_masses).to(dtype)
         self.register_buffer("atomic_mass", atomic_mass)
@@ -180,16 +199,23 @@ class EquivariantDipoleMoment(EquivariantScalar):
 
 class ElectronicSpatialExtent(OutputModel):
     def __init__(
-        self, hidden_channels, activation="silu", reduce_op="sum", dtype=torch.float
+        self,
+        hidden_channels,
+        activation="silu",
+        reduce_op="sum",
+        dtype=torch.float,
+        **kwargs
     ):
         super(ElectronicSpatialExtent, self).__init__(
             allow_prior_model=False, reduce_op=reduce_op
         )
-        act_class = act_class_mapping[activation]
-        self.output_network = nn.Sequential(
-            nn.Linear(hidden_channels, hidden_channels // 2, dtype=dtype),
-            act_class(),
-            nn.Linear(hidden_channels // 2, 1, dtype=dtype),
+        self.output_network = MLP(
+            in_channels=hidden_channels,
+            out_channels=1,
+            hidden_channels=hidden_channels // 2,
+            activation=activation,
+            num_layers=kwargs.get("num_layers", 0),
+            dtype=dtype,
         )
         atomic_mass = torch.from_numpy(atomic_masses).to(dtype)
         self.register_buffer("atomic_mass", atomic_mass)
@@ -197,10 +223,7 @@ class ElectronicSpatialExtent(OutputModel):
         self.reset_parameters()
 
     def reset_parameters(self):
-        nn.init.xavier_uniform_(self.output_network[0].weight)
-        self.output_network[0].bias.data.fill_(0)
-        nn.init.xavier_uniform_(self.output_network[2].weight)
-        self.output_network[2].bias.data.fill_(0)
+        self.output_network.reset_parameters()
 
     def pre_reduce(self, x, v: Optional[torch.Tensor], z, pos, batch):
         x = self.output_network(x)
@@ -219,7 +242,12 @@ class EquivariantElectronicSpatialExtent(ElectronicSpatialExtent):
 
 class EquivariantVectorOutput(EquivariantScalar):
     def __init__(
-        self, hidden_channels, activation="silu", reduce_op="sum", dtype=torch.float
+        self,
+        hidden_channels,
+        activation="silu",
+        reduce_op="sum",
+        dtype=torch.float,
+        **kwargs
     ):
         super(EquivariantVectorOutput, self).__init__(
             hidden_channels,
@@ -227,6 +255,7 @@ class EquivariantVectorOutput(EquivariantScalar):
             allow_prior_model=False,
             reduce_op="sum",
             dtype=dtype,
+            **kwargs
         )
 
     def pre_reduce(self, x, v, z, pos, batch):
