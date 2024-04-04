@@ -29,6 +29,7 @@ class mdCATH(Dataset):
         min_gyration_radius=None,
         max_gyration_radius=None,
         alpha_beta_coil=None,
+        solid_ss = None,
         numFrames=None,
     ):
         """mdCATH dataset class for PyTorch Geometric to load protein structures and dynamics from the mdCATH dataset.
@@ -142,14 +143,17 @@ class mdCATH(Dataset):
                         > self.max_gyration_radius
                     ):
                         continue
-                    if self.alpha_beta_coil is not None:
+                    if self.alpha_beta_coil is not None or self.solid_ss is not None:
                         alpha = pdb_group[temp][replica].attrs["alpha"]
                         beta = pdb_group[temp][replica].attrs["beta"]
                         coil = pdb_group[temp][replica].attrs["coil"]
-                        if not np.isclose(
-                            [alpha, beta, coil], list(self.alpha_beta_coil)
-                        ).all():
-                            continue
+                        solid_ss = (alpha + beta) / pdb_group.attrs["numResidues"] * 100
+                        if self.solid_ss is not None:
+                            if solid_ss < self.solid_ss:
+                                continue
+                        else:
+                            if not np.isclose([alpha, beta, coil], list(self.alpha_beta_coil)).all():
+                                continue
                     if pdb not in self.to_download:
                         self.to_download[pdb] = []
                     self.to_download[pdb].append((temp, replica))
