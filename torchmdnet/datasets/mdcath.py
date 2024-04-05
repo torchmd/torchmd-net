@@ -34,7 +34,7 @@ class mdCATH(Dataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
-        preload_dataset_limit=None,
+
         numAtoms=5000,
         numNoHAtoms=None,
         numResidues=1000,
@@ -53,6 +53,8 @@ class mdCATH(Dataset):
         -----------
         root: str
             Root directory where the dataset should be stored. Data will be downloaded to 'root/'.
+        preload_dataset_limit: int
+            Maximum size of the dataset in MB to load into memory. If the dataset is larger than this limit, a warning will be printed. Default is 1024 MB.
         numAtoms: int
             Max number of atoms in the protein structure.
         numNoHAtoms: int
