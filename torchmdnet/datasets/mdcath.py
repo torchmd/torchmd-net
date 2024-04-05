@@ -213,7 +213,6 @@ class mdCATH(Dataset):
             group = f[pdb][f"sims{group_info[0]}K"][group_info[1]]
             coords = group["coords"][()][:: self.skipFrames, :, :]
             forces = group["forces"][()][:: self.skipFrames, :, :]
-            # if any assertion fail print the same message
             # coords and forces shape (num_frames, num_atoms, 3)
 
             assert (
