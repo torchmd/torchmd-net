@@ -140,9 +140,15 @@ class mdCATH(Dataset):
                 domains, total=len(domains), desc="Processing mdCATH source"
             ):
                 pdb_group = f[pdb]
-                if pdb_group.attrs["numProteinAtoms"] > self.numAtoms:
+                if (
+                    self.numAtoms is not None
+                    and pdb_group.attrs["numProteinAtoms"] > self.numAtoms
+                ):
                     continue
-                if pdb_group.attrs["numResidues"] > self.numResidues:
+                if (
+                    self.numResidues is not None
+                    and pdb_group.attrs["numResidues"] > self.numResidues
+                ):
                     continue
                 if (
                     self.numNoHAtoms is not None
