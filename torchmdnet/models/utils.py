@@ -437,12 +437,21 @@ class CosineCutoff(nn.Module):
 class MLP(nn.Module):
     """A simple multi-layer perceptron with a given number of layers and hidden channels.
 
+    The simplest MLP has no hidden layers and is composed of two linear layers with a non-linear activation function in between:
+
+    .. math::
+
+        \text{MLP}(x) = \text{Linear}_o(\text{act}(\text{Linear}_i(x)))
+
+    Where :math:`\text{Linear}_i` has input size :math:`\text{in_channels}` and output size :math:`\text{hidden_channels}` and :math:`\text{Linear}_o` has input size :math:`\text{hidden_channels}` and output size :math:`\text{out_channels}`.
+
+
     Args:
         in_channels (int): Number of input features.
         out_channels (int): Number of output features.
         hidden_channels (int): Number of hidden features.
         activation (str): Activation function to use.
-        num_layers (int, optional): Number of layers. Defaults to 0.
+        num_hidden_layers (int, optional): Number of hidden layers. Defaults to 0.
         dtype (torch.dtype, optional): Data type to use. Defaults to torch.float32.
     """
 
@@ -452,7 +461,7 @@ class MLP(nn.Module):
         out_channels,
         hidden_channels,
         activation,
-        num_layers=0,
+        num_hidden_layers=0,
         dtype=torch.float32,
     ):
         super(MLP, self).__init__()
@@ -461,7 +470,7 @@ class MLP(nn.Module):
         self.layers = nn.Sequential()
         self.layers.append(nn.Linear(in_channels, hidden_channels, dtype=dtype))
         self.layers.append(self.act)
-        for _ in range(num_layers):
+        for _ in range(num_hidden_layers):
             self.layers.append(nn.Linear(hidden_channels, hidden_channels, dtype=dtype))
             self.layers.append(self.act)
         self.layers.append(nn.Linear(hidden_channels, out_channels, dtype=dtype))
@@ -510,7 +519,7 @@ class GatedEquivariantBlock(nn.Module):
             out_channels=out_channels * 2,
             hidden_channels=intermediate_channels,
             activation=activation,
-            num_layers=0,
+            num_hidden_layers=0,
             dtype=dtype,
         )
         self.act = act_class() if scalar_activation else None

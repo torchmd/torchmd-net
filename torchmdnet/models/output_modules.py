@@ -25,6 +25,7 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
     Derive this class to make custom output models.
     As an example, have a look at the :py:mod:`torchmdnet.output_modules.Scalar` output model.
     """
+
     def __init__(self, allow_prior_model, reduce_op):
         super(OutputModel, self).__init__()
         self.allow_prior_model = allow_prior_model
@@ -75,7 +76,7 @@ class Scalar(OutputModel):
             out_channels=1,
             hidden_channels=hidden_channels // 2,
             activation=activation,
-            num_layers=kwargs.get("num_layers", 0),
+            num_hidden_layers=kwargs.get("num_layers", 0),
             dtype=dtype,
         )
         self.reset_parameters()
@@ -214,7 +215,7 @@ class ElectronicSpatialExtent(OutputModel):
             out_channels=1,
             hidden_channels=hidden_channels // 2,
             activation=activation,
-            num_layers=kwargs.get("num_layers", 0),
+            num_hidden_layers=kwargs.get("num_layers", 0),
             dtype=dtype,
         )
         atomic_mass = torch.from_numpy(atomic_masses).to(dtype)
