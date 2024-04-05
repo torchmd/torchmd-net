@@ -127,6 +127,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         activation=args["activation"],
         reduce_op=args["reduce_op"],
         dtype=dtype,
+        num_hidden_layers=args.get("output_mlp_num_layers", 0),
     )
 
     # combine representation and output network
@@ -232,6 +233,13 @@ def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
             model.prior_model[-1].enable = True
 
     state_dict = {re.sub(r"^model\.", "", k): v for k, v in ckpt["state_dict"].items()}
+    # In ET, before we had output_model.output_network.{0,1}.update_net.[0-9].{weight,bias}
+    # Now we have output_model.output_network.{0,1}.update_net.layers.[0-9].{weight,bias}
+    # This change was introduced in https://github.com/torchmd/torchmd-net/pull/314
+    state_dict = {
+        re.sub(r"update_net\.(\d+)\.", r"update_net.layers.\1.", k): v
+        for k, v in state_dict.items()
+    }
     model.load_state_dict(state_dict)
     return model.to(device)
 
