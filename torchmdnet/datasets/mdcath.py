@@ -137,42 +137,51 @@ class mdCATH(Dataset):
                 for temp in self.temperatures:
                     if temp not in pdb_group.keys():
                         continue
-                for replica in pdb_group[temp].keys():
-                    if (
-                        self.numFrames is not None
-                        and pdb_group[temp][replica].attrs["numFrames"] < self.numFrames
-                    ):
-                        continue
-                    if (
-                        self.min_gyration_radius is not None
-                        and pdb_group[temp][replica].attrs["min_gyration_radius"]
-                        < self.min_gyration_radius
-                    ):
-                        continue
-                    if (
-                        self.max_gyration_radius is not None
-                        and pdb_group[temp][replica].attrs["max_gyration_radius"]
-                        > self.max_gyration_radius
-                    ):
-                        continue
-                    if self.alpha_beta_coil is not None or self.solid_ss is not None:
-                        alpha = pdb_group[temp][replica].attrs["alpha"]
-                        beta = pdb_group[temp][replica].attrs["beta"]
-                        coil = pdb_group[temp][replica].attrs["coil"]
-                        solid_ss = (alpha + beta) / pdb_group.attrs["numResidues"] * 100
-                        if self.solid_ss is not None:
-                            if solid_ss < self.solid_ss:
-                                continue
-                        else:
-                            if not np.isclose([alpha, beta, coil], list(self.alpha_beta_coil)).all():
-                                continue
-                    if pdb not in self.to_download:
-                        self.to_download[pdb] = []
-                    self.to_download[pdb].append((temp, replica))
-                    # append the number of frames of the trajectory to the total number of molecules
-                    self.num_conformers += math.ceil(
-                        pdb_group[temp][replica].attrs["numFrames"] / self.skipFrames
-                    )
+                    for replica in pdb_group[temp].keys():
+                        if (
+                            self.numFrames is not None
+                            and pdb_group[temp][replica].attrs["numFrames"]
+                            < self.numFrames
+                        ):
+                            continue
+                        if (
+                            self.min_gyration_radius is not None
+                            and pdb_group[temp][replica].attrs["min_gyration_radius"]
+                            < self.min_gyration_radius
+                        ):
+                            continue
+                        if (
+                            self.max_gyration_radius is not None
+                            and pdb_group[temp][replica].attrs["max_gyration_radius"]
+                            > self.max_gyration_radius
+                        ):
+                            continue
+                        if (
+                            self.alpha_beta_coil is not None
+                            or self.solid_ss is not None
+                        ):
+                            alpha = pdb_group[temp][replica].attrs["alpha"]
+                            beta = pdb_group[temp][replica].attrs["beta"]
+                            coil = pdb_group[temp][replica].attrs["coil"]
+                            solid_ss = (
+                                (alpha + beta) / pdb_group.attrs["numResidues"] * 100
+                            )
+                            if self.solid_ss is not None:
+                                if solid_ss < self.solid_ss:
+                                    continue
+                            else:
+                                if not np.isclose(
+                                    [alpha, beta, coil], list(self.alpha_beta_coil)
+                                ).all():
+                                    continue
+                        if pdb not in self.to_download:
+                            self.to_download[pdb] = []
+                        self.to_download[pdb].append((temp, replica))
+                        # append the number of frames of the trajectory to the total number of molecules
+                        self.num_conformers += math.ceil(
+                            pdb_group[temp][replica].attrs["numFrames"]
+                            / self.skipFrames
+                        )
 
     def len(self):
         return self.num_conformers
