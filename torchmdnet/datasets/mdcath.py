@@ -12,6 +12,21 @@ import numpy as np
 from torch_geometric.data import Dataset, download_url, Data
 
 
+def get_pdb_list(pdb_list):
+    # pdb list could be a list of pdb ids or a file with the pdb ids
+    if isinstance(pdb_list, list):
+        return pdb_list
+    elif isinstance(pdb_list, str):
+        if os.path.exists(pdb_list):
+            print(f"Reading PDB list from {pdb_list}")
+            with open(pdb_list, "r") as f:
+                return [line.strip() for line in f]
+        else:
+            raise FileNotFoundError(f"File {pdb_list} not found")
+    else:
+        return None
+
+
 class mdCATH(Dataset):
     def __init__(
         self,
@@ -48,7 +63,7 @@ class mdCATH(Dataset):
             List of temperatures (in Kelvin) to download. Default is ["348"]. Available temperatures are ['320', '348', '379', '413', '450']
         skipFrames: int
             Number of frames to skip in the trajectory. Default is 1.
-        pdb_list: list
+        pdb_list: list or str
             List of PDB IDs to download. If None, all available PDB IDs from 'mdcath_source.h5' will be downloaded.
         min_gyration_radius: float
             Minimum gyration radius (in nm) of the protein structure. Default is None.
@@ -71,7 +86,7 @@ class mdCATH(Dataset):
         self.numResidues = numResidues
         self.temperatures = temperatures
         self.skipFrames = skipFrames
-        self.pdb_list = pdb_list
+        self.pdb_list = get_pdb_list(pdb_list)
         self.min_gyration_radius = min_gyration_radius
         self.max_gyration_radius = max_gyration_radius
         self.alpha_beta_coil = alpha_beta_coil
