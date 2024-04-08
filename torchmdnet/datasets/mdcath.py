@@ -211,10 +211,10 @@ class mdCATH(Dataset):
 
     def process_specific_group(self, pdb, file, group_info):
         with h5py.File(file, "r") as f:
-            z = f[pdb]["z"][()]
+            z = f[pdb]["z"][:]
             group = f[pdb][f"sims{group_info[0]}K"][group_info[1]]
-            coords = group["coords"][()][:: self.skipFrames, :, :]
-            forces = group["forces"][()][:: self.skipFrames, :, :]
+            coords = group["coords"][::self.skipFrames, :, :]
+            forces = group["forces"][::self.skipFrames, :, :]
             # coords and forces shape (num_frames, num_atoms, 3)
 
             assert (
@@ -233,7 +233,7 @@ class mdCATH(Dataset):
                 group["forces"].attrs["unit"] == "kcal/mol/Angstrom"
             ), f"Forces unit is not kcal/mol/Angstrom: {group['forces'].attrs['unit']}"
 
-            return [z, coords, forces]
+        return (z, coords, forces)
 
     def _setup_idx(self):
         files = [
