@@ -236,31 +236,31 @@ class mdCATH(Dataset):
         return (z, coords, forces)
 
     def _setup_idx(self):
-        files = [
-            opj(self.root, f"cath_dataset_{pdb_id}.h5")
-            for pdb_id in self.to_download.keys()
-        ]
+        if self.noh_mode:
+            files = [opj(self.root, f"cath_noh_dataset_{pdb_id}.h5") for pdb_id in self.to_download.keys()]
+        else:
+            files = [opj(self.root, f"cath_dataset_{pdb_id}.h5") for pdb_id in self.to_download.keys()]
         self.idx = []
         for i, (pdb, group_info) in enumerate(self.to_download.items()):
             for temp, replica in group_info:
+                # data will return a tuple with the z, coords and forces
                 data = self.process_specific_group(pdb, files[i], (temp, replica))
+                # conformer_indices is a list with the indices of the conformers, from the coords (i.e. data[1])
                 conformer_indices = range(data[1].shape[0])
-                self.idx.extend(
-                    [
-                        tuple([data[0], data[1][j], data[2][j], [j]])
-                        for j in conformer_indices
-                    ]
-                )
-        assert (
-            len(self.idx) == self.num_conformers
-        ), f"Mismatch between number of conformers and idxs: {self.num_conformers} vs {len(self.idx)}"
-
-    def get(self, idx):
+                d = [Data(z=data[0], pos=data[1][j], neg_dy=data[2][j]) for j in conformer_indices]
+                self.idx.extend(d)  
+                
+        assert (len(self.idx) == self.num_conformers), f"Mismatch between number of conformers and idxs: {self.num_conformers} vs {len(self.idx)}"
+        
+    def get(self, element):
         data = Data()
         if self.idx is None:
+            # this process will be performed, num_workers * num_gpus 
+            print("Setting up idx, this may take a while...")
             self._setup_idx()
-        *fields_data, i = self.idx[idx]
-        data.z = torch.tensor(fields_data[0][i], dtype=torch.long)
-        data.pos = torch.tensor(fields_data[1][i], dtype=torch.float32)
-        data.neg_dy = torch.tensor(fields_data[2][i], dtype=torch.float32)
+        # fields_data is a data object with the z, pos and neg_dy
+        fields_data = self.idx[element]
+        data.z = torch.tensor(fields_data.z, dtype=torch.long)
+        data.pos = torch.tensor(fields_data.pos, dtype=torch.float32)
+        data.neg_dy = torch.tensor(fields_data.neg_dy, dtype=torch.float32)
         return data
