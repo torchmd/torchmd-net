@@ -70,6 +70,11 @@ class LNNP(LightningModule):
 
         if self.hparams.load_model:
             self.model = load_model(self.hparams.load_model, args=self.hparams)
+            if self.hparams.freeze_representation:
+                for p in self.model.representation_model.parameters():
+                    p.requires_grad = False
+            if self.hparams.reset_output_model:
+                self.model.output_model.reset_parameters()
         else:
             self.model = create_model(self.hparams, prior_model, mean, std)
 
