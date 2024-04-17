@@ -65,6 +65,12 @@ class LNNP(LightningModule):
             hparams["charge"] = False
         if "spin" not in hparams:
             hparams["spin"] = False
+        if "overwrite_representation" not in hparams:
+            hparams["overwrite_representation"] = None
+        if "freeze_representation" not in hparams:
+            hparams["freeze_representation"] = False
+        if "reset_output_model" not in hparams:
+            hparams["reset_output_model"] = False
 
         self.save_hyperparameters(hparams)
 
