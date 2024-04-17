@@ -70,13 +70,20 @@ class LNNP(LightningModule):
 
         if self.hparams.load_model:
             self.model = load_model(self.hparams.load_model, args=self.hparams)
-            if self.hparams.freeze_representation:
-                for p in self.model.representation_model.parameters():
-                    p.requires_grad = False
             if self.hparams.reset_output_model:
                 self.model.output_model.reset_parameters()
         else:
             self.model = create_model(self.hparams, prior_model, mean, std)
+
+        if self.hparams.overwrite_representation:
+            ckpt = torch.load(self.hparams.overwrite_representation, map_location="cpu")
+            self.model.representation_model.load_state_dict(
+                ckpt["representation_model"]
+            )
+
+        if self.hparams.freeze_representation:
+            for p in self.model.representation_model.parameters():
+                p.requires_grad = False
 
         # initialize exponential smoothing
         self.ema = None
