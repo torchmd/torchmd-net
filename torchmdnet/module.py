@@ -75,13 +75,13 @@ class LNNP(LightningModule):
         else:
             self.model = create_model(self.hparams, prior_model, mean, std)
 
-        if self.hparams.overwrite_representation:
-            ckpt = torch.load(self.hparams.overwrite_representation, map_location="cpu")
+        if hparams["overwrite_representation"] is not None:
+            ckpt = torch.load(hparams["overwrite_representation"], map_location="cpu")
             self.model.representation_model.load_state_dict(
                 ckpt["representation_model"]
             )
 
-        if self.hparams.freeze_representation:
+        if hparams["freeze_representation"]:
             for p in self.model.representation_model.parameters():
                 p.requires_grad = False
 
