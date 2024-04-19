@@ -38,7 +38,7 @@ def test_vector_equivariance(model_name):
             [-0.0626055, 0.3134752, 0.9475304],
         ]
     )
-    if model_name == "equivariant_transformer"
+    if model_name == "equivariant_transformer":
         model = create_model(
             load_example_args(
                 model_name,
@@ -46,7 +46,7 @@ def test_vector_equivariance(model_name):
                 output_model="VectorOutput",
             )
         )
-    if model_name == "tensornet"
+    if model_name == "tensornet":
         model = create_model(
             load_example_args(
                 model_name,
