@@ -124,7 +124,7 @@ class TensorNet(nn.Module):
             (default: :obj:`True`)
         check_errors (bool, optional): Whether to check for errors in the distance module.
             (default: :obj:`True`)
-        vector_output (bool, optional): Whether to return 
+        vector_output (bool, optional): Whether to return vector features per atom
     """
 
     def __init__(
