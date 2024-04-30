@@ -197,14 +197,13 @@ class mdCATH(Dataset):
                                     [alpha, beta, coil], list(self.alpha_beta_coil)
                                 ).all():
                                     continue
-                        if pdb not in self.to_download:
-                            self.to_download[pdb] = []
-                        self.to_download[pdb].append((temp, replica))
-                        # append the number of frames of the trajectory to the total number of molecules
-                        self.num_conformers += math.ceil(
-                            pdb_group[temp][replica].attrs["numFrames"]
-                            / self.skipFrames
-                        )
+                                
+                            if pdb not in self.to_download:
+                                self.to_download[pdb] = []
+                            num_frames = math.ceil(pdb_group[temp][replica].attrs["numFrames"]/self.skipFrames)
+                            self.to_download[pdb].append((temp, replica, num_frames))
+                            # append the number of frames of the trajectory to the total number of molecules
+                            self.num_conformers += num_frames
 
     def len(self):
         return self.num_conformers
