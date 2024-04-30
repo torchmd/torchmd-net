@@ -262,12 +262,12 @@ class mdCATH(Dataset):
     def get(self, element):
         data = Data()
         if self.idx is None:
-            # this process will be performed, num_workers * num_gpus 
-            print("Setting up idx, this may take a while...")
+            # this process will be performed, num_workers * num_gpus (one per thread)
             self._setup_idx()
-        # fields_data is a data object with the z, pos and neg_dy
-        fields_data = self.idx[element]
-        data.z = torch.tensor(fields_data.z, dtype=torch.long)
-        data.pos = torch.tensor(fields_data.pos, dtype=torch.float32)
-        data.neg_dy = torch.tensor(fields_data.neg_dy, dtype=torch.float32)
+        # fields_data is a tuple with the file, pdb, temp, replica, conf_idx
+        pdb_id, file_path, temp, replica, conf_idx = self.idx[element]
+        z, coords, forces = self.process_specific_group(pdb_id, file_path, temp, replica, conf_idx)
+        data.z = torch.tensor(z, dtype=torch.long)
+        data.pos = torch.tensor(coords, dtype=torch.float)
+        data.neg_dy = torch.tensor(forces, dtype=torch.float)
         return data
