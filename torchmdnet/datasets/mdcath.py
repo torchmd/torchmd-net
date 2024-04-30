@@ -209,6 +209,18 @@ class mdCATH(Dataset):
     def len(self):
         return self.num_conformers
 
+    def _setup_idx(self):
+        files = [opj(self.root, f"mdcath_dataset_{pdb_id}.h5") for pdb_id in self.to_download.keys()]
+        self.idx = []
+        for i, (pdb, group_info) in enumerate(self.to_download.items()):
+            for temp, replica, num_frames in group_info:
+                # build the catalog here for each conformer
+                d = [(pdb, files[i], temp, replica, conf_id) for conf_id in range(num_frames)]
+                self.idx.extend(d)  
+                
+        assert (len(self.idx) == self.num_conformers), f"Mismatch between number of conformers and idxs: {self.num_conformers} vs {len(self.idx)}"
+    
+    
     def process_specific_group(self, pdb, file, temp, repl, conf_idx):
         # use the read_direct and np.s_ to get the coords and forces of interest directly
         conf_idx = conf_idx*self.skipFrames 
@@ -241,24 +253,7 @@ class mdCATH(Dataset):
             ), f"Forces unit is not kcal/mol/Angstrom: {group['forces'].attrs['unit']}"
 
         return (z, coords, forces)
-
-    def _setup_idx(self):
-        if self.noh_mode:
-            files = [opj(self.root, f"cath_noh_dataset_{pdb_id}.h5") for pdb_id in self.to_download.keys()]
-        else:
-            files = [opj(self.root, f"cath_dataset_{pdb_id}.h5") for pdb_id in self.to_download.keys()]
-        self.idx = []
-        for i, (pdb, group_info) in enumerate(self.to_download.items()):
-            for temp, replica in group_info:
-                # data will return a tuple with the z, coords and forces
-                data = self.process_specific_group(pdb, files[i], (temp, replica))
-                # conformer_indices is a list with the indices of the conformers, from the coords (i.e. data[1])
-                conformer_indices = range(data[1].shape[0])
-                d = [Data(z=data[0], pos=data[1][j], neg_dy=data[2][j]) for j in conformer_indices]
-                self.idx.extend(d)  
-                
-        assert (len(self.idx) == self.num_conformers), f"Mismatch between number of conformers and idxs: {self.num_conformers} vs {len(self.idx)}"
-        
+    
     def get(self, element):
         data = Data()
         if self.idx is None:
