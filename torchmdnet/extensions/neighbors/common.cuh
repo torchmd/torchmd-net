@@ -34,7 +34,7 @@ inline Accessor<scalar_t, num_dims> get_accessor(const Tensor& tensor) {
     return tensor.packed_accessor32<scalar_t, num_dims, torch::RestrictPtrTraits>();
 };
 
-template <typename scalar_t> __device__ __forceinline__ scalar_t sqrt_(scalar_t x){};
+template <typename scalar_t> __device__ __forceinline__ scalar_t sqrt_(scalar_t x){return ::sqrt(x);};
 template <> __device__ __forceinline__ float sqrt_(float x) {
     return ::sqrtf(x);
 };
