@@ -109,7 +109,7 @@ class mdCATH(Dataset):
         if not hasattr(self, "to_download"):
             return ["mdCATH_source.h5"]
         # Otherwise, return the list of HDF5 files that passed the filtering criteria
-        return [f"cath_dataset_{pdb_id}.h5" for pdb_id in self.to_download.keys()]
+        return [f"mdcath_dataset_{pdb_id}.h5" for pdb_id in self.to_download.keys()]
 
     @property
     def raw_dir(self):
@@ -121,10 +121,15 @@ class mdCATH(Dataset):
             download_url(opj(self.url, "mdCATH_source.h5"), self.root)
             return
         for pdb_id in self.to_download.keys():
+            file_name = f"mdcath_dataset_{pdb_id}.h5"
+            file_path = opj(self.raw_dir, file_name)
+            if not os.path.exists(file_path):
+                download_url(opj(self.url, file_name), self.root)
+
     def calculate_dataset_size(self):
         total_size_bytes = 0
         for pdb_id in self.to_download.keys():
-            file_name = f"cath_noh_dataset_{pdb_id}.h5" if self.noh_mode else f"cath_dataset_{pdb_id}.h5"
+            file_name = f"mdcath_dataset_{pdb_id}.h5"
             total_size_bytes += os.path.getsize(opj(self.root, file_name))
         total_size_mb = round(total_size_bytes / (1024 * 1024), 4)
         return total_size_mb
