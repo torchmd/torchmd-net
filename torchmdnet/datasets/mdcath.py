@@ -209,22 +209,29 @@ class mdCATH(Dataset):
     def len(self):
         return self.num_conformers
 
-    def process_specific_group(self, pdb, file, group_info):
+    def process_specific_group(self, pdb, file, temp, repl, conf_idx):
+        # use the read_direct and np.s_ to get the coords and forces of interest directly
+        conf_idx = conf_idx*self.skipFrames 
+        slice_idxs = np.s_[conf_idx:conf_idx+1]
         with h5py.File(file, "r") as f:
             z = f[pdb]["z"][:]
-            group = f[pdb][f"sims{group_info[0]}K"][group_info[1]]
-            coords = group["coords"][::self.skipFrames, :, :]
-            forces = group["forces"][::self.skipFrames, :, :]
-            # coords and forces shape (num_frames, num_atoms, 3)
+            coords = np.zeros((z.shape[0], 3))
+            forces = np.zeros((z.shape[0], 3))
+            
+            group = f[f'{pdb}/{temp}/{repl}']
 
+            group['coords'].read_direct(coords, slice_idxs)
+            group['forces'].read_direct(forces, slice_idxs) 
+                                
+            # coords and forces shape (num_atoms, 3)
             assert (
                 coords.shape[0] == forces.shape[0]
             ), f"Number of frames mismatch between coords and forces: {group['coords'].shape[0]} vs {group['forces'].shape[0]}"
             assert (
-                coords.shape[1] == z.shape[0]
+                coords.shape[0] == z.shape[0]
             ), f"Number of atoms mismatch between coords and z: {group['coords'].shape[1]} vs {z.shape[0]}"
             assert (
-                forces.shape[1] == z.shape[0]
+                forces.shape[0] == z.shape[0]
             ), f"Number of atoms mismatch between forces and z: {group['forces'].shape[1]} vs {z.shape[0]}"
             assert (
                 group["coords"].attrs["unit"] == "Angstrom"
