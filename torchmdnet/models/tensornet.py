@@ -173,7 +173,6 @@ class TensorNet(nn.Module):
             act_class,
             cutoff_lower,
             cutoff_upper,
-            trainable_rbf,
             max_z,
             dtype,
         )
@@ -220,6 +219,43 @@ class TensorNet(nn.Module):
         self.linear.reset_parameters()
         self.out_norm.reset_parameters()
 
+    def _make_static(
+        self, num_nodes: int, edge_index: Tensor, edge_weight: Tensor, edge_vec: Tensor
+    ) -> Tuple[Tensor, Tensor, Tensor]:
+        # Distance module returns -1 for non-existing edges, to avoid having to resize the tensors when we want to ensure static shapes (for CUDA graphs) we make all non-existing edges pertain to a ghost atom
+        if self.static_shapes:
+            mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
+            # I trick the model into thinking that the masked edges pertain to the extra atom
+            # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
+            edge_index = edge_index.masked_fill(mask, num_nodes)
+            edge_weight = edge_weight.masked_fill(mask[0], 0)
+            edge_vec = edge_vec.masked_fill(
+                mask[0].unsqueeze(-1).expand_as(edge_vec), 0
+            )
+        return edge_index, edge_weight, edge_vec
+
+    def _compute_neighbors(
+        self, pos: Tensor, batch: Tensor, box: Optional[Tensor]
+    ) -> Tuple[Tensor, Tensor, Tensor]:
+        edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
+        # This assert convinces TorchScript that edge_vec is a Tensor and not an Optional[Tensor]
+        assert (
+            edge_vec is not None
+        ), "Distance module did not return directional information"
+        edge_index, edge_weight, edge_vec = self._make_static(
+            pos.shape[0], edge_index, edge_weight, edge_vec
+        )
+        return edge_index, edge_weight, edge_vec
+
+    def output(self, X: Tensor) -> Tensor:
+        I, A, S = decompose_tensor(X)  # shape: (n_atoms, hidden_channels, 3, 3)
+        x = torch.cat(
+            (tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1
+        )  # shape: (n_atoms, 3*hidden_channels)
+        x = self.out_norm(x)  # shape: (n_atoms, 3*hidden_channels)
+        x = self.act(self.linear((x)))  # shape: (n_atoms, hidden_channels)
+        return x
+
     def forward(
         self,
         z: Tensor,
@@ -229,45 +265,27 @@ class TensorNet(nn.Module):
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
-        # Obtain graph, with distances and relative position vectors
-        edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
-        # This assert convinces TorchScript that edge_vec is a Tensor and not an Optional[Tensor]
-        assert (
-            edge_vec is not None
-        ), "Distance module did not return directional information"
-        # Distance module returns -1 for non-existing edges, to avoid having to resize the tensors when we want to ensure static shapes (for CUDA graphs) we make all non-existing edges pertain to a ghost atom
+        if self.static_shapes:
+            z = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
         # Total charge q is a molecule-wise property. We transform it into an atom-wise property, with all atoms belonging to the same molecule being assigned the same charge q
         if q is None:
             q = torch.zeros_like(z, device=z.device, dtype=z.dtype)
         else:
             q = q[batch]
-        zp = z
-        if self.static_shapes:
-            mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
-            zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
-            q = torch.cat((q, torch.zeros(1, device=q.device, dtype=q.dtype)), dim=0)
-            # I trick the model into thinking that the masked edges pertain to the extra atom
-            # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
-            edge_index = edge_index.masked_fill(mask, z.shape[0])
-            edge_weight = edge_weight.masked_fill(mask[0], 0)
-            edge_vec = edge_vec.masked_fill(
-                mask[0].unsqueeze(-1).expand_as(edge_vec), 0
-            )
-        edge_attr = self.distance_expansion(edge_weight)
-        mask = edge_index[0] == edge_index[1]
-        # Normalizing edge vectors by their length can result in NaNs, breaking Autograd.
-        # I avoid dividing by zero by setting the weight of self edges and self loops to 1
-        edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
-        X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr)
+        edge_index, edge_weight, edge_vec = self._compute_neighbors(pos, batch, box)
+        edge_attr = self.distance_expansion(edge_weight)  # shape: (n_edges, num_rbf)
+        X = self.tensor_embedding(
+            z, edge_index, edge_weight, edge_vec, edge_attr
+        )  # shape: (n_atoms, hidden_channels, 3, 3)
         for layer in self.layers:
-            X = layer(X, edge_index, edge_weight, edge_attr, q)
-        I, A, S = decompose_tensor(X)
-        x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
-        x = self.out_norm(x)
-        x = self.act(self.linear((x)))
-        # # Remove the extra atom
+            X = layer(
+                X, edge_index, edge_weight, edge_attr, q
+            )  # shape: (n_atoms, hidden_channels, 3, 3)
+        x = self.output(X)  # shape: (n_atoms, hidden_channels)
+        # Remove the extra atom
         if self.static_shapes:
             x = x[:-1]
+            z = z[:-1]
         return x, None, z, pos, batch
 
 
@@ -284,7 +302,6 @@ class TensorEmbedding(nn.Module):
         activation,
         cutoff_lower,
         cutoff_upper,
-        trainable_rbf=False,
         max_z=128,
         dtype=torch.float32,
     ):
@@ -326,7 +343,16 @@ class TensorEmbedding(nn.Module):
             linear.reset_parameters()
         self.init_norm.reset_parameters()
 
-    def _get_atomic_number_message(self, z: Tensor, edge_index: Tensor) -> Tensor:
+    def _normalize_edges(
+        self, edge_index: Tensor, edge_weight: Tensor, edge_vec: Tensor
+    ) -> Tensor:
+        mask = edge_index[0] == edge_index[1]
+        # Normalizing edge vectors by their length can result in NaNs, breaking Autograd.
+        # I avoid dividing by zero by setting the weight of self edges and self loops to 1
+        edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
+        return edge_vec
+
+    def _compute_edge_atomic_features(self, z: Tensor, edge_index: Tensor) -> Tensor:
         Z = self.emb(z)
         Zij = self.emb2(
             Z.index_select(0, edge_index.t().reshape(-1)).view(
@@ -335,48 +361,66 @@ class TensorEmbedding(nn.Module):
         )[..., None, None]
         return Zij
 
-    def _get_tensor_messages(
-        self, Zij: Tensor, edge_weight: Tensor, edge_vec_norm: Tensor, edge_attr: Tensor
-    ) -> Tuple[Tensor, Tensor, Tensor]:
+    def _compute_edge_features(
+        self,
+        z: Tensor,
+        edge_index,
+        edge_weight: Tensor,
+        edge_vec: Tensor,
+        edge_attr: Tensor,
+    ) -> Tensor:
+        edge_vec_norm = self._normalize_edges(
+            edge_index, edge_weight, edge_vec
+        )  # shape: (n_edges, 3)
+        Zij = self._compute_edge_atomic_features(
+            z, edge_index
+        )  # shape: (n_edges, hidden_channels)
         C = self.cutoff(edge_weight).reshape(-1, 1, 1, 1) * Zij
-        eye = torch.eye(3, 3, device=edge_vec_norm.device, dtype=edge_vec_norm.dtype)[
-            None, None, ...
-        ]
-        Iij = self.distance_proj1(edge_attr)[..., None, None] * C * eye
+        Iij = self.distance_proj1(edge_attr)
         Aij = (
             self.distance_proj2(edge_attr)[..., None, None]
-            * C
             * vector_to_skewtensor(edge_vec_norm)[..., None, :, :]
         )
         Sij = (
             self.distance_proj3(edge_attr)[..., None, None]
-            * C
             * vector_to_symtensor(edge_vec_norm)[..., None, :, :]
         )
-        return Iij, Aij, Sij
+        features = Aij + Sij
+        features.diagonal(dim1=-2, dim2=-1).add_(Iij.unsqueeze(-1))
+        return features * C
+
+    def _message_passing(
+        self,
+        num_atoms: int,
+        edge_index: Tensor,
+        Xij: Tensor,
+    ) -> Tensor:
+        source = torch.zeros(
+            num_atoms, self.hidden_channels, 3, 3, device=Xij.device, dtype=Xij.dtype
+        )
+        X = source.index_add(dim=0, index=edge_index[0], source=Xij)
+        return X
 
     def forward(
         self,
         z: Tensor,
         edge_index: Tensor,
         edge_weight: Tensor,
-        edge_vec_norm: Tensor,
+        edge_vec: Tensor,
         edge_attr: Tensor,
     ) -> Tensor:
-        Zij = self._get_atomic_number_message(z, edge_index)
-        Iij, Aij, Sij = self._get_tensor_messages(
-            Zij, edge_weight, edge_vec_norm, edge_attr
-        )
-        source = torch.zeros(
-            z.shape[0], self.hidden_channels, 3, 3, device=z.device, dtype=Iij.dtype
-        )
-        I = source.index_add(dim=0, index=edge_index[0], source=Iij)
-        A = source.index_add(dim=0, index=edge_index[0], source=Aij)
-        S = source.index_add(dim=0, index=edge_index[0], source=Sij)
-        norm = self.init_norm(tensor_norm(I + A + S))
+        Xij = self._compute_edge_features(
+            z, edge_index, edge_weight, edge_vec, edge_attr
+        )  # shape: (n_edges, hidden_channels, 3, 3)
+        X = self._message_passing(
+            z.shape[0], edge_index, Xij
+        )  # shape: (n_atoms, hidden_channels, 3, 3)
+
+        norm = self.init_norm(tensor_norm(X))  # shape: (n_atoms, hidden_channels)
         for linear_scalar in self.linears_scalar:
             norm = self.act(linear_scalar(norm))
         norm = norm.reshape(-1, self.hidden_channels, 3)
+        I, A, S = decompose_tensor(X)  # shape: (n_atoms, hidden_channels, 3, 3)
         I = (
             self.linears_tensor[0](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
             * norm[..., 0, None, None]
@@ -389,19 +433,27 @@ class TensorEmbedding(nn.Module):
             self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
             * norm[..., 2, None, None]
         )
-        X = I + A + S
+        X = I + A + S  # shape: (n_atoms, hidden_channels, 3, 3)
         return X
 
 
-def tensor_message_passing(
-    edge_index: Tensor, factor: Tensor, tensor: Tensor, natoms: int
-) -> Tensor:
+def tensor_message_passing(edge_index: Tensor, tensor: Tensor, natoms: int) -> Tensor:
     """Message passing for tensors."""
-    msg = factor * tensor.index_select(0, edge_index[1])
+    msg = tensor.index_select(0, edge_index[1])
     shape = (natoms, tensor.shape[1], tensor.shape[2], tensor.shape[3])
     tensor_m = torch.zeros(*shape, device=tensor.device, dtype=tensor.dtype)
     tensor_m = tensor_m.index_add(0, edge_index[0], msg)
     return tensor_m
+
+
+def compute_tensor_edge_features(X, edge_index, factor):
+    I, A, S = decompose_tensor(X)
+    msg = (
+        factor[..., 0, None, None] * I.index_select(0, edge_index[1])
+        + factor[..., 1, None, None] * A.index_select(0, edge_index[1])
+        + factor[..., 2, None, None] * S.index_select(0, edge_index[1])
+    )
+    return msg
 
 
 class Interaction(nn.Module):
@@ -450,6 +502,22 @@ class Interaction(nn.Module):
         for linear in self.linears_tensor:
             linear.reset_parameters()
 
+    def update_tensor_features(self, X, X_aggregated):
+        B = torch.matmul(X, X_aggregated)
+        if self.equivariance_invariance_group == "O(3)":
+            A = torch.matmul(X_aggregated, X)
+        elif self.equivariance_invariance_group == "SO(3)":
+            A = B
+        else:
+            raise ValueError("Unknown equivariance group")
+        Xnew = A + B
+        I, A, S = decompose_tensor(Xnew / (tensor_norm(Xnew) + 1)[..., None, None])
+        I = self.linears_tensor[3](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        dX = I + A + S
+        return dX
+
     def forward(
         self,
         X: Tensor,
@@ -470,28 +538,9 @@ class Interaction(nn.Module):
         A = self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         Y = I + A + S
-        Im = tensor_message_passing(
-            edge_index, edge_attr[..., 0, None, None], I, X.shape[0]
-        )
-        Am = tensor_message_passing(
-            edge_index, edge_attr[..., 1, None, None], A, X.shape[0]
-        )
-        Sm = tensor_message_passing(
-            edge_index, edge_attr[..., 2, None, None], S, X.shape[0]
-        )
-        msg = Im + Am + Sm
-        if self.equivariance_invariance_group == "O(3)":
-            A = torch.matmul(msg, Y)
-            B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor((1 + 0.1 * q[..., None, None, None]) * (A + B))
-        if self.equivariance_invariance_group == "SO(3)":
-            B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor(2 * B)
-        normp1 = (tensor_norm(I + A + S) + 1)[..., None, None]
-        I, A, S = I / normp1, A / normp1, S / normp1
-        I = self.linears_tensor[3](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        dX = I + A + S
-        X = X + dX + (1 + 0.1 * q[..., None, None, None]) * torch.matrix_power(dX, 2)
+        Y_edges = compute_tensor_edge_features(Y, edge_index, edge_attr)
+        Ynew = tensor_message_passing(edge_index, Y_edges, X.shape[0])
+        charge_factor = 1 + 0.1 * q[..., None, None, None]
+        dX = self.update_tensor_features(Y, Ynew) * charge_factor
+        X = X + dX + charge_factor * torch.matrix_power(dX, 2)
         return X
