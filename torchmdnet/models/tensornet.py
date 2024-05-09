@@ -10,6 +10,7 @@ from torchmdnet.models.utils import (
     OptimizedDistance,
     rbf_class_mapping,
     act_class_mapping,
+    MLP,
 )
 
 __all__ = ["TensorNet"]
@@ -289,6 +290,43 @@ class TensorNet(nn.Module):
         return x, None, z, pos, batch
 
 
+class TensorLinear(nn.Module):
+
+    def __init__(self, in_channels, out_channels, dtype=torch.float32):
+        super(TensorLinear, self).__init__()
+        self.linearI = nn.Linear(in_channels, out_channels, bias=False, dtype=dtype)
+        self.linearA = nn.Linear(in_channels, out_channels, bias=False, dtype=dtype)
+        self.linearS = nn.Linear(in_channels, out_channels, bias=False, dtype=dtype)
+
+    def reset_parameters(self):
+        self.linearI.reset_parameters()
+        self.linearA.reset_parameters()
+        self.linearS.reset_parameters()
+
+    def forward(self, X: Tensor, factor: Optional[Tensor] = None) -> Tensor:
+        if factor is None:
+            factor = (
+                torch.ones(1, device=X.device, dtype=X.dtype)
+                .unsqueeze(-1)
+                .unsqueeze(-1)
+            ).expand(-1, -1, 3)
+        I, A, S = decompose_tensor(X)
+        I = (
+            self.linearI(I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+            * factor[..., 0, None, None]
+        )
+        A = (
+            self.linearA(A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+            * factor[..., 1, None, None]
+        )
+        S = (
+            self.linearS(S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+            * factor[..., 2, None, None]
+        )
+        dX = I + A + S
+        return dX
+
+
 class TensorEmbedding(nn.Module):
     """Tensor embedding layer.
 
@@ -316,11 +354,7 @@ class TensorEmbedding(nn.Module):
         self.emb = nn.Embedding(max_z, hidden_channels, dtype=dtype)
         self.emb2 = nn.Linear(2 * hidden_channels, hidden_channels, dtype=dtype)
         self.act = activation()
-        self.linears_tensor = nn.ModuleList()
-        for _ in range(3):
-            self.linears_tensor.append(
-                nn.Linear(hidden_channels, hidden_channels, bias=False)
-            )
+        self.linear_tensor = TensorLinear(hidden_channels, hidden_channels)
         self.linears_scalar = nn.ModuleList()
         self.linears_scalar.append(
             nn.Linear(hidden_channels, 2 * hidden_channels, bias=True, dtype=dtype)
@@ -337,8 +371,7 @@ class TensorEmbedding(nn.Module):
         self.distance_proj3.reset_parameters()
         self.emb.reset_parameters()
         self.emb2.reset_parameters()
-        for linear in self.linears_tensor:
-            linear.reset_parameters()
+        self.linear_tensor.reset_parameters()
         for linear in self.linears_scalar:
             linear.reset_parameters()
         self.init_norm.reset_parameters()
@@ -361,7 +394,7 @@ class TensorEmbedding(nn.Module):
         )[..., None, None]
         return Zij
 
-    def _compute_edge_features(
+    def _compute_edge_tensor_features(
         self,
         z: Tensor,
         edge_index,
@@ -403,23 +436,6 @@ class TensorEmbedding(nn.Module):
         Xij = Xij.index_add(0, edge_index[0], source=X)
         return Xij
 
-    def _tensor_linear(self, X, norm):
-        I, A, S = decompose_tensor(X)  # shape: (n_atoms, hidden_channels, 3, 3)
-        I = (
-            self.linears_tensor[0](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-            * norm[..., 0, None, None]
-        )
-        A = (
-            self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-            * norm[..., 1, None, None]
-        )
-        S = (
-            self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-            * norm[..., 2, None, None]
-        )
-        X = I + A + S  # shape: (n_atoms, hidden_channels, 3, 3)
-        return X
-
     def _norm_mlp(self, norm):
         norm = self.init_norm(norm)
         for linear_scalar in self.linears_scalar:
@@ -435,37 +451,15 @@ class TensorEmbedding(nn.Module):
         edge_vec: Tensor,
         edge_attr: Tensor,
     ) -> Tensor:
-        Xij = self._compute_edge_features(
+        Xij = self._compute_edge_tensor_features(
             z, edge_index, edge_weight, edge_vec, edge_attr
         )  # shape: (n_edges, hidden_channels, 3, 3)
         X = self._aggregate_edge_features(
             z.shape[0], Xij, edge_index
         )  # shape: (n_atoms, hidden_channels, 3, 3)
         norm = self._norm_mlp(tensor_norm(X))  # shape: (n_atoms, hidden_channels)
-        X = self._tensor_linear(X, norm)  # shape: (n_atoms, hidden_channels, 3, 3)
+        X = self.linear_tensor(X, norm)  # shape: (n_atoms, hidden_channels, 3, 3)
         return X
-
-
-class TensorLinear(nn.Module):
-
-    def __init__(self, hidden_channels):
-        super(TensorLinear, self).__init__()
-        self.linearI = nn.Linear(hidden_channels, hidden_channels, bias=False)
-        self.linearA = nn.Linear(hidden_channels, hidden_channels, bias=False)
-        self.linearS = nn.Linear(hidden_channels, hidden_channels, bias=False)
-
-    def reset_parameters(self):
-        self.linearI.reset_parameters()
-        self.linearA.reset_parameters()
-        self.linearS.reset_parameters()
-
-    def forward(self, X):
-        I, A, S = decompose_tensor(X)
-        I = self.linearI(I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        A = self.linearA(A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        S = self.linearS(S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        dX = I + A + S
-        return dX
 
 
 def compute_tensor_edge_features(X, edge_index, factor):
@@ -522,8 +516,8 @@ class Interaction(nn.Module):
         self.linears_scalar.append(
             nn.Linear(2 * hidden_channels, 3 * hidden_channels, bias=True, dtype=dtype)
         )
-        self.tensor_linear_in = TensorLinear(hidden_channels)
-        self.tensor_linear_out = TensorLinear(hidden_channels)
+        self.tensor_linear_in = TensorLinear(hidden_channels, hidden_channels)
+        self.tensor_linear_out = TensorLinear(hidden_channels, hidden_channels)
         self.act = activation()
         self.equivariance_invariance_group = equivariance_invariance_group
         self.reset_parameters()
@@ -535,6 +529,7 @@ class Interaction(nn.Module):
         self.tensor_linear_out.reset_parameters()
 
     def _update_tensor_node_features(self, X, X_aggregated):
+        X = self.tensor_linear_in(X)
         B = torch.matmul(X, X_aggregated)
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(X_aggregated, X)
@@ -545,6 +540,15 @@ class Interaction(nn.Module):
         Xnew = A + B
         return Xnew
 
+    def _compute_vector_node_features(self, edge_attr, edge_weight):
+        C = self.cutoff(edge_weight)
+        for linear_scalar in self.linears_scalar:
+            edge_attr = self.act(linear_scalar(edge_attr))
+        edge_attr = (edge_attr * C.view(-1, 1)).reshape(
+            edge_attr.shape[0], self.hidden_channels, 3
+        )
+        return edge_attr
+
     def forward(
         self,
         X: Tensor,
@@ -553,18 +557,26 @@ class Interaction(nn.Module):
         edge_attr: Tensor,
         q: Tensor,
     ) -> Tensor:
-        C = self.cutoff(edge_weight)
-        for linear_scalar in self.linears_scalar:
-            edge_attr = self.act(linear_scalar(edge_attr))
-        edge_attr = (edge_attr * C.view(-1, 1)).reshape(
-            edge_attr.shape[0], self.hidden_channels, 3
-        )
-        X = X / (tensor_norm(X) + 1)[..., None, None]
-        Y = self.tensor_linear_in(X)
-        Y_edges = compute_tensor_edge_features(X, edge_index, edge_attr)
-        Ynew = tensor_message_passing(X.shape[0], edge_index, Y_edges)
+        X = (
+            X / (tensor_norm(X) + 1)[..., None, None]
+        )  # shape (n_atoms, hidden_channels, 3, 3)
+        node_features = self._compute_vector_node_features(
+            edge_attr, edge_weight
+        )  # shape (n_atoms, hidden_channels, 3)
+        Y_edges = compute_tensor_edge_features(
+            X, edge_index, node_features
+        )  # shape (n_edges, hidden_channels, 3, 3)
+        Y_aggregated = tensor_message_passing(
+            X.shape[0], edge_index, Y_edges
+        )  # shape (n_atoms, hidden_channels, 3, 3)
+        Xnew = self._update_tensor_node_features(
+            X, Y_aggregated
+        )  # shape (n_atoms, hidden_channels, 3, 3)
+        dX = self.tensor_linear_out(
+            Xnew / (tensor_norm(Xnew) + 1)[..., None, None]
+        )  # shape (n_atoms, hidden_channels, 3, 3)
         charge_factor = 1 + 0.1 * q[..., None, None, None]
-        Xnew = self._update_tensor_node_features(Y, Ynew) * charge_factor
-        dX = self.tensor_linear_out(Xnew / (tensor_norm(Xnew) + 1)[..., None, None])
-        X = X + dX + charge_factor * torch.matrix_power(dX, 2)
+        X = (
+            X + (dX + torch.matrix_power(dX, 2)) * charge_factor
+        )  # shape (n_atoms, hidden_channels, 3, 3)
         return X
