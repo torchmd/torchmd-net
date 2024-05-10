@@ -57,11 +57,10 @@ def vector_to_symtensor(vector):
 @nvtx_annotate("decompose_tensor")
 def decompose_tensor(tensor):
     """Full tensor decomposition into irreducible components."""
-    I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)[
-        ..., None, None
-    ] * torch.eye(3, 3, device=tensor.device, dtype=tensor.dtype)
+    I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)
     A = 0.5 * (tensor - tensor.transpose(-2, -1))
-    S = 0.5 * (tensor + tensor.transpose(-2, -1)) - I
+    S = tensor - A
+    S.diagonal(offset=0, dim1=-1, dim2=-2).sub_(I.unsqueeze(-1))
     return I, A, S
 
 
@@ -260,7 +259,7 @@ class TensorNet(nn.Module):
     def output(self, X: Tensor) -> Tensor:
         I, A, S = decompose_tensor(X)  # shape: (n_atoms, hidden_channels, 3, 3)
         x = torch.cat(
-            (tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1
+            (3 * I**2, tensor_norm(A), tensor_norm(S)), dim=-1
         )  # shape: (n_atoms, 3*hidden_channels)
         x = self.out_norm(x)  # shape: (n_atoms, 3*hidden_channels)
         x = self.act(self.linear((x)))  # shape: (n_atoms, hidden_channels)
@@ -322,10 +321,7 @@ class TensorLinear(nn.Module):
                 .unsqueeze(-1)
             ).expand(-1, -1, 3)
         I, A, S = decompose_tensor(X)
-        I = (
-            self.linearI(I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-            * factor[..., 0, None, None]
-        )
+        I = self.linearI(I) * factor[..., 0]
         A = (
             self.linearA(A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
             * factor[..., 1, None, None]
@@ -334,7 +330,8 @@ class TensorLinear(nn.Module):
             self.linearS(S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
             * factor[..., 2, None, None]
         )
-        dX = I + A + S
+        dX = A + S
+        dX.diagonal(dim1=-2, dim2=-1).add_(I.unsqueeze(-1))
         return dX
 
 
@@ -490,10 +487,11 @@ class TensorEmbedding(nn.Module):
 @nvtx_annotate("compute_tensor_edge_features")
 def compute_tensor_edge_features(X, edge_index, factor):
     I, A, S = decompose_tensor(X)
-    msg = (
-        factor[..., 0, None, None] * I.index_select(0, edge_index[1])
-        + factor[..., 1, None, None] * A.index_select(0, edge_index[1])
-        + factor[..., 2, None, None] * S.index_select(0, edge_index[1])
+    msg = factor[..., 1, None, None] * A.index_select(0, edge_index[1]) + factor[
+        ..., 2, None, None
+    ] * S.index_select(0, edge_index[1])
+    msg.diagonal(dim1=-2, dim2=-1).add_(
+        factor[..., 0, None] * I.index_select(0, edge_index[1]).unsqueeze(-1)
     )
     return msg
 
