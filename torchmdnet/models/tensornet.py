@@ -47,9 +47,15 @@ def vector_to_skewtensor(vector):
 def vector_to_symtensor(vector):
     """Creates a symmetric traceless tensor from the outer product of a vector with itself."""
     tensor = torch.matmul(vector.unsqueeze(-1), vector.unsqueeze(-2))
+    S = tensor_to_symtensor(tensor)
+    return S
+
+
+@nvtx_annotate("tensor_to_symtensor")
+def tensor_to_symtensor(tensor):
     S = 0.5 * (tensor + tensor.transpose(-2, -1))
-    I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)
-    S.diagonal(offset=0, dim1=-1, dim2=-2).sub_(I.unsqueeze(-1))
+    I = (tensor.diagonal(dim1=-1, dim2=-2)).mean(-1)
+    S.diagonal(dim1=-1, dim2=-2).sub_(I.unsqueeze(-1))
     return S
 
 
@@ -58,8 +64,8 @@ def decompose_tensor(tensor):
     """Full tensor decomposition into irreducible components."""
     A = 0.5 * (tensor - tensor.transpose(-2, -1))
     S = tensor - A
-    I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)
-    S.diagonal(offset=0, dim1=-1, dim2=-2).sub_(I.unsqueeze(-1))
+    I = (tensor.diagonal(dim1=-1, dim2=-2)).mean(-1)
+    S.diagonal(dim1=-1, dim2=-2).sub_(I.unsqueeze(-1))
     return I, A, S
 
 
@@ -433,14 +439,16 @@ class TensorEmbedding(nn.Module):
         )  # shape: (n_atoms, hidden_channels, 3)
         A = vector_to_skewtensor(A)  # shape: (n_atoms, hidden_channels, 3, 3)
 
+        tensor = torch.matmul(edge_vec_norm.unsqueeze(-1), edge_vec_norm.unsqueeze(-2))
         S = (
             self.distance_proj3(edge_attr)[..., None, None]
             * Zij[..., None, None]
-            * vector_to_symtensor(edge_vec_norm)[..., None, :, :]
+            * tensor[..., None, :, :]
         )  # shape: (n_edges, hidden_channels, 3, 3)
         S = self._aggregate_edge_features(
             z.shape[0], S, edge_index[0]
         )  # shape: (n_atoms, hidden_channels, 3, 3)
+        S = tensor_to_symtensor(S)  # shape: (n_atoms, hidden_channels, 3, 3)
         I = self.distance_proj1(edge_attr) * Zij
         I = self._aggregate_edge_features(z.shape[0], I, edge_index[0])
         features = A + S
