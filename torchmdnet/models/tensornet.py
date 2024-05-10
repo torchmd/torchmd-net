@@ -47,19 +47,18 @@ def vector_to_skewtensor(vector):
 def vector_to_symtensor(vector):
     """Creates a symmetric traceless tensor from the outer product of a vector with itself."""
     tensor = torch.matmul(vector.unsqueeze(-1), vector.unsqueeze(-2))
-    I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)[
-        ..., None, None
-    ] * torch.eye(3, 3, device=tensor.device, dtype=tensor.dtype)
-    S = 0.5 * (tensor + tensor.transpose(-2, -1)) - I
+    S = 0.5 * (tensor + tensor.transpose(-2, -1))
+    I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)
+    S.diagonal(offset=0, dim1=-1, dim2=-2).sub_(I.unsqueeze(-1))
     return S
 
 
 @nvtx_annotate("decompose_tensor")
 def decompose_tensor(tensor):
     """Full tensor decomposition into irreducible components."""
-    I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)
     A = 0.5 * (tensor - tensor.transpose(-2, -1))
     S = tensor - A
+    I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)
     S.diagonal(offset=0, dim1=-1, dim2=-2).sub_(I.unsqueeze(-1))
     return I, A, S
 
