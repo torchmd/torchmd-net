@@ -11,35 +11,39 @@ from torchmdnet.models.utils import (
     rbf_class_mapping,
     act_class_mapping,
     MLP,
+    nvtx_annotate,
+    nvtx_range,
 )
 
 __all__ = ["TensorNet"]
-torch.set_float32_matmul_precision("high")
+torch.set_float32_matmul_precision("medium")
 torch.backends.cuda.matmul.allow_tf32 = True
 
 
+@nvtx_annotate("vector_to_skewtensor")
 def vector_to_skewtensor(vector):
     """Creates a skew-symmetric tensor from a vector."""
-    batch_size = vector.size(0)
+    batch_size = vector.shape[:-1]
     zero = torch.zeros(batch_size, device=vector.device, dtype=vector.dtype)
     tensor = torch.stack(
         (
             zero,
-            -vector[:, 2],
-            vector[:, 1],
-            vector[:, 2],
+            -vector[..., 2],
+            vector[..., 1],
+            vector[..., 2],
             zero,
-            -vector[:, 0],
-            -vector[:, 1],
-            vector[:, 0],
+            -vector[..., 0],
+            -vector[..., 1],
+            vector[..., 0],
             zero,
         ),
-        dim=1,
+        dim=-1,
     )
-    tensor = tensor.view(-1, 3, 3)
+    tensor = tensor.view(*batch_size, 3, 3)
     return tensor.squeeze(0)
 
 
+@nvtx_annotate("vector_to_symtensor")
 def vector_to_symtensor(vector):
     """Creates a symmetric traceless tensor from the outer product of a vector with itself."""
     tensor = torch.matmul(vector.unsqueeze(-1), vector.unsqueeze(-2))
@@ -50,6 +54,7 @@ def vector_to_symtensor(vector):
     return S
 
 
+@nvtx_annotate("decompose_tensor")
 def decompose_tensor(tensor):
     """Full tensor decomposition into irreducible components."""
     I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)[
@@ -60,6 +65,7 @@ def decompose_tensor(tensor):
     return I, A, S
 
 
+@nvtx_annotate("tensor_norm")
 def tensor_norm(tensor):
     """Computes Frobenius norm."""
     return (tensor**2).sum((-2, -1))
@@ -220,6 +226,7 @@ class TensorNet(nn.Module):
         self.linear.reset_parameters()
         self.out_norm.reset_parameters()
 
+    @nvtx_annotate("make_static")
     def _make_static(
         self, num_nodes: int, edge_index: Tensor, edge_weight: Tensor, edge_vec: Tensor
     ) -> Tuple[Tensor, Tensor, Tensor]:
@@ -235,6 +242,7 @@ class TensorNet(nn.Module):
             )
         return edge_index, edge_weight, edge_vec
 
+    @nvtx_annotate("compute_neighbors")
     def _compute_neighbors(
         self, pos: Tensor, batch: Tensor, box: Optional[Tensor]
     ) -> Tuple[Tensor, Tensor, Tensor]:
@@ -248,6 +256,7 @@ class TensorNet(nn.Module):
         )
         return edge_index, edge_weight, edge_vec
 
+    @nvtx_annotate("output")
     def output(self, X: Tensor) -> Tensor:
         I, A, S = decompose_tensor(X)  # shape: (n_atoms, hidden_channels, 3, 3)
         x = torch.cat(
@@ -257,6 +266,7 @@ class TensorNet(nn.Module):
         x = self.act(self.linear((x)))  # shape: (n_atoms, hidden_channels)
         return x
 
+    @nvtx_annotate("TensorNet")
     def forward(
         self,
         z: Tensor,
@@ -303,6 +313,7 @@ class TensorLinear(nn.Module):
         self.linearA.reset_parameters()
         self.linearS.reset_parameters()
 
+    @nvtx_annotate("TensorLinear")
     def forward(self, X: Tensor, factor: Optional[Tensor] = None) -> Tensor:
         if factor is None:
             factor = (
@@ -363,6 +374,8 @@ class TensorEmbedding(nn.Module):
             nn.Linear(2 * hidden_channels, 3 * hidden_channels, bias=True, dtype=dtype)
         )
         self.init_norm = nn.LayerNorm(hidden_channels, dtype=dtype)
+        self.num_rbf = num_rbf
+        self.hidden_channels = hidden_channels
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -376,6 +389,7 @@ class TensorEmbedding(nn.Module):
             linear.reset_parameters()
         self.init_norm.reset_parameters()
 
+    @nvtx_annotate("normalize_edges")
     def _normalize_edges(
         self, edge_index: Tensor, edge_weight: Tensor, edge_vec: Tensor
     ) -> Tensor:
@@ -385,16 +399,18 @@ class TensorEmbedding(nn.Module):
         edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
         return edge_vec
 
+    @nvtx_annotate("compute_edge_atomic_features")
     def _compute_edge_atomic_features(self, z: Tensor, edge_index: Tensor) -> Tensor:
         Z = self.emb(z)
         Zij = self.emb2(
             Z.index_select(0, edge_index.t().reshape(-1)).view(
                 -1, self.hidden_channels * 2
             )
-        )[..., None, None]
+        )
         return Zij
 
-    def _compute_edge_tensor_features(
+    @nvtx_annotate("compute_edge_tensor_features")
+    def _compute_node_tensor_features(
         self,
         z: Tensor,
         edge_index,
@@ -405,37 +421,45 @@ class TensorEmbedding(nn.Module):
         edge_vec_norm = self._normalize_edges(
             edge_index, edge_weight, edge_vec
         )  # shape: (n_edges, 3)
-        Zij = self._compute_edge_atomic_features(
+        Zij = self.cutoff(edge_weight)[:, None] * self._compute_edge_atomic_features(
             z, edge_index
         )  # shape: (n_edges, hidden_channels)
-        C = self.cutoff(edge_weight).reshape(-1, 1, 1, 1) * Zij
-        Iij = self.distance_proj1(edge_attr)
-        Aij = (
-            self.distance_proj2(edge_attr)[..., None, None]
-            * vector_to_skewtensor(edge_vec_norm)[..., None, :, :]
-        )
-        Sij = (
+
+        A = (
+            self.distance_proj2(edge_attr)[
+                ..., None
+            ]  # shape: (n_edges, hidden_channels, 1)
+            * Zij[..., None]  # shape: (n_edges, hidden_channels, 1)
+            * edge_vec_norm[:, None, :]  # shape: (n_edges, 1, 3)
+        )  # shape: (n_edges, hidden_channels, 3)
+        A = self._aggregate_edge_features(
+            z.shape[0], A, edge_index[0]
+        )  # shape: (n_atoms, hidden_channels, 3)
+        A = vector_to_skewtensor(A)  # shape: (n_atoms, hidden_channels, 3, 3)
+
+        S = (
             self.distance_proj3(edge_attr)[..., None, None]
+            * Zij[..., None, None]
             * vector_to_symtensor(edge_vec_norm)[..., None, :, :]
-        )
-        features = Aij + Sij
-        features.diagonal(dim1=-2, dim2=-1).add_(Iij.unsqueeze(-1))
-        return features * C
+        )  # shape: (n_edges, hidden_channels, 3, 3)
+        S = self._aggregate_edge_features(
+            z.shape[0], S, edge_index[0]
+        )  # shape: (n_atoms, hidden_channels, 3, 3)
+        I = self.distance_proj1(edge_attr) * Zij
+        I = self._aggregate_edge_features(z.shape[0], I, edge_index[0])
+        features = A + S
+        features.diagonal(dim1=-2, dim2=-1).add_(I.unsqueeze(-1))
+        return features
 
+    @nvtx_annotate("aggregate_edge_features")
     def _aggregate_edge_features(
-        self, num_atoms: int, X: Tensor, edge_index: Tensor
+        self, num_atoms: int, T: Tensor, source_indices: Tensor
     ) -> Tensor:
-        Xij = torch.zeros(
-            num_atoms,
-            self.hidden_channels,
-            3,
-            3,
-            device=X.device,
-            dtype=X.dtype,
-        )
-        Xij = Xij.index_add(0, edge_index[0], source=X)
-        return Xij
+        targetI = torch.zeros(num_atoms, *T.shape[1:], device=T.device, dtype=T.dtype)
+        I = targetI.index_add(dim=0, index=source_indices, source=T)
+        return I
 
+    @nvtx_annotate("norm_mlp")
     def _norm_mlp(self, norm):
         norm = self.init_norm(norm)
         for linear_scalar in self.linears_scalar:
@@ -443,6 +467,7 @@ class TensorEmbedding(nn.Module):
         norm = norm.reshape(-1, self.hidden_channels, 3)
         return norm
 
+    @nvtx_annotate("TensorEmbedding")
     def forward(
         self,
         z: Tensor,
@@ -451,17 +476,18 @@ class TensorEmbedding(nn.Module):
         edge_vec: Tensor,
         edge_attr: Tensor,
     ) -> Tensor:
-        Xij = self._compute_edge_tensor_features(
+        X = self._compute_node_tensor_features(
             z, edge_index, edge_weight, edge_vec, edge_attr
-        )  # shape: (n_edges, hidden_channels, 3, 3)
-        X = self._aggregate_edge_features(
-            z.shape[0], Xij, edge_index
         )  # shape: (n_atoms, hidden_channels, 3, 3)
+        # X = self._aggregate_edge_features(
+        #     z.shape[0], Xij, edge_index
+        # )  # shape: (n_atoms, hidden_channels, 3, 3)
         norm = self._norm_mlp(tensor_norm(X))  # shape: (n_atoms, hidden_channels)
         X = self.linear_tensor(X, norm)  # shape: (n_atoms, hidden_channels, 3, 3)
         return X
 
 
+@nvtx_annotate("compute_tensor_edge_features")
 def compute_tensor_edge_features(X, edge_index, factor):
     I, A, S = decompose_tensor(X)
     msg = (
@@ -472,6 +498,7 @@ def compute_tensor_edge_features(X, edge_index, factor):
     return msg
 
 
+@nvtx_annotate("tensor_message_passing")
 def tensor_message_passing(n_atoms: int, edge_index: Tensor, tensor: Tensor) -> Tensor:
     msg = tensor.index_select(
         0, edge_index[1]
@@ -528,6 +555,7 @@ class Interaction(nn.Module):
         self.tensor_linear_in.reset_parameters()
         self.tensor_linear_out.reset_parameters()
 
+    @nvtx_annotate("update_tensor_node_features")
     def _update_tensor_node_features(self, X, X_aggregated):
         X = self.tensor_linear_in(X)
         B = torch.matmul(X, X_aggregated)
@@ -540,6 +568,7 @@ class Interaction(nn.Module):
         Xnew = A + B
         return Xnew
 
+    @nvtx_annotate("compute_vector_node_features")
     def _compute_vector_node_features(self, edge_attr, edge_weight):
         C = self.cutoff(edge_weight)
         for linear_scalar in self.linears_scalar:
@@ -549,6 +578,7 @@ class Interaction(nn.Module):
         )
         return edge_attr
 
+    @nvtx_annotate("Interaction")
     def forward(
         self,
         X: Tensor,
@@ -562,7 +592,7 @@ class Interaction(nn.Module):
         )  # shape (n_atoms, hidden_channels, 3, 3)
         node_features = self._compute_vector_node_features(
             edge_attr, edge_weight
-        )  # shape (n_atoms, hidden_channels, 3)
+        )  # shape (n_edges, hidden_channels, 3)
         Y_edges = compute_tensor_edge_features(
             X, edge_index, node_features
         )  # shape (n_edges, hidden_channels, 3, 3)
