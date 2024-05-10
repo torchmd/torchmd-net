@@ -209,7 +209,7 @@ class OptimizedDistance(torch.nn.Module):
         self.use_periodic = True
         if self.box is None:
             self.use_periodic = False
-            self.box = torch.empty((0, 0))
+            self.box = torch.empty((0, 0), device="cpu", dtype=torch.float32)
             if self.strategy == "cell":
                 # Default the box to 3 times the cutoff, really inefficient for the cell list
                 lbox = cutoff_upper * 3.0
@@ -255,9 +255,10 @@ class OptimizedDistance(torch.nn.Module):
         use_periodic = self.use_periodic
         if not use_periodic:
             use_periodic = box is not None
+        self.box = self.box.to(pos.device)
         box = self.box if box is None else box
         assert box is not None, "Box must be provided"
-        box = box.to(pos.dtype)
+        # box = box.to(pos.dtype)
         max_pairs: int = self.max_num_pairs
         if self.max_num_pairs < 0:
             max_pairs = -self.max_num_pairs * pos.shape[0]
@@ -618,3 +619,48 @@ act_class_mapping = {
 }
 
 dtype_mapping = {16: torch.float16, 32: torch.float, 64: torch.float64}
+
+
+# Can be globally disabled by setting the global variable ENABLE_NVTX to False
+class nvtx_range:
+    def __init__(self, name, force_enabled=False):
+        self.name = name
+        self.force_enabled = force_enabled
+
+    def __enter__(self):
+        if self.force_enabled or ENABLE_NVTX:
+            torch.cuda.synchronize()
+            torch.cuda.nvtx.range_push(self.name)
+
+    def __exit__(self, type, value, traceback):
+        if self.force_enabled or ENABLE_NVTX:
+            torch.cuda.synchronize()
+            torch.cuda.nvtx.range_pop()
+
+
+ENABLE_NVTX = False
+
+
+def tmdnet_push_range(name: str, force_enabled: bool = False):
+    if force_enabled or ENABLE_NVTX:
+        torch.cuda.synchronize()
+        torch.cuda.nvtx.range_push(name)
+
+
+def tmdnet_pop_range(force_enabled: bool = False):
+    if force_enabled or ENABLE_NVTX:
+        torch.cuda.synchronize()
+        torch.cuda.nvtx.range_pop()
+
+
+def nvtx_annotate(tag: Optional[str] = None):
+    def Inner(foo):
+        def wrapper(*args, **kwargs):
+            if not ENABLE_NVTX:
+                return foo(*args, **kwargs)
+            with nvtx_range(foo.__name__ if tag is None else tag):
+                return foo(*args, **kwargs)
+
+        return wrapper
+
+    return Inner
