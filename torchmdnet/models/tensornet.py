@@ -426,7 +426,6 @@ class TensorEmbedding(nn.Module):
         Zij = self.cutoff(edge_weight)[:, None] * self._compute_edge_atomic_features(
             z, edge_index
         )  # shape: (n_edges, hidden_channels)
-
         A = (
             self.distance_proj2(edge_attr)[
                 ..., None
@@ -438,19 +437,21 @@ class TensorEmbedding(nn.Module):
             z.shape[0], A, edge_index[0]
         )  # shape: (n_atoms, hidden_channels, 3)
         A = vector_to_skewtensor(A)  # shape: (n_atoms, hidden_channels, 3, 3)
-
-        tensor = torch.matmul(edge_vec_norm.unsqueeze(-1), edge_vec_norm.unsqueeze(-2))
-        S = (
+        I = self.distance_proj1(edge_attr) * Zij
+        I = self._aggregate_edge_features(z.shape[0], I, edge_index[0])
+        # Outer product of edge vectors
+        tensor = torch.matmul(
+            edge_vec_norm.unsqueeze(-1), edge_vec_norm.unsqueeze(-2)
+        )  # shape: (n_edges, 3, 3)
+        tensor = (
             self.distance_proj3(edge_attr)[..., None, None]
             * Zij[..., None, None]
             * tensor[..., None, :, :]
         )  # shape: (n_edges, hidden_channels, 3, 3)
-        S = self._aggregate_edge_features(
-            z.shape[0], S, edge_index[0]
+        tensor = self._aggregate_edge_features(
+            z.shape[0], tensor, edge_index[0]
         )  # shape: (n_atoms, hidden_channels, 3, 3)
-        S = tensor_to_symtensor(S)  # shape: (n_atoms, hidden_channels, 3, 3)
-        I = self.distance_proj1(edge_attr) * Zij
-        I = self._aggregate_edge_features(z.shape[0], I, edge_index[0])
+        S = tensor_to_symtensor(tensor)  # shape: (n_atoms, hidden_channels, 3, 3)
         features = A + S
         features.diagonal(dim1=-2, dim2=-1).add_(I.unsqueeze(-1))
         return features
@@ -483,9 +484,6 @@ class TensorEmbedding(nn.Module):
         X = self._compute_node_tensor_features(
             z, edge_index, edge_weight, edge_vec, edge_attr
         )  # shape: (n_atoms, hidden_channels, 3, 3)
-        # X = self._aggregate_edge_features(
-        #     z.shape[0], Xij, edge_index
-        # )  # shape: (n_atoms, hidden_channels, 3, 3)
         norm = self._norm_mlp(tensor_norm(X))  # shape: (n_atoms, hidden_channels)
         X = self.linear_tensor(X, norm)  # shape: (n_atoms, hidden_channels, 3, 3)
         return X
