@@ -74,7 +74,10 @@ class LNNP(LightningModule):
         else:
             self.model = create_model(self.hparams, prior_model, mean, std)
 
-        self.ema_weights = ExponentialMovingAverage(self.model.parameters(), decay=0.995)
+        self.ema_prmtrs = None
+        if self.hparams.ema_prmtrs_decay is not None:
+            # initialize EMA for the model paremeters
+            self.ema_prmtrs = ExponentialMovingAverage(self.model.parameters(), decay=self.hparams.ema_prmtrs_decay)
         
         # initialize exponential smoothing
         self.ema = None
@@ -256,8 +259,9 @@ class LNNP(LightningModule):
         optimizer.zero_grad()
     
     def on_before_zero_grad(self, *args, **kwargs):
-        self.ema_weights.to(self.device)
-        self.ema_weights.update(self.model.parameters())
+        if self.ema_prmtrs is not None:
+            self.ema_prmtrs.to(self.device)
+            self.ema_prmtrs.update(self.model.parameters())
 
     def _get_mean_loss_dict_for_type(self, type):
         # Returns a list with the mean loss for each loss_fn for each stage (train, val, test)
