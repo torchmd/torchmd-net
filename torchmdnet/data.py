@@ -134,7 +134,7 @@ class DataModule(LightningDataModule):
             batch_size=batch_size,
             num_workers=self.hparams["num_workers"],
             persistent_workers=True if self.hparams["num_workers"] > 0 else False,
-            pin_memory=True,
+            pin_memory=False,
             shuffle=shuffle,
         )
 
