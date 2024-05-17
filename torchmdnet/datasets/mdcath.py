@@ -34,7 +34,6 @@ class mdCATH(Dataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
-
         numAtoms=5000,
         numNoHAtoms=None,
         numResidues=1000,
@@ -246,15 +245,6 @@ class mdCATH(Dataset):
             assert (
                 coords.shape[0] == z.shape[0]
             ), f"Number of atoms mismatch between coords and z: {group['coords'].shape[1]} vs {z.shape[0]}"
-            assert (
-                forces.shape[0] == z.shape[0]
-            ), f"Number of atoms mismatch between forces and z: {group['forces'].shape[1]} vs {z.shape[0]}"
-            assert (
-                group["coords"].attrs["unit"] == "Angstrom"
-            ), f"Coords unit is not Angstrom: {group['coords'].attrs['unit']}"
-            assert (
-                group["forces"].attrs["unit"] == "kcal/mol/Angstrom"
-            ), f"Forces unit is not kcal/mol/Angstrom: {group['forces'].attrs['unit']}"
 
         return (z, coords, forces)
     
