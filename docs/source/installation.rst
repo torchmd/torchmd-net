@@ -5,7 +5,7 @@ TorchMD-Net is available in `conda-forge <https://conda-forge.org/>`_ and can be
 
 .. code-block:: shell
 
-   mamba install torchmd-net
+   mamba install torchmd-net -c conda-forge
 
 We recommend using `Mamba <https://github.com/conda-forge/miniforge/#mambaforge>`_ instead of conda.
 
