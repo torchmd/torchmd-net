@@ -105,7 +105,7 @@ class mdCATH(Dataset):
     def raw_file_names(self):
         # Check if the dataset has been processed, and if not, return the original source file
         if not hasattr(self, "to_download"):
-            return ["mdCATH_source.h5"]
+            return ["mdcath_source.h5"]
         # Otherwise, return the list of HDF5 files that passed the filtering criteria
         return [f"mdcath_dataset_{pdb_id}.h5" for pdb_id in self.to_download.keys()]
 
@@ -133,7 +133,7 @@ class mdCATH(Dataset):
         return total_size_mb
     def process_data_source(self):
         print("Processing mdCATH source")
-        data_info_path = opj(self.root, "mdCATH_source.h5")
+        data_info_path = opj(self.root, "mdcath_source.h5")
         if not os.path.exists(data_info_path):
             self.download()
         # the to_downlaod is the dictionary that will store the pdb ids and the corresponding temp and replica ids if they pass the filter
