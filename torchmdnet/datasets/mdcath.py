@@ -79,7 +79,6 @@ class mdCATH(Dataset):
         """
 
         self.url = "https://zenodo.org/record/<record_id>/files/"
-        self.preload_dataset_limit = preload_dataset_limit
         super(mdCATH, self).__init__(root, transform, pre_transform, pre_filter)
 
         self.numAtoms = numAtoms
