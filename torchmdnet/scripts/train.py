@@ -121,8 +121,8 @@ def get_argparse():
     parser.add_argument('--wandb-project', default='training_', type=str, help='Define what wandb Project to log to')
     parser.add_argument('--wandb-resume-from-id', default=None, type=str, help='Resume a wandb run from a given run id. The id can be retrieved from the wandb dashboard')
     parser.add_argument('--tensorboard-use', default=False, type=bool, help='Defines if tensor board is used or not')
-    parser.add_argument('--freeze-representation', type=bool, default=False, help='Freeze the representation model parameters during training.')
-    parser.add_argument('--reset-output-model', type=bool, default=False, help='Reset the parameters (randomize) of the output models before stating a training. This option is only used if the training is not starting from scratch, otherwise the parameters are always randomized.')
+    parser.add_argument('--freeze-representation', type=bool, default=False, help='Freeze the representation model parameters during training.', action='store_true')
+    parser.add_argument('--reset-output-model', type=bool, default=False, help='Reset the parameters (randomize) of the output models before stating a training. This option is only used if the training is not starting from scratch, otherwise the parameters are always randomized.', action='store_true')
     parser.add_argument('--overwrite-representation', type=str, help='After loading/creating the model, overwrite the weights of the representation model using the ones stored in the checkpoint provided in this argument.')
     # fmt: on
     return parser
