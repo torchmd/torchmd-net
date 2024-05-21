@@ -48,6 +48,16 @@ class EnergyRefRemover(T.BaseTransform):
         return data
 
 
+def extract_representation_model(state_dict):
+    representation_model = {}
+    prefix = "model.representation_model."
+    for key, value in state_dict.items():
+        if key.startswith(prefix):
+            new_key = key[len(prefix) :]
+            representation_model[new_key] = value
+    return representation_model
+
+
 class LNNP(LightningModule):
     """
     Lightning wrapper for the Neural Network Potentials in TorchMD-Net.
@@ -83,9 +93,8 @@ class LNNP(LightningModule):
 
         if self.hparams.overwrite_representation is not None:
             ckpt = torch.load(self.hparams.overwrite_representation, map_location="cpu")
-            self.model.representation_model.load_state_dict(
-                ckpt["representation_model"]
-            )
+            state_dict = extract_representation_model(ckpt["state_dict"])
+            self.model.representation_model.load_state_dict(state_dict)
 
         if self.hparams.freeze_representation:
             for p in self.model.representation_model.parameters():
