@@ -14,6 +14,7 @@ from lightning import LightningModule
 from torchmdnet.models.model import create_model, load_model
 from torchmdnet.models.utils import dtype_mapping
 import torch_geometric.transforms as T
+from torch_ema import ExponentialMovingAverage
 
 
 class FloatCastDatasetWrapper(T.BaseTransform):
@@ -73,6 +74,11 @@ class LNNP(LightningModule):
         else:
             self.model = create_model(self.hparams, prior_model, mean, std)
 
+        self.ema_prmtrs = None
+        if self.hparams.ema_prmtrs_decay is not None:
+            # initialize EMA for the model paremeters
+            self.ema_prmtrs = ExponentialMovingAverage(self.model.parameters(), decay=self.hparams.ema_prmtrs_decay)
+        
         # initialize exponential smoothing
         self.ema = None
         self._reset_ema_dict()
@@ -251,6 +257,11 @@ class LNNP(LightningModule):
                 pg["lr"] = lr_scale * self.hparams.lr
         super().optimizer_step(*args, **kwargs)
         optimizer.zero_grad()
+    
+    def on_before_zero_grad(self, *args, **kwargs):
+        if self.ema_prmtrs is not None:
+            self.ema_prmtrs.to(self.device)
+            self.ema_prmtrs.update(self.model.parameters())
 
     def _get_mean_loss_dict_for_type(self, type):
         # Returns a list with the mean loss for each loss_fn for each stage (train, val, test)

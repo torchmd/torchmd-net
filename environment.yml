@@ -17,3 +17,5 @@ dependencies:
   - pytest
   - psutil
   - gxx<12
+  - pip:
+    - torch-ema
