@@ -78,9 +78,9 @@ class mdCATH(Dataset):
             Minimum number of frames in the trajectory in order to be considered. Default is None.
         """
 
-        self.url = "https://zenodo.org/record/<record_id>/files/"
-        super(mdCATH, self).__init__(root, transform, pre_transform, pre_filter)
+        self.url = "https://huggingface.co/datasets/compsciencelab/mdCATH/tree/main/"
         self.source_file = "mdcath_source.h5"
+        super(mdCATH, self).__init__(root, transform, pre_transform, pre_filter)
         self.numAtoms = numAtoms
         self.numNoHAtoms = numNoHAtoms
         self.numResidues = numResidues
@@ -120,7 +120,7 @@ class mdCATH(Dataset):
             return
         for pdb_id in self.to_download.keys():
             file_name = f"mdcath_dataset_{pdb_id}.h5"
-            file_path = opj(self.raw_dir, file_name)
+            file_path = opj(self.raw_dir, 'data', file_name)
             if not os.path.exists(file_path):
                 download_url(opj(self.url, file_name), self.root)
 
