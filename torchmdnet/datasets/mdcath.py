@@ -226,6 +226,7 @@ class mdCATH(Dataset):
     
     
     def process_specific_group(self, pdb, file, temp, repl, conf_idx):
+        # do not use attributes from h5group beause is will cause memory leak
         # use the read_direct and np.s_ to get the coords and forces of interest directly
         conf_idx = conf_idx*self.skipFrames 
         slice_idxs = np.s_[conf_idx:conf_idx+1]
@@ -238,7 +239,7 @@ class mdCATH(Dataset):
 
             group['coords'].read_direct(coords, slice_idxs)
             group['forces'].read_direct(forces, slice_idxs) 
-                                
+                         
             # coords and forces shape (num_atoms, 3)
             assert (
                 coords.shape[0] == forces.shape[0]
@@ -246,16 +247,6 @@ class mdCATH(Dataset):
             assert (
                 coords.shape[0] == z.shape[0]
             ), f"Number of atoms mismatch between coords and z: {group['coords'].shape[1]} vs {z.shape[0]}"
-            assert (
-                forces.shape[0] == z.shape[0]
-            ), f"Number of atoms mismatch between forces and z: {group['forces'].shape[1]} vs {z.shape[0]}"
-            assert (
-                group["coords"].attrs["unit"] == "Angstrom"
-            ), f"Coords unit is not Angstrom: {group['coords'].attrs['unit']}"
-            assert (
-                group["forces"].attrs["unit"] == "kcal/mol/Angstrom"
-            ), f"Forces unit is not kcal/mol/Angstrom: {group['forces'].attrs['unit']}"
-
         return (z, coords, forces)
     
     def get(self, element):
