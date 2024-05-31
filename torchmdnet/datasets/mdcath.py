@@ -34,7 +34,6 @@ class mdCATH(Dataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
-
         numAtoms=5000,
         numNoHAtoms=None,
         numResidues=1000,
@@ -44,7 +43,7 @@ class mdCATH(Dataset):
         min_gyration_radius=None,
         max_gyration_radius=None,
         alpha_beta_coil=None,
-        solid_ss = None,
+        solid_ss=None,
         numFrames=None,
     ):
         """mdCATH dataset class for PyTorch Geometric to load protein structures and dynamics from the mdCATH dataset.
