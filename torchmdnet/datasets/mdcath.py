@@ -258,4 +258,5 @@ class mdCATH(Dataset):
         data.z = torch.tensor(z, dtype=torch.long)
         data.pos = torch.tensor(coords, dtype=torch.float)
         data.neg_dy = torch.tensor(forces, dtype=torch.float)
+        data.info = f'{pdb_id}_{temp}_{replica}_{conf_idx}'
         return data
