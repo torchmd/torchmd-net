@@ -436,7 +436,7 @@ class CosineCutoff(nn.Module):
 
 
 class MLP(nn.Module):
-    """A simple multi-layer perceptron with a given number of layers and hidden channels.
+    r"""A simple multi-layer perceptron with a given number of layers and hidden channels.
 
     The simplest MLP has no hidden layers and is composed of two linear layers with a non-linear activation function in between:
 
