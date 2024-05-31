@@ -78,8 +78,7 @@ class mdCATH(Dataset):
             Minimum number of frames in the trajectory in order to be considered. Default is None.
         """
 
-        self.url = "https://huggingface.co/datasets/compsciencelab/mdCATH/tree/main/"
-        self.source_file = "mdcath_source.h5"
+        self.url = "https://zenodo.org/record/<record_id>/files/"
         super(mdCATH, self).__init__(root, transform, pre_transform, pre_filter)
         self.numAtoms = numAtoms
         self.numNoHAtoms = numNoHAtoms
@@ -105,7 +104,7 @@ class mdCATH(Dataset):
     def raw_file_names(self):
         # Check if the dataset has been processed, and if not, return the original source file
         if not hasattr(self, "to_download"):
-            return [self.source_file]
+            return ["mdcath_source.h5"]
         # Otherwise, return the list of HDF5 files that passed the filtering criteria
         return [f"mdcath_dataset_{pdb_id}.h5" for pdb_id in self.to_download.keys()]
 
@@ -133,7 +132,7 @@ class mdCATH(Dataset):
         return total_size_mb
     def process_data_source(self):
         print("Processing mdCATH source")
-        data_info_path = opj(self.root, self.source_file)
+        data_info_path = opj(self.root, "mdcath_source.h5")
         if not os.path.exists(data_info_path):
             self.download()
         # the to_downlaod is the dictionary that will store the pdb ids and the corresponding temp and replica ids if they pass the filter
@@ -245,6 +244,7 @@ class mdCATH(Dataset):
             assert (
                 coords.shape[0] == z.shape[0]
             ), f"Number of atoms mismatch between coords and z: {group['coords'].shape[1]} vs {z.shape[0]}"
+
         return (z, coords, forces)
     
     def get(self, element):
