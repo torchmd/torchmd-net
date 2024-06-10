@@ -25,7 +25,7 @@ class FloatCastDatasetWrapper(T.BaseTransform):
         super(FloatCastDatasetWrapper, self).__init__()
         self._dtype = dtype
 
-    def forward(self, data):
+    def __call__(self, data):
         for key, value in data:
             if torch.is_tensor(value) and torch.is_floating_point(value):
                 setattr(data, key, value.to(self._dtype))
@@ -41,7 +41,7 @@ class EnergyRefRemover(T.BaseTransform):
         super(EnergyRefRemover, self).__init__()
         self._atomref = atomref
 
-    def forward(self, data):
+    def __call__(self, data):
         self._atomref = self._atomref.to(data.z.device).type(data.y.dtype)
         if "y" in data:
             data.y.index_add_(0, data.batch, -self._atomref[data.z])
