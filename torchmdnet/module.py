@@ -167,6 +167,32 @@ class LNNP(LightningModule):
             loss_y = self._update_loss_with_ema(stage, "y", loss_name, loss_y)
         return {"y": loss_y, "neg_dy": loss_neg_y}
 
+    def _compute_second_derivative_regularization(self, y, neg_dy, batch):
+        # Compute force gradient and add it to the loss like: max(0, grad(neg_dy.sum())-eps)^2
+        # Args:
+        #   y: predicted value
+        #   neg_dy: predicted negative derivative
+        #   batch: batch of data
+        # Returns:
+        #   regularization: regularization term
+        assert "pos" in batch
+        force_sum = neg_dy.sum()
+        grad_outputs = [torch.ones_like(force_sum)]
+        assert batch.pos.requires_grad
+        ddy = torch.autograd.grad(
+            [force_sum],
+            [batch.pos],
+            grad_outputs=grad_outputs,
+            create_graph=True,
+            retain_graph=True,
+        )[0]
+        decay = self.hparams.regularization_decay / (self.current_epoch + 1)
+        regularization = (
+            torch.max((ddy.norm() - self.hparams.regularization_coefficient), 0)[0]
+            * decay
+        )
+        return regularization
+
     def _update_loss_with_ema(self, stage, type, loss_name, loss):
         # Update the loss using an exponential moving average when applicable
         # Args:
@@ -235,6 +261,15 @@ class LNNP(LightningModule):
                 step_losses["y"] * self.hparams.y_weight
                 + step_losses["neg_dy"] * self.hparams.neg_dy_weight
             )
+            if (
+                self.hparams.regularize_second_gradient
+                and self.hparams.derivative
+                and stage == "train"
+            ):
+                total_loss = (
+                    total_loss
+                    + self._compute_second_derivative_regularization(y, neg_dy, batch)
+                )
             self.losses[stage]["total"][loss_name].append(total_loss.detach())
         return total_loss
 
