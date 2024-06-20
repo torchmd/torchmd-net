@@ -175,7 +175,7 @@ class LNNP(LightningModule):
         #   loss_name: name of the loss function
         #   loss: loss value
         alpha = getattr(self.hparams, f"ema_alpha_{type}")
-        if stage in ["train", "val"] and alpha < 1:
+        if stage in ["train", "val"] and alpha < 1 and alpha > 0:
             ema = (
                 self.ema[stage][type][loss_name]
                 if loss_name in self.ema[stage][type]
