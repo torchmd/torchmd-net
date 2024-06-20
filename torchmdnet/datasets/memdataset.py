@@ -17,9 +17,9 @@ class MemmappedDataset(Dataset):
         - :obj:`pos`: Positions of the atoms.
         - :obj:`y`: Energy of the conformation.
         - :obj:`neg_dy`: Forces on the atoms.
-        - :obj:`q`: Total charge of the conformation.
-        - :obj:`pq`: Partial charges of the atoms.
-        - :obj:`dp`: Dipole moment of the conformation.
+        - :obj:`total_charge`: Total charge of the conformation.
+        - :obj:`partial_charges`: Partial charges of the atoms.
+        - :obj:`dipole_moment`: Dipole moment of the conformation.
 
     The data is stored in the following files:
 
@@ -28,9 +28,9 @@ class MemmappedDataset(Dataset):
         - :obj:`name.pos.mmap`: Positions of all the atoms.
         - :obj:`name.y.mmap`: Energy of each conformation.
         - :obj:`name.neg_dy.mmap`: Forces on all the atoms.
-        - :obj:`name.q.mmap`: Total charge of each conformation.
-        - :obj:`name.pq.mmap`: Partial charges of all the atoms.
-        - :obj:`name.dp.mmap`: Dipole moment of each conformation.
+        - :obj:`name.total_charge.mmap`: Total charge of each conformation.
+        - :obj:`name.partial_charges.mmap`: Partial charges of all the atoms.
+        - :obj:`name.dipole_moment.mmap`: Dipole moment of each conformation.
 
     Args:
         root (str): Root directory where the dataset should be stored.
@@ -45,8 +45,8 @@ class MemmappedDataset(Dataset):
             indicating whether the data object should be included in the final
             dataset.
         properties (tuple of str, optional): The properties to include in the
-            dataset. Can be any subset of :obj:`y`, :obj:`neg_dy`, :obj:`q`,
-            :obj:`pq`, and :obj:`dp`.
+            dataset. Can be any subset of :obj:`y`, :obj:`neg_dy`, :obj:`total_charge`,
+            :obj:`partial_charges`, and :obj:`dipole_moment`.
     """
 
     def __init__(
@@ -55,7 +55,7 @@ class MemmappedDataset(Dataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
-        properties=("y", "neg_dy", "q", "pq", "dp"),
+        properties=("y", "neg_dy", "total_charge", "partial_charges", "dipole_moment"),
     ):
         self.name = self.__class__.__name__
         self.properties = properties
@@ -76,13 +76,13 @@ class MemmappedDataset(Dataset):
             self.neg_dy_mm = np.memmap(
                 fnames["neg_dy"], mode="r", dtype=np.float32, shape=(num_all_atoms, 3)
             )
-        if "q" in self.properties:
-            self.q_mm = np.memmap(fnames["q"], mode="r", dtype=np.int8)
-        if "pq" in self.properties:
-            self.pq_mm = np.memmap(fnames["pq"], mode="r", dtype=np.float32)
-        if "dp" in self.properties:
+        if "total_charge" in self.properties:
+            self.q_mm = np.memmap(fnames["total_charge"], mode="r", dtype=np.int8)
+        if "partial_charges" in self.properties:
+            self.pq_mm = np.memmap(fnames["partial_charges"], mode="r", dtype=np.float32)
+        if "dipole_moment" in self.properties:
             self.dp_mm = np.memmap(
-                fnames["dp"], mode="r", dtype=np.float32, shape=(num_all_confs, 3)
+                fnames["dipole_moment"], mode="r", dtype=np.float32, shape=(num_all_confs, 3)
             )
 
         assert self.idx_mm[0] == 0
@@ -151,20 +151,20 @@ class MemmappedDataset(Dataset):
                 dtype=np.float32,
                 shape=(num_all_atoms, 3),
             )
-        if "q" in self.properties:
+        if "total_charge" in self.properties:
             q_mm = np.memmap(
-                fnames["q"] + ".tmp", mode="w+", dtype=np.int8, shape=num_all_confs
+                fnames["total_charge"] + ".tmp", mode="w+", dtype=np.int8, shape=num_all_confs
             )
-        if "pq" in self.properties:
+        if "partial_charges" in self.properties:
             pq_mm = np.memmap(
-                fnames["pq"] + ".tmp",
+                fnames["partial_charges"] + ".tmp",
                 mode="w+",
                 dtype=np.float32,
                 shape=num_all_atoms,
             )
-        if "dp" in self.properties:
+        if "dipole_moment" in self.properties:
             dp_mm = np.memmap(
-                fnames["dp"] + ".tmp",
+                fnames["dipole_moment"] + ".tmp",
                 mode="w+",
                 dtype=np.float32,
                 shape=(num_all_confs, 3),
@@ -182,12 +182,12 @@ class MemmappedDataset(Dataset):
                 y_mm[i_conf] = data.y
             if "neg_dy" in self.properties:
                 neg_dy_mm[i_atom:i_next_atom] = data.neg_dy
-            if "q" in self.properties:
-                q_mm[i_conf] = data.q.to(pt.int8)
-            if "pq" in self.properties:
-                pq_mm[i_atom:i_next_atom] = data.pq
-            if "dp" in self.properties:
-                dp_mm[i_conf] = data.dp
+            if "total_charge" in self.properties:
+                q_mm[i_conf] = data.total_charge.to(pt.int8)
+            if "partial_charges" in self.properties:
+                pq_mm[i_atom:i_next_atom] = data.partial_charges
+            if "dipole_moment" in self.properties:
+                dp_mm[i_conf] = data.dipole_moment
             i_atom = i_next_atom
 
         idx_mm[-1] = num_all_atoms
@@ -200,11 +200,11 @@ class MemmappedDataset(Dataset):
             y_mm.flush()
         if "neg_dy" in self.properties:
             neg_dy_mm.flush()
-        if "q" in self.properties:
+        if "total_charge" in self.properties:
             q_mm.flush()
-        if "pq" in self.properties:
+        if "partial_charges" in self.properties:
             pq_mm.flush()
-        if "dp" in self.properties:
+        if "dipole_moment" in self.properties:
             dp_mm.flush()
 
         os.rename(idx_mm.filename, fnames["idx"])
@@ -214,12 +214,12 @@ class MemmappedDataset(Dataset):
             os.rename(y_mm.filename, fnames["y"])
         if "neg_dy" in self.properties:
             os.rename(neg_dy_mm.filename, fnames["neg_dy"])
-        if "q" in self.properties:
-            os.rename(q_mm.filename, fnames["q"])
-        if "pq" in self.properties:
-            os.rename(pq_mm.filename, fnames["pq"])
-        if "dp" in self.properties:
-            os.rename(dp_mm.filename, fnames["dp"])
+        if "total_charge" in self.properties:
+            os.rename(q_mm.filename, fnames["total_charge"])
+        if "partial_charges" in self.properties:
+            os.rename(pq_mm.filename, fnames["partial_charges"])
+        if "dipole_moment" in self.properties:
+            os.rename(dp_mm.filename, fnames["dipole_moment"])
 
     def len(self):
         return len(self.idx_mm) - 1
@@ -233,9 +233,9 @@ class MemmappedDataset(Dataset):
             - :obj:`pos`: Positions of the atoms.
             - :obj:`y`: Formation energy of the molecule.
             - :obj:`neg_dy`: Forces on the atoms.
-            - :obj:`q`: Total charge of the molecule.
-            - :obj:`pq`: Partial charges of the atoms.
-            - :obj:`dp`: Dipole moment of the molecule.
+            - :obj:`total_charge`: Total charge of the molecule.
+            - :obj:`partial_charges`: Partial charges of the atoms.
+            - :obj:`dipole_moment`: Dipole moment of the molecule.
 
         Args:
             idx (int): Index of the data object.
@@ -252,10 +252,10 @@ class MemmappedDataset(Dataset):
             props["y"] = pt.tensor(self.y_mm[idx]).view(1, 1)
         if "neg_dy" in self.properties:
             props["neg_dy"] = pt.tensor(self.neg_dy_mm[atoms])
-        if "q" in self.properties:
-            props["q"] = pt.tensor(self.q_mm[idx], dtype=pt.long)
-        if "pq" in self.properties:
-            props["pq"] = pt.tensor(self.pq_mm[atoms])
-        if "dp" in self.properties:
-            props["dp"] = pt.tensor(self.dp_mm[idx])
+        if "total_charge" in self.properties:
+            props["total_charge"] = pt.tensor(self.q_mm[idx], dtype=pt.long)
+        if "partial_charges" in self.properties:
+            props["partial_charges"] = pt.tensor(self.pq_mm[atoms])
+        if "dipole_moment" in self.properties:
+            props["dipole_moment"] = pt.tensor(self.dp_mm[idx])
         return Data(z=z, pos=pos, **props)

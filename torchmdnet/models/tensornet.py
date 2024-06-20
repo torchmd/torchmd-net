@@ -3,7 +3,7 @@
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
 import torch
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 from torch import Tensor, nn
 from torchmdnet.models.utils import (
     CosineCutoff,
@@ -62,6 +62,15 @@ def tensor_norm(tensor):
     return (tensor**2).sum((-2, -1))
 
 
+def additional_labels_handler(method, args):
+    """ Handler for additional labels. It returns the method to be used for the specific additional label 
+    and the parameters to initialize it."""
+    if method == "tensornet_q":
+        return TensornetQ(args["init_value"], args["label"], args["learnable"])
+    else:
+        raise NotImplementedError(f"Method {method} not implemented")
+
+
 class TensorNet(nn.Module):
     r"""TensorNet's architecture. From
     TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials; G. Simeon and G. de Fabritiis.
@@ -118,6 +127,12 @@ class TensorNet(nn.Module):
             (default: :obj:`True`)
         check_errors (bool, optional): Whether to check for errors in the distance module.
             (default: :obj:`True`)
+        additional_labels (Dict[str, Any], optional): Define the additional method to be used by the model, and the parameters to initialize it.
+            example:
+            additional_labels = {method_name1: {label_name: 'extra_arg_label', 'method_prm1': method_prm1,  'method_prm2': method_prm2}, 
+                                 method_name2: {label_name: 'extra_arg_label', 'method_prm1': method_prm1,  'method_prm2': method_prm2},
+                                 ...}
+            (default: :obj:`None`)
     """
 
     def __init__(
@@ -137,6 +152,7 @@ class TensorNet(nn.Module):
         check_errors=True,
         dtype=torch.float32,
         box_vecs=None,
+        additional_labels=None,
     ):
         super(TensorNet, self).__init__()
 
@@ -161,6 +177,22 @@ class TensorNet(nn.Module):
         self.activation = activation
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
+        self.additional_labels = additional_labels
+        self.label_callbacks = None
+
+        if additional_labels is not None:
+            self.label_callbacks = {}
+            for method_name, method_args in additional_labels.items():
+                # the key of the label_callbacks is the label of the method (total_charge, partial_charges, etc.)
+                # this will be useful for static shapes processing if needed
+                self.label_callbacks[method_args["label"]] = {
+                    "name": method_name,
+                    "method": additional_labels_handler(method_name, method_args),
+                }
+        self.tensorq_labels = None
+        if self.label_callbacks is not None:
+            self.tensorq_labels = [label for label, callback in self.label_callbacks.items() if callback['name'] == 'tensornet_q']
+        
         act_class = act_class_mapping[activation]
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
@@ -171,11 +203,9 @@ class TensorNet(nn.Module):
             act_class,
             cutoff_lower,
             cutoff_upper,
-            trainable_rbf,
             max_z,
             dtype,
         )
-
         self.layers = nn.ModuleList()
         if num_layers != 0:
             for _ in range(num_layers):
@@ -217,6 +247,9 @@ class TensorNet(nn.Module):
             layer.reset_parameters()
         self.linear.reset_parameters()
         self.out_norm.reset_parameters()
+        if self.label_callbacks is not None:
+            for callback in self.label_callbacks:
+                self.label_callbacks[callback]["method"].reset_parameters()
 
     def forward(
         self,
@@ -224,8 +257,7 @@ class TensorNet(nn.Module):
         pos: Tensor,
         batch: Tensor,
         box: Optional[Tensor] = None,
-        q: Optional[Tensor] = None,
-        s: Optional[Tensor] = None,
+        extra_args: Optional[Dict[str, Tensor]] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
         # Obtain graph, with distances and relative position vectors
         edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
@@ -234,16 +266,21 @@ class TensorNet(nn.Module):
             edge_vec is not None
         ), "Distance module did not return directional information"
         # Distance module returns -1 for non-existing edges, to avoid having to resize the tensors when we want to ensure static shapes (for CUDA graphs) we make all non-existing edges pertain to a ghost atom
-        # Total charge q is a molecule-wise property. We transform it into an atom-wise property, with all atoms belonging to the same molecule being assigned the same charge q
-        if q is None:
-            q = torch.zeros_like(z, device=z.device, dtype=z.dtype)
-        else:
-            q = q[batch]
         zp = z
+
+        if self.label_callbacks is not None:
+            assert extra_args is not None, "TensorNet expects extra_args to be provided when additional_labels are used"
+            for label in self.label_callbacks.keys():
+                assert (label in extra_args), f"TensorNet expects {label} to be provided as part of extra_args"
+                if extra_args[label].shape != z.shape:
+                    extra_args[label] = extra_args[label][batch]
+                if self.static_shapes:
+                        extra_args[label] = torch.cat((extra_args[label], torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
+
         if self.static_shapes:
             mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
             zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
-            q = torch.cat((q, torch.zeros(1, device=q.device, dtype=q.dtype)), dim=0)
+
             # I trick the model into thinking that the masked edges pertain to the extra atom
             # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
             edge_index = edge_index.masked_fill(mask, z.shape[0])
@@ -256,9 +293,17 @@ class TensorNet(nn.Module):
         # Normalizing edge vectors by their length can result in NaNs, breaking Autograd.
         # I avoid dividing by zero by setting the weight of self edges and self loops to 1
         edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
+        
+        prefactor = torch.ones(1, device=z.device, dtype=z.dtype)
+        if self.tensorq_labels is not None:
+            for label in self.tensorq_labels:
+                prefactor = prefactor * self.label_callbacks[label]["method"](extra_args[label]) 
+            prefactor += 1
+       
         X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr)
+        
         for layer in self.layers:
-            X = layer(X, edge_index, edge_weight, edge_attr, q)
+            X = layer(X, edge_index, edge_weight, edge_attr, prefactor)
         I, A, S = decompose_tensor(X)
         x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
         x = self.out_norm(x)
@@ -282,7 +327,6 @@ class TensorEmbedding(nn.Module):
         activation,
         cutoff_lower,
         cutoff_upper,
-        trainable_rbf=False,
         max_z=128,
         dtype=torch.float32,
     ):
@@ -440,6 +484,7 @@ class Interaction(nn.Module):
             )
         self.act = activation()
         self.equivariance_invariance_group = equivariance_invariance_group
+
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -454,7 +499,7 @@ class Interaction(nn.Module):
         edge_index: Tensor,
         edge_weight: Tensor,
         edge_attr: Tensor,
-        q: Tensor,
+        prefactor: Tensor,
     ) -> Tensor:
         C = self.cutoff(edge_weight)
         for linear_scalar in self.linears_scalar:
@@ -478,18 +523,39 @@ class Interaction(nn.Module):
             edge_index, edge_attr[..., 2, None, None], S, X.shape[0]
         )
         msg = Im + Am + Sm
+                    
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(msg, Y)
             B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor((1 + 0.1 * q[..., None, None, None]) * (A + B))
+            I, A, S = decompose_tensor(prefactor * (A + B))
         if self.equivariance_invariance_group == "SO(3)":
             B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor(2 * B)
+            I, A, S = decompose_tensor(prefactor * 2 * B)
         normp1 = (tensor_norm(I + A + S) + 1)[..., None, None]
         I, A, S = I / normp1, A / normp1, S / normp1
         I = self.linears_tensor[3](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(
+            0, 3, 1, 2
+        )  # shape: (natoms, hidden_channels, 3, 3)
         dX = I + A + S
-        X = X + dX + (1 + 0.1 * q[..., None, None, None]) * torch.matrix_power(dX, 2)
+        X = X + dX + (prefactor) * torch.matrix_power(dX, 2)
         return X
+
+
+class TensornetQ(nn.Module):
+    def __init__(self, init_value, additional_label="total_charge", learnable=False):
+        super().__init__()
+        self.prmtr = nn.Parameter(torch.tensor(init_value), requires_grad=learnable)
+        self.learnable = learnable
+        self.init_value = init_value
+        self.allowed_labels = ["total_charge", "partial_charges"]
+        assert (
+            additional_label in self.allowed_labels
+        ), f"Label {additional_label} not allowed for this method"
+
+    def forward(self, X):
+        return self.prmtr * X[..., None, None, None]
+
+    def reset_parameters(self):
+        self.prmtr.data = torch.tensor(self.init_value)

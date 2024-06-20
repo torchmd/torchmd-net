@@ -18,19 +18,19 @@ from utils import load_example_args, create_example_batch
 
 @mark.parametrize("model_name", models.__all_models__)
 @mark.parametrize("use_batch", [True, False])
-@mark.parametrize("explicit_q_s", [True, False])
+@mark.parametrize("use_extra_args", [True, False])
 @mark.parametrize("precision", [32, 64])
-def test_forward(model_name, use_batch, explicit_q_s, precision):
+@mark.parametrize("additional_labels", [None, {"tensornet_q": {"label": "total_charge", 'learnable': False, 'init_value': 0.1}}])
+def test_forward(model_name, use_batch, use_extra_args, precision, additional_labels):
     z, pos, batch = create_example_batch()
     pos = pos.to(dtype=dtype_mapping[precision])
-    model = create_model(
-        load_example_args(model_name, prior_model=None, precision=precision)
-    )
+    model = create_model(load_example_args(model_name, prior_model=None, precision=precision, additional_labels=additional_labels))
     batch = batch if use_batch else None
-    if explicit_q_s:
-        model(z, pos, batch=batch, q=None, s=None)
-    else:
+    if not use_extra_args and additional_labels is None:
         model(z, pos, batch=batch)
+    else:
+        model(z, pos, batch=batch, extra_args={'total_charge': torch.zeros_like(z)})
+
 
 
 @mark.parametrize("model_name", models.__all_models__)
@@ -137,7 +137,6 @@ def test_cuda_graph_compatible(model_name):
         "output_model": "Scalar",
         "reduce_op": "sum",
         "precision": 32,
-    }
     model = create_model(args).to(device="cuda")
     model.eval()
     z = z.to("cuda")
