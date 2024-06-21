@@ -61,7 +61,6 @@ def get_argparse():
     parser.add_argument('--remove-ref-energy', action='store_true', help='If true, remove the reference energy from the dataset for delta-learning. Total energy can still be predicted by the model during inference by turning this flag off when loading.  The dataset must be compatible with Atomref for this to be used.')
 
     parser.add_argument('--regularize-second-gradient', action="store_true", help='If true, regularize the second derivative of the energy w.r.t. the coordinates')
-    parser.add_argument('--regularization-coefficient', type=float, default=0.0, help='Coefficient for the regularization term')
     parser.add_argument('--regularization-weight', type=float, default=0.0, help='Weight for the force regularization term')
     # dataset specific
     parser.add_argument('--dataset', default=None, type=str, choices=datasets.__all__, help='Name of the torch_geometric dataset')
