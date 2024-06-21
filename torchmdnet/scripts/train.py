@@ -62,7 +62,7 @@ def get_argparse():
 
     parser.add_argument('--regularize-second-gradient', action="store_true", help='If true, regularize the second derivative of the energy w.r.t. the coordinates')
     parser.add_argument('--regularization-coefficient', type=float, default=0.0, help='Coefficient for the regularization term')
-    parser.add_argument('--regularization-decay', type=float, default=0.0, help='Decay rate for the regularization term')
+    parser.add_argument('--regularization-weight', type=float, default=0.0, help='Weight for the force regularization term')
     # dataset specific
     parser.add_argument('--dataset', default=None, type=str, choices=datasets.__all__, help='Name of the torch_geometric dataset')
     parser.add_argument('--dataset-root', default='~/data', type=str, help='Data storage directory (not used if dataset is "CG")')

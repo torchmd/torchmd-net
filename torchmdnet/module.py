@@ -176,7 +176,7 @@ class LNNP(LightningModule):
         # Returns:
         #   regularization: regularization term
         assert "pos" in batch
-        force_sum = neg_dy.sum()
+        force_sum = (neg_dy**2).sum()
         grad_outputs = [torch.ones_like(force_sum)]
         assert batch.pos.requires_grad
         ddy = torch.autograd.grad(
@@ -186,11 +186,8 @@ class LNNP(LightningModule):
             create_graph=True,
             retain_graph=True,
         )[0]
-        decay = self.hparams.regularization_decay / (self.current_epoch + 1)
-        regularization = (
-            torch.max((ddy.norm() - self.hparams.regularization_coefficient), 0)[0]
-            * decay
-        )
+        regularization = ddy.norm() * self.hparams.regularization_weight
+        print(f"Regularization: {regularization}")
         return regularization
 
     def _update_loss_with_ema(self, stage, type, loss_name, loss):
