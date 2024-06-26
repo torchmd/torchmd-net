@@ -33,8 +33,24 @@ def random_vectors_in_sphere_box_muller(radius, count):
     return vectors_scaled
 
 
+def compute_energy(pos, max_dist):
+    dist = torch.linalg.norm(pos[:, 0, :] - pos[:, 1, :], axis=1)  # shape (size,)
+    y = 20 + 80 * (1 - dist / max_dist)  # shape (size,)
+    return y
+
+
+def compute_forces(pos, max_dist):
+    pos = pos.clone().detach().requires_grad_(True)
+    y = compute_energy(pos, max_dist)
+    y_sum = y.sum()
+    y_sum.backward()
+    forces = -pos.grad
+    return forces
+
+
 class ShortRange(Dataset):
-    def __init__(self, max_dist, size, max_z, transform=None, pre_transform=None):
+    def __init__(self, root, max_dist, size, max_z, transform=None, pre_transform=None):
+        super(ShortRange, self).__init__(root, transform, pre_transform)
         self.max_dist = max_dist
         self.size = size
         self.max_z = max_z
@@ -44,29 +60,58 @@ class ShortRange(Dataset):
         self.pos = self.pos.reshape(size, 2, 3)
         # Atomic numbers
         self.z = np.random.randint(1, max_z, size=2 * size).reshape(size, 2)
-        # Energy, should be a linear function of the distance, goes from 20 to 100 from max_dist to 0
-        dist = np.linalg.norm(
-            self.pos[:, 0, :] - self.pos[:, 1, :], axis=1
-        )  # shape (size,)
-        self.y = 20 + 80 * (1 - dist / max_dist)
+        # Energy
+        self.y = compute_energy(torch.tensor(self.pos), max_dist).detach().numpy() * 0
+        assert self.y.shape == (size,)
+        assert self.z.shape == (size, 2)
         # Negative gradient of the energy with respect to the positions, should have the same shape as pos
-        self.neg_dy = np.zeros((size, 2, 3))
-        self.neg_dy[:, 0, :] = (
-            -80
-            / max_dist
-            * (self.pos[:, 0, :] - self.pos[:, 1, :])
-            / dist[:, np.newaxis]
+        self.neg_dy = (
+            compute_forces(torch.tensor(self.pos, dtype=torch.float), max_dist)
+            .detach()
+            .numpy()
+            * 0
         )
-        self.neg_dy[:, 1, :] = -self.neg_dy[:, 0, :]
 
     def get(self, idx):
+        y = torch.tensor(self.y[idx], dtype=torch.float).view(1, 1)
+        z = torch.tensor(self.z[idx], dtype=torch.long).view(2)
+        pos = torch.tensor(self.pos[idx], dtype=torch.float).view(2, 3)
+        neg_dy = torch.tensor(self.neg_dy[idx], dtype=torch.float).view(2, 3)
         data = Data(
-            z=torch.tensor(self.z[idx], dtype=torch.long),
-            pos=torch.tensor(self.pos[idx], dtype=torch.float),
-            y=torch.tensor(self.y[idx], dtype=torch.float),
-            neg_dy=torch.tensor(self.neg_dy[idx], dtype=torch.float),
+            z=z,
+            pos=pos,
+            y=y,
+            neg_dy=neg_dy,
         )
         return data
 
-    def __len__(self):
+    def len(self):
         return self.size
+
+        # Taken from https://github.com/isayev/ASE_ANI/blob/master/ani_models/ani-2x_8x/sae_linfit.dat
+
+    _ELEMENT_ENERGIES = {
+        1: -0.5978583943827134,  # H
+        6: -38.08933878049795,  # C
+        7: -54.711968298621066,  # N
+        8: -75.19106774742086,  # O
+        9: -99.80348506781634,  # F
+        16: -398.1577125334925,  # S
+        17: -460.1681939421027,  # Cl
+    }
+    HARTREE_TO_EV = 27.211386246  #::meta private:
+
+    def get_atomref(self, max_z=100):
+        """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior.
+
+        Args:
+            max_z (int): Maximum atomic number
+
+        Returns:
+            torch.Tensor: Atomic energy reference values for each element in the dataset.
+        """
+        refs = torch.zeros(max_z)
+        for key, val in self._ELEMENT_ENERGIES.items():
+            refs[key] = val * self.HARTREE_TO_EV * 0
+
+        return refs.view(-1, 1)
