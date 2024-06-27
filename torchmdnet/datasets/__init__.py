@@ -23,6 +23,7 @@ from .qm9 import QM9
 from .qm9q import QM9q
 from .spice import SPICE
 from .genentech import GenentechTorsions
+from .maceoff import MACEOFF
 
 __all__ = [
     "Ace",
@@ -47,4 +48,5 @@ __all__ = [
     "SPICE",
     "Tripeptides",
     "WaterBox",
+    "MACEOFF",
 ]
