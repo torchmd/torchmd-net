@@ -20,8 +20,14 @@ import logging
 
 class MACEOFF(MemmappedDataset):
     """
-    MACEOFF dataset from MACE-OFF23: Transferable Machine Learning Force Fields for Organic Molecules, Kovacs et.al. https://arxiv.org/abs/2312.15211
-    This dataset consists of arounf 100K conformations with 95% of them coming from SPICE and augmented with conformations from QMugs, COMP6 and clusters of water carved out of MD simulations of liquid water.
+        MACEOFF dataset from MACE-OFF23: Transferable Machine Learning Force Fields for Organic Molecules, Kovacs et.al. https://arxiv.org/abs/2312.15211
+        This dataset consists of arounf 100K conformations with 95% of them coming from SPICE and augmented with conformations from QMugs, COMP6 and clusters of water carved out of MD simulations of liquid water.
+
+        From the repository:
+        The core of the training set is the SPICE dataset. 95% of the data were used for training and validation, and 5% for testing. The MACE-OFF23 model is trained to reproduce the energies and forces computed at the ωB97M-D3(BJ)/def2-TZVPPD level of quantum mechanics, as implemented in the PSI4 software. We have used a subset of SPICE that contains the ten chemical elements H, C, N, O, F, P, S, Cl, Br, and I, and has a neutral formal charge. We have also removed the ion pairs subset. Overall, we used about 85% of the full SPICE dataset.
+
+    Contains energy and force data in units of eV and eV/Angstrom
+
     """
 
     VERSIONS = {
