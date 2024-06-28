@@ -68,6 +68,10 @@ class SPICE(MemmappedDataset):
             "url": "https://zenodo.org/records/8222043/files",
             "file": "SPICE-1.1.4.hdf5",
         },
+        "2.0.1": {
+            "url": "https://zenodo.org/records/10975225/files",
+            "file": "SPICE-2.0.1.hdf5",
+        },
     }
 
     @property
