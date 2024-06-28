@@ -57,7 +57,8 @@ class MemmappedDataset(Dataset):
         pre_filter=None,
         properties=("y", "neg_dy", "q", "pq", "dp"),
     ):
-        self.name = self.__class__.__name__
+        if not hasattr(self, "name"):
+            self.name = self.__class__.__name__
         self.properties = properties
         super().__init__(root, transform, pre_transform, pre_filter)
 
