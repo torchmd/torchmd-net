@@ -108,6 +108,10 @@ class MACEOFF(MemmappedDataset):
                 if self.max_gradient:
                     if data.neg_dy.norm(dim=1).max() > float(self.max_gradient):
                         continue
+                if self.pre_filter is not None and not self.pre_filter(data):
+                    continue
+                if self.pre_transform is not None:
+                    data = self.pre_transform(data)
                 yield data
 
     def download(self):
