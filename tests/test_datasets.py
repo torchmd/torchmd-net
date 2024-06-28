@@ -291,8 +291,8 @@ def test_ace(tmpdir):
         mol["forces"].attrs["units"] = "eV/Å"
         mol["partial_charges"] = np.random.random((2, 3))
         mol["partial_charges"].attrs["units"] = "e"
-        mol["dipole_moment"] = np.random.random((2, 3))
-        mol["dipole_moment"].attrs["units"] = "e*Å"
+        mol["dipole_moments"] = np.random.random((2, 3))
+        mol["dipole_moments"].attrs["units"] = "e*Å"
     dataset_v2 = Ace(root=tmpdir, paths=tmpfilename_v2)
     assert len(dataset_v2) == 6
     f2.flush()
