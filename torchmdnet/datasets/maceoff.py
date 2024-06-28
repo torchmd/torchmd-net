@@ -101,6 +101,9 @@ class MACEOFF(MemmappedDataset):
                         neg_dy=pt.tensor(forces, dtype=pt.float32),
                     )
                 )
+                assert data.y.shape == (1, 1)
+                assert data.z.shape[0] == data.pos.shape[0]
+                assert data.neg_dy.shape[0] == data.pos.shape[0]
                 # Skip samples with large forces
                 if self.max_gradient:
                     if data.neg_dy.norm(dim=1).max() > float(self.max_gradient):
