@@ -76,7 +76,7 @@ class SPICE(MemmappedDataset):
 
     @property
     def raw_dir(self):
-        return os.path.join(super().raw_dir, self.version)
+        return os.path.join(super().raw_dir, "spice", self.version)
 
     @property
     def raw_file_names(self):
