@@ -101,6 +101,10 @@ class MACEOFF(MemmappedDataset):
                         neg_dy=pt.tensor(forces, dtype=pt.float32),
                     )
                 )
+                # Skip samples with large forces
+                if self.max_gradient:
+                    if data.neg_dy.norm(dim=1).max() > float(self.max_gradient):
+                        continue
                 yield data
 
     def download(self):
