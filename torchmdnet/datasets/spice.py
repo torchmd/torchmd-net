@@ -10,6 +10,7 @@ import torch as pt
 from torchmdnet.datasets.memdataset import MemmappedDataset
 from torch_geometric.data import Data, download_url
 from tqdm import tqdm
+import logging
 
 
 class SPICE(MemmappedDataset):
@@ -141,7 +142,12 @@ class SPICE(MemmappedDataset):
                 * self.HARTREE_TO_EV
                 / self.BORH_TO_ANGSTROM
             )
-
+            if all_pos.ndim < 3:
+                logging.warning(f"Bogus conformation {mol_id}")
+                logging.warning(
+                    f"Found {all_pos.shape} positions, {all_y.shape} energies and {all_neg_dy.shape} gradients"
+                )
+                continue
             assert all_pos.shape[0] == all_y.shape[0]
             assert all_pos.shape[1] == z.shape[0]
             assert all_pos.shape[2] == 3
