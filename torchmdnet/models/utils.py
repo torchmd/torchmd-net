@@ -690,6 +690,7 @@ act_class_mapping = {
     "tanh": nn.Tanh,
     "sigmoid": nn.Sigmoid,
     "swish": Swish,
+    "mish": nn.Mish,
 }
 
 dtype_mapping = {16: torch.float16, 32: torch.float, 64: torch.float64}
