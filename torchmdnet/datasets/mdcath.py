@@ -43,7 +43,7 @@ class mdCATH(Dataset):
         min_gyration_radius=None,
         max_gyration_radius=None,
         alpha_beta_coil=None,
-        solid_ss = None,
+        solid_ss=None,
         numFrames=None,
     ):
         """mdCATH dataset class for PyTorch Geometric to load protein structures and dynamics from the mdCATH dataset.
@@ -78,9 +78,9 @@ class mdCATH(Dataset):
             Minimum number of frames in the trajectory in order to be considered. Default is None.
         """
 
-        self.url = "https://zenodo.org/record/<record_id>/files/"
+        self.url = "https://huggingface.co/datasets/compsciencelab/mdCATH/tree/main/"
+        self.source_file = "mdcath_source.h5"
         super(mdCATH, self).__init__(root, transform, pre_transform, pre_filter)
-
         self.numAtoms = numAtoms
         self.numNoHAtoms = numNoHAtoms
         self.numResidues = numResidues
@@ -105,7 +105,7 @@ class mdCATH(Dataset):
     def raw_file_names(self):
         # Check if the dataset has been processed, and if not, return the original source file
         if not hasattr(self, "to_download"):
-            return ["mdcath_source.h5"]
+            return [self.source_file]
         # Otherwise, return the list of HDF5 files that passed the filtering criteria
         return [f"mdcath_dataset_{pdb_id}.h5" for pdb_id in self.to_download.keys()]
 
@@ -116,11 +116,11 @@ class mdCATH(Dataset):
         return self.root
     def download(self):
         if not hasattr(self, "to_download") or not self.to_download:
-            download_url(opj(self.url, "mdCATH_source.h5"), self.root)
+            download_url(opj(self.url, self.source_file), self.root)
             return
         for pdb_id in self.to_download.keys():
             file_name = f"mdcath_dataset_{pdb_id}.h5"
-            file_path = opj(self.raw_dir, file_name)
+            file_path = opj(self.raw_dir, 'data', file_name)
             if not os.path.exists(file_path):
                 download_url(opj(self.url, file_name), self.root)
 
@@ -133,7 +133,7 @@ class mdCATH(Dataset):
         return total_size_mb
     def process_data_source(self):
         print("Processing mdCATH source")
-        data_info_path = opj(self.root, "mdcath_source.h5")
+        data_info_path = opj(self.root, self.source_file)
         if not os.path.exists(data_info_path):
             self.download()
         # the to_downlaod is the dictionary that will store the pdb ids and the corresponding temp and replica ids if they pass the filter
@@ -224,6 +224,7 @@ class mdCATH(Dataset):
     
     
     def process_specific_group(self, pdb, file, temp, repl, conf_idx):
+        # do not use attributes from h5group beause is will cause memory leak
         # use the read_direct and np.s_ to get the coords and forces of interest directly
         conf_idx = conf_idx*self.skipFrames 
         slice_idxs = np.s_[conf_idx:conf_idx+1]
@@ -236,7 +237,7 @@ class mdCATH(Dataset):
 
             group['coords'].read_direct(coords, slice_idxs)
             group['forces'].read_direct(forces, slice_idxs) 
-                                
+                         
             # coords and forces shape (num_atoms, 3)
             assert (
                 coords.shape[0] == forces.shape[0]
@@ -258,4 +259,5 @@ class mdCATH(Dataset):
         data.z = torch.tensor(z, dtype=torch.long)
         data.pos = torch.tensor(coords, dtype=torch.float)
         data.neg_dy = torch.tensor(forces, dtype=torch.float)
+        data.info = f'{pdb_id}_{temp}_{replica}_{conf_idx}'
         return data
