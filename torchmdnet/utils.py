@@ -247,7 +247,7 @@ def make_splits(
     order=None,
 ):
     if splits is not None:
-        splits = np.load(splits)
+        splits = np.load(splits, allow_pickle=True)
         idx_train = splits["idx_train"]
         idx_val = splits["idx_val"]
         idx_test = splits["idx_test"]

@@ -25,7 +25,7 @@ class FloatCastDatasetWrapper(T.BaseTransform):
         super(FloatCastDatasetWrapper, self).__init__()
         self._dtype = dtype
 
-    def forward(self, data):
+    def __call__(self, data):
         for key, value in data:
             if torch.is_tensor(value) and torch.is_floating_point(value):
                 setattr(data, key, value.to(self._dtype))
@@ -41,7 +41,7 @@ class EnergyRefRemover(T.BaseTransform):
         super(EnergyRefRemover, self).__init__()
         self._atomref = atomref
 
-    def forward(self, data):
+    def __call__(self, data):
         self._atomref = self._atomref.to(data.z.device).type(data.y.dtype)
         if "y" in data:
             data.y.index_add_(0, data.batch, -self._atomref[data.z])
@@ -175,7 +175,7 @@ class LNNP(LightningModule):
         #   loss_name: name of the loss function
         #   loss: loss value
         alpha = getattr(self.hparams, f"ema_alpha_{type}")
-        if stage in ["train", "val"] and alpha < 1:
+        if stage in ["train", "val"] and alpha < 1 and alpha > 0:
             ema = (
                 self.ema[stage][type][loss_name]
                 if loss_name in self.ema[stage][type]
