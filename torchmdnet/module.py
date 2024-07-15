@@ -269,7 +269,7 @@ class LNNP(LightningModule):
                 pg["lr"] = lr_scale * self.hparams.lr
         super().optimizer_step(*args, **kwargs)
         if (
-            self.trainer.global_step >= self.ema_parameters_start
+            self.trainer.current_epoch >= self.ema_parameters_start
             and self.ema_model is not None
         ):
             self.ema_model.update_parameters(self.model)
