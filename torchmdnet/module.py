@@ -65,6 +65,8 @@ class LNNP(LightningModule):
             hparams["charge"] = False
         if "spin" not in hparams:
             hparams["spin"] = False
+        if "train_loss" not in hparams:
+            hparams["train_loss"] = "mse_loss"
 
         self.save_hyperparameters(hparams)
 
