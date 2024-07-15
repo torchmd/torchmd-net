@@ -111,9 +111,11 @@ class LNNP(LightningModule):
             patience=self.hparams.lr_patience,
             min_lr=self.hparams.lr_min,
         )
+        lr_metric = getattr(self.hparams, "lr_metric", "val")
+        monitor = f"{lr_metric}_total_{self.hparams.train_loss}"
         lr_scheduler = {
             "scheduler": scheduler,
-            "monitor": getattr(self.hparams, "lr_metric", "val_loss"),
+            "monitor": monitor,
             "interval": "epoch",
             "frequency": 1,
         }
