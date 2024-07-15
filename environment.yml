@@ -12,7 +12,6 @@ dependencies:
   - pydantic
   - torchmetrics
   - tqdm
-  - torch-ema
   # Dev tools
   - flake8
   - pytest
