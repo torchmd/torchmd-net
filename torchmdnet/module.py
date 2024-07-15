@@ -96,7 +96,7 @@ class LNNP(LightningModule):
 
         if self.hparams.training_loss not in loss_class_mapping:
             raise ValueError(
-                f"Training loss {self.hparams.training_loss} not supported. Supported losses are {list(loss_map.keys())}"
+                f"Training loss {self.hparams.training_loss} not supported. Supported losses are {list(loss_class_mapping.keys())}"
             )
         self.training_loss = loss_class_mapping[self.hparams.training_loss]
 
