@@ -6,7 +6,7 @@ from collections import defaultdict
 import torch
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.nn.functional import local_response_norm, mse_loss, l1_loss
+from torch.nn.functional import local_response_norm
 from torch import Tensor
 from typing import Optional, Dict, Tuple
 
@@ -14,6 +14,9 @@ from lightning import LightningModule
 from torchmdnet.models.model import create_model, load_model
 from torchmdnet.models.utils import dtype_mapping
 import torch_geometric.transforms as T
+
+
+from torchmdnet.loss import l1_loss, loss_map
 
 
 class FloatCastDatasetWrapper(T.BaseTransform):
@@ -92,6 +95,12 @@ class LNNP(LightningModule):
                 ]
             )
 
+        if self.hparams.training_loss not in loss_map:
+            raise ValueError(
+                f"Training loss {self.hparams.training_loss} not supported. Supported losses are {list(loss_map.keys())}"
+            )
+        self.training_loss = loss_map[self.hparams.training_loss]
+
     def configure_optimizers(self):
         optimizer = AdamW(
             self.model.parameters(),
@@ -126,7 +135,7 @@ class LNNP(LightningModule):
         return self.model(z, pos, batch=batch, box=box, q=q, s=s, extra_args=extra_args)
 
     def training_step(self, batch, batch_idx):
-        return self.step(batch, [mse_loss], "train")
+        return self.step(batch, [self.training_loss], "train")
 
     def validation_step(self, batch, batch_idx, *args):
         # If args is not empty the first (and only) element is the dataloader_idx
@@ -135,7 +144,7 @@ class LNNP(LightningModule):
         # The dataloader takes care of sending the two sets only when the second one is needed.
         is_val = len(args) == 0 or (len(args) > 0 and args[0] == 0)
         if is_val:
-            step_type = {"loss_fn_list": [l1_loss, mse_loss], "stage": "val"}
+            step_type = {"loss_fn_list": [l1_loss, self.training_loss], "stage": "val"}
         else:
             step_type = {"loss_fn_list": [l1_loss], "stage": "test"}
         return self.step(batch, **step_type)

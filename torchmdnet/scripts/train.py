@@ -18,6 +18,7 @@ from lightning.pytorch.callbacks import (
 from torchmdnet.module import LNNP
 from torchmdnet import datasets, priors, models
 from torchmdnet.data import DataModule
+from torchmdnet.loss import loss_map
 from torchmdnet.models import output_modules
 from torchmdnet.models.model import create_prior_models
 from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping, dtype_mapping
@@ -70,6 +71,7 @@ def get_argparse():
     parser.add_argument('--dataset-preload-limit', default=1024, type=int, help='Custom and HDF5 datasets will preload to RAM datasets that are less than this size in MB')
     parser.add_argument('--y-weight', default=1.0, type=float, help='Weighting factor for y label in the loss function')
     parser.add_argument('--neg-dy-weight', default=1.0, type=float, help='Weighting factor for neg_dy label in the loss function')
+    parser.add_argument('--train_loss', default='mse', type=str, choices=loss_map.keys(), help='Loss function to use during training')
 
     # model architecture
     parser.add_argument('--model', type=str, default='graph-network', choices=models.__all_models__, help='Which model to train')
