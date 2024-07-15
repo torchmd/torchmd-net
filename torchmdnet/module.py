@@ -9,14 +9,11 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.functional import local_response_norm
 from torch import Tensor
 from typing import Optional, Dict, Tuple
-
 from lightning import LightningModule
 from torchmdnet.models.model import create_model, load_model
 from torchmdnet.models.utils import dtype_mapping
+from torchmdnet.loss import l1_loss, loss_class_mapping
 import torch_geometric.transforms as T
-
-
-from torchmdnet.loss import l1_loss, loss_map
 
 
 class FloatCastDatasetWrapper(T.BaseTransform):
@@ -68,6 +65,8 @@ class LNNP(LightningModule):
             hparams["charge"] = False
         if "spin" not in hparams:
             hparams["spin"] = False
+        if "training_loss" not in hparams:
+            hparams["training_loss"] = "mse_loss"
 
         self.save_hyperparameters(hparams)
 
@@ -95,11 +94,11 @@ class LNNP(LightningModule):
                 ]
             )
 
-        if self.hparams.training_loss not in loss_map:
+        if self.hparams.training_loss not in loss_class_mapping:
             raise ValueError(
                 f"Training loss {self.hparams.training_loss} not supported. Supported losses are {list(loss_map.keys())}"
             )
-        self.training_loss = loss_map[self.hparams.training_loss]
+        self.training_loss = loss_class_mapping[self.hparams.training_loss]
 
     def configure_optimizers(self):
         optimizer = AdamW(
