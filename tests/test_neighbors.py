@@ -669,6 +669,10 @@ def test_per_batch_box(device, strategy, n_batches, use_forward):
 @pytest.mark.parametrize("loop", [True, False])
 @pytest.mark.parametrize("include_transpose", [True, False])
 def test_torch_compile(device, dtype, loop, include_transpose):
+    import sys
+
+    if sys.version_info >= (3, 12):
+        pytest.skip("Not available in this version")
     if torch.__version__ < "2.0.0":
         pytest.skip("Not available in this version")
     if device == "cuda" and not torch.cuda.is_available():
