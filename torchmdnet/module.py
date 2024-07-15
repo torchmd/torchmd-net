@@ -65,8 +65,6 @@ class LNNP(LightningModule):
             hparams["charge"] = False
         if "spin" not in hparams:
             hparams["spin"] = False
-        if "training_loss" not in hparams:
-            hparams["training_loss"] = "mse_loss"
 
         self.save_hyperparameters(hparams)
 
@@ -94,11 +92,11 @@ class LNNP(LightningModule):
                 ]
             )
 
-        if self.hparams.training_loss not in loss_class_mapping:
+        if self.hparams.train_loss not in loss_class_mapping:
             raise ValueError(
-                f"Training loss {self.hparams.training_loss} not supported. Supported losses are {list(loss_class_mapping.keys())}"
+                f"Training loss {self.hparams.train_loss} not supported. Supported losses are {list(loss_class_mapping.keys())}"
             )
-        self.training_loss = loss_class_mapping[self.hparams.training_loss]
+        self.training_loss = loss_class_mapping[self.hparams.train_loss]
 
     def configure_optimizers(self):
         optimizer = AdamW(
