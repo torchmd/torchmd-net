@@ -279,7 +279,7 @@ def test_ace(tmpdir):
     f2.attrs["layout_version"] = "2.0"
     f2.attrs["name"] = "sample_molecule_data_v2"
     master_mol_group = f2.create_group("master_molecule_group")
-    for m in range(3):  # Three molecules
+    for m in range(4):
         mol = master_mol_group.create_group(f"mol_{m+1}")
         mol["atomic_numbers"] = [1, 6, 8]  # H, C, O
         mol["formal_charges"] = [0, 0, 0]  # Neutral charges
@@ -291,9 +291,9 @@ def test_ace(tmpdir):
         mol["forces"].attrs["units"] = "eV/Å"
         mol["partial_charges"] = np.random.random((2, 3))
         mol["partial_charges"].attrs["units"] = "e"
-        mol["dipole_moment"] = np.random.random((2, 3))
-        mol["dipole_moment"].attrs["units"] = "e*Å"
+        mol["dipole_moments"] = np.random.random((2, 3))
+        mol["dipole_moments"].attrs["units"] = "e*Å"
     dataset_v2 = Ace(root=tmpdir, paths=tmpfilename_v2)
-    assert len(dataset_v2) == 6
+    assert len(dataset_v2) == 8
     f2.flush()
     f2.close()
