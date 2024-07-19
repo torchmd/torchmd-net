@@ -1,11 +1,11 @@
-from torchmdnet.datasets.mdcath import mdCATH
+import h5py
+import psutil
+import numpy as np
+from pytest import mark
+from os.path import join
+from torchmdnet.datasets.mdcath import MDCATH
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
-import numpy as np
-import h5py
-from os.path import join
-import psutil
-from pytest import mark
 
 
 def test_mdcath(tmpdir):
@@ -49,7 +49,7 @@ def test_mdcath(tmpdir):
         data.flush()
         data.close()
 
-    dataset = mdCATH(root=tmpdir)
+    dataset = MDCATH(root=tmpdir)
     dl = DataLoader(
         dataset,
         batch_size=1,
@@ -106,7 +106,7 @@ def test_mdcath_multiprocessing(tmpdir, num_entries=100, numFrames=10):
     proc = psutil.Process()
     n_open = len(proc.open_files())
 
-    dset = mdCATH(
+    dset = MDCATH(
         root=tmpdir,
         source_file=join(tmpdir, "source.h5"),
     )
@@ -168,7 +168,7 @@ def test_mdcath_skipframes(tmpdir, skipframes, batch_size):
             data.flush()
             data.close()
 
-    dataset = mdCATH(
+    dataset = MDCATH(
         root=tmpdir, skipFrames=skipframes, source_file=join(tmpdir, "source.h5")
     )
     dl = DataLoader(
