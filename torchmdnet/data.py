@@ -133,7 +133,7 @@ class DataModule(LightningDataModule):
             dataset=dataset,
             batch_size=batch_size,
             num_workers=self.hparams["num_workers"],
-            persistent_workers=True,
+            persistent_workers=False,
             pin_memory=True,
             shuffle=shuffle,
         )
