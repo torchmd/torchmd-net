@@ -122,8 +122,8 @@ def replacer(arr, skipframes):
 
 @mark.parametrize("skipframes", [1, 2, 5])
 @mark.parametrize("batch_size", [1, 10])
-def test_mdcath_skipframes(tmpdir, skipframes, batch_size):
-
+@mark.parametrize("pdb_list", [["A50", "A612", "A1000"], None])
+def test_mdcath_args(tmpdir, skipframes, batch_size, pdb_list):
     with h5py.File(join(tmpdir, "mdcath_source.h5"), mode="w") as source_file:
         num_frames_list = np.linspace(50, 1000, 50).astype(int)
         for num_frame in tqdm(num_frames_list, desc="Creating tmp files"):
@@ -168,7 +168,7 @@ def test_mdcath_skipframes(tmpdir, skipframes, batch_size):
             data.close()
 
     dataset = MDCATH(
-        root=tmpdir, skipFrames=skipframes
+        root=tmpdir, skipFrames=skipframes, pdb_list=pdb_list
     )
     dl = DataLoader(
         dataset,
