@@ -83,7 +83,7 @@ class MDCATH(Dataset):
         self.numResidues = numResidues
         self.temperatures = temperatures
         self.skipFrames = skipFrames
-        self.pdb_list = load_pdb_list(pdb_list)
+        self.pdb_list = load_pdb_list(pdb_list) if pdb_list is not None else None
         self.min_gyration_radius = min_gyration_radius
         self.max_gyration_radius = max_gyration_radius
         self.alpha_beta_coil = alpha_beta_coil
