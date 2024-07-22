@@ -36,7 +36,7 @@ class MDCATH(Dataset):
         numAtoms=5000,
         numResidues=1000,
         temperatures=["348"],
-        skipFrames=1,
+        skip_frames=1,
         pdb_list=None,
         min_gyration_radius=None,
         max_gyration_radius=None,
@@ -58,7 +58,7 @@ class MDCATH(Dataset):
             Max number of residues in the protein structure.
         temperatures: list
             List of temperatures (in Kelvin) to download. Default is ["348"]. Available temperatures are ['320', '348', '379', '413', '450']
-        skipFrames: int
+        skip_frames: int
             Number of frames to skip in the trajectory. Default is 1.
         pdb_list: list or str
             List of PDB IDs to download or path to a file with the PDB IDs. If None, all available PDB IDs from 'mdcath_source.h5' will be downloaded. 
@@ -82,7 +82,7 @@ class MDCATH(Dataset):
         self.numAtoms = numAtoms
         self.numResidues = numResidues
         self.temperatures = temperatures
-        self.skipFrames = skipFrames
+        self.skip_frames = skip_frames
         self.pdb_list = load_pdb_list(pdb_list) if pdb_list is not None else None
         self.min_gyration_radius = min_gyration_radius
         self.max_gyration_radius = max_gyration_radius
@@ -166,7 +166,7 @@ class MDCATH(Dataset):
         if any(conditions):
             return
         
-        num_frames = math.ceil(pdb_group[temp][replica].attrs["numFrames"] / self.skipFrames)
+        num_frames = math.ceil(pdb_group[temp][replica].attrs["numFrames"] / self.skip_frames)
         self.processed[pdb_id].append((temp, replica, num_frames))
         self.num_conformers += num_frames
 
@@ -194,7 +194,7 @@ class MDCATH(Dataset):
     def process_specific_group(self, pdb, file, temp, repl, conf_idx):
         # do not use attributes from h5group beause is will cause memory leak
         # use the read_direct and np.s_ to get the coords and forces of interest directly
-        conf_idx = conf_idx*self.skipFrames 
+        conf_idx = conf_idx*self.skip_frames 
         slice_idxs = np.s_[conf_idx:conf_idx+1]
         with h5py.File(file, "r") as f:
             z = f[pdb]["z"][:]
