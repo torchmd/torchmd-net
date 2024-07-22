@@ -168,7 +168,7 @@ def test_mdcath_args(tmpdir, skipframes, batch_size, pdb_list):
             data.close()
 
     dataset = MDCATH(
-        root=tmpdir, skipFrames=skipframes, pdb_list=pdb_list
+        root=tmpdir, skip_frames=skipframes, pdb_list=pdb_list
     )
     dl = DataLoader(
         dataset,
