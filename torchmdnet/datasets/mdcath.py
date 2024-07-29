@@ -81,7 +81,7 @@ class MDCATH(Dataset):
         os.makedirs(root, exist_ok=True)
         self.numAtoms = numAtoms
         self.numResidues = numResidues
-        self.temperatures = temperatures
+        self.temperatures = [str(temp) for temp in temperatures]
         self.skip_frames = skip_frames
         self.pdb_list = load_pdb_list(pdb_list) if pdb_list is not None else None
         self.min_gyration_radius = min_gyration_radius
