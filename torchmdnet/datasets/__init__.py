@@ -14,6 +14,7 @@ from .comp6 import (
     COMP6v1,
     COMP6v2,
 )
+from .mdcath import MDCATH
 from .custom import Custom
 from .water import WaterBox
 from .hdf import HDF5
@@ -40,6 +41,7 @@ __all__ = [
     "GDB10to13",
     "GenentechTorsions",
     "HDF5",
+    "MDCATH",
     "MD17",
     "MD22",
     "QM9",
