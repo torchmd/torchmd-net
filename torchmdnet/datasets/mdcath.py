@@ -19,7 +19,7 @@ logger = logging.getLogger('MDCATH')
 def load_pdb_list(pdb_list):
     """Load PDB list from a file or return list directly."""
     if isinstance(pdb_list, list):
-        return [str(pdb) for pdb in pdb_list]
+        return pdb_list
     elif isinstance(pdb_list, str) and os.path.isfile(pdb_list):
         logger.info(f"Reading PDB list from {pdb_list}")
         with open(pdb_list, "r") as file:
