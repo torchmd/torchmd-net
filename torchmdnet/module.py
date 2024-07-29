@@ -48,6 +48,16 @@ class EnergyRefRemover(T.BaseTransform):
         return data
 
 
+def extract_representation_model(state_dict):
+    representation_model = {}
+    prefix = "model.representation_model."
+    for key, value in state_dict.items():
+        if key.startswith(prefix):
+            new_key = key[len(prefix) :]
+            representation_model[new_key] = value
+    return representation_model
+
+
 class LNNP(LightningModule):
     """
     Lightning wrapper for the Neural Network Potentials in TorchMD-Net.
@@ -65,13 +75,30 @@ class LNNP(LightningModule):
             hparams["charge"] = False
         if "spin" not in hparams:
             hparams["spin"] = False
+        if "overwrite_representation" not in hparams:
+            hparams["overwrite_representation"] = None
+        if "freeze_representation" not in hparams:
+            hparams["freeze_representation"] = False
+        if "reset_output_model" not in hparams:
+            hparams["reset_output_model"] = False
 
         self.save_hyperparameters(hparams)
 
         if self.hparams.load_model:
             self.model = load_model(self.hparams.load_model, args=self.hparams)
+            if self.hparams.reset_output_model:
+                self.model.output_model.reset_parameters()
         else:
             self.model = create_model(self.hparams, prior_model, mean, std)
+
+        if self.hparams.overwrite_representation is not None:
+            ckpt = torch.load(self.hparams.overwrite_representation, map_location="cpu")
+            state_dict = extract_representation_model(ckpt["state_dict"])
+            self.model.representation_model.load_state_dict(state_dict)
+
+        if self.hparams.freeze_representation:
+            for p in self.model.representation_model.parameters():
+                p.requires_grad = False
 
         # initialize exponential smoothing
         self.ema = None
