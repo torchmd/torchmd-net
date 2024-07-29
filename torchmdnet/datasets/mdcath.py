@@ -19,7 +19,7 @@ logger = logging.getLogger('MDCATH')
 def load_pdb_list(pdb_list):
     """Load PDB list from a file or return list directly."""
     if isinstance(pdb_list, list):
-        return pdb_list
+        return [str(pdb) for pdb in pdb_list]
     elif isinstance(pdb_list, str) and os.path.isfile(pdb_list):
         logger.info(f"Reading PDB list from {pdb_list}")
         with open(pdb_list, "r") as file:
@@ -192,7 +192,7 @@ class MDCATH(Dataset):
     
     
     def process_specific_group(self, pdb, file, temp, repl, conf_idx):
-        # do not use attributes from h5group beause is will cause memory leak
+        # do not use attributes from h5group because is will cause memory leak
         # use the read_direct and np.s_ to get the coords and forces of interest directly
         conf_idx = conf_idx*self.skip_frames 
         slice_idxs = np.s_[conf_idx:conf_idx+1]
