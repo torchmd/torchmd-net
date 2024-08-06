@@ -61,11 +61,6 @@ class LNNP(LightningModule):
 
     def __init__(self, hparams, prior_model=None, mean=None, std=None):
         super(LNNP, self).__init__()
-        if "charge" not in hparams:
-            hparams["charge"] = False
-        if "spin" not in hparams:
-            hparams["spin"] = False
-
         self.save_hyperparameters(hparams)
 
         if self.hparams.load_model:
@@ -119,11 +114,9 @@ class LNNP(LightningModule):
         pos: Tensor,
         batch: Optional[Tensor] = None,
         box: Optional[Tensor] = None,
-        q: Optional[Tensor] = None,
-        s: Optional[Tensor] = None,
         extra_args: Optional[Dict[str, Tensor]] = None,
     ) -> Tuple[Tensor, Optional[Tensor]]:
-        return self.model(z, pos, batch=batch, box=box, q=q, s=s, extra_args=extra_args)
+        return self.model(z, pos, batch=batch, box=box, extra_args=extra_args)
 
     def training_step(self, batch, batch_idx):
         return self.step(batch, [mse_loss], "train")
@@ -199,7 +192,7 @@ class LNNP(LightningModule):
         batch = self.data_transform(batch)
         with torch.set_grad_enabled(stage == "train" or self.hparams.derivative):
             extra_args = batch.to_dict()
-            for a in ("y", "neg_dy", "z", "pos", "batch", "box", "q", "s"):
+            for a in ("y", "neg_dy", "z", "pos", "batch", "box"):
                 if a in extra_args:
                     del extra_args[a]
             # TODO: the model doesn't necessarily need to return a derivative once
@@ -209,8 +202,6 @@ class LNNP(LightningModule):
                 batch.pos,
                 batch=batch.batch,
                 box=batch.box if "box" in batch else None,
-                q=batch.q if self.hparams.charge else None,
-                s=batch.s if self.hparams.spin else None,
                 extra_args=extra_args,
             )
         if self.hparams.derivative and "y" not in batch:

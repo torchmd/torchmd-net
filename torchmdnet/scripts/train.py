@@ -59,6 +59,7 @@ def get_argparse():
     parser.add_argument('--gradient-clipping', type=float, default=0.0, help='Gradient clipping norm')
     parser.add_argument('--remove-ref-energy', action='store_true', help='If true, remove the reference energy from the dataset for delta-learning. Total energy can still be predicted by the model during inference by turning this flag off when loading.  The dataset must be compatible with Atomref for this to be used.')
     # dataset specific
+    parser.add_argument('--additional-labels', default=None, help='Additional labels to be passed to the model, must be a dict like {"method_name":{args}}')    
     parser.add_argument('--dataset', default=None, type=str, choices=datasets.__all__, help='Name of the torch_geometric dataset')
     parser.add_argument('--dataset-root', default='~/data', type=str, help='Data storage directory (not used if dataset is "CG")')
     parser.add_argument('--dataset-arg', default=None, help='Additional dataset arguments. Needs to be a dictionary.')
@@ -77,8 +78,8 @@ def get_argparse():
     parser.add_argument('--prior-model', type=str, default=None, help='Which prior model to use. It can be a string, a dict if you want to add arguments for it or a dicts to add more than one prior. e.g. {"Atomref": {"max_z":100}, "Coulomb":{"max_num_neighs"=100, "lower_switch_distance"=4, "upper_switch_distance"=8}', action="extend", nargs="*")
 
     # architectural args
-    parser.add_argument('--charge', type=bool, default=False, help='Model needs a total charge. Set this to True if your dataset contains charges and you want them passed down to the model.')
-    parser.add_argument('--spin', type=bool, default=False, help='Model needs a spin state. Set this to True if your dataset contains spin states and you want them passed down to the model.')
+    parser.add_argument('--charge', type=bool, default=False, help='DEPRECATED: This argument is no longer in use and is maintained only for retro-compatibility')
+    parser.add_argument('--spin', type=bool, default=False, help='DEPRECATED: This argument is no longer in use and is maintained only for retro-compatibility')
     parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
     parser.add_argument('--num-layers', type=int, default=6, help='Number of interaction layers in the model')
     parser.add_argument('--num-rbf', type=int, default=64, help='Number of radial basis functions in model')
@@ -139,7 +140,7 @@ def get_args():
         args.inference_batch_size = args.batch_size
 
     os.makedirs(os.path.abspath(args.log_dir), exist_ok=True)
-    save_argparse(args, os.path.join(args.log_dir, "input.yaml"), exclude=["conf"])
+    save_argparse(args, os.path.join(args.log_dir, "input.yaml"), exclude=["conf", "charge", "spin"])
 
     return args
 

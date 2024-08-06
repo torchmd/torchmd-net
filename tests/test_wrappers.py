@@ -19,7 +19,7 @@ def test_atom_filter(remove_threshold, model_name):
     model = AtomFilter(model, remove_threshold)
 
     z, pos, batch = create_example_batch(n_atoms=100)
-    x, v, z, pos, batch = model(z, pos, batch, None, None)
+    x, v, z, pos, batch = model(z, pos, batch, None)
 
     assert (z > remove_threshold).all(), (
         f"Lowest updated atomic number is {z.min()} but "

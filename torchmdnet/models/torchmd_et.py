@@ -2,7 +2,7 @@
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 import torch
 from torch import Tensor, nn
 from torchmdnet.models.utils import (
@@ -13,7 +13,6 @@ from torchmdnet.models.utils import (
     act_class_mapping,
     scatter,
 )
-from torchmdnet.utils import deprecated_class
 
 class TorchMD_ET(nn.Module):
     r"""Equivariant Transformer's architecture. From
@@ -79,7 +78,12 @@ class TorchMD_ET(nn.Module):
             (default: :obj:`False`)
         check_errors (bool, optional): Whether to check for errors in the distance module.
             (default: :obj:`True`)
-
+        additional_labels (Dict[str, Any], optional): Define the additional method to be used by the model, and the parameters to initialize it.
+            example:
+            additional_labels = {method_name1: {label_name: 'extra_arg_label', 'method_prm1': method_prm1,  'method_prm2': method_prm2}, 
+                                 method_name2: {label_name: 'extra_arg_label', 'method_prm1': method_prm1,  'method_prm2': method_prm2},
+                                 ...}
+            (default: :obj:`None`)
     """
 
     def __init__(
@@ -102,6 +106,7 @@ class TorchMD_ET(nn.Module):
         box_vecs=None,
         vector_cutoff=False,
         dtype=torch.float32,
+        additional_labels=None,
     ):
         super(TorchMD_ET, self).__init__()
 
@@ -133,7 +138,10 @@ class TorchMD_ET(nn.Module):
         self.cutoff_upper = cutoff_upper
         self.max_z = max_z
         self.dtype = dtype
-
+        self.additional_labels = additional_labels
+        self.label_callbacks = None
+        if additional_labels is not None:
+            Warning("Found additional_labels, equivariant-transformer still does not support additional labels. Ignoring them.")
         act_class = act_class_mapping[activation]
 
         self.embedding = nn.Embedding(self.max_z, hidden_channels, dtype=dtype)
@@ -194,8 +202,7 @@ class TorchMD_ET(nn.Module):
         pos: Tensor,
         batch: Tensor,
         box: Optional[Tensor] = None,
-        q: Optional[Tensor] = None,
-        s: Optional[Tensor] = None,
+        extra_args: Optional[Dict[str, Tensor]] = None,
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
         x = self.embedding(z)
 
