@@ -9,7 +9,6 @@ import argparse
 import logging
 import torch
 import lightning.pytorch as pl
-from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.loggers import WandbLogger, CSVLogger, TensorBoardLogger
 from lightning.pytorch.callbacks import (
     ModelCheckpoint,
