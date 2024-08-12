@@ -117,6 +117,7 @@ class LNNP(LightningModule):
         monitor = f"{lr_metric}_total_{self.hparams.train_loss}"
         lr_scheduler = {
             "scheduler": scheduler,
+            "strict": True,
             "monitor": monitor,
             "interval": "epoch",
             "frequency": 1,
