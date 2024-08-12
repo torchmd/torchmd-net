@@ -67,7 +67,8 @@ class LNNP(LightningModule):
             hparams["spin"] = False
         if "train_loss" not in hparams:
             hparams["train_loss"] = "mse_loss"
-
+        if "train_loss_arg" not in hparams:
+            hparams["train_loss_arg"] = {}
         self.save_hyperparameters(hparams)
 
         if self.hparams.load_model:
@@ -98,7 +99,15 @@ class LNNP(LightningModule):
             raise ValueError(
                 f"Training loss {self.hparams.train_loss} not supported. Supported losses are {list(loss_class_mapping.keys())}"
             )
-        self.training_loss = loss_class_mapping[self.hparams.train_loss]
+        if self.hparams.train_loss_arg is None:
+            self.hparams.train_loss_arg = {}
+        self.training_loss = lambda x, batch: loss_class_mapping[
+            self.hparams.train_loss
+        ](x, batch, **self.hparams.train_loss_arg)
+        # The name of the loss function is used for logging and the LR scheduler, it cannot be just <lambda>
+        self.training_loss.__name__ = loss_class_mapping[
+            self.hparams.train_loss
+        ].__name__
 
     def configure_optimizers(self):
         optimizer = AdamW(
@@ -234,7 +243,6 @@ class LNNP(LightningModule):
             batch.y = batch.y.unsqueeze(1)
         for loss_fn in loss_fn_list:
             step_losses = self._compute_losses(y, neg_dy, batch, loss_fn, stage)
-
             loss_name = loss_fn.__name__
             if self.hparams.neg_dy_weight > 0:
                 self.losses[stage]["neg_dy"][loss_name].append(

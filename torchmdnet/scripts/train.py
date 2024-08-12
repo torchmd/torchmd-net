@@ -71,6 +71,7 @@ def get_argparse():
     parser.add_argument('--y-weight', default=1.0, type=float, help='Weighting factor for y label in the loss function')
     parser.add_argument('--neg-dy-weight', default=1.0, type=float, help='Weighting factor for neg_dy label in the loss function')
     parser.add_argument('--train-loss', default='mse_loss', type=str, choices=loss_class_mapping.keys(), help='Loss function to use during training')
+    parser.add_argument('--train-loss-arg', default=None, help='Additional arguments for the loss function. Needs to be a dictionary.')
 
     # model architecture
     parser.add_argument('--model', type=str, default='graph-network', choices=models.__all_models__, help='Which model to train')
