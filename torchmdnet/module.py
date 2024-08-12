@@ -50,12 +50,14 @@ class EnergyRefRemover(T.BaseTransform):
 
 # This wrapper is here in order to permit Lightning to serialize the loss function.
 class LossFunction:
-    def __init__(self, loss_fn, **kwargs):
+    def __init__(self, loss_fn, extra_args=None):
         self.loss_fn = loss_fn
-        self.kwargs = kwargs
+        self.extra_args = extra_args
+        if self.extra_args is None:
+            self.extra_args = {}
 
     def __call__(self, x, batch):
-        return self.loss_fn(x, batch, **self.kwargs)
+        return self.loss_fn(x, batch, **self.extra_args)
 
 
 class LNNP(LightningModule):
@@ -109,12 +111,10 @@ class LNNP(LightningModule):
             raise ValueError(
                 f"Training loss {self.hparams.train_loss} not supported. Supported losses are {list(loss_class_mapping.keys())}"
             )
-        if self.hparams.train_loss_arg is None:
-            self.hparams.train_loss_arg = {}
 
         self.train_loss_fn = LossFunction(
             loss_class_mapping[self.hparams.train_loss],
-            **self.hparams.train_loss_arg,
+            self.hparams.train_loss_arg,
         )
 
     def configure_optimizers(self):
