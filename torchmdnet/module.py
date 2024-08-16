@@ -6,13 +6,13 @@ from collections import defaultdict
 import torch
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.nn.functional import local_response_norm, mse_loss, l1_loss
+from torch.nn.functional import local_response_norm
 from torch import Tensor
 from typing import Optional, Dict, Tuple
-
 from lightning import LightningModule
 from torchmdnet.models.model import create_model, load_model
 from torchmdnet.models.utils import dtype_mapping
+from torchmdnet.loss import l1_loss, loss_class_mapping
 import torch_geometric.transforms as T
 
 
@@ -48,6 +48,18 @@ class EnergyRefRemover(T.BaseTransform):
         return data
 
 
+# This wrapper is here in order to permit Lightning to serialize the loss function.
+class LossFunction:
+    def __init__(self, loss_fn, extra_args=None):
+        self.loss_fn = loss_fn
+        self.extra_args = extra_args
+        if self.extra_args is None:
+            self.extra_args = {}
+
+    def __call__(self, x, batch):
+        return self.loss_fn(x, batch, **self.extra_args)
+
+
 class LNNP(LightningModule):
     """
     Lightning wrapper for the Neural Network Potentials in TorchMD-Net.
@@ -65,7 +77,10 @@ class LNNP(LightningModule):
             hparams["charge"] = False
         if "spin" not in hparams:
             hparams["spin"] = False
-
+        if "train_loss" not in hparams:
+            hparams["train_loss"] = "mse_loss"
+        if "train_loss_arg" not in hparams:
+            hparams["train_loss_arg"] = {}
         self.save_hyperparameters(hparams)
 
         if self.hparams.load_model:
@@ -92,6 +107,16 @@ class LNNP(LightningModule):
                 ]
             )
 
+        if self.hparams.train_loss not in loss_class_mapping:
+            raise ValueError(
+                f"Training loss {self.hparams.train_loss} not supported. Supported losses are {list(loss_class_mapping.keys())}"
+            )
+
+        self.train_loss_fn = LossFunction(
+            loss_class_mapping[self.hparams.train_loss],
+            self.hparams.train_loss_arg,
+        )
+
     def configure_optimizers(self):
         optimizer = AdamW(
             self.model.parameters(),
@@ -105,9 +130,12 @@ class LNNP(LightningModule):
             patience=self.hparams.lr_patience,
             min_lr=self.hparams.lr_min,
         )
+        lr_metric = getattr(self.hparams, "lr_metric", "val")
+        monitor = f"{lr_metric}_total_{self.hparams.train_loss}"
         lr_scheduler = {
             "scheduler": scheduler,
-            "monitor": getattr(self.hparams, "lr_metric", "val_loss"),
+            "strict": True,
+            "monitor": monitor,
             "interval": "epoch",
             "frequency": 1,
         }
@@ -126,7 +154,9 @@ class LNNP(LightningModule):
         return self.model(z, pos, batch=batch, box=box, q=q, s=s, extra_args=extra_args)
 
     def training_step(self, batch, batch_idx):
-        return self.step(batch, [mse_loss], "train")
+        return self.step(
+            batch, [(self.hparams.train_loss, self.train_loss_fn)], "train"
+        )
 
     def validation_step(self, batch, batch_idx, *args):
         # If args is not empty the first (and only) element is the dataloader_idx
@@ -135,28 +165,34 @@ class LNNP(LightningModule):
         # The dataloader takes care of sending the two sets only when the second one is needed.
         is_val = len(args) == 0 or (len(args) > 0 and args[0] == 0)
         if is_val:
-            step_type = {"loss_fn_list": [l1_loss, mse_loss], "stage": "val"}
+            step_type = {
+                "loss_fn_list": [
+                    ("l1_loss", l1_loss),
+                    (self.hparams.train_loss, self.train_loss_fn),
+                ],
+                "stage": "val",
+            }
         else:
-            step_type = {"loss_fn_list": [l1_loss], "stage": "test"}
+            step_type = {"loss_fn_list": [("l1_loss", l1_loss)], "stage": "test"}
         return self.step(batch, **step_type)
 
     def test_step(self, batch, batch_idx):
-        return self.step(batch, [l1_loss], "test")
+        return self.step(batch, [("l1_loss", l1_loss)], "test")
 
-    def _compute_losses(self, y, neg_y, batch, loss_fn, stage):
+    def _compute_losses(self, y, neg_y, batch, loss_fn, loss_name, stage):
         # Compute the loss for the predicted value and the negative derivative (if available)
         # Args:
         #   y: predicted value
         #   neg_y: predicted negative derivative
         #   batch: batch of data
-        #   loss_fn: loss function to compute
+        #   loss_fn: The loss function to compute
+        #   loss_name: The name of the loss function
         # Returns:
         #   loss_y: loss for the predicted value
         #   loss_neg_y: loss for the predicted negative derivative
         loss_y, loss_neg_y = torch.tensor(0.0, device=self.device), torch.tensor(
             0.0, device=self.device
         )
-        loss_name = loss_fn.__name__
         if self.hparams.derivative and "neg_dy" in batch:
             loss_neg_y = loss_fn(neg_y, batch.neg_dy)
             loss_neg_y = self._update_loss_with_ema(
@@ -221,10 +257,10 @@ class LNNP(LightningModule):
             neg_dy = neg_dy + y.sum() * 0
         if "y" in batch and batch.y.ndim == 1:
             batch.y = batch.y.unsqueeze(1)
-        for loss_fn in loss_fn_list:
-            step_losses = self._compute_losses(y, neg_dy, batch, loss_fn, stage)
-
-            loss_name = loss_fn.__name__
+        for loss_name, loss_fn in loss_fn_list:
+            step_losses = self._compute_losses(
+                y, neg_dy, batch, loss_fn, loss_name, stage
+            )
             if self.hparams.neg_dy_weight > 0:
                 self.losses[stage]["neg_dy"][loss_name].append(
                     step_losses["neg_dy"].detach()

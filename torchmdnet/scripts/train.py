@@ -17,6 +17,7 @@ from lightning.pytorch.callbacks import (
 from torchmdnet.module import LNNP
 from torchmdnet import datasets, priors, models
 from torchmdnet.data import DataModule
+from torchmdnet.loss import loss_class_mapping
 from torchmdnet.models import output_modules
 from torchmdnet.models.model import create_prior_models
 from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping, dtype_mapping
@@ -34,7 +35,7 @@ def get_argparse():
     parser.add_argument('--inference-batch-size', default=None, type=int, help='Batchsize for validation and tests.')
     parser.add_argument('--lr', default=1e-4, type=float, help='learning rate')
     parser.add_argument('--lr-patience', type=int, default=10, help='Patience for lr-schedule. Patience per eval-interval of validation')
-    parser.add_argument('--lr-metric', type=str, default='val_total_mse_loss', choices=['train_total_mse_loss', 'val_total_mse_loss'], help='Metric to monitor when deciding whether to reduce learning rate')
+    parser.add_argument('--lr-metric', type=str, default='val', choices=['train', 'val'], help='Metric to monitor when deciding whether to reduce learning rate')
     parser.add_argument('--lr-min', type=float, default=1e-6, help='Minimum learning rate before early stop')
     parser.add_argument('--lr-factor', type=float, default=0.8, help='Factor by which to multiply the learning rate when the metric stops improving')
     parser.add_argument('--lr-warmup-steps', type=int, default=0, help='How many steps to warm-up over. Defaults to 0 for no warm-up')
@@ -69,6 +70,8 @@ def get_argparse():
     parser.add_argument('--dataset-preload-limit', default=1024, type=int, help='Custom and HDF5 datasets will preload to RAM datasets that are less than this size in MB')
     parser.add_argument('--y-weight', default=1.0, type=float, help='Weighting factor for y label in the loss function')
     parser.add_argument('--neg-dy-weight', default=1.0, type=float, help='Weighting factor for neg_dy label in the loss function')
+    parser.add_argument('--train-loss', default='mse_loss', type=str, choices=loss_class_mapping.keys(), help='Loss function to use during training')
+    parser.add_argument('--train-loss-arg', default=None, help='Additional arguments for the loss function. Needs to be a dictionary.')
 
     # model architecture
     parser.add_argument('--model', type=str, default='graph-network', choices=models.__all_models__, help='Which model to train')
@@ -165,17 +168,16 @@ def main():
     # initialize lightning module
     model = LNNP(args, prior_model=prior_models, mean=data.mean, std=data.std)
 
+    val_loss_name = f"val_total_{args.train_loss}"
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.log_dir,
-        monitor="val_total_mse_loss",
+        monitor=val_loss_name,
         save_top_k=10,  # -1 to save all
         every_n_epochs=args.save_interval,
-        filename="epoch={epoch}-val_loss={val_total_mse_loss:.4f}-test_loss={test_total_l1_loss:.4f}",
+        filename=f"epoch={{epoch}}-val_loss={{{val_loss_name}:.4f}}-test_loss={{test_total_l1_loss:.4f}}",
         auto_insert_metric_name=False,
     )
-    early_stopping = EarlyStopping(
-        "val_total_mse_loss", patience=args.early_stopping_patience
-    )
+    early_stopping = EarlyStopping(val_loss_name, patience=args.early_stopping_patience)
 
     csv_logger = CSVLogger(args.log_dir, name="", version="")
     _logger = [csv_logger]
