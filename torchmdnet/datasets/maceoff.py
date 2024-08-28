@@ -3,7 +3,7 @@
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
 import hashlib
-from ase.data import atomic_numbers
+from torchmdnet.utils import ATOMIC_NUMBERS
 import numpy as np
 import os
 import torch as pt
@@ -44,7 +44,7 @@ def parse_maceoff_tar(tar_file):
                     counter = 2
                     continue
                 el, x, y, z, fx, fy, fz, _, _, _ = line.split()
-                numbers.append(atomic_numbers[el])
+                numbers.append(ATOMIC_NUMBERS[el])
                 positions.append([float(x), float(y), float(z)])
                 forces.append([float(fx), float(fy), float(fz)])
                 counter += 1
