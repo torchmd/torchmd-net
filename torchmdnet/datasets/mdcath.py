@@ -124,19 +124,19 @@ class MDCATH(Dataset):
     
     def _ensure_source_file(self):
         """Ensure the source file is downloaded before processing."""
-        assert self.source_file == "mdcath_source.h5", "Only 'mdcath_source.h5' is supported as source file for download."
         source_path = os.path.join(self.root, self.source_file)
         if not os.path.exists(source_path):
+            assert self.source_file == "mdcath_source.h5", "Only 'mdcath_source.h5' is supported as source file for download."
             logger.info(f"Downloading source file {self.source_file}")
             urllib.request.urlretrieve(opj(self.url, self.source_file), source_path)
             
     def download(self):
-        assert self.noh_mode is False, "Download is not supported for noh_mode. Please be sure you defined the correct path to the local files."
-        assert self.file_basename == "mdcath_dataset", "Only 'mdcath_dataset' is supported as file_basename for download."
         for pdb_id in self.processed.keys():
-            file_name = f"mdcath_dataset_{pdb_id}.h5"
+            file_name = f"{self.file_basename}_{pdb_id}.h5"
             file_path = opj(self.raw_dir, file_name)
             if not os.path.exists(file_path):
+                assert self.noh_mode is False, "Download is not supported for noh_mode. Please be sure you defined the correct path to the local files."
+                assert self.file_basename == "mdcath_dataset", "Only 'mdcath_dataset' is supported as file_basename for download."
                 # Download the file if it does not exist
                 urllib.request.urlretrieve(opj(self.url, 'data', file_name), file_path)
 
