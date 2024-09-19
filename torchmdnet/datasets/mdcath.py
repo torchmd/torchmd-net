@@ -35,7 +35,6 @@ class MDCATH(Dataset):
         pre_filter=None,
         source_file="mdcath_source.h5",
         file_basename="mdcath_dataset",
-        noh_mode=False,
         numAtoms=5000,
         numNoHAtoms=None,
         numResidues=1000,
@@ -61,7 +60,8 @@ class MDCATH(Dataset):
         file_basename: str
             Base name of the hdf5 files. Default is "mdcath_dataset".
         numNoHAtoms: int
-            Max number of non-hydrogen atoms in the protein structure, available only in noh_mode. Default is None.
+            Max number of non-hydrogen atoms in the protein structure, not available for original mdcath dataset. Default is None.
+            Be sure to have the attribute 'numNoHAtoms' in the source file.
         numResidues: int
             Max number of residues in the protein structure.
         temperatures: list
@@ -86,7 +86,6 @@ class MDCATH(Dataset):
         self.url = "https://huggingface.co/datasets/compsciencelab/mdCATH/resolve/main/"
         self.source_file = source_file
         self.file_basename = file_basename
-        self.noh_mode = noh_mode
         self.numNoHAtoms = numNoHAtoms
         self.root = root
         os.makedirs(root, exist_ok=True)
@@ -119,7 +118,7 @@ class MDCATH(Dataset):
     @property
     def raw_dir(self):
         # Override the raw_dir property to return the root directory
-        # The files will be downloaded to the root directory, not compatible with noh_mode
+        # The files will be downloaded to the root directory, compatible only with original mdcath dataset
         return self.root
     
     def _ensure_source_file(self):
@@ -135,7 +134,6 @@ class MDCATH(Dataset):
             file_name = f"{self.file_basename}_{pdb_id}.h5"
             file_path = opj(self.raw_dir, file_name)
             if not os.path.exists(file_path):
-                assert self.noh_mode is False, "Download is not supported for noh_mode. Please be sure you defined the correct path to the local files."
                 assert self.file_basename == "mdcath_dataset", "Only 'mdcath_dataset' is supported as file_basename for download."
                 # Download the file if it does not exist
                 urllib.request.urlretrieve(opj(self.url, 'data', file_name), file_path)
@@ -176,7 +174,7 @@ class MDCATH(Dataset):
             self.min_gyration_radius is not None and pdb_group[temp][replica].attrs["min_gyration_radius"] < self.min_gyration_radius,
             self.max_gyration_radius is not None and pdb_group[temp][replica].attrs["max_gyration_radius"] > self.max_gyration_radius,
             self._evaluate_structure(pdb_group, temp, replica),
-            self.noh_mode is True and self.numNoHAtoms is not None and pdb_group.attrs["numNoHAtoms"] > self.numNoHAtoms,
+            self.numNoHAtoms is not None and pdb_group.attrs["numNoHAtoms"] > self.numNoHAtoms,
         ]
         if any(conditions):
             return
