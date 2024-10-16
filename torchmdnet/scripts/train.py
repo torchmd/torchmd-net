@@ -184,9 +184,9 @@ def main():
         auto_insert_metric_name=False,
     )
     early_stopping = EarlyStopping(val_loss_name, patience=args.early_stopping_patience)
-
+    
+    check_logs(args.log_dir)
     csv_logger = CSVLogger(args.log_dir, name="", version="")
-    check_logs(csv_logger)
     _logger = [csv_logger]
 
     if args.wandb_use:
