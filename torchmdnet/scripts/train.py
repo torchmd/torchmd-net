@@ -21,7 +21,13 @@ from torchmdnet.loss import loss_class_mapping
 from torchmdnet.models import output_modules
 from torchmdnet.models.model import create_prior_models
 from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping, dtype_mapping
-from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, number, check_logs
+from torchmdnet.utils import (
+    LoadFromFile,
+    LoadFromCheckpoint,
+    save_argparse,
+    number,
+    check_logs,
+)
 from lightning_utilities.core.rank_zero import rank_zero_warn
 
 
@@ -178,10 +184,11 @@ def main():
         auto_insert_metric_name=False,
     )
     early_stopping = EarlyStopping(val_loss_name, patience=args.early_stopping_patience)
+
     csv_logger = CSVLogger(args.log_dir, name="", version="")
     check_logs(csv_logger)
-    
     _logger = [csv_logger]
+
     if args.wandb_use:
         wandb_logger = WandbLogger(
             project=args.wandb_project,
