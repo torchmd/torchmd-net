@@ -8,7 +8,7 @@
 using std::tuple;
 using torch::arange;
 using torch::div;
-using torch::frobenius_norm;
+using torch::linalg_vector_norm;
 using torch::full;
 using torch::hstack;
 using torch::index_select;
@@ -99,7 +99,7 @@ forward_impl(const std::string& strategy, const Tensor& positions, const Tensor&
         deltas.index_put_({Slice(), 0}, deltas.index({Slice(), 0}) -
                                             scale1 * box_vectors.index({pair_batch, 0, 0}));
     }
-    distances = frobenius_norm(deltas, 1);
+    distances = linalg_vector_norm(deltas, 2, 1);
     mask = (distances < cutoff_upper) * (distances >= cutoff_lower);
     neighbors = neighbors.index({Slice(), mask});
     deltas = deltas.index({mask, Slice()});
