@@ -209,7 +209,7 @@ def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
             filepath, args=args, device=device, return_std=return_std, **kwargs
         )
     assert isinstance(filepath, str)
-    ckpt = torch.load(filepath, map_location="cpu")
+    ckpt = torch.load(filepath, map_location="cpu", weights_only=True)
     if args is None:
         args = ckpt["hyper_parameters"]
 
