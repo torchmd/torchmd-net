@@ -4,14 +4,23 @@
 
 import pytest
 from pytest import mark
-import torch as pt
-from torchmdnet.models.model import create_model
-from torchmdnet.optimize import optimize
-from torchmdnet.models.utils import dtype_mapping
 
+try:
+    import NNPOps
+
+    nnpops_available = True
+except ImportError:
+    nnpops_available = False
+
+
+@pytest.mark.skipif(not nnpops_available, reason="NNPOps not available")
 @mark.parametrize("device", ["cpu", "cuda"])
 @mark.parametrize("num_atoms", [10, 100])
 def test_gn(device, num_atoms):
+    import torch as pt
+    from torchmdnet.models.model import create_model
+    from torchmdnet.optimize import optimize
+    from torchmdnet.models.utils import dtype_mapping
 
     if not pt.cuda.is_available() and device == "cuda":
         pytest.skip("No GPU")
