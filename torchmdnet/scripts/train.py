@@ -40,6 +40,7 @@ def get_argparse():
     parser.add_argument('--lr-factor', type=float, default=0.8, help='Factor by which to multiply the learning rate when the metric stops improving')
     parser.add_argument('--lr-warmup-steps', type=int, default=0, help='How many steps to warm-up over. Defaults to 0 for no warm-up')
     parser.add_argument('--early-stopping-patience', type=int, default=30, help='Stop training after this many epochs without improvement')
+    parser.add_argument('--early-stopping-monitor', type=str, default='val_total_mse_loss', choices=['train_total_mse_loss', 'val_total_mse_loss'], help='Metric to monitor for early stopping')
     parser.add_argument('--reset-trainer', type=bool, default=False, help='Reset training metrics (e.g. early stopping, lr) when loading a model checkpoint')
     parser.add_argument('--weight-decay', type=float, default=0.0, help='Weight decay strength')
     parser.add_argument('--ema-alpha-y', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of y. Must be between 0 and 1.')
@@ -59,6 +60,8 @@ def get_argparse():
     parser.add_argument('--redirect', type=bool, default=False, help='Redirect stdout and stderr to log_dir/log')
     parser.add_argument('--gradient-clipping', type=float, default=0.0, help='Gradient clipping norm')
     parser.add_argument('--remove-ref-energy', action='store_true', help='If true, remove the reference energy from the dataset for delta-learning. Total energy can still be predicted by the model during inference by turning this flag off when loading.  The dataset must be compatible with Atomref for this to be used.')
+    parser.add_argument('--checkpoint-monitor', type=str, default='val_total_mse_loss', choices=['train_total_mse_loss', 'val_total_mse_loss'], help='Metric to monitor for writing out best models')
+    parser.add_argument('--load-weights', default=None, type=str, help='Load the weights of an existing model')
     # dataset specific
     parser.add_argument('--dataset', default=None, type=str, choices=datasets.__all__, help='Name of the torch_geometric dataset')
     parser.add_argument('--dataset-root', default='~/data', type=str, help='Data storage directory (not used if dataset is "CG")')
@@ -147,6 +150,30 @@ def get_args():
     return args
 
 
+def fix_state_dict(ckpt):
+    import re
+
+    state_dict = {re.sub(r"^model\.", "", k): v for k, v in ckpt["state_dict"].items()}
+    # In ET, before we had output_model.output_network.{0,1}.update_net.[0-9].{weight,bias}
+    # Now we have output_model.output_network.{0,1}.update_net.layers.[0-9].{weight,bias}
+    # In other models, we had output_model.output_network.{0,1}.{weight,bias},
+    # which is now output_model.output_network.layers.{0,1}.{weight,bias}
+    # This change was introduced in https://github.com/torchmd/torchmd-net/pull/314
+    patterns = [
+        (
+            r"output_model.output_network.(\d+).update_net.(\d+).",
+            r"output_model.output_network.\1.update_net.layers.\2.",
+        ),
+        (
+            r"output_model.output_network.([02]).(weight|bias)",
+            r"output_model.output_network.layers.\1.\2",
+        ),
+    ]
+    for p in patterns:
+        state_dict = {re.sub(p[0], p[1], k): v for k, v in state_dict.items()}
+    return state_dict
+
+
 def main():
     args = get_args()
     if args.remove_ref_energy:
@@ -167,17 +194,31 @@ def main():
     args.prior_args = [p.get_init_args() for p in prior_models]
     # initialize lightning module
     model = LNNP(args, prior_model=prior_models, mean=data.mean, std=data.std)
+    if args.load_weights is not None:
+        print(f"Loading weights from {args.load_weights}")
+        ckpt = torch.load(args.load_weights, map_location="cpu")
+        model.model.load_state_dict(fix_state_dict(ckpt))
 
-    val_loss_name = f"val_total_{args.train_loss}"
+    mon = args.checkpoint_monitor
+    chkpoint_name = f"epoch={{epoch}}-{mon.split('_')[0]}_loss={{{mon}:.4f}}"
+    if len(data.idx_test):
+        chkpoint_name += "-test_loss={test_total_l1_loss:.4f}"
+
+    callbacks = []
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.log_dir,
-        monitor=val_loss_name,
+        monitor=args.checkpoint_monitor,
         save_top_k=10,  # -1 to save all
         every_n_epochs=args.save_interval,
-        filename=f"epoch={{epoch}}-val_loss={{{val_loss_name}:.4f}}-test_loss={{test_total_l1_loss:.4f}}",
+        filename=chkpoint_name,
         auto_insert_metric_name=False,
     )
-    early_stopping = EarlyStopping(val_loss_name, patience=args.early_stopping_patience)
+    callbacks.append(checkpoint_callback)
+    if args.early_stopping_monitor is not None:
+        early_stopping = EarlyStopping(
+            args.early_stopping_monitor, patience=args.early_stopping_patience
+        )
+        callbacks.append(early_stopping)
 
     csv_logger = CSVLogger(args.log_dir, name="", version="")
     _logger = [csv_logger]
@@ -208,7 +249,7 @@ def main():
         devices=args.ngpus,
         num_nodes=args.num_nodes,
         default_root_dir=args.log_dir,
-        callbacks=[early_stopping, checkpoint_callback],
+        callbacks=callbacks,
         logger=_logger,
         precision=args.precision,
         gradient_clip_val=args.gradient_clipping,

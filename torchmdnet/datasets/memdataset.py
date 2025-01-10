@@ -85,6 +85,8 @@ class MemmappedDataset(Dataset):
             self.dp_mm = np.memmap(
                 fnames["dp"], mode="r", dtype=np.float32, shape=(num_all_confs, 3)
             )
+        if "mol_idx" in self.properties:
+            self.mi_mm = np.memmap(fnames["mol_idx"], mode="r", dtype=np.uint64)
 
         assert self.idx_mm[0] == 0
         assert self.idx_mm[-1] == len(self.z_mm)
@@ -170,6 +172,13 @@ class MemmappedDataset(Dataset):
                 dtype=np.float32,
                 shape=(num_all_confs, 3),
             )
+        if "mol_idx" in self.properties:
+            mi_mm = np.memmap(
+                fnames["mol_idx"] + ".tmp",
+                mode="w+",
+                dtype=np.uint64,
+                shape=(num_all_confs,),
+            )
 
         print("Storing data...")
         i_atom = 0
@@ -189,6 +198,8 @@ class MemmappedDataset(Dataset):
                 pq_mm[i_atom:i_next_atom] = data.pq
             if "dp" in self.properties:
                 dp_mm[i_conf] = data.dp
+            if "mol_idx" in self.properties:
+                mi_mm[i_conf] = data.mol_idx
             i_atom = i_next_atom
 
         idx_mm[-1] = num_all_atoms
@@ -207,6 +218,8 @@ class MemmappedDataset(Dataset):
             pq_mm.flush()
         if "dp" in self.properties:
             dp_mm.flush()
+        if "mol_idx" in self.properties:
+            mi_mm.flush()
 
         os.rename(idx_mm.filename, fnames["idx"])
         os.rename(z_mm.filename, fnames["z"])
@@ -221,6 +234,8 @@ class MemmappedDataset(Dataset):
             os.rename(pq_mm.filename, fnames["pq"])
         if "dp" in self.properties:
             os.rename(dp_mm.filename, fnames["dp"])
+        if "mol_idx" in self.properties:
+            os.rename(mi_mm.filename, fnames["mol_idx"])
 
     def len(self):
         return len(self.idx_mm) - 1
@@ -237,6 +252,7 @@ class MemmappedDataset(Dataset):
             - :obj:`q`: Total charge of the molecule.
             - :obj:`pq`: Partial charges of the atoms.
             - :obj:`dp`: Dipole moment of the molecule.
+            - :obj:`mol_idx`: The index of the molecule of the conformer.
 
         Args:
             idx (int): Index of the data object.
@@ -259,4 +275,6 @@ class MemmappedDataset(Dataset):
             props["pq"] = pt.tensor(self.pq_mm[atoms])
         if "dp" in self.properties:
             props["dp"] = pt.tensor(self.dp_mm[idx])
+        # if "mol_idx" in self.properties:
+        #     props["mol_idx"] = pt.tensor(self.mi_mm[idx], dtype=pt.int64).view(1, 1)
         return Data(z=z, pos=pos, **props)

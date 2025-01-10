@@ -179,6 +179,24 @@ class LNNP(LightningModule):
     def test_step(self, batch, batch_idx):
         return self.step(batch, [("l1_loss", l1_loss)], "test")
 
+    def predict_step(self, batch, batch_idx):
+        batch = self.data_transform(batch)
+
+        with torch.set_grad_enabled(self.hparams.derivative):
+            extra_args = batch.to_dict()
+            for a in ("y", "neg_dy", "z", "pos", "batch", "box", "q", "s"):
+                if a in extra_args:
+                    del extra_args[a]
+            return self(
+                batch.z,
+                batch.pos,
+                batch=batch.batch,
+                box=batch.box if "box" in batch else None,
+                q=batch.q if self.hparams.charge else None,
+                s=batch.s if self.hparams.spin else None,
+                extra_args=extra_args,
+            )
+
     def _compute_losses(self, y, neg_y, batch, loss_fn, loss_name, stage):
         # Compute the loss for the predicted value and the negative derivative (if available)
         # Args:
@@ -327,6 +345,19 @@ class LNNP(LightningModule):
             result_dict.update(self._get_mean_loss_dict_for_type("neg_dy"))
             # Get only test entries
             result_dict = {k: v for k, v in result_dict.items() if k.startswith("test")}
+            self.log_dict(result_dict, sync_dist=True)
+
+    def on_train_epoch_end(self):
+        # Log all train losses
+        if not self.trainer.sanity_checking:
+            result_dict = {}
+            result_dict.update(self._get_mean_loss_dict_for_type("total"))
+            result_dict.update(self._get_mean_loss_dict_for_type("y"))
+            result_dict.update(self._get_mean_loss_dict_for_type("neg_dy"))
+            # Get only train entries
+            result_dict = {
+                k: v for k, v in result_dict.items() if k.startswith("train")
+            }
             self.log_dict(result_dict, sync_dist=True)
 
     def _reset_losses_dict(self):
