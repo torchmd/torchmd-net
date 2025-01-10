@@ -397,3 +397,13 @@ def deprecated_class(cls):
 
     cls.__init__ = wrapped_init
     return cls
+
+def check_logs(log_dir):
+    import os 
+    import time
+    metr_file_path = os.path.join(log_dir, 'metrics.csv')
+    if os.path.exists(metr_file_path):
+        # we make a backup of the metrics file (rename)
+        bckp_date = f'{time.strftime("%Y%m%d")}-{time.strftime("%H%M%S")}'
+        os.rename(metr_file_path, metr_file_path.replace(".csv", f"_{bckp_date}.csv"))
+    return
