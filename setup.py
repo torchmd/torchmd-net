@@ -43,7 +43,7 @@ neighbor_sources = [os.path.join(extension_root, "neighbors", source) for source
 ExtensionType = CppExtension if not use_cuda else CUDAExtension
 extensions = ExtensionType(
     name='torchmdnet.extensions.torchmdnet_extensions',
-    sources=[os.path.join(extension_root, "extensions.cpp")] + neighbor_sources,
+    sources=[os.path.join(extension_root, "torchmdnet_extensions.cpp")] + neighbor_sources,
     include_dirs=include_paths(),
     define_macros=[('WITH_CUDA', 1)] if use_cuda else [],
 )
