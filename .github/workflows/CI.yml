@@ -19,15 +19,13 @@ jobs:
 
     steps:
       - name: Check out
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Create a conda environment
-        uses: conda-incubator/setup-miniconda@v2
+        uses: conda-incubator/setup-miniconda@v3
         with:
           activate-environment: torchmd-net
           environment-file: environment.yml
-          miniforge-variant: Mambaforge
-          use-mamba: true
 
       - name: Install the package
         run: pip -vv install .
@@ -47,4 +45,3 @@ jobs:
 
       - name: Test torchmd-train utility
         run: torchmd-train --help
-          
