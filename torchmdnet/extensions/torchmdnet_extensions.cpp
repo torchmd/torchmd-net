@@ -15,15 +15,12 @@
 #include <cuda_runtime_api.h>
 #endif
 
-#ifdef _WIN32
-#define EXTENSION_API __declspec(dllexport)
-#else
-#define EXTENSION_API
-#endif
-
-extern "C" EXTENSION_API PyObject* PyInit_torchmdnet_extensions(void) {
-    return NULL;
-}
+#ifdef _WIN32 
+PyMODINIT_FUNC PyInit_torchmdnet_extensions(void) { 
+  // No need to do anything. 
+  return NULL; 
+} 
+#endif 
 
 /* @brief Returns true if the current torch CUDA stream is capturing.
  * This function is required because the one available in torch is not compatible with TorchScript.
