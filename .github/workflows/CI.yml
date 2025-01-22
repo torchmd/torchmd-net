@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "macos-latest", "macos-13", "windows-2019"]
+        os: ["ubuntu-latest", "macos-latest", "macos-13", "windows-2022"]
         python-version: ["3.10"] #, "3.9", "3.11", "3.12"]
 
     defaults: # Needed for conda
@@ -33,12 +33,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
           channels: conda-forge,defaults
 
-      - name: Remove conflicting Visual Studio compiler (Windows only)
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v2
         if: runner.os == 'Windows'
-        shell: cmd
-        run: |
-          del "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Tools\MSVC\14.29.30133\bin\HostX86\x64\cl.exe"
-          del "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Tools\MSVC\14.29.30133\bin\HostX86\x64\link.exe"
 
       - name: Install OS-specific conda dependencies
         run: |
