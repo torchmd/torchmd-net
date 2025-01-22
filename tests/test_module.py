@@ -12,6 +12,7 @@ from torchmdnet.priors import Atomref
 from torchmdnet.module import LNNP
 from torchmdnet.data import DataModule
 from torchmdnet import priors
+import os
 
 from utils import load_example_args, DummyDataset
 
@@ -30,6 +31,11 @@ def test_load_model():
 @mark.parametrize("use_atomref", [True, False])
 @mark.parametrize("precision", [32, 64])
 def test_train(model_name, use_atomref, precision, tmpdir):
+    import torch
+
+    if os.getenv("CPU_ONLY"):
+        torch.set_default_device("cpu")
+
     args = load_example_args(
         model_name,
         remove_prior=not use_atomref,
@@ -53,6 +59,11 @@ def test_train(model_name, use_atomref, precision, tmpdir):
 
     module = LNNP(args, prior_model=prior)
 
-    trainer = pl.Trainer(max_steps=10, default_root_dir=tmpdir, precision=args["precision"],inference_mode=False)
+    trainer = pl.Trainer(
+        max_steps=10,
+        default_root_dir=tmpdir,
+        precision=args["precision"],
+        inference_mode=False,
+    )
     trainer.fit(module, datamodule)
     trainer.test(module, datamodule)

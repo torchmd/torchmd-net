@@ -54,7 +54,11 @@ jobs:
         run: conda list
 
       - name: Build and install the package
-        run: pip -vv install .
+        run: |
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            export OMP_PREFIX=/Users/runner/miniconda3/envs/test
+          fi
+          pip -vv install .
         env:
           CPU_ONLY: 1
 
