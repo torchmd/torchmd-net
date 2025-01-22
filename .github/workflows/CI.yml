@@ -66,13 +66,10 @@ jobs:
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
       - name: Run tests
-        run: |
-          if [[ "${{ runner.os }}" == "macOS" ]]; then
-            export OMP_PREFIX=/Users/runner/miniconda3/envs/test
-          fi
-          pytest -v -s
+        run: pytest -v -s
         env:
           CPU_ONLY: 1
+          OMP_PREFIX: ${{ runner.os == 'macOS' && '/Users/runner/miniconda3/envs/test' || '' }}
 
       - name: Test torchmd-train utility
         run: torchmd-train --help
