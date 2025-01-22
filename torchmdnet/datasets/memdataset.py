@@ -112,6 +112,8 @@ class MemmappedDataset(Dataset):
         raise NotImplementedError()
 
     def process(self):
+        import gc
+
         print("Gathering statistics...")
         num_all_confs = 0
         num_all_atoms = 0
@@ -206,36 +208,48 @@ class MemmappedDataset(Dataset):
         assert i_atom == num_all_atoms
 
         idx_mm.flush()
+        del idx_mm
         z_mm.flush()
+        del z_mm
         pos_mm.flush()
+        del pos_mm
         if "y" in self.properties:
             y_mm.flush()
+            del y_mm
         if "neg_dy" in self.properties:
             neg_dy_mm.flush()
+            del neg_dy_mm
         if "q" in self.properties:
             q_mm.flush()
+            del q_mm
         if "pq" in self.properties:
             pq_mm.flush()
+            del pq_mm
         if "dp" in self.properties:
             dp_mm.flush()
+            del dp_mm
         if "mol_idx" in self.properties:
             mi_mm.flush()
+            del mi_mm
 
-        os.rename(idx_mm.filename, fnames["idx"])
-        os.rename(z_mm.filename, fnames["z"])
-        os.rename(pos_mm.filename, fnames["pos"])
+        # Force garbage collection to ensure files are closed before renaming
+        gc.collect()
+
+        os.rename(fnames["idx"] + ".tmp", fnames["idx"])
+        os.rename(fnames["z"] + ".tmp", fnames["z"])
+        os.rename(fnames["pos"] + ".tmp", fnames["pos"])
         if "y" in self.properties:
-            os.rename(y_mm.filename, fnames["y"])
+            os.rename(fnames["y"] + ".tmp", fnames["y"])
         if "neg_dy" in self.properties:
-            os.rename(neg_dy_mm.filename, fnames["neg_dy"])
+            os.rename(fnames["neg_dy"] + ".tmp", fnames["neg_dy"])
         if "q" in self.properties:
-            os.rename(q_mm.filename, fnames["q"])
+            os.rename(fnames["q"] + ".tmp", fnames["q"])
         if "pq" in self.properties:
-            os.rename(pq_mm.filename, fnames["pq"])
+            os.rename(fnames["pq"] + ".tmp", fnames["pq"])
         if "dp" in self.properties:
-            os.rename(dp_mm.filename, fnames["dp"])
+            os.rename(fnames["dp"] + ".tmp", fnames["dp"])
         if "mol_idx" in self.properties:
-            os.rename(mi_mm.filename, fnames["mol_idx"])
+            os.rename(fnames["mol_idx"] + ".tmp", fnames["mol_idx"])
 
     def len(self):
         return len(self.idx_mm) - 1
