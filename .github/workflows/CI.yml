@@ -71,6 +71,8 @@ jobs:
 
       - name: Run tests
         run: pytest -v -s
+        env:
+          CPU_ONLY: 1
 
       - name: Test torchmd-train utility
         run: torchmd-train --help
