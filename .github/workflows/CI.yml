@@ -48,6 +48,8 @@ jobs:
 
       - name: Build and install the package
         run: pip -vv install .
+        env:
+          CPU_ONLY: 1
 
       - name: List the conda environment
         run: conda list
