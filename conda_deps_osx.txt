@@ -9,3 +9,4 @@ torchmetrics
 tqdm
 clangxx
 llvm-openmp
+pybind11
