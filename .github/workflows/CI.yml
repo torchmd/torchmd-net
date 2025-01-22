@@ -54,11 +54,7 @@ jobs:
         run: conda list
 
       - name: Build and install the package
-        run: |
-          if [[ "${{ runner.os }}" == "macOS" ]]; then
-            export OMP_PREFIX=/Users/runner/miniconda3/envs/test
-          fi
-          pip -vv install .
+        run: pip -vv install .
         env:
           CPU_ONLY: 1
 
@@ -70,7 +66,11 @@ jobs:
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
       - name: Run tests
-        run: pytest -v -s
+        run: |
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            export OMP_PREFIX=/Users/runner/miniconda3/envs/test
+          fi
+          pytest -v -s
         env:
           CPU_ONLY: 1
 
