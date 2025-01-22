@@ -32,9 +32,13 @@ def test_load_model():
 @mark.parametrize("precision", [32, 64])
 def test_train(model_name, use_atomref, precision, tmpdir):
     import torch
+    import platform
 
-    if os.getenv("CPU_ONLY"):
+    accelerator = "auto"
+    if platform.system() == "Darwin" and (os.getenv("CI", None) is not None):
+        # MPS backend runs out of memory on Github
         torch.set_default_device("cpu")
+        accelerator = "cpu"
 
     args = load_example_args(
         model_name,
@@ -64,6 +68,7 @@ def test_train(model_name, use_atomref, precision, tmpdir):
         default_root_dir=tmpdir,
         precision=args["precision"],
         inference_mode=False,
+        accelerator=accelerator,
     )
     trainer.fit(module, datamodule)
     trainer.test(module, datamodule)
