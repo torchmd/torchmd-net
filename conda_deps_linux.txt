@@ -1,8 +1,8 @@
 h5py
 nnpops
 pip
-libtorch
-pytorch-cpu
+libtorch >=2.5.1
+pytorch-cpu >=2.5.1
 pytorch_geometric
 lightning
 torchmetrics
