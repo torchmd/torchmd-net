@@ -1,9 +1,11 @@
 h5py
 nnpops
 pip
-pytorch
+libtorch
+pytorch-cpu
 pytorch_geometric
 lightning
 torchmetrics
 tqdm
 clangxx
+llvm-openmp

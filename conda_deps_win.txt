@@ -1,6 +1,7 @@
 h5py
 pip
-pytorch
+libtorch
+pytorch-cpu
 pytorch_geometric
 lightning
 torchmetrics
