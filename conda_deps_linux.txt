@@ -1,0 +1,9 @@
+h5py
+nnpops
+pip
+pytorch
+pytorch_geometric
+lightning
+torchmetrics
+tqdm
+gxx

@@ -28,13 +28,25 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
 
-      - name: Create a conda environment
-        uses: conda-incubator/setup-miniconda@v3
+      - uses: conda-incubator/setup-miniconda@v3
         with:
-          activate-environment: torchmd-net
-          environment-file: environment.yml
+          python-version: ${{ matrix.python-version }}
+          channels: conda-forge,defaults
 
-      - name: Install the package
+      - name: Install OS-specific conda dependencies
+        run: |
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            conda install --file conda_deps_linux.txt
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            conda install --file conda_deps_osx.txt
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            conda install --file conda_deps_win.txt
+          fi
+
+      - name: Install testing packages
+        run: conda install -y -c conda-forge flake8 pytest psutil
+
+      - name: Build and install the package
         run: pip -vv install .
 
       - name: List the conda environment
