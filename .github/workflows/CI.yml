@@ -31,7 +31,7 @@ jobs:
       - uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: ${{ matrix.python-version }}
-          channels: conda-forge,defaults
+          channels: conda-forge
 
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v2
@@ -53,9 +53,9 @@ jobs:
       - name: List the conda environment
         run: conda list
 
-      - name: Patch missing symlink of library in OSX 13
-        run: ln -s /Users/runner/miniconda3/envs/test/lib/libtorch_python.dylib /Users/runner/miniconda3/envs/test/lib/python3.10/site-packages/torch/lib/libtorch_python.dylib
-        if: matrix.os == 'macos-13'
+      # - name: Patch missing symlink of library in OSX 13
+      #   run: ln -s /Users/runner/miniconda3/envs/test/lib/libtorch_python.dylib /Users/runner/miniconda3/envs/test/lib/python3.10/site-packages/torch/lib/libtorch_python.dylib
+      #   if: matrix.os == 'macos-13'
 
       - name: List libs in the Windows environment
         run: dir "C:/Miniconda/envs/test/libs"
