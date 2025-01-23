@@ -87,6 +87,11 @@ class LNNP(LightningModule):
             hparams["spin"] = False
         if "partial_charges" not in hparams:
             hparams["partial_charges"] = False
+        # Ensure only one of charge, partial_charges, and spin can be True, otherwise raise a ValueError
+        if sum([hparams["charge"], hparams["partial_charges"], hparams["spin"]]) > 1:
+            raise ValueError(
+            "Only one of 'charge', 'partial_charges', and 'spin' can be True."
+            )
         if "train_loss" not in hparams:
             hparams["train_loss"] = "mse_loss"
         if "train_loss_arg" not in hparams:
