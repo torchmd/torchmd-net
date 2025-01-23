@@ -77,6 +77,8 @@ class LNNP(LightningModule):
             hparams["charge"] = False
         if "spin" not in hparams:
             hparams["spin"] = False
+        if "partial_charges" not in hparams:
+            hparams["partial_charges"] = False
         if "train_loss" not in hparams:
             hparams["train_loss"] = "mse_loss"
         if "train_loss_arg" not in hparams:
