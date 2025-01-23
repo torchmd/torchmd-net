@@ -53,16 +53,13 @@ jobs:
       - name: List the conda environment
         run: conda list
 
+      - name: Patch missing symlink of library in OSX 13
+        run: ln -s /Users/runner/miniconda3/envs/test/lib/libtorch_python.dylib /Users/runner/miniconda3/envs/test/lib/python3.10/site-packages/torch/lib/libtorch_python.dylib
+        if: matrix.os == 'macos-13'
+
       - name: List libs in the environment
         run: ls -l /Users/runner/miniconda3/envs/test/lib/python3.10/site-packages/torch/lib
         if: runner.os == 'macOS'
-
-      - name: List the conda lib dir
-        run: ls -l /Users/runner/miniconda3/envs/test/lib/
-        if: runner.os == 'macOS'
-
-      - name: pytorch bug report
-        run: python collect_env.py
 
       - name: Build and install the package
         run: pip -vv install .
