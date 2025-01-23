@@ -36,8 +36,11 @@ jobs:
 
       - name: Install OS-specific conda dependencies
         run: |
+          conda install mamba -y -c conda-forge
           if [[ "${{ runner.os }}" == "Linux" ]]; then
             conda install --file conda_deps_linux.txt --channel conda-forge --override-channels
+          elif [[ "${{ runner.os }}" == "macos-13" ]]; then
+            mamba install --file conda_deps_osx.txt --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
             conda install --file conda_deps_osx.txt --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
