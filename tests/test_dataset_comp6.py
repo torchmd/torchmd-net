@@ -39,7 +39,7 @@ def test_dataset_s66x8():
             ),
             atol=1e-4,
         )
-        assert pt.allclose(sample.y, pt.tensor([[-5755.7288331]],dtype=pt.float64))
+        assert pt.allclose(sample.y, pt.tensor([[-5755.7288331]], dtype=pt.float64))
         assert pt.allclose(
             sample.neg_dy,
             -pt.tensor(
@@ -65,3 +65,8 @@ def test_dataset_s66x8():
         data_loader = DataLoader(dataset=data_set, batch_size=32, num_workers=2)
         for batch in data_loader:
             pass
+
+        # Extra cleanup for Windows tests which are sensitive to open mmap files
+        del sample
+        del data_loader
+        del data_set
