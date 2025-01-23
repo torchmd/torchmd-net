@@ -32,7 +32,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           channels: conda-forge
-          mamba-version: "*"
           conda-remove-defaults: "true"
 
       - name: Install OS-specific conda dependencies
