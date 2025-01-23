@@ -17,13 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          [
-            "ubuntu-latest",
-            "macos-latest",
-            "macos-latest-large",
-            "windows-2022",
-          ]
+        os: ["ubuntu-latest", "macos-latest", "macos-13", "windows-2022"]
         python-version: ["3.10"]
 
     defaults: # Needed for conda
@@ -61,6 +55,10 @@ jobs:
 
       - name: List libs in the environment
         run: ls -l /Users/runner/miniconda3/envs/test/lib/python3.10/site-packages/torch/lib
+        if: runner.os == 'macOS'
+
+      - name: List the conda lib dir
+        run: ls -l /Users/runner/miniconda3/envs/test/lib/
         if: runner.os == 'macOS'
 
       - name: Build and install the package
