@@ -671,6 +671,11 @@ def test_per_batch_box(device, strategy, n_batches, use_forward):
 def test_torch_compile(device, dtype, loop, include_transpose):
     import sys
 
+    # Skip if WINDOWS_TESTS is set to true
+    if os.environ.get("WINDOWS_TESTS", "false") == "true":
+        # torch.compile doesn't detect cl.exe on Windows Github Actions
+        pytest.skip("Skipping test on Windows")
+
     if sys.version_info >= (3, 12):
         pytest.skip("Not available in this version")
     if torch.__version__ < "2.0.0":

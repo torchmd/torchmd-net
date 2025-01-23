@@ -76,6 +76,7 @@ jobs:
           fi
           pytest -v -s
         env:
+          WINDOWS_TESTS: ${{ runner.os == 'Windows' && 'true' || 'false' }}
           CPU_ONLY: 1
           OMP_PREFIX: ${{ runner.os == 'macOS' && '/Users/runner/miniconda3/envs/test' || '' }}
 
