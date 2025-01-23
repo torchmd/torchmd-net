@@ -31,8 +31,10 @@ jobs:
       - uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: ${{ matrix.python-version }}
-          channels: conda-forge
+          mamba-version: "*"
+          channels: conda-forge,defaults
           conda-remove-defaults: "true"
+          channel-priority: true
 
       - name: Install OS-specific conda dependencies
         run: |
