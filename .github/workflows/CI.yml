@@ -32,6 +32,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           channels: conda-forge
+          conda-remove-defaults: "true"
 
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v2
