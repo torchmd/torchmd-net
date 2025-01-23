@@ -199,9 +199,7 @@ class LNNP(LightningModule):
 
         with torch.set_grad_enabled(self.hparams.derivative):
             extra_args = batch.to_dict()
-            for a in ("y", "neg_dy", "z", "pos", "batch", "box", "q", "s"):
-                if a in extra_args:
-                    del extra_args[a]
+            extra_args = process_extra_args(extra_args, self.hparams.partial_charges)
             return self(
                 batch.z,
                 batch.pos,
