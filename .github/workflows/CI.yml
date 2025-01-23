@@ -58,11 +58,11 @@ jobs:
         if: matrix.os == 'macos-13'
 
       - name: List libs in the Windows environment
-        run: dir C:\Miniconda\envs\test\libs
+        run: dir "C:/Miniconda/envs/test/libs"
         if: runner.os == 'Windows'
 
       - name: List libs in the Windows environment
-        run: dir C:\Miniconda\envs\test\lib\site-packages\torch\lib
+        run: dir "C:/Miniconda/envs/test/lib/site-packages/torch/lib"
         if: runner.os == 'Windows'
 
       - name: Build and install the package
