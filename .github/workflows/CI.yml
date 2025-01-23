@@ -65,8 +65,18 @@ jobs:
         run: dir "C:/Miniconda/envs/test/lib/site-packages/torch/lib"
         if: runner.os == 'Windows'
 
+      - name: List libs in the Windows environment
+        run: dir "C:/Miniconda/envs/test/Library/lib"
+        if: runner.os == 'Windows'
+
       - name: Build and install the package
-        run: pip -vv install .
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            export LIB="C:/Miniconda/envs/test/Library/lib"
+            pip -vv install .
+          else
+            pip -vv install .
+          fi
         env:
           CPU_ONLY: 1
 
