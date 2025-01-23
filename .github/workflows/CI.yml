@@ -32,9 +32,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           mamba-version: "*"
-          channels: conda-forge,defaults
+          channels: conda-forge
           conda-remove-defaults: "true"
           channel-priority: true
+          activate-environment: torchmdnet
 
       - name: Install OS-specific conda dependencies
         run: |
