@@ -272,7 +272,7 @@ class MemmappedDataset(Dataset):
         if "q" in self.properties:
             props["q"] = pt.tensor(self.q_mm[idx], dtype=pt.long)
         if "pq" in self.properties:
-            props["pq"] = pt.tensor(self.pq_mm[atoms])
+            props["partial_charges"] = pt.tensor(self.pq_mm[atoms])
         if "dp" in self.properties:
             props["dp"] = pt.tensor(self.dp_mm[idx])
         # if "mol_idx" in self.properties:
