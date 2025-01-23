@@ -3,7 +3,7 @@
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
 from abc import abstractmethod, ABCMeta
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 from torch import nn, Tensor
 
 
@@ -45,8 +45,9 @@ class AtomFilter(BaseWrapper):
         batch: Tensor,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
+        extra_args: Optional[Dict[str, Tensor]] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
-        x, v, z, pos, batch = self.model(z, pos, batch=batch, q=q, s=s)
+        x, v, z, pos, batch = self.model(z, pos, batch=batch, q=q, s=s, extra_args=extra_args)
 
         n_samples = len(batch.unique())
 
