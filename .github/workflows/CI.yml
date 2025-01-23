@@ -17,8 +17,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "macos-latest", "macos-13", "windows-2022"]
-        python-version: ["3.10"] #, "3.9", "3.11", "3.12"]
+        os:
+          [
+            "ubuntu-latest",
+            "macos-latest",
+            "macos-latest-large",
+            "windows-2022",
+          ]
+        python-version: ["3.10"]
 
     defaults: # Needed for conda
       run:
