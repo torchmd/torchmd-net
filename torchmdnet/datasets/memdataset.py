@@ -211,7 +211,7 @@ class MemmappedDataset(Dataset):
         mmaps["idx"][-1] = num_all_atoms
         assert i_atom == num_all_atoms
 
-        for prop in mmaps:
+        for prop in list(mmaps.keys()):
             mmaps[prop].flush()
             del mmaps[prop]
 
@@ -280,7 +280,7 @@ class MemmappedDataset(Dataset):
         # Flush and close all the memory-mapped files
         import gc
 
-        for prop in self.mmaps:
+        for prop in list(self.mmaps.keys()):
             self.mmaps[prop].flush()
             del self.mmaps[prop]
 
