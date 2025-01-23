@@ -61,6 +61,32 @@ def tensor_norm(tensor):
     """Computes Frobenius norm."""
     return (tensor**2).sum((-2, -1))
 
+def process_additional_labels(z: torch.Tensor, q: Optional[torch.Tensor], s: Optional[torch.Tensor], extra_args: Optional[Dict[str, torch.Tensor]], batch: torch.Tensor) -> torch.Tensor:
+    """
+    Process additional labels for the model. This function assigns atom-wise properties based on the provided
+    molecule-wise properties or extra arguments.
+    Total charge q and spin s are molecule-wise properties. We transform it into an atom-wise property, with all atoms 
+    belonging to the same molecule being assigned the same charge q or spin s.
+
+    Args:
+        batch (Tensor): Batch tensor indicating the molecule each atom belongs to.
+        z (Tensor): Atomic numbers tensor.
+        q (Optional[Tensor]): Total charge tensor for each molecule.
+        s (Optional[Tensor]): Spin tensor for each molecule.
+        extra_args (Optional[Dict[str, Tensor]]): Dictionary containing additional properties.
+
+    Returns:
+        Tensor: Atom-wise property tensor already scaled by 0.1.
+    """
+    if q is not None:
+        t = q[batch]
+    elif s is not None:
+        t = s[batch]
+    elif extra_args is not None and 'partial_charges' in extra_args:
+        t = extra_args['partial_charges']
+    else:
+        t = torch.zeros_like(z, device=z.device, dtype=z.dtype)
+    return 0.1 * t[..., None, None, None]
 
 class TensorNet(nn.Module):
     r"""TensorNet's architecture. From
@@ -235,16 +261,13 @@ class TensorNet(nn.Module):
             edge_vec is not None
         ), "Distance module did not return directional information"
         # Distance module returns -1 for non-existing edges, to avoid having to resize the tensors when we want to ensure static shapes (for CUDA graphs) we make all non-existing edges pertain to a ghost atom
-        # Total charge q is a molecule-wise property. We transform it into an atom-wise property, with all atoms belonging to the same molecule being assigned the same charge q
-        if q is None:
-            q = torch.zeros_like(z, device=z.device, dtype=z.dtype)
-        else:
-            q = q[batch]
+        
+        t = process_additional_labels(z, q, s, extra_args, batch)
         zp = z
         if self.static_shapes:
             mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
             zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
-            q = torch.cat((q, torch.zeros(1, device=q.device, dtype=q.dtype)), dim=0)
+            t = torch.cat((q, torch.zeros(1, device=q.device, dtype=q.dtype)), dim=0)
             # I trick the model into thinking that the masked edges pertain to the extra atom
             # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
             edge_index = edge_index.masked_fill(mask, z.shape[0])
@@ -259,7 +282,7 @@ class TensorNet(nn.Module):
         edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
         X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr)
         for layer in self.layers:
-            X = layer(X, edge_index, edge_weight, edge_attr, q)
+            X = layer(X, edge_index, edge_weight, edge_attr, t)
         I, A, S = decompose_tensor(X)
         x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
         x = self.out_norm(x)
@@ -455,7 +478,7 @@ class Interaction(nn.Module):
         edge_index: Tensor,
         edge_weight: Tensor,
         edge_attr: Tensor,
-        q: Tensor,
+        t: Tensor,
     ) -> Tensor:
         C = self.cutoff(edge_weight)
         for linear_scalar in self.linears_scalar:
@@ -482,7 +505,7 @@ class Interaction(nn.Module):
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(msg, Y)
             B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor((1 + 0.1 * q[..., None, None, None]) * (A + B))
+            I, A, S = decompose_tensor((1 + t) * (A + B))
         if self.equivariance_invariance_group == "SO(3)":
             B = torch.matmul(Y, msg)
             I, A, S = decompose_tensor(2 * B)
@@ -492,5 +515,5 @@ class Interaction(nn.Module):
         A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         dX = I + A + S
-        X = X + dX + (1 + 0.1 * q[..., None, None, None]) * torch.matrix_power(dX, 2)
+        X = X + dX + (1 + t) * torch.matrix_power(dX, 2)
         return X
