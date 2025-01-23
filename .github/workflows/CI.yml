@@ -34,18 +34,14 @@ jobs:
           channels: conda-forge
           conda-remove-defaults: "true"
 
-      - name: Add msbuild to PATH
-        uses: microsoft/setup-msbuild@v2
-        if: runner.os == 'Windows'
-
       - name: Install OS-specific conda dependencies
         run: |
           if [[ "${{ runner.os }}" == "Linux" ]]; then
-            conda install --file conda_deps_linux.txt
+            conda install --file conda_deps_linux.txt --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            conda install --file conda_deps_osx.txt
+            conda install --file conda_deps_osx.txt --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
-            conda install --file conda_deps_win.txt
+            conda install --file conda_deps_win.txt --channel conda-forge --override-channels
           fi
 
       - name: Install testing packages
@@ -53,22 +49,6 @@ jobs:
 
       - name: List the conda environment
         run: conda list
-
-      # - name: Patch missing symlink of library in OSX 13
-      #   run: ln -s /Users/runner/miniconda3/envs/test/lib/libtorch_python.dylib /Users/runner/miniconda3/envs/test/lib/python3.10/site-packages/torch/lib/libtorch_python.dylib
-      #   if: matrix.os == 'macos-13'
-
-      - name: List libs in the Windows environment
-        run: dir "C:/Miniconda/envs/test/libs"
-        if: runner.os == 'Windows'
-
-      - name: List libs in the Windows environment
-        run: dir "C:/Miniconda/envs/test/lib/site-packages/torch/lib"
-        if: runner.os == 'Windows'
-
-      - name: List libs in the Windows environment
-        run: dir "C:/Miniconda/envs/test/Library/lib"
-        if: runner.os == 'Windows'
 
       - name: Build and install the package
         run: |
@@ -89,7 +69,11 @@ jobs:
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
       - name: Run tests
-        run: pytest -v -s
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            export PATH="C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.42.34433\bin\HostX86\x64\:$PATH"
+          fi
+          pytest -v -s
         env:
           CPU_ONLY: 1
           OMP_PREFIX: ${{ runner.os == 'macOS' && '/Users/runner/miniconda3/envs/test' || '' }}
