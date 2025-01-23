@@ -53,6 +53,10 @@ jobs:
       - name: List the conda environment
         run: conda list
 
+      - name: List libs in the environment
+        run: ls -l /Users/runner/miniconda3/envs/test/lib/python3.10/site-packages/torch/lib
+        if: runner.os == 'macOS'
+
       - name: Build and install the package
         run: pip -vv install .
         env:
