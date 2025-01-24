@@ -33,12 +33,22 @@ jobs:
           python-version: ${{ matrix.python-version }}
           channels: conda-forge
           conda-remove-defaults: "true"
-          auto-update-conda: true
+        if: matrix.os != 'macos-13'
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+          channels: conda-forge
+          mamba-version: "*"
+          conda-remove-defaults: "true"
+        if: matrix.os == 'macos-13'
 
       - name: Install OS-specific conda dependencies
         run: |
           if [[ "${{ runner.os }}" == "Linux" ]]; then
             conda install --file conda_deps_linux.txt --channel conda-forge --override-channels
+          elif [[ "${{ runner.os }}" == "macos-13" ]]; then
+            mamba install --file conda_deps_osx.txt --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
             conda install --file conda_deps_osx.txt --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
