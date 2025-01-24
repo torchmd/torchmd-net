@@ -83,8 +83,9 @@ jobs:
         run: pytest -v -s
         env:
           CPU_ONLY: 1
-          WINDOWS_TESTS: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+          SKIP_TORCH_COMPILE: ${{ runner.os == 'Windows' && 'true' || 'false' }}
           OMP_PREFIX: ${{ runner.os == 'macOS' && '/Users/runner/miniconda3/envs/test' || '' }}
+          CPU_TRAIN: ${{ runner.os == 'macOS' && 'true' || 'false' }}
 
       - name: Test torchmd-train utility
         run: torchmd-train --help
