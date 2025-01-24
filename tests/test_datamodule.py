@@ -55,9 +55,9 @@ def test_dataloader_get(tmpdir):
 def test_datamodule_standardize(energy, forces, has_atomref, tmpdir):
     args = load_example_args("graph-network")
     args["standardize"] = True
-    args["train_size"] = 800
-    args["val_size"] = 100
-    args["test_size"] = 100
+    args["train_size"] = 80
+    args["val_size"] = 10
+    args["test_size"] = 10
     args["log_dir"] = tmpdir
 
     dataset = DummyDataset(energy=energy, forces=forces, has_atomref=has_atomref)
