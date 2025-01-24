@@ -86,6 +86,7 @@ jobs:
           SKIP_TORCH_COMPILE: ${{ runner.os == 'Windows' && 'true' || 'false' }}
           OMP_PREFIX: ${{ runner.os == 'macOS' && '/Users/runner/miniconda3/envs/test' || '' }}
           CPU_TRAIN: ${{ runner.os == 'macOS' && 'true' || 'false' }}
+          LONG_TRAIN: "true"
 
       - name: Test torchmd-train utility
         run: torchmd-train --help
