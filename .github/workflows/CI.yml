@@ -80,7 +80,7 @@ jobs:
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
       - name: Run tests
-        run: pytest -v -s
+        run: pytest -v -s --durations=10
         env:
           CPU_ONLY: 1
           SKIP_TORCH_COMPILE: ${{ runner.os == 'Windows' && 'true' || 'false' }}
