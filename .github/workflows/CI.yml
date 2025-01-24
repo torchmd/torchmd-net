@@ -33,22 +33,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
           channels: conda-forge
           conda-remove-defaults: "true"
-        if: matrix.os != 'macos-13'
-
-      - uses: conda-incubator/setup-miniconda@v3
-        with:
-          python-version: ${{ matrix.python-version }}
-          channels: conda-forge
-          mamba-version: "*"
-          conda-remove-defaults: "true"
-        if: matrix.os == 'macos-13'
+          auto-update-conda: true
 
       - name: Install OS-specific conda dependencies
         run: |
           if [[ "${{ runner.os }}" == "Linux" ]]; then
             conda install --file conda_deps_linux.txt --channel conda-forge --override-channels
-          elif [[ "${{ runner.os }}" == "macos-13" ]]; then
-            mamba install --file conda_deps_osx.txt --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
             conda install --file conda_deps_osx.txt --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
@@ -80,14 +70,10 @@ jobs:
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
       - name: Run tests
-        run: |
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            export PATH="C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.42.34433\bin\HostX86\x64\:$PATH"
-          fi
-          pytest -v -s
+        run: pytest -v -s
         env:
-          WINDOWS_TESTS: ${{ runner.os == 'Windows' && 'true' || 'false' }}
           CPU_ONLY: 1
+          WINDOWS_TESTS: ${{ runner.os == 'Windows' && 'true' || 'false' }}
           OMP_PREFIX: ${{ runner.os == 'macOS' && '/Users/runner/miniconda3/envs/test' || '' }}
 
       - name: Test torchmd-train utility
