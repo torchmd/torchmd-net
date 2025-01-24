@@ -7,6 +7,9 @@ from setuptools import setup, find_packages
 import torch
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension, include_paths, CppExtension
 import os
+import sys
+
+is_windows = sys.platform == 'win32'
 
 try:
     version = (
@@ -43,7 +46,7 @@ neighbor_sources = [os.path.join(extension_root, "neighbors", source) for source
 ExtensionType = CppExtension if not use_cuda else CUDAExtension
 extensions = ExtensionType(
     name='torchmdnet.extensions.torchmdnet_extensions',
-    sources=[os.path.join(extension_root, "extensions.cpp")] + neighbor_sources,
+    sources=[os.path.join(extension_root, "torchmdnet_extensions.cpp")] + neighbor_sources,
     include_dirs=include_paths(),
     define_macros=[('WITH_CUDA', 1)] if use_cuda else [],
 )
@@ -58,5 +61,5 @@ if __name__ == "__main__":
             'build_ext': BuildExtension.with_options(no_python_abi_suffix=True, use_ninja=False)},
         include_package_data=True,
         entry_points={"console_scripts": ["torchmd-train = torchmdnet.scripts.train:main"]},
-        package_data={"torchmdnet": ["extensions/torchmdnet_extensions.so"]},
+        package_data={"torchmdnet": ["extensions/torchmdnet_extensions.so"] if not is_windows else ["extensions/torchmdnet_extensions.dll"]},
     )

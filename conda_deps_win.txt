@@ -1,0 +1,13 @@
+h5py
+pip
+libtorch >=2.5.1
+pytorch-cpu >=2.5.1
+pytorch_geometric
+lightning
+torchmetrics
+tqdm
+vc
+vc14_runtime
+vs2015_runtime
+vs2019_win-64
+sleef

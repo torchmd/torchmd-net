@@ -1,0 +1,10 @@
+h5py
+nnpops
+pip
+libtorch >=2.5.1
+pytorch-cpu >=2.5.1
+pytorch_geometric
+lightning
+torchmetrics
+tqdm
+gxx
