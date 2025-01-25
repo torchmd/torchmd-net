@@ -61,6 +61,8 @@ def test_datamodule_standardize(energy, forces, has_atomref, tmpdir):
     args["val_size"] = 10
     args["test_size"] = 10
     args["log_dir"] = tmpdir
+    args["batch_size"] = 2
+    args["inference_batch_size"] = 2
 
     dataset = DummyDataset(
         num_samples=100, energy=energy, forces=forces, has_atomref=has_atomref
