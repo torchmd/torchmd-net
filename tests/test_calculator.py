@@ -38,13 +38,14 @@ def test_compare_forward(box, use_cuda_graphs):
         "precision": 32,
     }
     device = "cpu" if not use_cuda_graphs else "cuda"
-    model = create_model(args).to(device=device)
+    calc_model = create_model(args).to(device=device)
+    graph_model = create_model({**args, "check_errors": False, "static_shapes": True}).to(device=device)
     z, pos, _ = create_example_batch(multiple_batches=False)
     z = z.to(device)
     pos = pos.to(device)
-    calc = External(model, z.unsqueeze(0), use_cuda_graph=False, device=device)
+    calc = External(calc_model, z.unsqueeze(0), use_cuda_graph=False, device=device)
     calc_graph = External(
-        model, z.unsqueeze(0), use_cuda_graph=use_cuda_graphs, device=device
+        graph_model, z.unsqueeze(0), use_cuda_graph=use_cuda_graphs, device=device
     )
 
     if box is not None:
