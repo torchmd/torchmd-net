@@ -23,7 +23,7 @@ atol = 1e-5
 def test_compare_forward(box, use_cuda_graphs):
     if use_cuda_graphs and not torch.cuda.is_available():
         pytest.skip("CUDA not available")
-    checkpoint = join(dirname(dirname(__file__)), "tests", "tn_example.ckpt")
+    checkpoint = join(dirname(dirname(__file__)), "tests", "example.ckpt")
     args = {
         "model": "tensornet",
         "embedding_dimension": 128,
