@@ -17,7 +17,6 @@ from utils import create_example_batch
 def test_compare_forward(box, use_cuda_graphs):
     if use_cuda_graphs and not torch.cuda.is_available():
         pytest.skip("CUDA not available")
-    checkpoint = join(dirname(dirname(__file__)), "tests", "example.ckpt")
     args = {
         "model": "tensornet",
         "embedding_dimension": 128,
@@ -43,12 +42,11 @@ def test_compare_forward(box, use_cuda_graphs):
     z, pos, _ = create_example_batch(multiple_batches=False)
     z = z.to(device)
     pos = pos.to(device)
-    calc = External(checkpoint, z.unsqueeze(0), use_cuda_graph=False, device=device)
+    calc = External(model, z.unsqueeze(0), use_cuda_graph=False, device=device)
     calc_graph = External(
-        checkpoint, z.unsqueeze(0), use_cuda_graph=use_cuda_graphs, device=device
+        model, z.unsqueeze(0), use_cuda_graph=use_cuda_graphs, device=device
     )
-    calc.model = model
-    calc_graph.model = model
+
     if box is not None:
         box = (box * 2 * args["cutoff_upper"]).unsqueeze(0)
     for _ in range(10):
