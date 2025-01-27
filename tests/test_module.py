@@ -36,6 +36,8 @@ def test_load_model():
 def test_train(model_name, use_atomref, precision, tmpdir):
     import torch
 
+    torch.set_num_threads(1)
+
     accelerator = "auto"
     if os.getenv("CPU_TRAIN", "false") == "true":
         # OSX MPS backend runs out of memory on Github Actions
@@ -55,6 +57,7 @@ def test_train(model_name, use_atomref, precision, tmpdir):
         num_rbf=16,
         batch_size=8,
         precision=precision,
+        num_workers=0,
     )
     datamodule = DataModule(args, DummyDataset(has_atomref=use_atomref))
 
@@ -71,6 +74,9 @@ def test_train(model_name, use_atomref, precision, tmpdir):
         precision=args["precision"],
         inference_mode=False,
         accelerator=accelerator,
+        num_nodes=1,
+        devices=1,
+        use_distributed_sampler=False,
     )
     trainer.fit(module, datamodule)
     trainer.test(module, datamodule)
@@ -81,6 +87,8 @@ def test_train(model_name, use_atomref, precision, tmpdir):
 @mark.parametrize("precision", [32, 64])
 def test_dummy_train(model_name, use_atomref, precision, tmpdir):
     import torch
+
+    torch.set_num_threads(1)
 
     accelerator = "auto"
     if os.getenv("CPU_TRAIN", "false") == "true":
@@ -105,6 +113,7 @@ def test_dummy_train(model_name, use_atomref, precision, tmpdir):
         num_rbf=4,
         batch_size=2,
         precision=precision,
+        num_workers=0,
         **extra_args,
     )
     datamodule = DataModule(args, DummyDataset(has_atomref=use_atomref))
@@ -122,6 +131,9 @@ def test_dummy_train(model_name, use_atomref, precision, tmpdir):
         precision=args["precision"],
         inference_mode=False,
         accelerator=accelerator,
+        num_nodes=1,
+        devices=1,
+        use_distributed_sampler=False,
     )
     trainer.fit(module, datamodule)
     trainer.test(module, datamodule)
