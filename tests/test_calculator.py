@@ -3,7 +3,7 @@
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
 import torch
-from torch.testing import assert_allclose
+from torch.testing import assert_close
 import pytest
 from os.path import dirname, join
 from torchmdnet.calculators import External
@@ -54,8 +54,8 @@ def test_compare_forward(box, use_cuda_graphs):
     for _ in range(10):
         e_calc, f_calc = calc.calculate(pos, box)
         e_pred, f_pred = calc_graph.calculate(pos, box)
-        assert_allclose(e_calc, e_pred)
-        assert_allclose(f_calc, f_pred)
+        assert_close(e_calc, e_pred)
+        assert_close(f_calc, f_pred)
 
 
 def test_compare_forward_multiple():
@@ -72,5 +72,5 @@ def test_compare_forward_multiple():
         torch.cat([torch.zeros(len(z1)), torch.ones(len(z2))]).long(),
     )
 
-    assert_allclose(e_calc, e_pred)
-    assert_allclose(f_calc, f_pred.view(-1, len(z1), 3))
+    assert_close(e_calc, e_pred)
+    assert_close(f_calc, f_pred.view(-1, len(z1), 3))

@@ -19,16 +19,21 @@ from utils import load_example_args, create_example_batch
 @mark.parametrize("model_name", models.__all_models__)
 @mark.parametrize("use_batch", [True, False])
 @mark.parametrize("explicit_q_s", [True, False])
+@mark.parametrize("explicit_extra_args", [True, False])
 @mark.parametrize("precision", [32, 64])
-def test_forward(model_name, use_batch, explicit_q_s, precision):
+def test_forward(model_name, use_batch, explicit_q_s, explicit_extra_args, precision):
     z, pos, batch = create_example_batch()
     pos = pos.to(dtype=dtype_mapping[precision])
     model = create_model(
         load_example_args(model_name, prior_model=None, precision=precision)
     )
     batch = batch if use_batch else None
-    if explicit_q_s:
+    if explicit_q_s and explicit_extra_args:
+        model(z, pos, batch=batch, q=None, s=None, extra_args=None)
+    elif explicit_q_s:
         model(z, pos, batch=batch, q=None, s=None)
+    elif explicit_extra_args:
+        model(z, pos, batch=batch, extra_args=None)
     else:
         model(z, pos, batch=batch)
 
