@@ -104,6 +104,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         representation_model = TensorNet(
             equivariance_invariance_group=args["equivariance_invariance_group"],
             static_shapes=args["static_shapes"],
+            vector_output=args["vector_output"],
             **shared_args,
         )
     else:
