@@ -80,6 +80,12 @@ class External:
                     "Warning: extra arguments are being ignored when passing a torch.nn.Module"
                 )
             self.model = netfile
+            if use_cuda_graph:
+                warnings.warn(
+                    "CUDA graphs are enabled, setting static_shapes=True and check_errors=False"
+                )
+                self.model.representation_model.static_shapes = True
+                self.model.representation_model.check_errors = False
         else:
             raise ValueError(
                 f"Expected a path to a checkpoint file or a torch.nn.Module, got {type(netfile)}"
