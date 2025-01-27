@@ -36,6 +36,8 @@ def test_load_model():
 def test_train(model_name, use_atomref, precision, tmpdir):
     import torch
 
+    torch.set_num_threads(1)
+
     accelerator = "auto"
     if os.getenv("CPU_TRAIN", "false") == "true":
         # OSX MPS backend runs out of memory on Github Actions
@@ -55,6 +57,7 @@ def test_train(model_name, use_atomref, precision, tmpdir):
         num_rbf=16,
         batch_size=8,
         precision=precision,
+        num_workers=0,
     )
     datamodule = DataModule(args, DummyDataset(has_atomref=use_atomref))
 
