@@ -74,9 +74,9 @@ def test_train(model_name, use_atomref, precision, tmpdir):
         precision=args["precision"],
         inference_mode=False,
         accelerator=accelerator,
-        num_processes=1,
         num_nodes=1,
-        progress_bar_refresh_rate=0,
+        devices=1,
+        use_distributed_sampler=False,
     )
     trainer.fit(module, datamodule)
     trainer.test(module, datamodule)
