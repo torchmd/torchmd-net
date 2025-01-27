@@ -52,10 +52,10 @@ jobs:
 
       - name: Install OS-specific conda dependencies
         run: |
-          if [[ "${{ runner.os }}" == "Linux" ]]; then
-            conda install --file conda_deps_linux.txt --channel conda-forge --override-channels
-          elif [[ "${{ matrix.os }}" == "ubuntu-22.04-arm" ]]; then
+          if [[ "${{ matrix.os }}" == "ubuntu-22.04-arm" ]]; then
             conda install --file conda_deps_linux_aarch64.txt --channel conda-forge --override-channels
+          elif [[ "${{ runner.os }}" == "Linux" ]]; then
+            conda install --file conda_deps_linux.txt --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
             conda install --file conda_deps_osx.txt --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
