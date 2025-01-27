@@ -299,7 +299,7 @@ __device__ void addNeighborsForCell(const Particle<scalar_t>& i_atom, int j_cell
                                                                     list.use_periodic, box_size);
                 const scalar_t distance2 =
                     delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
-                if ((distance2 < i_atom.cutoff_upper2 && distance2 >= i_atom.cutoff_lower2) or
+                if ( ((distance2 < i_atom.cutoff_upper2 && distance2 >= i_atom.cutoff_lower2)) ||
                     (list.loop && cur_j == i_atom.index)) {
                     const int orj = cl.sorted_indices[cur_j];
                     addNeighborPair(list, i_atom.original_index, orj, distance2, delta);

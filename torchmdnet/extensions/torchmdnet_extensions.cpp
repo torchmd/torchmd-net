@@ -15,6 +15,13 @@
 #include <cuda_runtime_api.h>
 #endif
 
+#ifdef _WIN32 
+PyMODINIT_FUNC PyInit_torchmdnet_extensions(void) { 
+  // No need to do anything. 
+  return NULL; 
+} 
+#endif 
+
 /* @brief Returns true if the current torch CUDA stream is capturing.
  * This function is required because the one available in torch is not compatible with TorchScript.
  * @return True if the current torch CUDA stream is capturing.
