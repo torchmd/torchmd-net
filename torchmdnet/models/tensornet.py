@@ -86,7 +86,7 @@ def process_additional_labels(z: torch.Tensor, q: Optional[torch.Tensor], s: Opt
         t = extra_args['partial_charges']
     else:
         t = torch.zeros_like(z, device=z.device, dtype=z.dtype)
-    return 0.1 * t[..., None, None, None]
+    return t
 
 class TensorNet(nn.Module):
     r"""TensorNet's architecture. From
@@ -267,7 +267,7 @@ class TensorNet(nn.Module):
         if self.static_shapes:
             mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
             zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
-            t = torch.cat((q, torch.zeros(1, device=q.device, dtype=q.dtype)), dim=0)
+            t = torch.cat((t, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
             # I trick the model into thinking that the masked edges pertain to the extra atom
             # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
             edge_index = edge_index.masked_fill(mask, z.shape[0])
@@ -505,7 +505,7 @@ class Interaction(nn.Module):
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(msg, Y)
             B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor((1 + t) * (A + B))
+            I, A, S = decompose_tensor((1 + 0.1 * t[..., None, None, None]) * (A + B))
         if self.equivariance_invariance_group == "SO(3)":
             B = torch.matmul(Y, msg)
             I, A, S = decompose_tensor(2 * B)
@@ -515,5 +515,5 @@ class Interaction(nn.Module):
         A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         dX = I + A + S
-        X = X + dX + (1 + t) * torch.matrix_power(dX, 2)
+        X = X + dX + (1 + 0.1 * t[..., None, None, None]) * torch.matrix_power(dX, 2)
         return X
