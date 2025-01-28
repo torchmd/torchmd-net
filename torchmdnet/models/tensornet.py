@@ -13,8 +13,6 @@ from torchmdnet.models.utils import (
 )
 
 __all__ = ["TensorNet"]
-torch.set_float32_matmul_precision("high")
-torch.backends.cuda.matmul.allow_tf32 = True
 
 
 def vector_to_skewtensor(vector):

@@ -64,12 +64,41 @@ If you want to train on custom data, first have a look at :py:mod:`torchmdnet.da
 
 To add a new dataset, you need to:
 
-1. Write a new class inheriting from :py:mod:`torch_geometric.data.Dataset`, see `here <https://pytorch-geometric.readthedocs.io/en/latest/tutorial/create_dataset.html>`_ for a tutorial on that.
+1. Write a new class inheriting from :py:mod:`torch_geometric.data.Dataset`, see `here <https://pytorch-geometric.readthedocs.io/en/latest/tutorial/create_dataset.html>`_ for a tutorial on that. You may also start from :ref:`one of the base datasets we provide <base datasets>`.
 2. Add the new class to the :py:mod:`torchmdnet.datasets` module (by listing it in the `__all__` variable in the `datasets/__init__.py` file) so that the :ref:`configuration file <configuration-file>` recognizes it.
 
 .. note::
 
    The dataset must return torch-geometric `Data` objects, containing at least the keys `z` (atom types) and `pos` (atomic coordinates), as well as `y` (label), `neg_dy` (negative derivative of the label w.r.t atom coordinates) or both.
+
+
+Datasets and Atomref
+--------------------
+
+Compatibility with the :py:mod:`torchmdnet.priors.Atomref` prior (and thus :ref:`delta learning <delta-learning>`) requires the dataset to define a method called :code:`get_atomref` as follows:
+
+.. code:: python
+
+   class MyDataset(Dataset):
+       # ...
+       def get_atomref(self, max_z=100):
+          """Atomic energy reference values.
+	  Args:
+	      max_z (int): Maximum atomic number
+	  Returns:
+	      torch.Tensor: Atomic energy reference values for each element in the dataset.
+	  """
+          refs = pt.zeros(max_z)
+	  # Set the references for each element present in the dataset.
+	  refs[1] = -0.500607632585
+	  refs[6] = -37.8302333826
+	  refs[7] = -54.5680045287
+	  refs[8] = -75.0362229210
+	  # ...
+          return refs.view(-1, 1)
+
+
+
 
 Available Datasets
 ------------------
@@ -79,3 +108,17 @@ Available Datasets
       
    .. include:: generated/torchmdnet.datasets.rst
       :start-line: 5
+
+.. _base datasets:
+Base Datasets
+-------------
+The following datasets are used as a base for other datasets.
+
+.. autoclass:: torchmdnet.datasets.ani.ANIBase
+   :noindex:
+
+.. autoclass:: torchmdnet.datasets.comp6.COMP6Base
+   :noindex:
+
+.. autoclass:: torchmdnet.datasets.memdataset.MemmappedDataset
+   :noindex:

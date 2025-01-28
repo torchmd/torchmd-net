@@ -9,7 +9,7 @@ import lightning as pl
 from torchmdnet import models
 from torchmdnet.models.model import create_model, create_prior_models
 from torchmdnet.module import LNNP
-from torchmdnet.priors import Atomref, D2, ZBL, Coulomb
+from torchmdnet.priors import Atomref, LearnableAtomref, D2, ZBL, Coulomb
 from torchmdnet.models.utils import scatter
 from utils import load_example_args, create_example_batch, DummyDataset
 from os.path import dirname, join
@@ -17,9 +17,10 @@ import tempfile
 
 
 @mark.parametrize("model_name", models.__all_models__)
-def test_atomref(model_name):
+@mark.parametrize("enable_atomref", [True, False])
+def test_atomref(model_name, enable_atomref):
     dataset = DummyDataset(has_atomref=True)
-    atomref = Atomref(max_z=100, dataset=dataset)
+    atomref = Atomref(max_z=100, dataset=dataset, enable=enable_atomref)
     z, pos, batch = create_example_batch()
 
     # create model with atomref
@@ -36,8 +37,21 @@ def test_atomref(model_name):
     x_no_atomref, _ = model_no_atomref(z, pos, batch)
 
     # check if the output of both models differs by the expected atomref contribution
-    expected_offset = scatter(dataset.get_atomref().squeeze()[z], batch).unsqueeze(1)
+    if enable_atomref:
+        expected_offset = scatter(dataset.get_atomref().squeeze()[z], batch).unsqueeze(1)
+    else:
+        expected_offset = 0
     torch.testing.assert_allclose(x_atomref, x_no_atomref + expected_offset)
+
+@mark.parametrize("trainable", [True, False])
+def test_atomref_trainable(trainable):
+    dataset = DummyDataset(has_atomref=True)
+    atomref = Atomref(max_z=100, dataset=dataset, trainable=trainable)
+    assert atomref.atomref.weight.requires_grad == trainable
+
+def test_learnableatomref():
+    atomref = LearnableAtomref(max_z=100)
+    assert atomref.atomref.weight.requires_grad == True
 
 def test_zbl():
     pos = torch.tensor([[1.0, 0.0, 0.0], [2.5, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 0.0, -1.0]], dtype=torch.float32)  # Atom positions in Bohr
@@ -74,11 +88,12 @@ def test_coulomb(dtype):
     types = torch.tensor([0, 1, 2, 1], dtype=torch.long)  # Atom types
     distance_scale = 1e-9  # Convert nm to meters
     energy_scale = 1000.0/6.02214076e23  # Convert kJ/mol to Joules
-    alpha = 1.8
+    lower_switch_distance = 0.9
+    upper_switch_distance = 1.3
 
     # Use the Coulomb class to compute the energy.
 
-    coulomb = Coulomb(alpha, 5, distance_scale=distance_scale, energy_scale=energy_scale)
+    coulomb = Coulomb(lower_switch_distance, upper_switch_distance, 5, distance_scale=distance_scale, energy_scale=energy_scale)
     energy = coulomb.post_reduce(torch.zeros((1,)), types, pos, torch.zeros_like(types), extra_args={'partial_charges':charge})[0]
 
     # Compare to the expected value.
@@ -86,7 +101,12 @@ def test_coulomb(dtype):
     def compute_interaction(pos1, pos2, z1, z2):
         delta = pos1-pos2
         r = torch.sqrt(torch.dot(delta, delta))
-        return torch.erf(alpha*r)*138.935*z1*z2/r
+        if r < lower_switch_distance:
+            return 0
+        energy = 138.935*z1*z2/r
+        if r < upper_switch_distance:
+            energy *= 0.5-0.5*torch.cos(torch.pi*(r-lower_switch_distance)/(upper_switch_distance-lower_switch_distance))
+        return energy
 
     expected = 0
     for i in range(len(pos)):

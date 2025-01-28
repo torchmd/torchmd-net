@@ -266,7 +266,7 @@ template <class scalar_t> struct CellListAccessor {
 template <class scalar_t>
 __device__ void addNeighborPair(PairListAccessor<scalar_t>& list, const int i, const int j,
                                 scalar_t distance2, scalar3<scalar_t> delta) {
-    const bool requires_transpose = list.include_transpose and (j != i);
+    const bool requires_transpose = list.include_transpose && (j != i);
     const int ni = max(i, j);
     const int nj = min(i, j);
     const scalar_t delta_sign = (ni == i) ? scalar_t(1.0) : scalar_t(-1.0);
@@ -292,14 +292,14 @@ __device__ void addNeighborsForCell(const Particle<scalar_t>& i_atom, int j_cell
         const auto last_particle = cl.cell_end[j_cell];
         for (int cur_j = first_particle; cur_j < last_particle; cur_j++) {
             const auto j_batch = cl.sorted_batch[cur_j];
-            if ((j_batch == i_atom.batch) and
-                ((cur_j < i_atom.index) || (list.loop and cur_j == i_atom.index))) {
+            if ((j_batch == i_atom.batch) &&
+                ((cur_j < i_atom.index) || (list.loop && cur_j == i_atom.index))) {
                 const auto position_j = fetchPosition(cl.sorted_positions, cur_j);
                 const auto delta = rect::compute_distance<scalar_t>(i_atom.position, position_j,
                                                                     list.use_periodic, box_size);
                 const scalar_t distance2 =
                     delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
-                if ((distance2 < i_atom.cutoff_upper2 && distance2 >= i_atom.cutoff_lower2) or
+                if ( ((distance2 < i_atom.cutoff_upper2 && distance2 >= i_atom.cutoff_lower2)) ||
                     (list.loop && cur_j == i_atom.index)) {
                     const int orj = cl.sorted_indices[cur_j];
                     addNeighborPair(list, i_atom.original_index, orj, distance2, delta);

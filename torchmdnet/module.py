@@ -6,17 +6,69 @@ from collections import defaultdict
 import torch
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.nn.functional import local_response_norm, mse_loss, l1_loss
+from torch.nn.functional import local_response_norm
 from torch import Tensor
 from typing import Optional, Dict, Tuple
-
 from lightning import LightningModule
 from torchmdnet.models.model import create_model, load_model
+from torchmdnet.models.utils import dtype_mapping
+from torchmdnet.loss import l1_loss, loss_class_mapping
+import torch_geometric.transforms as T
+
+
+class FloatCastDatasetWrapper(T.BaseTransform):
+    """A transform that casts all floating point tensors to a given dtype.
+    tensors to a given dtype.
+    """
+
+    def __init__(self, dtype=torch.float64):
+        super(FloatCastDatasetWrapper, self).__init__()
+        self._dtype = dtype
+
+    def __call__(self, data):
+        for key, value in data:
+            if torch.is_tensor(value) and torch.is_floating_point(value):
+                setattr(data, key, value.to(self._dtype))
+        return data
+
+
+class EnergyRefRemover(T.BaseTransform):
+    """A transform that removes the atom reference energy from the energy of a
+    dataset.
+    """
+
+    def __init__(self, atomref):
+        super(EnergyRefRemover, self).__init__()
+        self._atomref = atomref
+
+    def __call__(self, data):
+        self._atomref = self._atomref.to(data.z.device).type(data.y.dtype)
+        if "y" in data:
+            data.y.index_add_(0, data.batch, -self._atomref[data.z])
+        return data
+
+
+# This wrapper is here in order to permit Lightning to serialize the loss function.
+class LossFunction:
+    def __init__(self, loss_fn, extra_args=None):
+        self.loss_fn = loss_fn
+        self.extra_args = extra_args
+        if self.extra_args is None:
+            self.extra_args = {}
+
+    def __call__(self, x, batch):
+        return self.loss_fn(x, batch, **self.extra_args)
 
 
 class LNNP(LightningModule):
     """
     Lightning wrapper for the Neural Network Potentials in TorchMD-Net.
+
+    Args:
+        hparams (dict): A dictionary containing the hyperparameters of the model.
+        prior_model (torchmdnet.priors.BasePrior): A prior model to use in the model.
+        mean (torch.Tensor, optional): The mean of the dataset to normalize the input.
+        std (torch.Tensor, optional): The standard deviation of the dataset to normalize the input.
     """
 
     def __init__(self, hparams, prior_model=None, mean=None, std=None):
@@ -25,7 +77,10 @@ class LNNP(LightningModule):
             hparams["charge"] = False
         if "spin" not in hparams:
             hparams["spin"] = False
-
+        if "train_loss" not in hparams:
+            hparams["train_loss"] = "mse_loss"
+        if "train_loss_arg" not in hparams:
+            hparams["train_loss_arg"] = {}
         self.save_hyperparameters(hparams)
 
         if self.hparams.load_model:
@@ -41,6 +96,27 @@ class LNNP(LightningModule):
         self.losses = None
         self._reset_losses_dict()
 
+        self.data_transform = FloatCastDatasetWrapper(
+            dtype_mapping[self.hparams.precision]
+        )
+        if self.hparams.remove_ref_energy:
+            self.data_transform = T.Compose(
+                [
+                    EnergyRefRemover(self.model.prior_model[-1].initial_atomref),
+                    self.data_transform,
+                ]
+            )
+
+        if self.hparams.train_loss not in loss_class_mapping:
+            raise ValueError(
+                f"Training loss {self.hparams.train_loss} not supported. Supported losses are {list(loss_class_mapping.keys())}"
+            )
+
+        self.train_loss_fn = LossFunction(
+            loss_class_mapping[self.hparams.train_loss],
+            self.hparams.train_loss_arg,
+        )
+
     def configure_optimizers(self):
         optimizer = AdamW(
             self.model.parameters(),
@@ -54,9 +130,12 @@ class LNNP(LightningModule):
             patience=self.hparams.lr_patience,
             min_lr=self.hparams.lr_min,
         )
+        lr_metric = getattr(self.hparams, "lr_metric", "val")
+        monitor = f"{lr_metric}_total_{self.hparams.train_loss}"
         lr_scheduler = {
             "scheduler": scheduler,
-            "monitor": getattr(self.hparams, "lr_metric", "val_loss"),
+            "strict": True,
+            "monitor": monitor,
             "interval": "epoch",
             "frequency": 1,
         }
@@ -75,7 +154,9 @@ class LNNP(LightningModule):
         return self.model(z, pos, batch=batch, box=box, q=q, s=s, extra_args=extra_args)
 
     def training_step(self, batch, batch_idx):
-        return self.step(batch, [mse_loss], "train")
+        return self.step(
+            batch, [(self.hparams.train_loss, self.train_loss_fn)], "train"
+        )
 
     def validation_step(self, batch, batch_idx, *args):
         # If args is not empty the first (and only) element is the dataloader_idx
@@ -84,28 +165,52 @@ class LNNP(LightningModule):
         # The dataloader takes care of sending the two sets only when the second one is needed.
         is_val = len(args) == 0 or (len(args) > 0 and args[0] == 0)
         if is_val:
-            step_type = {"loss_fn_list": [l1_loss, mse_loss], "stage": "val"}
+            step_type = {
+                "loss_fn_list": [
+                    ("l1_loss", l1_loss),
+                    (self.hparams.train_loss, self.train_loss_fn),
+                ],
+                "stage": "val",
+            }
         else:
-            step_type = {"loss_fn_list": [l1_loss], "stage": "test"}
+            step_type = {"loss_fn_list": [("l1_loss", l1_loss)], "stage": "test"}
         return self.step(batch, **step_type)
 
     def test_step(self, batch, batch_idx):
-        return self.step(batch, [l1_loss], "test")
+        return self.step(batch, [("l1_loss", l1_loss)], "test")
 
-    def _compute_losses(self, y, neg_y, batch, loss_fn, stage):
+    def predict_step(self, batch, batch_idx):
+        batch = self.data_transform(batch)
+
+        with torch.set_grad_enabled(self.hparams.derivative):
+            extra_args = batch.to_dict()
+            for a in ("y", "neg_dy", "z", "pos", "batch", "box", "q", "s"):
+                if a in extra_args:
+                    del extra_args[a]
+            return self(
+                batch.z,
+                batch.pos,
+                batch=batch.batch,
+                box=batch.box if "box" in batch else None,
+                q=batch.q if self.hparams.charge else None,
+                s=batch.s if self.hparams.spin else None,
+                extra_args=extra_args,
+            )
+
+    def _compute_losses(self, y, neg_y, batch, loss_fn, loss_name, stage):
         # Compute the loss for the predicted value and the negative derivative (if available)
         # Args:
         #   y: predicted value
         #   neg_y: predicted negative derivative
         #   batch: batch of data
-        #   loss_fn: loss function to compute
+        #   loss_fn: The loss function to compute
+        #   loss_name: The name of the loss function
         # Returns:
         #   loss_y: loss for the predicted value
         #   loss_neg_y: loss for the predicted negative derivative
         loss_y, loss_neg_y = torch.tensor(0.0, device=self.device), torch.tensor(
             0.0, device=self.device
         )
-        loss_name = loss_fn.__name__
         if self.hparams.derivative and "neg_dy" in batch:
             loss_neg_y = loss_fn(neg_y, batch.neg_dy)
             loss_neg_y = self._update_loss_with_ema(
@@ -124,7 +229,7 @@ class LNNP(LightningModule):
         #   loss_name: name of the loss function
         #   loss: loss value
         alpha = getattr(self.hparams, f"ema_alpha_{type}")
-        if stage in ["train", "val"] and alpha < 1:
+        if stage in ["train", "val"] and alpha < 1 and alpha > 0:
             ema = (
                 self.ema[stage][type][loss_name]
                 if loss_name in self.ema[stage][type]
@@ -145,6 +250,7 @@ class LNNP(LightningModule):
         #   total_loss: sum of all losses (weighted by the loss weights) for the last loss function in the provided list
         assert len(loss_fn_list) > 0
         assert self.losses is not None
+        batch = self.data_transform(batch)
         with torch.set_grad_enabled(stage == "train" or self.hparams.derivative):
             extra_args = batch.to_dict()
             for a in ("y", "neg_dy", "z", "pos", "batch", "box", "q", "s"):
@@ -169,10 +275,10 @@ class LNNP(LightningModule):
             neg_dy = neg_dy + y.sum() * 0
         if "y" in batch and batch.y.ndim == 1:
             batch.y = batch.y.unsqueeze(1)
-        for loss_fn in loss_fn_list:
-            step_losses = self._compute_losses(y, neg_dy, batch, loss_fn, stage)
-
-            loss_name = loss_fn.__name__
+        for loss_name, loss_fn in loss_fn_list:
+            step_losses = self._compute_losses(
+                y, neg_dy, batch, loss_fn, loss_name, stage
+            )
             if self.hparams.neg_dy_weight > 0:
                 self.losses[stage]["neg_dy"][loss_name].append(
                     step_losses["neg_dy"].detach()
@@ -239,6 +345,19 @@ class LNNP(LightningModule):
             result_dict.update(self._get_mean_loss_dict_for_type("neg_dy"))
             # Get only test entries
             result_dict = {k: v for k, v in result_dict.items() if k.startswith("test")}
+            self.log_dict(result_dict, sync_dist=True)
+
+    def on_train_epoch_end(self):
+        # Log all train losses
+        if not self.trainer.sanity_checking:
+            result_dict = {}
+            result_dict.update(self._get_mean_loss_dict_for_type("total"))
+            result_dict.update(self._get_mean_loss_dict_for_type("y"))
+            result_dict.update(self._get_mean_loss_dict_for_type("neg_dy"))
+            # Get only train entries
+            result_dict = {
+                k: v for k, v in result_dict.items() if k.startswith("train")
+            }
             self.log_dict(result_dict, sync_dist=True)
 
     def _reset_losses_dict(self):

@@ -12,28 +12,72 @@ on:
 
 jobs:
   test:
-    runs-on: "ubuntu-latest"
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          [
+            "ubuntu-latest",
+            "ubuntu-22.04-arm",
+            "macos-latest",
+            "macos-13",
+            "windows-2022",
+          ]
+        python-version: ["3.10"]
+
     defaults: # Needed for conda
       run:
         shell: bash -l {0}
 
     steps:
       - name: Check out
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
-      - name: Create a conda environment
-        uses: conda-incubator/setup-miniconda@v2
+      - uses: conda-incubator/setup-miniconda@v3
         with:
-          activate-environment: torchmd-net
-          environment-file: environment.yml
-          miniforge-variant: Mambaforge
-          use-mamba: true
+          python-version: ${{ matrix.python-version }}
+          channels: conda-forge
+          conda-remove-defaults: "true"
+        if: matrix.os != 'macos-13'
 
-      - name: Install the package
-        run: pip -vv install .
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+          channels: conda-forge
+          mamba-version: "*"
+          conda-remove-defaults: "true"
+        if: matrix.os == 'macos-13'
+
+      - name: Install OS-specific conda dependencies
+        run: |
+          if [[ "${{ matrix.os }}" == "ubuntu-22.04-arm" ]]; then
+            conda install --file conda_deps_linux_aarch64.txt --channel conda-forge --override-channels
+          elif [[ "${{ runner.os }}" == "Linux" ]]; then
+            conda install --file conda_deps_linux.txt --channel conda-forge --override-channels
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            conda install --file conda_deps_osx.txt --channel conda-forge --override-channels
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            conda install --file conda_deps_win.txt --channel conda-forge --override-channels
+          fi
+
+      - name: Install testing packages
+        run: conda install -y -c conda-forge flake8 pytest psutil
 
       - name: List the conda environment
         run: conda list
+
+      - name: Build and install the package
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            export LIB="C:/Miniconda/envs/test/Library/lib"
+            pip -vv install .
+          else
+            pip -vv install .
+          fi
+        env:
+          CPU_ONLY: 1
 
       - name: Lint with flake8
         run: |
@@ -43,8 +87,13 @@ jobs:
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
       - name: Run tests
-        run: pytest -v -s
+        run: pytest -v -s --durations=10
+        env:
+          CPU_ONLY: 1
+          SKIP_TORCH_COMPILE: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+          OMP_PREFIX: ${{ runner.os == 'macOS' && '/Users/runner/miniconda3/envs/test' || '' }}
+          CPU_TRAIN: ${{ runner.os == 'macOS' && 'true' || 'false' }}
+          LONG_TRAIN: "true"
 
       - name: Test torchmd-train utility
         run: torchmd-train --help
-          

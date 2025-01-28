@@ -118,69 +118,70 @@ class NeighborEmbedding(nn.Module):
 
 
 class OptimizedDistance(torch.nn.Module):
-    """ Compute the neighbor list for a given cutoff.
+    """Compute the neighbor list for a given cutoff.
 
-        This operation can be placed inside a CUDA graph in some cases.
-        In particular, resize_to_fit and check_errors must be False.
+    This operation can be placed inside a CUDA graph in some cases.
+    In particular, resize_to_fit and check_errors must be False.
 
-        Note that this module returns neighbors such that :math:`r_{ij} \\ge \\text{cutoff_lower}\\quad\\text{and}\\quad r_{ij} < \\text{cutoff_upper}`.
+    Note that this module returns neighbors such that :math:`r_{ij} \\ge \\text{cutoff_lower}\\quad\\text{and}\\quad r_{ij} < \\text{cutoff_upper}`.
 
-        This function optionally supports periodic boundary conditions with
-        arbitrary triclinic boxes.  The box vectors `a`, `b`, and `c` must satisfy
-        certain requirements:
+    This function optionally supports periodic boundary conditions with
+    arbitrary triclinic boxes.  The box vectors `a`, `b`, and `c` must satisfy
+    certain requirements:
 
-        .. code:: python
+    .. code:: python
 
-           a[1] = a[2] = b[2] = 0
-           a[0] >= 2*cutoff, b[1] >= 2*cutoff, c[2] >= 2*cutoff
-           a[0] >= 2*b[0]
-           a[0] >= 2*c[0]
-           b[1] >= 2*c[1]
+       a[1] = a[2] = b[2] = 0
+       a[0] >= 2*cutoff, b[1] >= 2*cutoff, c[2] >= 2*cutoff
+       a[0] >= 2*b[0]
+       a[0] >= 2*c[0]
+       b[1] >= 2*c[1]
 
-        These requirements correspond to a particular rotation of the system and
-        reduced form of the vectors, as well as the requirement that the cutoff be
-        no larger than half the box width.
+    These requirements correspond to a particular rotation of the system and
+    reduced form of the vectors, as well as the requirement that the cutoff be
+    no larger than half the box width.
 
-        Parameters
-        ----------
-        cutoff_lower : float
-            Lower cutoff for the neighbor list.
-        cutoff_upper : float
-            Upper cutoff for the neighbor list.
-        max_num_pairs : int
-            Maximum number of pairs to store, if the number of pairs found is less than this, the list is padded with (-1,-1) pairs up to max_num_pairs unless resize_to_fit is True, in which case the list is resized to the actual number of pairs found.
-            If the number of pairs found is larger than this, the pairs are randomly sampled. When check_errors is True, an exception is raised in this case.
-            If negative, it is interpreted as (minus) the maximum number of neighbors per atom.
-        strategy : str
-            Strategy to use for computing the neighbor list. Can be one of :code:`["shared", "brute", "cell"]`.
+    Parameters
+    ----------
+    cutoff_lower : float
+        Lower cutoff for the neighbor list.
+    cutoff_upper : float
+        Upper cutoff for the neighbor list.
+    max_num_pairs : int
+        Maximum number of pairs to store, if the number of pairs found is less than this, the list is padded with (-1,-1) pairs up to max_num_pairs unless resize_to_fit is True, in which case the list is resized to the actual number of pairs found.
+        If the number of pairs found is larger than this, the pairs are randomly sampled. When check_errors is True, an exception is raised in this case.
+        If negative, it is interpreted as (minus) the maximum number of neighbors per atom.
+    strategy : str
+        Strategy to use for computing the neighbor list. Can be one of :code:`["shared", "brute", "cell"]`.
 
-            1. *Shared*: An O(N^2) algorithm that leverages CUDA shared memory, best for large number of particles.
-            2. *Brute*: A brute force O(N^2) algorithm, best for small number of particles.
-            3. *Cell*:  A cell list algorithm, best for large number of particles, low cutoffs and low batch size.
-        box : torch.Tensor, optional
-            The vectors defining the periodic box.  This must have shape `(3, 3)` or `(max(batch)+1, 3, 3)` if a ox per sample is desired.
-            where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
-            If this is omitted, periodic boundary conditions are not applied.
-        loop : bool, optional
-            Whether to include self-interactions.
-            Default: False
-        include_transpose : bool, optional
-            Whether to include the transpose of the neighbor list.
-            Default: True
-        resize_to_fit : bool, optional
-            Whether to resize the neighbor list to the actual number of pairs found. When False, the list is padded with (-1,-1) pairs up to max_num_pairs
-            Default: True
-            If this is True the operation is not CUDA graph compatible.
-        check_errors : bool, optional
-            Whether to check for too many pairs. If this is True the operation is not CUDA graph compatible.
-            Default: True
-        return_vecs : bool, optional
-            Whether to return the distance vectors.
-            Default: False
-        long_edge_index : bool, optional
-            Whether to return edge_index as int64, otherwise int32.
-            Default: True
-        """
+        1. *Shared*: An O(N^2) algorithm that leverages CUDA shared memory, best for large number of particles.
+        2. *Brute*: A brute force O(N^2) algorithm, best for small number of particles.
+        3. *Cell*:  A cell list algorithm, best for large number of particles, low cutoffs and low batch size.
+    box : torch.Tensor, optional
+        The vectors defining the periodic box.  This must have shape `(3, 3)` or `(max(batch)+1, 3, 3)` if a ox per sample is desired.
+        where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
+        If this is omitted, periodic boundary conditions are not applied.
+    loop : bool, optional
+        Whether to include self-interactions.
+        Default: False
+    include_transpose : bool, optional
+        Whether to include the transpose of the neighbor list.
+        Default: True
+    resize_to_fit : bool, optional
+        Whether to resize the neighbor list to the actual number of pairs found. When False, the list is padded with (-1,-1) pairs up to max_num_pairs
+        Default: True
+        If this is True the operation is not CUDA graph compatible.
+    check_errors : bool, optional
+        Whether to check for too many pairs. If this is True the operation is not CUDA graph compatible.
+        Default: True
+    return_vecs : bool, optional
+        Whether to return the distance vectors.
+        Default: False
+    long_edge_index : bool, optional
+        Whether to return edge_index as int64, otherwise int32.
+        Default: True
+    """
+
     def __init__(
         self,
         cutoff_lower=0.0,
@@ -193,7 +194,7 @@ class OptimizedDistance(torch.nn.Module):
         resize_to_fit=True,
         check_errors=True,
         box=None,
-        long_edge_index=True
+        long_edge_index=True,
     ):
         super(OptimizedDistance, self).__init__()
         self.cutoff_upper = cutoff_upper
@@ -212,14 +213,16 @@ class OptimizedDistance(torch.nn.Module):
             if self.strategy == "cell":
                 # Default the box to 3 times the cutoff, really inefficient for the cell list
                 lbox = cutoff_upper * 3.0
-                self.box = torch.tensor([[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]], device="cpu")
+                self.box = torch.tensor(
+                    [[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]], device="cpu"
+                )
         if self.strategy == "cell":
             self.box = self.box.cpu()
         self.check_errors = check_errors
         self.long_edge_index = long_edge_index
 
     def forward(
-            self, pos: Tensor, batch: Optional[Tensor] = None, box: Optional[Tensor] = None
+        self, pos: Tensor, batch: Optional[Tensor] = None, box: Optional[Tensor] = None
     ) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
         """
         Compute the neighbor list for a given cutoff.
@@ -255,7 +258,7 @@ class OptimizedDistance(torch.nn.Module):
         box = self.box if box is None else box
         assert box is not None, "Box must be provided"
         box = box.to(pos.dtype)
-        max_pairs : int = self.max_num_pairs
+        max_pairs: int = self.max_num_pairs
         if self.max_num_pairs < 0:
             max_pairs = -self.max_num_pairs * pos.shape[0]
         if batch is None:
@@ -273,12 +276,10 @@ class OptimizedDistance(torch.nn.Module):
             use_periodic=use_periodic,
         )
         if self.check_errors:
-            if num_pairs[0] > max_pairs:
-                raise AssertionError(
-                    "Found num_pairs({}) > max_num_pairs({})".format(
-                        num_pairs[0], max_pairs
-                    )
-                )
+            assert (
+                num_pairs[0] <= max_pairs
+            ), f"Found num_pairs({num_pairs[0]}) > max_num_pairs({max_pairs})"
+
         # Remove (-1,-1)  pairs
         if self.resize_to_fit:
             mask = edge_index[0] != -1
@@ -387,6 +388,36 @@ class ExpNormalSmearing(nn.Module):
         )
 
 
+class GLU(nn.Module):
+    r"""Applies the gated linear unit (GLU) function:
+
+    .. math::
+
+        \text{GLU}(x) = \text{Linear}_1(x) \otimes \sigma(\text{Linear}_2(x))
+
+
+    where :math:`\otimes` is the element-wise multiplication operator and
+    :math:`\sigma` is an activation function.
+
+    Args:
+        in_channels (int): Number of input features.
+        hidden_channels (int, optional): Number of hidden features. Defaults to None, meaning hidden_channels=in_channels.
+        activation (nn.Module, optional): Activation function to use. Defaults to Sigmoid.
+    """
+
+    def __init__(
+        self, in_channels, hidden_channels=None, activation: Optional[nn.Module] = None
+    ):
+        super(GLU, self).__init__()
+        self.act = nn.Sigmoid() if activation is None else activation
+        hidden_channels = hidden_channels or in_channels
+        self.W = nn.Linear(in_channels, hidden_channels)
+        self.V = nn.Linear(in_channels, hidden_channels)
+
+    def forward(self, x):
+        return self.W(x) * self.act(self.V(x))
+
+
 class ShiftedSoftplus(nn.Module):
     r"""Applies the ShiftedSoftplus function :math:`\text{ShiftedSoftplus}(x) = \frac{1}{\beta} *
     \log(1 + \exp(\beta * x))-\log(2)` element-wise.
@@ -401,6 +432,50 @@ class ShiftedSoftplus(nn.Module):
 
     def forward(self, x):
         return F.softplus(x) - self.shift
+
+
+class Swish(nn.Module):
+    """Swish activation function as defined in https://arxiv.org/pdf/1710.05941 :
+
+    .. math::
+
+        \text{Swish}(x) = x \cdot \sigma(\beta x)
+
+    Args:
+        beta (float, optional): Scaling factor for Swish activation. Defaults to 1.
+
+    """
+
+    def __init__(self, beta=1.0):
+        super(Swish, self).__init__()
+        self.beta = beta
+
+    def forward(self, x):
+        return x * torch.sigmoid(self.beta * x)
+
+
+class SwiGLU(nn.Module):
+    """SwiGLU activation function as defined in https://arxiv.org/pdf/2002.05202 :
+
+    .. math::
+
+        \text{SwiGLU}(x) = \text{Linear}_1(x) \otimes \text{Swish}(\text{Linear}_2(x))
+
+    W1, V have shape (in_features, hidden_features)
+    Args:
+        in_features (int): Number of input features.
+        hidden_features (int, optional): Number of hidden features. Defaults to None, meaning hidden_features=in_features.
+        beta (float, optional): Scaling factor for Swish activation. Defaults to 1.0.
+    """
+
+    def __init__(self, in_features, hidden_features=None, beta=1.0):
+        super().__init__()
+        hidden_features = hidden_features or in_features
+        act = Swish(beta)
+        self.glu = GLU(in_features, hidden_features, activation=act)
+
+    def forward(self, x):
+        return self.glu(x)
 
 
 class CosineCutoff(nn.Module):
@@ -434,6 +509,58 @@ class CosineCutoff(nn.Module):
             return cutoffs
 
 
+class MLP(nn.Module):
+    r"""A simple multi-layer perceptron with a given number of layers and hidden channels.
+
+    The simplest MLP has no hidden layers and is composed of two linear layers with a non-linear activation function in between:
+
+    .. math::
+
+        \text{MLP}(x) = \text{Linear}_o(\text{act}(\text{Linear}_i(x)))
+
+    Where :math:`\text{Linear}_i` has input size :math:`\text{in_channels}` and output size :math:`\text{hidden_channels}` and :math:`\text{Linear}_o` has input size :math:`\text{hidden_channels}` and output size :math:`\text{out_channels}`.
+
+
+    Args:
+        in_channels (int): Number of input features.
+        out_channels (int): Number of output features.
+        hidden_channels (int): Number of hidden features.
+        activation (str): Activation function to use.
+        num_hidden_layers (int, optional): Number of hidden layers. Defaults to 0.
+        dtype (torch.dtype, optional): Data type to use. Defaults to torch.float32.
+    """
+
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        hidden_channels,
+        activation,
+        num_hidden_layers=0,
+        dtype=torch.float32,
+    ):
+        super(MLP, self).__init__()
+        act_class = act_class_mapping[activation]
+        self.act = act_class()
+        self.layers = nn.Sequential()
+        self.layers.append(nn.Linear(in_channels, hidden_channels, dtype=dtype))
+        self.layers.append(self.act)
+        for _ in range(num_hidden_layers):
+            self.layers.append(nn.Linear(hidden_channels, hidden_channels, dtype=dtype))
+            self.layers.append(self.act)
+        self.layers.append(nn.Linear(hidden_channels, out_channels, dtype=dtype))
+
+    def reset_parameters(self):
+        for layer in self.layers:
+            if isinstance(layer, nn.Linear):
+                nn.init.xavier_uniform_(layer.weight)
+                layer.bias.data.fill_(0)
+
+    def forward(self, x):
+        x = self.layers(x)
+        return x
+
+
 class GatedEquivariantBlock(nn.Module):
     """Gated Equivariant Block as defined in Schütt et al. (2021):
     Equivariant message passing for the prediction of tensorial properties and molecular spectra
@@ -462,21 +589,20 @@ class GatedEquivariantBlock(nn.Module):
         )
 
         act_class = act_class_mapping[activation]
-        self.update_net = nn.Sequential(
-            nn.Linear(hidden_channels * 2, intermediate_channels, dtype=dtype),
-            act_class(),
-            nn.Linear(intermediate_channels, out_channels * 2, dtype=dtype),
+        self.update_net = MLP(
+            in_channels=hidden_channels * 2,
+            out_channels=out_channels * 2,
+            hidden_channels=intermediate_channels,
+            activation=activation,
+            num_hidden_layers=0,
+            dtype=dtype,
         )
-
         self.act = act_class() if scalar_activation else None
 
     def reset_parameters(self):
         nn.init.xavier_uniform_(self.vec1_proj.weight)
         nn.init.xavier_uniform_(self.vec2_proj.weight)
-        nn.init.xavier_uniform_(self.update_net[0].weight)
-        self.update_net[0].bias.data.fill_(0)
-        nn.init.xavier_uniform_(self.update_net[2].weight)
-        self.update_net[2].bias.data.fill_(0)
+        self.update_net.reset_parameters()
 
     def forward(self, x, v):
         vec1_buffer = self.vec1_proj(v)
@@ -563,6 +689,8 @@ act_class_mapping = {
     "silu": nn.SiLU,
     "tanh": nn.Tanh,
     "sigmoid": nn.Sigmoid,
+    "swish": Swish,
+    "mish": nn.Mish,
 }
 
 dtype_mapping = {16: torch.float16, 32: torch.float, 64: torch.float64}

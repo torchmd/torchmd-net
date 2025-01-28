@@ -10,10 +10,10 @@ import torch as pt
 from torchmdnet.datasets.memdataset import MemmappedDataset
 from torch_geometric.data import Data, download_url
 from tqdm import tqdm
+import logging
 
 
 class SPICE(MemmappedDataset):
-
     """
     SPICE dataset (https://github.com/openmm/spice-dataset)
 
@@ -56,20 +56,33 @@ class SPICE(MemmappedDataset):
         "1.1.1": {
             "url": "https://zenodo.org/record/7258940/files",
             "file": "SPICE-1.1.1.hdf5",
+            "hash": "5411e7014c6d18ff07d108c9ad820b53",
         },
         "1.1.2": {
             "url": "https://zenodo.org/record/7338495/files",
             "file": "SPICE-1.1.2.hdf5",
+            "hash": "a2b5ae2d1f72581040e1cceb20a79a33",
         },
         "1.1.3": {
             "url": "https://zenodo.org/record/7606550/files",
             "file": "SPICE-1.1.3.hdf5",
+            "hash": "be93706b3bb2b2e327b690b185905856",
+        },
+        "1.1.4": {
+            "url": "https://zenodo.org/records/8222043/files",
+            "file": "SPICE-1.1.4.hdf5",
+            "hash": "f27d4c81da0e37d6547276bf6b4ae6a1",
+        },
+        "2.0.1": {
+            "url": "https://zenodo.org/records/10975225/files",
+            "file": "SPICE-2.0.1.hdf5",
+            "hash": "bfba2224b6540e1390a579569b475510",
         },
     }
 
     @property
     def raw_dir(self):
-        return os.path.join(super().raw_dir, self.version)
+        return os.path.join(super().raw_dir, "spice", self.version)
 
     @property
     def raw_file_names(self):
@@ -103,7 +116,6 @@ class SPICE(MemmappedDataset):
             transform,
             pre_transform,
             pre_filter,
-            remove_ref_energy=False,
             properties=("y", "neg_dy"),
         )
 
@@ -135,7 +147,12 @@ class SPICE(MemmappedDataset):
                 * self.HARTREE_TO_EV
                 / self.BORH_TO_ANGSTROM
             )
-
+            if all_pos.ndim < 3:
+                logging.warning(f"Bogus conformation {mol_id}")
+                logging.warning(
+                    f"Found {all_pos.shape} positions, {all_y.shape} energies and {all_neg_dy.shape} gradients"
+                )
+                continue
             assert all_pos.shape[0] == all_y.shape[0]
             assert all_pos.shape[1] == z.shape[0]
             assert all_pos.shape[2] == 3
@@ -166,3 +183,7 @@ class SPICE(MemmappedDataset):
 
     def download(self):
         download_url(self.raw_url, self.raw_dir)
+        if "hash" in self.VERSIONS[self.version]:
+            with open(self.raw_paths[0], "rb") as f:
+                file_hash = hashlib.md5(f.read()).hexdigest()
+            assert file_hash == self.VERSIONS[self.version]["hash"]

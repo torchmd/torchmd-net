@@ -10,37 +10,9 @@ from torch_geometric.loader import DataLoader
 from lightning import LightningDataModule
 from lightning_utilities.core.rank_zero import rank_zero_warn
 from torchmdnet import datasets
-from torch_geometric.data import Dataset
 from torchmdnet.utils import make_splits, MissingEnergyException
 from torchmdnet.models.utils import scatter
-from torchmdnet.models.utils import dtype_mapping
-
-
-class FloatCastDatasetWrapper(Dataset):
-    """A wrapper around a torch_geometric dataset that casts all floating point
-    tensors to a given dtype.
-    """
-
-    def __init__(self, dataset, dtype=torch.float64):
-        super(FloatCastDatasetWrapper, self).__init__(
-            dataset.root, dataset.transform, dataset.pre_transform, dataset.pre_filter
-        )
-        self._dataset = dataset
-        self._dtype = dtype
-
-    def len(self):
-        return len(self._dataset)
-
-    def get(self, idx):
-        data = self._dataset.get(idx)
-        for key, value in data:
-            if torch.is_tensor(value) and torch.is_floating_point(value):
-                setattr(data, key, value.to(self._dtype))
-        return data
-
-    def __getattr__(self, __name):
-        return getattr(self.__getattribute__("_dataset"), __name)
-
+import warnings
 
 class DataModule(LightningDataModule):
     """A LightningDataModule for loading datasets from the torchmdnet.datasets module.
@@ -82,10 +54,6 @@ class DataModule(LightningDataModule):
                     self.hparams["dataset_root"], **dataset_arg
                 )
 
-        self.dataset = FloatCastDatasetWrapper(
-            self.dataset, dtype_mapping[self.hparams["precision"]]
-        )
-
         self.idx_train, self.idx_val, self.idx_test = make_splits(
             len(self.dataset),
             self.hparams["train_size"],
@@ -104,6 +72,11 @@ class DataModule(LightningDataModule):
         self.test_dataset = Subset(self.dataset, self.idx_test)
 
         if self.hparams["standardize"]:
+            # Mark as deprecated
+            warnings.warn(
+                "The standardize option is deprecated and will be removed in the future. ",
+                DeprecationWarning,
+            )
             self._standardize()
 
     def train_dataloader(self):
@@ -160,7 +133,7 @@ class DataModule(LightningDataModule):
             dataset=dataset,
             batch_size=batch_size,
             num_workers=self.hparams["num_workers"],
-            persistent_workers=True,
+            persistent_workers=False,
             pin_memory=True,
             shuffle=shuffle,
         )

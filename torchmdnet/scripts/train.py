@@ -9,7 +9,6 @@ import argparse
 import logging
 import torch
 import lightning.pytorch as pl
-from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.loggers import WandbLogger, CSVLogger, TensorBoardLogger
 from lightning.pytorch.callbacks import (
     ModelCheckpoint,
@@ -18,10 +17,17 @@ from lightning.pytorch.callbacks import (
 from torchmdnet.module import LNNP
 from torchmdnet import datasets, priors, models
 from torchmdnet.data import DataModule
+from torchmdnet.loss import loss_class_mapping
 from torchmdnet.models import output_modules
 from torchmdnet.models.model import create_prior_models
 from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping, dtype_mapping
-from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, number
+from torchmdnet.utils import (
+    LoadFromFile,
+    LoadFromCheckpoint,
+    save_argparse,
+    number,
+    check_logs,
+)
 from lightning_utilities.core.rank_zero import rank_zero_warn
 
 
@@ -35,17 +41,18 @@ def get_argparse():
     parser.add_argument('--inference-batch-size', default=None, type=int, help='Batchsize for validation and tests.')
     parser.add_argument('--lr', default=1e-4, type=float, help='learning rate')
     parser.add_argument('--lr-patience', type=int, default=10, help='Patience for lr-schedule. Patience per eval-interval of validation')
-    parser.add_argument('--lr-metric', type=str, default='val_total_mse_loss', choices=['train_total_mse_loss', 'val_total_mse_loss'], help='Metric to monitor when deciding whether to reduce learning rate')
+    parser.add_argument('--lr-metric', type=str, default='val', choices=['train', 'val'], help='Metric to monitor when deciding whether to reduce learning rate')
     parser.add_argument('--lr-min', type=float, default=1e-6, help='Minimum learning rate before early stop')
     parser.add_argument('--lr-factor', type=float, default=0.8, help='Factor by which to multiply the learning rate when the metric stops improving')
     parser.add_argument('--lr-warmup-steps', type=int, default=0, help='How many steps to warm-up over. Defaults to 0 for no warm-up')
     parser.add_argument('--early-stopping-patience', type=int, default=30, help='Stop training after this many epochs without improvement')
+    parser.add_argument('--early-stopping-monitor', type=str, default='val_total_mse_loss', choices=['train_total_mse_loss', 'val_total_mse_loss'], help='Metric to monitor for early stopping')
     parser.add_argument('--reset-trainer', type=bool, default=False, help='Reset training metrics (e.g. early stopping, lr) when loading a model checkpoint')
     parser.add_argument('--weight-decay', type=float, default=0.0, help='Weight decay strength')
-    parser.add_argument('--ema-alpha-y', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of y')
-    parser.add_argument('--ema-alpha-neg-dy', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of dy')
+    parser.add_argument('--ema-alpha-y', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of y. Must be between 0 and 1.')
+    parser.add_argument('--ema-alpha-neg-dy', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of dy. Must be between 0 and 1.')
     parser.add_argument('--ngpus', type=int, default=-1, help='Number of GPUs, -1 use all available. Use CUDA_VISIBLE_DEVICES=1, to decide gpus')
-    parser.add_argument('--num-nodes', type=int, default=1, help='Number of nodes')
+    parser.add_argument('--num-nodes', type=int, default=1, help='Number of GPU nodes for distributed training with the Lightning Trainer.')
     parser.add_argument('--precision', type=int, default=32, choices=[16, 32, 64], help='Floating point precision')
     parser.add_argument('--log-dir', '-l', default='/tmp/logs', help='log file')
     parser.add_argument('--splits', default=None, help='Npz with splits idx_train, idx_val, idx_test')
@@ -58,7 +65,9 @@ def get_argparse():
     parser.add_argument('--num-workers', type=int, default=4, help='Number of workers for data prefetch')
     parser.add_argument('--redirect', type=bool, default=False, help='Redirect stdout and stderr to log_dir/log')
     parser.add_argument('--gradient-clipping', type=float, default=0.0, help='Gradient clipping norm')
-
+    parser.add_argument('--remove-ref-energy', action='store_true', help='If true, remove the reference energy from the dataset for delta-learning. Total energy can still be predicted by the model during inference by turning this flag off when loading.  The dataset must be compatible with Atomref for this to be used.')
+    parser.add_argument('--checkpoint-monitor', type=str, default='val_total_mse_loss', choices=['train_total_mse_loss', 'val_total_mse_loss'], help='Metric to monitor for writing out best models')
+    parser.add_argument('--load-weights', default=None, type=str, help='Load the weights of an existing model')
     # dataset specific
     parser.add_argument('--dataset', default=None, type=str, choices=datasets.__all__, help='Name of the torch_geometric dataset')
     parser.add_argument('--dataset-root', default='~/data', type=str, help='Data storage directory (not used if dataset is "CG")')
@@ -70,11 +79,14 @@ def get_argparse():
     parser.add_argument('--dataset-preload-limit', default=1024, type=int, help='Custom and HDF5 datasets will preload to RAM datasets that are less than this size in MB')
     parser.add_argument('--y-weight', default=1.0, type=float, help='Weighting factor for y label in the loss function')
     parser.add_argument('--neg-dy-weight', default=1.0, type=float, help='Weighting factor for neg_dy label in the loss function')
+    parser.add_argument('--train-loss', default='mse_loss', type=str, choices=loss_class_mapping.keys(), help='Loss function to use during training')
+    parser.add_argument('--train-loss-arg', default=None, help='Additional arguments for the loss function. Needs to be a dictionary.')
 
     # model architecture
     parser.add_argument('--model', type=str, default='graph-network', choices=models.__all_models__, help='Which model to train')
     parser.add_argument('--output-model', type=str, default='Scalar', choices=output_modules.__all__, help='The type of output model')
-    parser.add_argument('--prior-model', type=str, default=None, help='Which prior model to use. It can be a string, a dict if you want to add arguments for it or a dicts to add more than one prior. e.g. {"Atomref": {"max_z":100}, "Coulomb":{"max_num_neighs"=100, "alpha"=1}', action="extend", nargs="*")
+    parser.add_argument('--output-mlp-num-layers', type=int, default=0, help='If the output model uses an MLP this will be the number of hidden layers, excluding the input and output layers.')
+    parser.add_argument('--prior-model', type=str, default=None, help='Which prior model to use. It can be a string, a dict if you want to add arguments for it or a dicts to add more than one prior. e.g. {"Atomref": {"max_z":100}, "Coulomb":{"max_num_neighs"=100, "lower_switch_distance"=4, "upper_switch_distance"=8}', action="extend", nargs="*")
 
     # architectural args
     parser.add_argument('--charge', type=bool, default=False, help='Model needs a total charge. Set this to True if your dataset contains charges and you want them passed down to the model.')
@@ -144,8 +156,39 @@ def get_args():
     return args
 
 
+def fix_state_dict(ckpt):
+    import re
+
+    state_dict = {re.sub(r"^model\.", "", k): v for k, v in ckpt["state_dict"].items()}
+    # In ET, before we had output_model.output_network.{0,1}.update_net.[0-9].{weight,bias}
+    # Now we have output_model.output_network.{0,1}.update_net.layers.[0-9].{weight,bias}
+    # In other models, we had output_model.output_network.{0,1}.{weight,bias},
+    # which is now output_model.output_network.layers.{0,1}.{weight,bias}
+    # This change was introduced in https://github.com/torchmd/torchmd-net/pull/314
+    patterns = [
+        (
+            r"output_model.output_network.(\d+).update_net.(\d+).",
+            r"output_model.output_network.\1.update_net.layers.\2.",
+        ),
+        (
+            r"output_model.output_network.([02]).(weight|bias)",
+            r"output_model.output_network.layers.\1.\2",
+        ),
+    ]
+    for p in patterns:
+        state_dict = {re.sub(p[0], p[1], k): v for k, v in state_dict.items()}
+    return state_dict
+
+
 def main():
     args = get_args()
+    if args.remove_ref_energy:
+        if args.prior_model is None:
+            args.prior_model = []
+        if not isinstance(args.prior_model, list):
+            args.prior_model = [args.prior_model]
+        args.prior_model.append({"Atomref": {"enable": False}})
+
     pl.seed_everything(args.seed, workers=True)
 
     # initialize data module
@@ -155,24 +198,38 @@ def main():
 
     prior_models = create_prior_models(vars(args), data.dataset)
     args.prior_args = [p.get_init_args() for p in prior_models]
-
     # initialize lightning module
     model = LNNP(args, prior_model=prior_models, mean=data.mean, std=data.std)
+    if args.load_weights is not None:
+        print(f"Loading weights from {args.load_weights}")
+        ckpt = torch.load(args.load_weights, map_location="cpu")
+        model.model.load_state_dict(fix_state_dict(ckpt))
 
+    mon = args.checkpoint_monitor
+    chkpoint_name = f"epoch={{epoch}}-{mon.split('_')[0]}_loss={{{mon}:.4f}}"
+    if len(data.idx_test):
+        chkpoint_name += "-test_loss={test_total_l1_loss:.4f}"
+
+    callbacks = []
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.log_dir,
-        monitor="val_total_mse_loss",
+        monitor=args.checkpoint_monitor,
         save_top_k=10,  # -1 to save all
         every_n_epochs=args.save_interval,
-        filename="epoch={epoch}-val_loss={val_total_mse_loss:.4f}-test_loss={test_total_l1_loss:.4f}",
+        filename=chkpoint_name,
         auto_insert_metric_name=False,
     )
-    early_stopping = EarlyStopping(
-        "val_total_mse_loss", patience=args.early_stopping_patience
-    )
-
+    callbacks.append(checkpoint_callback)
+    if args.early_stopping_monitor is not None:
+        early_stopping = EarlyStopping(
+            args.early_stopping_monitor, patience=args.early_stopping_patience
+        )
+        callbacks.append(early_stopping)
+    
+    check_logs(args.log_dir)
     csv_logger = CSVLogger(args.log_dir, name="", version="")
     _logger = [csv_logger]
+
     if args.wandb_use:
         wandb_logger = WandbLogger(
             project=args.wandb_project,
@@ -200,7 +257,7 @@ def main():
         devices=args.ngpus,
         num_nodes=args.num_nodes,
         default_root_dir=args.log_dir,
-        callbacks=[early_stopping, checkpoint_callback],
+        callbacks=callbacks,
         logger=_logger,
         precision=args.precision,
         gradient_clip_val=args.gradient_clipping,

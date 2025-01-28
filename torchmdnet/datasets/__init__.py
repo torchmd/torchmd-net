@@ -14,6 +14,7 @@ from .comp6 import (
     COMP6v1,
     COMP6v2,
 )
+from .mdcath import MDCATH
 from .custom import Custom
 from .water import WaterBox
 from .hdf import HDF5
@@ -23,6 +24,7 @@ from .qm9 import QM9
 from .qm9q import QM9q
 from .spice import SPICE
 from .genentech import GenentechTorsions
+from .maceoff import MACEOFF
 
 __all__ = [
     "Ace",
@@ -39,6 +41,7 @@ __all__ = [
     "GDB10to13",
     "GenentechTorsions",
     "HDF5",
+    "MDCATH",
     "MD17",
     "MD22",
     "QM9",
@@ -47,4 +50,5 @@ __all__ = [
     "SPICE",
     "Tripeptides",
     "WaterBox",
+    "MACEOFF",
 ]

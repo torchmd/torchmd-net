@@ -50,7 +50,7 @@ __global__ void forward_kernel_shared(uint32_t num_atoms, const Accessor<scalar_
             if (!active)
                 break; // An out of bounds thread must be masked
             const int cur_j = tile * blockDim.x + counter;
-            const bool testPair = cur_j < num_atoms and (cur_j < id or (list.loop and cur_j == id));
+            const bool testPair = (cur_j < num_atoms) && (cur_j < id || (list.loop && cur_j == id));
             if (testPair) {
                 const auto batch_j = sh_batch[counter];
                 if (batch_i == batch_j) {

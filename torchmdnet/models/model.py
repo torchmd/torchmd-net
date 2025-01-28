@@ -1,8 +1,10 @@
 # Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
-
+from glob import glob
+import os
 import re
+import tempfile
 from typing import Optional, List, Tuple, Dict
 import torch
 from torch.autograd import grad
@@ -13,6 +15,7 @@ from torchmdnet.models.utils import dtype_mapping
 from torchmdnet import priors
 from lightning_utilities.core.rank_zero import rank_zero_warn
 import warnings
+import zipfile
 
 
 def create_model(args, prior_model=None, mean=None, std=None):
@@ -51,9 +54,11 @@ def create_model(args, prior_model=None, mean=None, std=None):
         max_z=args["max_z"],
         check_errors=bool(args["check_errors"]),
         max_num_neighbors=args["max_num_neighbors"],
-        box_vecs=torch.tensor(args["box_vecs"], dtype=dtype)
-        if args["box_vecs"] is not None
-        else None,
+        box_vecs=(
+            torch.tensor(args["box_vecs"], dtype=dtype)
+            if args["box_vecs"] is not None
+            else None
+        ),
         dtype=dtype,
     )
 
@@ -122,6 +127,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         activation=args["activation"],
         reduce_op=args["reduce_op"],
         dtype=dtype,
+        num_hidden_layers=args.get("output_mlp_num_layers", 0),
     )
 
     # combine representation and output network
@@ -137,22 +143,77 @@ def create_model(args, prior_model=None, mean=None, std=None):
     return model
 
 
-def load_model(filepath, args=None, device="cpu", **kwargs):
-    """Load a model from a checkpoint file.
+def load_ensemble(filepath, args=None, device="cpu", return_std=False, **kwargs):
+    """Load an ensemble of models from a list of checkpoint files or a zip file.
 
     Args:
-        filepath (str): Path to the checkpoint file.
+        filepath (str or list): Can be any of the following:
+
+            - Path to a zip file containing multiple checkpoint files.
+            - List of paths to checkpoint files.
+
         args (dict, optional): Arguments for the model. Defaults to None.
         device (str, optional): Device on which the model should be loaded. Defaults to "cpu".
+        return_std (bool, optional): Whether to return the standard deviation of the predictions. Defaults to False.
+        **kwargs: Extra keyword arguments for the model, will be passed to :py:mod:`load_model`.
+
+    Returns:
+        nn.Module: An instance of :py:mod:`Ensemble`.
+    """
+    if isinstance(filepath, (list, tuple)):
+        assert all(isinstance(f, str) for f in filepath), "Invalid filepath list."
+        model_list = [
+            load_model(f, args=args, device=device, **kwargs) for f in filepath
+        ]
+    elif filepath.endswith(".zip"):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with zipfile.ZipFile(filepath, "r") as z:
+                z.extractall(tmpdir)
+            ckpt_list = glob(os.path.join(tmpdir, "*.ckpt"))
+            assert len(ckpt_list) > 0, "No checkpoint files found in zip file."
+            model_list = [
+                load_model(f, args=args, device=device, **kwargs) for f in ckpt_list
+            ]
+    else:
+        raise ValueError(
+            "Invalid filepath. Must be a list of paths or a path to a zip file."
+        )
+    return Ensemble(
+        model_list,
+        return_std=return_std,
+    )
+
+
+def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
+    """Load a model from a checkpoint file.
+
+       If a list of paths or a path to a zip file is given, an :py:mod:`Ensemble` model is returned.
+    Args:
+        filepath (str or list): Can be any of the following:
+
+            - Path to a checkpoint file. In this case, a :py:mod:`TorchMD_Net` model is returned.
+            - Path to a zip file containing multiple checkpoint files. In this case, an :py:mod:`Ensemble` model is returned.
+            - List of paths to checkpoint files. In this case, an :py:mod:`Ensemble` model is returned.
+
+        args (dict, optional): Arguments for the model. Defaults to None.
+        device (str, optional): Device on which the model should be loaded. Defaults to "cpu".
+        return_std (bool, optional): Whether to return the standard deviation of an Ensemble model. Defaults to False.
         **kwargs: Extra keyword arguments for the model.
 
     Returns:
-        nn.Module: An instance of the TorchMD_Net model.
+        nn.Module: An instance of the TorchMD_Net model or an Ensemble model.
     """
-
-    ckpt = torch.load(filepath, map_location="cpu")
+    isEnsemble = isinstance(filepath, (list, tuple)) or filepath.endswith(".zip")
+    if isEnsemble:
+        return load_ensemble(
+            filepath, args=args, device=device, return_std=return_std, **kwargs
+        )
+    assert isinstance(filepath, str)
+    ckpt = torch.load(filepath, map_location="cpu", weights_only=False)
     if args is None:
         args = ckpt["hyper_parameters"]
+
+    delta_learning = args["remove_ref_energy"] if "remove_ref_energy" in args else False
 
     for key, value in kwargs.items():
         if not key in args:
@@ -160,36 +221,82 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
         args[key] = value
 
     model = create_model(args)
+    if delta_learning and "remove_ref_energy" in kwargs:
+        if not kwargs["remove_ref_energy"]:
+            assert (
+                len(model.prior_model) > 0
+            ), "Atomref prior must be added during training (with enable=False) for total energy prediction."
+            assert isinstance(
+                model.prior_model[-1], priors.Atomref
+            ), "I expected the last prior to be Atomref."
+            # Set the Atomref prior to enabled
+            model.prior_model[-1].enable = True
 
     state_dict = {re.sub(r"^model\.", "", k): v for k, v in ckpt["state_dict"].items()}
-    # The following are for backward compatibility with models created when atomref was
-    # the only supported prior.
-    if "prior_model.initial_atomref" in state_dict:
-        warnings.warn(
-            "prior_model.initial_atomref is deprecated and will be removed in a future version. Use prior_model.0.initial_atomref instead.",
-            category=DeprecationWarning,
-            stacklevel=2,
-        )
-        state_dict["prior_model.0.initial_atomref"] = state_dict[
-            "prior_model.initial_atomref"
-        ]
-        del state_dict["prior_model.initial_atomref"]
-    if "prior_model.atomref.weight" in state_dict:
-        warnings.warn(
-            "prior_model.atomref.weight is deprecated and will be removed in a future version. Use prior_model.0.atomref.weight instead.",
-            category=DeprecationWarning,
-            stacklevel=2,
-        )
-        state_dict["prior_model.0.atomref.weight"] = state_dict[
-            "prior_model.atomref.weight"
-        ]
-        del state_dict["prior_model.atomref.weight"]
+    # In ET, before we had output_model.output_network.{0,1}.update_net.[0-9].{weight,bias}
+    # Now we have output_model.output_network.{0,1}.update_net.layers.[0-9].{weight,bias}
+    # In other models, we had output_model.output_network.{0,1}.{weight,bias},
+    # which is now output_model.output_network.layers.{0,1}.{weight,bias}
+    # This change was introduced in https://github.com/torchmd/torchmd-net/pull/314
+    patterns = [
+        (
+            r"output_model.output_network.(\d+).update_net.(\d+).",
+            r"output_model.output_network.\1.update_net.layers.\2.",
+        ),
+        (
+            r"output_model.output_network.([02]).(weight|bias)",
+            r"output_model.output_network.layers.\1.\2",
+        ),
+    ]
+    for p in patterns:
+        state_dict = {re.sub(p[0], p[1], k): v for k, v in state_dict.items()}
+
     model.load_state_dict(state_dict)
     return model.to(device)
 
 
 def create_prior_models(args, dataset=None):
-    """Parse the prior_model configuration option and create the prior models."""
+    """Parse the prior_model configuration option and create the prior models.
+
+    The information can be passed in different ways via the args dictionary, which must contain at least the key "prior_model".
+
+    1. A single prior model name and its arguments as a dictionary:
+
+    .. code:: python
+
+      args = {
+          "prior_model": "Atomref",
+          "prior_args": {"max_z": 100}
+      }
+
+
+    2. A list of prior model names and their arguments as a list of dictionaries:
+
+    .. code:: python
+
+      args = {
+          "prior_model": ["Atomref", "D2"],
+          "prior_args": [{"max_z": 100}, {"max_z": 100}]
+      }
+
+
+    3. A list of prior model names and their arguments as a dictionary:
+
+    .. code:: python
+
+      args = {
+          "prior_model": [{"Atomref": {"max_z": 100}}, {"D2": {"max_z": 100}}]
+      }
+
+
+    Args:
+        args (dict): Arguments for the model.
+        dataset (torch_geometric.data.Dataset, optional): A dataset from which to extract the atomref values. Defaults to None.
+
+    Returns:
+        list: A list of prior models.
+
+    """
     prior_models = []
     if args["prior_model"]:
         prior_model = args["prior_model"]
@@ -310,7 +417,7 @@ class TorchMD_Net(nn.Module):
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
         extra_args: Optional[Dict[str, Tensor]] = None,
-    ) -> Tuple[Tensor, Optional[Tensor]]:
+    ) -> Tuple[Tensor, Tensor]:
         """
         Compute the output of the model.
 
@@ -392,9 +499,57 @@ class TorchMD_Net(nn.Module):
                 create_graph=self.training,
                 retain_graph=self.training,
             )[0]
-            if dy is None:
-                raise RuntimeError("Autograd returned None for the force prediction.")
-
+            assert dy is not None, "Autograd returned None for the force prediction."
             return y, -dy
-        # TODO: return only `out` once Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
-        return y, None
+        # Returning an empty tensor allows to decorate this method as always returning two tensors.
+        # This is required to overcome a TorchScript limitation, xref https://github.com/openmm/openmm-torch/issues/135
+        return y, torch.empty(0)
+
+
+class Ensemble(torch.nn.ModuleList):
+    """Average predictions over an ensemble of TorchMD-Net models.
+
+       This module behaves like a single TorchMD-Net model, but its forward method returns the average and standard deviation of the predictions over all models it was initialized with.
+
+    Args:
+        modules (List[nn.Module]): List of :py:mod:`TorchMD_Net` models to average predictions over.
+        return_std (bool, optional): Whether to return the standard deviation of the predictions. Defaults to False. If set to True, the model returns 4 arguments (mean_y, mean_neg_dy, std_y, std_neg_dy) instead of 2 (mean_y, mean_neg_dy).
+    """
+
+    def __init__(self, modules: List[nn.Module], return_std: bool = False):
+        for module in modules:
+            assert isinstance(module, TorchMD_Net)
+        super().__init__(modules)
+        self.return_std = return_std
+
+    def forward(
+        self,
+        *args,
+        **kwargs,
+    ):
+        """Average predictions over all models in the ensemble.
+        The arguments to this function are simply relayed to the forward method of each :py:mod:`TorchMD_Net` model in the ensemble.
+        Args:
+            *args: Positional arguments to forward to the models.
+            **kwargs: Keyword arguments to forward to the models.
+        Returns:
+            Tuple[Tensor, Optional[Tensor]] or Tuple[Tensor, Optional[Tensor], Tensor, Optional[Tensor]]: The average and standard deviation of the predictions over all models in the ensemble. If return_std is False, the output is a tuple (mean_y, mean_neg_dy). If return_std is True, the output is a tuple (mean_y, mean_neg_dy, std_y, std_neg_dy).
+
+        """
+        y = []
+        neg_dy = []
+        for model in self:
+            res = model(*args, **kwargs)
+            y.append(res[0])
+            neg_dy.append(res[1])
+        y = torch.stack(y)
+        neg_dy = torch.stack(neg_dy)
+        y_mean = torch.mean(y, axis=0)
+        neg_dy_mean = torch.mean(neg_dy, axis=0)
+        y_std = torch.std(y, axis=0)
+        neg_dy_std = torch.std(neg_dy, axis=0)
+
+        if self.return_std:
+            return y_mean, neg_dy_mean, y_std, neg_dy_std
+        else:
+            return y_mean, neg_dy_mean
