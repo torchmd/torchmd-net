@@ -145,12 +145,12 @@ def get_neighbor_pairs_fwd_meta(
 
 
 if torch.__version__ >= "2.2.0":
-    from torch.library import impl_abstract
+    from torch.library import register_fake
 
-    impl_abstract(
+    register_fake(
         "torchmdnet_extensions::get_neighbor_pairs_bkwd", get_neighbor_pairs_bkwd_meta
     )
-    impl_abstract(
+    register_fake(
         "torchmdnet_extensions::get_neighbor_pairs_fwd", get_neighbor_pairs_fwd_meta
     )
 elif torch.__version__ < "2.2.0" and torch.__version__ >= "2.0.0":

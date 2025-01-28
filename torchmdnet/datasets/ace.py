@@ -9,6 +9,7 @@ import torch as pt
 from torchmdnet.datasets.memdataset import MemmappedDataset
 from torch_geometric.data import Data
 from tqdm import tqdm
+import pandas as pd
 
 
 class Ace(MemmappedDataset):
@@ -132,6 +133,7 @@ class Ace(MemmappedDataset):
         paths=None,
         max_gradient=None,
         subsample_molecules=1,
+        index_csv=None,
     ):
         assert isinstance(paths, (str, list))
 
@@ -141,12 +143,19 @@ class Ace(MemmappedDataset):
         self.paths = paths
         self.max_gradient = max_gradient
         self.subsample_molecules = int(subsample_molecules)
+        if index_csv is not None:
+            df = pd.read_csv(index_csv, dtype=int, converters={"name": str})
+            self.mol_indexes = {mol_id: i for i, mol_id in enumerate(df.name)}
+
+        props = ["y", "neg_dy", "q", "pq", "dp"]
+        if index_csv is not None:
+            props += ["mol_idx"]
         super().__init__(
             root,
             transform,
             pre_transform,
             pre_filter,
-            properties=("y", "neg_dy", "q", "pq", "dp"),
+            properties=tuple(props),
         )
 
     @property
@@ -278,6 +287,9 @@ class Ace(MemmappedDataset):
                     if mol_ids:
                         args["mol_id"] = mol_id
                         args["i_conf"] = i_conf
+                    if "mol_idx" in self.properties:
+                        args["mol_idx"] = self.mol_indexes[mol_id]
+
                     data = Data(**args)
 
                     if self.pre_filter is not None and not self.pre_filter(data):

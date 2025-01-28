@@ -3,13 +3,11 @@ channels:
   - conda-forge
 dependencies:
   - h5py
-  - matplotlib-base
   - nnpops
   - pip
   - pytorch
   - pytorch_geometric
   - lightning
-  - pydantic
   - torchmetrics
   - tqdm
   # Dev tools

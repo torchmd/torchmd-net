@@ -64,31 +64,36 @@ class MemmappedDataset(Dataset):
 
         fnames = self.processed_paths_dict
 
-        self.idx_mm = np.memmap(fnames["idx"], mode="r", dtype=np.int64)
-        self.z_mm = np.memmap(fnames["z"], mode="r", dtype=np.int8)
-        num_all_confs = self.idx_mm.shape[0] - 1
-        num_all_atoms = self.z_mm.shape[0]
-        self.pos_mm = np.memmap(
+        self.mmaps = {}
+        self.mmaps["idx"] = np.memmap(fnames["idx"], mode="r", dtype=np.int64)
+        self.mmaps["z"] = np.memmap(fnames["z"], mode="r", dtype=np.int8)
+        num_all_confs = self.mmaps["idx"].shape[0] - 1
+        num_all_atoms = self.mmaps["z"].shape[0]
+        self.mmaps["pos"] = np.memmap(
             fnames["pos"], mode="r", dtype=np.float32, shape=(num_all_atoms, 3)
         )
         if "y" in self.properties:
-            self.y_mm = np.memmap(fnames["y"], mode="r", dtype=np.float64)
+            self.mmaps["y"] = np.memmap(fnames["y"], mode="r", dtype=np.float64)
         if "neg_dy" in self.properties:
-            self.neg_dy_mm = np.memmap(
+            self.mmaps["neg_dy"] = np.memmap(
                 fnames["neg_dy"], mode="r", dtype=np.float32, shape=(num_all_atoms, 3)
             )
         if "q" in self.properties:
-            self.q_mm = np.memmap(fnames["q"], mode="r", dtype=np.int8)
+            self.mmaps["q"] = np.memmap(fnames["q"], mode="r", dtype=np.int8)
         if "pq" in self.properties:
-            self.pq_mm = np.memmap(fnames["pq"], mode="r", dtype=np.float32)
+            self.mmaps["pq"] = np.memmap(fnames["pq"], mode="r", dtype=np.float32)
         if "dp" in self.properties:
-            self.dp_mm = np.memmap(
+            self.mmaps["dp"] = np.memmap(
                 fnames["dp"], mode="r", dtype=np.float32, shape=(num_all_confs, 3)
             )
+        if "mol_idx" in self.properties:
+            self.mmaps["mol_idx"] = np.memmap(
+                fnames["mol_idx"], mode="r", dtype=np.uint64
+            )
 
-        assert self.idx_mm[0] == 0
-        assert self.idx_mm[-1] == len(self.z_mm)
-        assert len(self.idx_mm) == len(self.y_mm) + 1
+        assert self.mmaps["idx"][0] == 0
+        assert self.mmaps["idx"][-1] == len(self.mmaps["z"])
+        assert len(self.mmaps["idx"]) == len(self.mmaps["y"]) + 1
 
     @property
     def processed_file_names(self):
@@ -110,6 +115,8 @@ class MemmappedDataset(Dataset):
         raise NotImplementedError()
 
     def process(self):
+        import gc
+
         print("Gathering statistics...")
         num_all_confs = 0
         num_all_atoms = 0
@@ -123,52 +130,60 @@ class MemmappedDataset(Dataset):
 
         fnames = self.processed_paths_dict
 
-        idx_mm = np.memmap(
+        mmaps = {}
+        mmaps["idx"] = np.memmap(
             fnames["idx"] + ".tmp",
             mode="w+",
             dtype=np.int64,
             shape=(num_all_confs + 1,),
         )
-        z_mm = np.memmap(
+        mmaps["z"] = np.memmap(
             fnames["z"] + ".tmp", mode="w+", dtype=np.int8, shape=(num_all_atoms,)
         )
-        pos_mm = np.memmap(
+        mmaps["pos"] = np.memmap(
             fnames["pos"] + ".tmp",
             mode="w+",
             dtype=np.float32,
             shape=(num_all_atoms, 3),
         )
         if "y" in self.properties:
-            y_mm = np.memmap(
+            mmaps["y"] = np.memmap(
                 fnames["y"] + ".tmp",
                 mode="w+",
                 dtype=np.float64,
                 shape=(num_all_confs,),
             )
         if "neg_dy" in self.properties:
-            neg_dy_mm = np.memmap(
+            mmaps["neg_dy"] = np.memmap(
                 fnames["neg_dy"] + ".tmp",
                 mode="w+",
                 dtype=np.float32,
                 shape=(num_all_atoms, 3),
             )
         if "q" in self.properties:
-            q_mm = np.memmap(
+            mmaps["q"] = np.memmap(
                 fnames["q"] + ".tmp", mode="w+", dtype=np.int8, shape=num_all_confs
             )
         if "pq" in self.properties:
-            pq_mm = np.memmap(
+            mmaps["pq"] = np.memmap(
                 fnames["pq"] + ".tmp",
                 mode="w+",
                 dtype=np.float32,
                 shape=num_all_atoms,
             )
         if "dp" in self.properties:
-            dp_mm = np.memmap(
+            mmaps["dp"] = np.memmap(
                 fnames["dp"] + ".tmp",
                 mode="w+",
                 dtype=np.float32,
                 shape=(num_all_confs, 3),
+            )
+        if "mol_idx" in self.properties:
+            mmaps["mol_idx"] = np.memmap(
+                fnames["mol_idx"] + ".tmp",
+                mode="w+",
+                dtype=np.uint64,
+                shape=(num_all_confs,),
             )
 
         print("Storing data...")
@@ -176,54 +191,51 @@ class MemmappedDataset(Dataset):
         for i_conf, data in enumerate(self.sample_iter()):
             i_next_atom = i_atom + data.z.shape[0]
 
-            idx_mm[i_conf] = i_atom
-            z_mm[i_atom:i_next_atom] = data.z.to(pt.int8)
-            pos_mm[i_atom:i_next_atom] = data.pos
+            mmaps["idx"][i_conf] = i_atom
+            mmaps["z"][i_atom:i_next_atom] = data.z.to(pt.int8)
+            mmaps["pos"][i_atom:i_next_atom] = data.pos
             if "y" in self.properties:
-                y_mm[i_conf] = data.y
+                mmaps["y"][i_conf] = data.y
             if "neg_dy" in self.properties:
-                neg_dy_mm[i_atom:i_next_atom] = data.neg_dy
+                mmaps["neg_dy"][i_atom:i_next_atom] = data.neg_dy
             if "q" in self.properties:
-                q_mm[i_conf] = data.q.to(pt.int8)
+                mmaps["q"][i_conf] = data.q.to(pt.int8)
             if "pq" in self.properties:
-                pq_mm[i_atom:i_next_atom] = data.pq
+                mmaps["pq"][i_atom:i_next_atom] = data.pq
             if "dp" in self.properties:
-                dp_mm[i_conf] = data.dp
+                mmaps["dp"][i_conf] = data.dp
+            if "mol_idx" in self.properties:
+                mmaps["mol_idx"][i_conf] = data.mol_idx
             i_atom = i_next_atom
 
-        idx_mm[-1] = num_all_atoms
+        mmaps["idx"][-1] = num_all_atoms
         assert i_atom == num_all_atoms
 
-        idx_mm.flush()
-        z_mm.flush()
-        pos_mm.flush()
-        if "y" in self.properties:
-            y_mm.flush()
-        if "neg_dy" in self.properties:
-            neg_dy_mm.flush()
-        if "q" in self.properties:
-            q_mm.flush()
-        if "pq" in self.properties:
-            pq_mm.flush()
-        if "dp" in self.properties:
-            dp_mm.flush()
+        for prop in list(mmaps.keys()):
+            mmaps[prop].flush()
+            del mmaps[prop]
 
-        os.rename(idx_mm.filename, fnames["idx"])
-        os.rename(z_mm.filename, fnames["z"])
-        os.rename(pos_mm.filename, fnames["pos"])
+        # Force garbage collection to ensure files are closed before renaming
+        gc.collect()
+
+        os.rename(fnames["idx"] + ".tmp", fnames["idx"])
+        os.rename(fnames["z"] + ".tmp", fnames["z"])
+        os.rename(fnames["pos"] + ".tmp", fnames["pos"])
         if "y" in self.properties:
-            os.rename(y_mm.filename, fnames["y"])
+            os.rename(fnames["y"] + ".tmp", fnames["y"])
         if "neg_dy" in self.properties:
-            os.rename(neg_dy_mm.filename, fnames["neg_dy"])
+            os.rename(fnames["neg_dy"] + ".tmp", fnames["neg_dy"])
         if "q" in self.properties:
-            os.rename(q_mm.filename, fnames["q"])
+            os.rename(fnames["q"] + ".tmp", fnames["q"])
         if "pq" in self.properties:
-            os.rename(pq_mm.filename, fnames["pq"])
+            os.rename(fnames["pq"] + ".tmp", fnames["pq"])
         if "dp" in self.properties:
-            os.rename(dp_mm.filename, fnames["dp"])
+            os.rename(fnames["dp"] + ".tmp", fnames["dp"])
+        if "mol_idx" in self.properties:
+            os.rename(fnames["mol_idx"] + ".tmp", fnames["mol_idx"])
 
     def len(self):
-        return len(self.idx_mm) - 1
+        return len(self.mmaps["idx"]) - 1
 
     def get(self, idx):
         """Gets the data object at index :obj:`idx`.
@@ -237,6 +249,7 @@ class MemmappedDataset(Dataset):
             - :obj:`q`: Total charge of the molecule.
             - :obj:`pq`: Partial charges of the atoms.
             - :obj:`dp`: Dipole moment of the molecule.
+            - :obj:`mol_idx`: The index of the molecule of the conformer.
 
         Args:
             idx (int): Index of the data object.
@@ -244,19 +257,31 @@ class MemmappedDataset(Dataset):
         Returns:
             :obj:`torch_geometric.data.Data`: The data object.
         """
-        atoms = slice(self.idx_mm[idx], self.idx_mm[idx + 1])
-        z = pt.tensor(self.z_mm[atoms], dtype=pt.long)
-        pos = pt.tensor(self.pos_mm[atoms])
+        atoms = slice(self.mmaps["idx"][idx], self.mmaps["idx"][idx + 1])
+        z = pt.tensor(self.mmaps["z"][atoms], dtype=pt.long)
+        pos = pt.tensor(self.mmaps["pos"][atoms])
 
         props = {}
         if "y" in self.properties:
-            props["y"] = pt.tensor(self.y_mm[idx]).view(1, 1)
+            props["y"] = pt.tensor(self.mmaps["y"][idx]).view(1, 1)
         if "neg_dy" in self.properties:
-            props["neg_dy"] = pt.tensor(self.neg_dy_mm[atoms])
+            props["neg_dy"] = pt.tensor(self.mmaps["neg_dy"][atoms])
         if "q" in self.properties:
-            props["q"] = pt.tensor(self.q_mm[idx], dtype=pt.long)
+            props["q"] = pt.tensor(self.mmaps["q"][idx], dtype=pt.long)
         if "pq" in self.properties:
-            props["pq"] = pt.tensor(self.pq_mm[atoms])
+            props["pq"] = pt.tensor(self.mmaps["pq"][atoms])
         if "dp" in self.properties:
-            props["dp"] = pt.tensor(self.dp_mm[idx])
+            props["dp"] = pt.tensor(self.mmaps["dp"][idx])
+        # if "mol_idx" in self.properties:
+        #     props["mol_idx"] = pt.tensor(self.mmaps["mol_idx"][idx], dtype=pt.int64).view(1, 1)
         return Data(z=z, pos=pos, **props)
+
+    def __del__(self):
+        # Flush and close all the memory-mapped files
+        import gc
+
+        for prop in list(self.mmaps.keys()):
+            self.mmaps[prop].flush()
+            del self.mmaps[prop]
+
+        gc.collect()
