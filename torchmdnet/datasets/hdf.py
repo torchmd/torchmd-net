@@ -49,6 +49,10 @@ class HDF5(Dataset):
                             ("pos", "pos", torch.float32),
                             ("z", "types", torch.long),
                         ]
+                        if "charge" in group:
+                            self.fields.append(("q", "charge", torch.float32))
+                        if "spin" in group:
+                            self.fields.append(("s", "spin", torch.float32))
                         if "energy" in group:
                             self.fields.append(("y", "energy", torch.float32))
                         if "forces" in group:

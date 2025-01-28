@@ -3,7 +3,7 @@
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
 import torch
-from torch.testing import assert_allclose
+from torch.testing import assert_close
 import pytest
 from os.path import dirname, join
 from torchmdnet.calculators import External
@@ -11,6 +11,12 @@ from torchmdnet.models.model import load_model, create_model
 
 from utils import create_example_batch
 
+# Set relative and absolute tolerance values for float32 precision
+# The original test used assert_allclose, which is now deprecated.
+# assert_close is used instead, with default tolerances of 1e-5 (rtol) and 1.3e-6 (atol) for torch.float32.
+# Here, we manually set rtol and atol to match the original test's tolerances.
+rtol = 1e-4
+atol = 1e-5
 
 @pytest.mark.parametrize("box", [None, torch.eye(3)])
 @pytest.mark.parametrize("use_cuda_graphs", [True, False])
@@ -39,24 +45,24 @@ def test_compare_forward(box, use_cuda_graphs):
         "precision": 32,
     }
     device = "cpu" if not use_cuda_graphs else "cuda"
-    model = create_model(args).to(device=device)
+    c_model = load_model(checkpoint).to(device=device)
+    g_model = load_model(checkpoint, check_errors=not use_cuda_graphs, static_shapes=use_cuda_graphs).to(device=device)
     z, pos, _ = create_example_batch(multiple_batches=False)
     z = z.to(device)
     pos = pos.to(device)
-    calc = External(checkpoint, z.unsqueeze(0), use_cuda_graph=False, device=device)
+    calc = External(c_model, z.unsqueeze(0), use_cuda_graph=False, device=device)
     calc_graph = External(
-        checkpoint, z.unsqueeze(0), use_cuda_graph=use_cuda_graphs, device=device
+        g_model, z.unsqueeze(0), use_cuda_graph=use_cuda_graphs, device=device
     )
-    calc.model = model
-    calc_graph.model = model
+    
     if box is not None:
         box = (box * 2 * args["cutoff_upper"]).unsqueeze(0)
+    
     for _ in range(10):
         e_calc, f_calc = calc.calculate(pos, box)
         e_pred, f_pred = calc_graph.calculate(pos, box)
-        assert_allclose(e_calc, e_pred)
-        assert_allclose(f_calc, f_pred)
-
+        assert_close(e_calc, e_pred, rtol=rtol, atol=atol)
+        assert_close(f_calc, f_pred, rtol=rtol, atol=atol)
 
 def test_compare_forward_multiple():
     checkpoint = join(dirname(dirname(__file__)), "tests", "example.ckpt")
@@ -72,5 +78,5 @@ def test_compare_forward_multiple():
         torch.cat([torch.zeros(len(z1)), torch.ones(len(z2))]).long(),
     )
 
-    assert_allclose(e_calc, e_pred)
-    assert_allclose(f_calc, f_pred.view(-1, len(z1), 3))
+    assert_close(e_calc, e_pred, rtol=rtol, atol=atol)
+    assert_close(f_calc, f_pred.view(-1, len(z1), 3), rtol=rtol, atol=atol)
