@@ -35,11 +35,6 @@ def set_torch_cuda_arch_list():
             formatted_versions += "+PTX"
             os.environ["TORCH_CUDA_ARCH_LIST"] = formatted_versions
 
-def filter_torch_paths(paths):
-    """Filter out venv torch paths on OSX ARM64 builds to avoid duplicate definitions"""
-    if os.environ.get("CONDA_BUILD_CROSS_COMPILATION") == "1" and os.environ.get("target_platform") == "osx-arm64":
-        return [p for p in paths if "site-packages/torch/include" not in p]
-    return paths
 
 set_torch_cuda_arch_list()
 
@@ -53,7 +48,7 @@ ExtensionType = CppExtension if not use_cuda else CUDAExtension
 extensions = ExtensionType(
     name='torchmdnet.extensions.torchmdnet_extensions',
     sources=[os.path.join(extension_root, "torchmdnet_extensions.cpp")] + neighbor_sources,
-    include_dirs=filter_torch_paths(include_paths()),
+    include_dirs=[os.path.abspath(extension_root)],
     define_macros=[('WITH_CUDA', 1)] if use_cuda else [],
 )
 
