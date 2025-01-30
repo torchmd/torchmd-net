@@ -27,7 +27,7 @@ except Exception:
     version = "0"
 
 # If WITH_CUDA is defined
-if os.environ.get("WITH_CUDA", 0) == 1:
+if os.environ.get("WITH_CUDA", "0") == "1":
     use_cuda = True
 else:
     use_cuda = torch.cuda._is_compiled()
