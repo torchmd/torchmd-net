@@ -26,13 +26,11 @@ except Exception:
     print("Failed to retrieve the current version, defaulting to 0")
     version = "0"
 
-# If CPU_ONLY is defined
-force_cpu_only = os.environ.get("CPU_ONLY", None) is not None
-
-if os.environ.get("CUDA_BUILD", "false") == "true":
+# If WITH_CUDA is defined
+if os.environ.get("WITH_CUDA", 0) == 1:
     use_cuda = True
 else:
-    use_cuda = torch.cuda._is_compiled() if not force_cpu_only else False
+    use_cuda = torch.cuda._is_compiled()
 
 
 def set_torch_cuda_arch_list():
