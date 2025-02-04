@@ -11,10 +11,12 @@ from torch.utils.cpp_extension import (
     include_paths,
     CppExtension,
 )
+import platform
 import os
 import sys
 
 is_windows = sys.platform == "win32"
+is_mac = sys.platform == "darwin"
 
 try:
     version = (
@@ -56,6 +58,17 @@ neighbor_sources = [
     os.path.join(extension_root, "neighbors", source) for source in neighbor_sources
 ]
 
+
+# Compile for mac arm64
+extra_compile_args = {}
+extra_link_args = {}
+if is_mac:
+    extra_compile_args["cxx"] += ["-D_LIBCPP_DISABLE_AVAILABILITY"]
+    if platform.machine().lower() == "arm64":
+        extra_compile_args["cxx"] += ["-arch", "arm64"]
+        extra_link_args += ["-arch", "arm64"]
+
+
 ExtensionType = CppExtension if not use_cuda else CUDAExtension
 extensions = ExtensionType(
     name="torchmdnet.extensions.torchmdnet_extensions",
@@ -63,6 +76,8 @@ extensions = ExtensionType(
     + neighbor_sources,
     include_dirs=include_paths(),
     define_macros=[("WITH_CUDA", 1)] if use_cuda else [],
+    extra_compile_args=extra_compile_args,
+    extra_link_args=extra_link_args,
 )
 
 if __name__ == "__main__":
