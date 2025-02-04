@@ -58,15 +58,16 @@ neighbor_sources = [
     os.path.join(extension_root, "neighbors", source) for source in neighbor_sources
 ]
 
-
+include_dirs = include_paths()
 # Compile for mac arm64
-extra_compile_args = {}
-extra_link_args = {}
+extra_compile_args = {"cxx": ["-O3"]}
+extra_link_args = []
 if is_mac:
     extra_compile_args["cxx"] += ["-D_LIBCPP_DISABLE_AVAILABILITY"]
     if platform.machine().lower() == "arm64":
         extra_compile_args["cxx"] += ["-arch", "arm64"]
         extra_link_args += ["-arch", "arm64"]
+        include_dirs = [os.path.join(extension_root, "neighbors")]
 
 
 ExtensionType = CppExtension if not use_cuda else CUDAExtension
@@ -74,7 +75,7 @@ extensions = ExtensionType(
     name="torchmdnet.extensions.torchmdnet_extensions",
     sources=[os.path.join(extension_root, "torchmdnet_extensions.cpp")]
     + neighbor_sources,
-    include_dirs=include_paths(),
+    include_dirs=include_dirs,
     define_macros=[("WITH_CUDA", 1)] if use_cuda else [],
     extra_compile_args=extra_compile_args,
     extra_link_args=extra_link_args,
