@@ -301,10 +301,10 @@ def test_ace(tmpdir):
 
 @mark.parametrize("num_files", [1, 3])
 @mark.parametrize("tile_embed", [True, False])
-def test_hdf5_with_and_without_caching(num_files, tile_embed, tmpdir):
-    '''This test ensures that the output from the get of the HDF5 dataset is the same
-    when the dataset is loaded with and without caching.'''
-    
+@mark.parametrize("batch_size", [1, 5])
+def test_hdf5_with_and_without_caching(num_files, tile_embed, batch_size, tmpdir):
+    """This test ensures that the output from the get of the HDF5 dataset is the same
+    when the dataset is loaded with and without caching."""
     # set up necessary files
     _ = write_sample_npy_files(True, True, tmpdir, num_files)
     files = {}
@@ -321,8 +321,8 @@ def test_hdf5_with_and_without_caching(num_files, tile_embed, tmpdir):
     data_cached = HDF5(join(tmpdir, "test.hdf5"), dataset_preload_limit=256) # caching
     assert len(data) == len(data_cached), "Number of samples does not match"    
 
-    dl = DataLoader(data, batch_size=1, shuffle=False, pin_memory=False, persistent_workers=False)
-    dl_cached = DataLoader(data_cached, batch_size=1, shuffle=False, pin_memory=False, persistent_workers=False)
+    dl = DataLoader(data, batch_size)
+    dl_cached = DataLoader(data_cached, batch_size)
 
     for sample_cached, sample in zip(dl_cached, dl):
         assert np.allclose(sample_cached.pos, sample.pos), "Sample has incorrect coords"
