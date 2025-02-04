@@ -131,7 +131,7 @@ class HDF5(Dataset):
                 if d.ndim == 1:
                     tensor_input = [d[i]] if len(d) == size else d[:]
                 else:
-                    tensor_input = d[i]                
+                    tensor_input = d[i]
                 data[name] = torch.tensor(tensor_input, dtype=dtype)
         return data
 
