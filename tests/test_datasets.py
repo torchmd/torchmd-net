@@ -317,14 +317,14 @@ def test_hdf5_with_and_without_caching(num_files, tile_embed, tmpdir):
     # Assert file is present in the disk
     assert os.path.isfile(join(tmpdir, "test.hdf5")), "HDF5 file was not created"
 
-    # Load the dataset with caching
-    data_cached = HDF5(join(tmpdir, "test.hdf5"), dataset_preload_limit=0)
-    data = HDF5(join(tmpdir, "test.hdf5"), dataset_preload_limit=256)
-    
-    dl_cached = DataLoader(data_cached, batch_size=1, shuffle=False, pin_memory=False, persistent_workers=False)
+    data = HDF5(join(tmpdir, "test.hdf5"), dataset_preload_limit=0) # no caching
+    data_cached = HDF5(join(tmpdir, "test.hdf5"), dataset_preload_limit=256) # caching
+    assert len(data) == len(data_cached), "Number of samples does not match"    
+
     dl = DataLoader(data, batch_size=1, shuffle=False, pin_memory=False, persistent_workers=False)
-    from tqdm import tqdm
-    for i, (sample_cached, sample) in tqdm(enumerate(zip(dl_cached, dl))):
+    dl_cached = DataLoader(data_cached, batch_size=1, shuffle=False, pin_memory=False, persistent_workers=False)
+
+    for sample_cached, sample in zip(dl_cached, dl):
         assert np.allclose(sample_cached.pos, sample.pos), "Sample has incorrect coords"
         assert np.allclose(sample_cached.z, sample.z), "Sample has incorrect atom numbers"
         assert np.allclose(sample_cached.y, sample.y), "Sample has incorrect energy"
