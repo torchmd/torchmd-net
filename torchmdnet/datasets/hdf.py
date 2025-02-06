@@ -125,8 +125,13 @@ class HDF5(Dataset):
             if self.index is None:
                 self._setup_index()
             *fields_data, i = self.index[idx]
+            # Assuming the first element of fields_data is 'pos' based on the definition of self.fields
+            size = len(fields_data[0])
             for (name, _, dtype), d in zip(self.fields, fields_data):
-                tensor_input = [[d[i]]] if d.ndim == 1 else d[i]
+                if d.ndim == 1:
+                    tensor_input = [d[i]] if len(d) == size else d[:]
+                else:
+                    tensor_input = d[i]
                 data[name] = torch.tensor(tensor_input, dtype=dtype)
         return data
 
