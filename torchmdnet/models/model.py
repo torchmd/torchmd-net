@@ -460,7 +460,8 @@ class TorchMD_Net(nn.Module):
             pos.requires_grad_(True)
         # run the potentially wrapped representation model
         x, v, z, pos, batch = self.representation_model(
-            z, pos, batch, box=box, q=q, s=s
+            z, pos, batch, box=box, q=q, s=s, extra_args=extra_args
+
         )
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch)

@@ -27,4 +27,4 @@ def test_example_yamls(fname):
 
     z, pos, batch = create_example_batch()
     model(z, pos, batch)
-    model(z, pos, batch, q=None, s=None)
+    model(z, pos, batch, q=None, s=None, extra_args=None)

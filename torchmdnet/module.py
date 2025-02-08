@@ -59,6 +59,14 @@ class LossFunction:
     def __call__(self, x, batch):
         return self.loss_fn(x, batch, **self.extra_args)
 
+def process_extra_args(extra_args, use_partial_charges):
+    ''' Process extra arguments to remove those that are not needed by the model, before passing them to the forward function.'''
+    for a in ("y", "neg_dy", "z", "pos", "batch", "box", "q", "s"):
+        if a in extra_args:
+            del extra_args[a]
+    if not use_partial_charges and 'partial_charges' in extra_args:
+        del extra_args['partial_charges']
+    return extra_args
 
 class LNNP(LightningModule):
     """
@@ -77,6 +85,13 @@ class LNNP(LightningModule):
             hparams["charge"] = False
         if "spin" not in hparams:
             hparams["spin"] = False
+        if "partial_charges" not in hparams:
+            hparams["partial_charges"] = False
+        # Ensure only one of charge, partial_charges, and spin can be True, otherwise raise a ValueError
+        if sum([hparams["charge"], hparams["partial_charges"], hparams["spin"]]) > 1:
+            raise ValueError(
+            "Only one of 'charge', 'partial_charges', and 'spin' can be True."
+            )
         if "train_loss" not in hparams:
             hparams["train_loss"] = "mse_loss"
         if "train_loss_arg" not in hparams:
@@ -184,9 +199,7 @@ class LNNP(LightningModule):
 
         with torch.set_grad_enabled(self.hparams.derivative):
             extra_args = batch.to_dict()
-            for a in ("y", "neg_dy", "z", "pos", "batch", "box", "q", "s"):
-                if a in extra_args:
-                    del extra_args[a]
+            extra_args = process_extra_args(extra_args, self.hparams.partial_charges)
             return self(
                 batch.z,
                 batch.pos,
@@ -253,9 +266,7 @@ class LNNP(LightningModule):
         batch = self.data_transform(batch)
         with torch.set_grad_enabled(stage == "train" or self.hparams.derivative):
             extra_args = batch.to_dict()
-            for a in ("y", "neg_dy", "z", "pos", "batch", "box", "q", "s"):
-                if a in extra_args:
-                    del extra_args[a]
+            extra_args = process_extra_args(extra_args, self.hparams.partial_charges)
             # TODO: the model doesn't necessarily need to return a derivative once
             # Union typing works under TorchScript (https://github.com/pytorch/pytorch/pull/53180)
             y, neg_dy = self(
