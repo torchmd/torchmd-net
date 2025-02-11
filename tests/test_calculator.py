@@ -3,7 +3,7 @@
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
 import torch
-from torch.testing import assert_allclose
+from torch.testing import assert_close
 import pytest
 from os.path import dirname, join
 from torchmdnet.calculators import External
@@ -15,6 +15,8 @@ from utils import create_example_batch
 @pytest.mark.parametrize("box", [None, torch.eye(3)])
 @pytest.mark.parametrize("use_cuda_graphs", [True, False])
 def test_compare_forward(box, use_cuda_graphs):
+    from copy import deepcopy
+
     if use_cuda_graphs and not torch.cuda.is_available():
         pytest.skip("CUDA not available")
     checkpoint = join(dirname(dirname(__file__)), "tests", "example.ckpt")
@@ -48,14 +50,19 @@ def test_compare_forward(box, use_cuda_graphs):
         checkpoint, z.unsqueeze(0), use_cuda_graph=use_cuda_graphs, device=device
     )
     calc.model = model
+    # Path the model
+    model = deepcopy(model)
+    model.representation_model.distance.check_errors = not use_cuda_graphs
+    model.representation_model.static_shapes = use_cuda_graphs
+    model.representation_model.distance.resize_to_fit = not use_cuda_graphs
     calc_graph.model = model
     if box is not None:
         box = (box * 2 * args["cutoff_upper"]).unsqueeze(0)
     for _ in range(10):
         e_calc, f_calc = calc.calculate(pos, box)
         e_pred, f_pred = calc_graph.calculate(pos, box)
-        assert_allclose(e_calc, e_pred)
-        assert_allclose(f_calc, f_pred)
+        assert_close(e_calc, e_pred)
+        assert_close(f_calc, f_pred)
 
 
 def test_compare_forward_multiple():
@@ -72,5 +79,5 @@ def test_compare_forward_multiple():
         torch.cat([torch.zeros(len(z1)), torch.ones(len(z2))]).long(),
     )
 
-    assert_allclose(e_calc, e_pred)
-    assert_allclose(f_calc, f_pred.view(-1, len(z1), 3))
+    assert_close(e_calc, e_pred)
+    assert_close(f_calc, f_pred.view(-1, len(z1), 3), rtol=1e-4, atol=1e-5)

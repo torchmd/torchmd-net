@@ -86,4 +86,4 @@ def test_d2(test_case):
     y_init = pt.zeros_like(y_ref)
     y_res = prior.post_reduce(y_init, z, pos, batch)
 
-    pt.testing.assert_allclose(y_res, y_ref)
+    pt.testing.assert_close(y_res, y_ref)
