@@ -6,9 +6,7 @@ from setuptools import setup
 import torch
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension, CppExtension
 import os
-import sys
 
-is_windows = sys.platform == "win32"
 
 # If WITH_CUDA is defined
 if os.environ.get("WITH_CUDA", "0") == "1":
