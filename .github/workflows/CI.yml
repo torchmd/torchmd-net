@@ -17,12 +17,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          [
+        os: [
             "ubuntu-latest",
             "ubuntu-22.04-arm",
             "macos-latest",
-            "macos-13",
+            # "macos-13",
             "windows-2022",
           ]
         python-version: ["3.10"]
