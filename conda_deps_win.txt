@@ -1,7 +1,0 @@
-nnpops
-gxx
-vc
-vc14_runtime
-vs2015_runtime
-vs2019_win-64
-sleef

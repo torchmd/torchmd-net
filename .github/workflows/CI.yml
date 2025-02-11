@@ -53,13 +53,13 @@ jobs:
       - name: Install OS-specific conda dependencies
         run: |
           if [[ "${{ matrix.os }}" == "ubuntu-22.04-arm" ]]; then
-            conda install --file conda_deps_linux_aarch64.txt --channel conda-forge --override-channels
+            conda install gxx --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "Linux" ]]; then
-            conda install --file conda_deps_linux.txt --channel conda-forge --override-channels
+            conda install gxx nnpops --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            conda install --file conda_deps_osx.txt --channel conda-forge --override-channels
+            conda install clangxx llvm-openmp pybind11 nnpops --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
-            conda install --file conda_deps_win.txt --channel conda-forge --override-channels
+            conda install vc vc14_runtime vs2015_runtime --channel conda-forge --override-channels
           fi
 
       - name: Install testing packages

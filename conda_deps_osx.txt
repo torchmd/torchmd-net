@@ -1,5 +1,0 @@
-nnpops
-gxx
-clangxx
-llvm-openmp
-pybind11
