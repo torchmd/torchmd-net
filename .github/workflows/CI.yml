@@ -63,7 +63,7 @@ jobs:
           fi
 
       - name: Install testing packages
-        run: conda install -y -c conda-forge flake8 pytest psutil
+        run: conda install -y -c conda-forge flake8 pytest psutil python-build
 
       - name: List the conda environment
         run: conda list
@@ -72,10 +72,9 @@ jobs:
         run: |
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             export LIB="C:/Miniconda/envs/test/Library/lib"
-            pip -vv install .
-          else
-            pip -vv install .
           fi
+          python -m build            
+          pip install dist/*.whl
         env:
           WITH_CUDA: "0"
 
