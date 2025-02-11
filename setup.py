@@ -2,29 +2,13 @@
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
-import subprocess
-from setuptools import setup, find_packages
+from setuptools import setup
 import torch
-from torch.utils.cpp_extension import (
-    BuildExtension,
-    CUDAExtension,
-    include_paths,
-    CppExtension,
-)
+from torch.utils.cpp_extension import BuildExtension, CUDAExtension, CppExtension
 import os
 import sys
 
 is_windows = sys.platform == "win32"
-
-try:
-    version = (
-        subprocess.check_output(["git", "describe", "--abbrev=0", "--tags"])
-        .strip()
-        .decode("utf-8")
-    )
-except Exception:
-    print("Failed to retrieve the current version, defaulting to 0")
-    version = "0"
 
 # If WITH_CUDA is defined
 if os.environ.get("WITH_CUDA", "0") == "1":
@@ -61,30 +45,15 @@ extensions = ExtensionType(
     name="torchmdnet.extensions.torchmdnet_extensions",
     sources=[os.path.join(extension_root, "torchmdnet_extensions.cpp")]
     + neighbor_sources,
-    include_dirs=include_paths(),
     define_macros=[("WITH_CUDA", 1)] if use_cuda else [],
 )
 
 if __name__ == "__main__":
     setup(
-        name="torchmd-net",
-        version=version,
-        packages=find_packages(),
         ext_modules=[extensions],
         cmdclass={
             "build_ext": BuildExtension.with_options(
                 no_python_abi_suffix=True, use_ninja=False
-            )
-        },
-        include_package_data=True,
-        entry_points={
-            "console_scripts": ["torchmd-train = torchmdnet.scripts.train:main"]
-        },
-        package_data={
-            "torchmdnet": (
-                ["extensions/torchmdnet_extensions.so"]
-                if not is_windows
-                else ["extensions/torchmdnet_extensions.dll"]
             )
         },
     )
