@@ -11,6 +11,8 @@ import os
 # If WITH_CUDA is defined
 if os.environ.get("WITH_CUDA", "0") == "1":
     use_cuda = True
+elif os.environ.get("WITH_CUDA", "0") == "0":
+    use_cuda = False
 else:
     use_cuda = torch.cuda._is_compiled()
 
@@ -19,13 +21,12 @@ def set_torch_cuda_arch_list():
     """Set the CUDA arch list according to the architectures the current torch installation was compiled for.
     This function is a no-op if the environment variable TORCH_CUDA_ARCH_LIST is already set or if torch was not compiled with CUDA support.
     """
-    if not os.environ.get("TORCH_CUDA_ARCH_LIST"):
-        if use_cuda:
-            arch_flags = torch._C._cuda_getArchFlags()
-            sm_versions = [x[3:] for x in arch_flags.split() if x.startswith("sm_")]
-            formatted_versions = ";".join([f"{y[0]}.{y[1]}" for y in sm_versions])
-            formatted_versions += "+PTX"
-            os.environ["TORCH_CUDA_ARCH_LIST"] = formatted_versions
+    if use_cuda and not os.environ.get("TORCH_CUDA_ARCH_LIST"):
+        arch_flags = torch._C._cuda_getArchFlags()
+        sm_versions = [x[3:] for x in arch_flags.split() if x.startswith("sm_")]
+        formatted_versions = ";".join([f"{y[0]}.{y[1]}" for y in sm_versions])
+        formatted_versions += "+PTX"
+        os.environ["TORCH_CUDA_ARCH_LIST"] = formatted_versions
 
 
 set_torch_cuda_arch_list()

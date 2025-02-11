@@ -17,7 +17,6 @@ dependencies = [
   "lightning",
   "tqdm",
   "pandas",
-  # "gxx",
 ]
 
 [project.urls]
