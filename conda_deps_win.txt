@@ -1,11 +1,5 @@
-h5py
-pip
-libtorch >=2.5.1
-pytorch-cpu >=2.5.1
-pytorch_geometric
-lightning
-torchmetrics
-tqdm
+nnpops
+gxx
 vc
 vc14_runtime
 vs2015_runtime
