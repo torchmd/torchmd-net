@@ -85,9 +85,9 @@ jobs:
         env:
           WITH_CUDA: "0"
 
-      - name: Install nnpops
-        if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest'
-        run: conda install nnpops --channel conda-forge --override-channels
+      # - name: Install nnpops
+      #   if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest'
+      #   run: conda install nnpops --channel conda-forge --override-channels
 
       - name: List the conda environment
         run: conda list
