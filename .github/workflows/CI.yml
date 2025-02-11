@@ -55,9 +55,9 @@ jobs:
           if [[ "${{ matrix.os }}" == "ubuntu-22.04-arm" ]]; then
             conda install gxx --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "Linux" ]]; then
-            conda install gxx nnpops --channel conda-forge --override-channels
+            conda install gxx --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            conda install clangxx llvm-openmp pybind11 nnpops --channel conda-forge --override-channels
+            conda install clangxx llvm-openmp pybind11 --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
             conda install vc vc14_runtime vs2015_runtime --channel conda-forge --override-channels
           fi
@@ -84,6 +84,13 @@ jobs:
           pip install dist/*.whl
         env:
           WITH_CUDA: "0"
+
+      - name: Install nnpops
+        if: runner.os == 'Linux' || runner.os == 'macOS'
+        run: conda install nnpops --channel conda-forge --override-channels
+
+      - name: List the conda environment
+        run: conda list
 
       - name: Run tests
         run: pytest -v -s --durations=10
