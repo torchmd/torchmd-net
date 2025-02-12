@@ -5,7 +5,9 @@ try:
     import openmm
     import openmmtorch
 except ImportError:
-    raise ImportError("Please install OpenMM and OpenMM-Torch (you can use conda install -c conda-forge openmm openmm-torch)")
+    raise ImportError(
+        "Please install OpenMM and OpenMM-Torch (you can use conda install -c conda-forge openmm openmm-torch)"
+    )
 
 import sys
 import torch
@@ -34,9 +36,9 @@ class Wrapper(torch.nn.Module):
     def forward(self, positions):
         # OpenMM works with nanometer positions and kilojoule per mole energies
         # Depending on the model, you might need to convert the units
-        positions = positions.to(torch.float32) * 10.0 # nm -> A
+        positions = positions.to(torch.float32) * 10.0  # nm -> A
         energy = self.model(z=self.embeddings, pos=positions)[0]
-        return energy * 96.4916 # eV -> kJ/mol
+        return energy * 96.4916  # eV -> kJ/mol
 
 
 pdb = PDBFile("../benchmarks/systems/chignolin.pdb")
@@ -54,9 +56,11 @@ system = System()
 for atom in pdb.topology.atoms():
     system.addParticle(atom.element.mass)
 system.addForce(torch_force)
-integrator = LangevinMiddleIntegrator(298.15*kelvin, 1/picosecond, 2*femtosecond)
-platform = Platform.getPlatformByName('CPU')
+integrator = LangevinMiddleIntegrator(298.15 * kelvin, 1 / picosecond, 2 * femtosecond)
+platform = Platform.getPlatformByName("CPU")
 simulation = Simulation(pdb.topology, system, integrator, platform)
 simulation.context.setPositions(pdb.positions)
-simulation.reporters.append(StateDataReporter(sys.stdout, 1, step=True, potentialEnergy=True, temperature=True))
+simulation.reporters.append(
+    StateDataReporter(sys.stdout, 1, step=True, potentialEnergy=True, temperature=True)
+)
 simulation.step(10)

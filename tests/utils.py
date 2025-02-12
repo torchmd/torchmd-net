@@ -11,7 +11,9 @@ from torch_geometric.data import Dataset, Data
 def load_example_args(model_name, remove_prior=False, config_file=None, **kwargs):
     if config_file is None:
         if model_name == "tensornet":
-            config_file = join(dirname(dirname(__file__)), "examples", "TensorNet-QM9.yaml")
+            config_file = join(
+                dirname(dirname(__file__)), "examples", "TensorNet-QM9.yaml"
+            )
         else:
             config_file = join(dirname(dirname(__file__)), "examples", "ET-QM9.yaml")
     with open(config_file, "r") as f:
@@ -84,7 +86,7 @@ class DummyDataset(Dataset):
                 return self.atomref
 
             DummyDataset.get_atomref = _get_atomref
-        self.atomic_number = torch.arange(max(atom_types)+1)
+        self.atomic_number = torch.arange(max(atom_types) + 1)
         self.distance_scale = 1.0
         self.energy_scale = 1.0
 

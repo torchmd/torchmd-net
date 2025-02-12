@@ -328,6 +328,10 @@ def test_hdf5_with_and_without_caching(num_files, tile_embed, batch_size, tmpdir
 
     for sample_cached, sample in zip(dl_cached, dl):
         assert np.allclose(sample_cached.pos, sample.pos), "Sample has incorrect coords"
-        assert np.allclose(sample_cached.z, sample.z), "Sample has incorrect atom numbers"
+        assert np.allclose(
+            sample_cached.z, sample.z
+        ), "Sample has incorrect atom numbers"
         assert np.allclose(sample_cached.y, sample.y), "Sample has incorrect energy"
-        assert np.allclose(sample_cached.neg_dy, sample.neg_dy), "Sample has incorrect forces"
+        assert np.allclose(
+            sample_cached.neg_dy, sample.neg_dy
+        ), "Sample has incorrect forces"

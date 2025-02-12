@@ -2,4 +2,9 @@
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
-__all_models__ = ["graph-network", "transformer", "equivariant-transformer", "tensornet"]
+__all_models__ = [
+    "graph-network",
+    "transformer",
+    "equivariant-transformer",
+    "tensornet",
+]

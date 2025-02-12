@@ -122,6 +122,7 @@ cases = {
     "2L emb 64": {"num_layers": 2, "embedding_dimension": 64},
 }
 
+
 def benchmark_all():
     timings = {}
     for pdb_file in os.listdir("systems"):

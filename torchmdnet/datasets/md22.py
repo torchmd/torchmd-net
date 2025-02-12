@@ -15,18 +15,19 @@ from torch_geometric.data import (
     extract_zip,
 )
 
+
 class MD22(InMemoryDataset):
 
-    gdml_url = 'http://quantum-machine.org/gdml/data/npz'
+    gdml_url = "http://quantum-machine.org/gdml/data/npz"
 
     file_names = {
-        'AT-AT-CG-CG': 'md22_AT-AT-CG-CG.npz',
-        'AT-AT': 'md22_AT-AT.npz',
-        'Ac-Ala3-NHMe': 'md22_Ac-Ala3-NHMe.npz',
-        'DHA': 'md22_DHA.npz',
-        'buckyball-catcher': 'md22_buckyball-catcher.npz',
-        'dw-nanotube': 'md22_dw_nanotube.npz',
-        'stachyose': 'md22_stachyose.npz',        
+        "AT-AT-CG-CG": "md22_AT-AT-CG-CG.npz",
+        "AT-AT": "md22_AT-AT.npz",
+        "Ac-Ala3-NHMe": "md22_Ac-Ala3-NHMe.npz",
+        "DHA": "md22_DHA.npz",
+        "buckyball-catcher": "md22_buckyball-catcher.npz",
+        "dw-nanotube": "md22_dw_nanotube.npz",
+        "stachyose": "md22_stachyose.npz",
     }
 
     def __init__(
@@ -53,11 +54,11 @@ class MD22(InMemoryDataset):
 
     @property
     def raw_dir(self) -> str:
-        return osp.join(self.root, self.name, 'raw')
+        return osp.join(self.root, self.name, "raw")
 
     @property
     def processed_dir(self) -> str:
-        return osp.join(self.root, 'processed', self.name)
+        return osp.join(self.root, "processed", self.name)
 
     @property
     def raw_file_names(self) -> str:
@@ -66,21 +67,21 @@ class MD22(InMemoryDataset):
 
     @property
     def processed_file_names(self) -> List[str]:
-        return ['data.pt']
+        return ["data.pt"]
 
     def download(self):
-        url = f'{self.gdml_url}/{self.file_names[self.name]}'
+        url = f"{self.gdml_url}/{self.file_names[self.name]}"
         path = download_url(url, self.raw_dir)
 
     def process(self):
         it = zip(self.raw_paths, self.processed_paths)
         for raw_path, processed_path in it:
             raw_data = np.load(raw_path)
-            
-            z = torch.from_numpy(raw_data['z']).long()
-            pos = torch.from_numpy(raw_data['R']).float()
-            energy = torch.from_numpy(raw_data['E']).float()
-            force = torch.from_numpy(raw_data['F']).float()
+
+            z = torch.from_numpy(raw_data["z"]).long()
+            pos = torch.from_numpy(raw_data["R"]).float()
+            energy = torch.from_numpy(raw_data["E"]).float()
+            force = torch.from_numpy(raw_data["F"]).float()
 
             data_list = []
             for i in range(pos.size(0)):

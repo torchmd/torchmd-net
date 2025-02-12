@@ -38,7 +38,15 @@ class BasePrior(nn.Module):
         """
         return x
 
-    def post_reduce(self, y, z, pos, batch, box: Optional[Tensor], extra_args: Optional[Dict[str, Tensor]]):
+    def post_reduce(
+        self,
+        y,
+        z,
+        pos,
+        batch,
+        box: Optional[Tensor],
+        extra_args: Optional[Dict[str, Tensor]],
+    ):
         r"""Post-reduce method of the prior model.
 
         Args:

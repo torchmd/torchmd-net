@@ -62,12 +62,12 @@ class COMP6Base(MemmappedDataset):
     def get_atomref(self, max_z=100):
         """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior.
 
-	  Args:
-	      max_z (int): Maximum atomic number
+        Args:
+            max_z (int): Maximum atomic number
 
-	  Returns:
-	      torch.Tensor: Atomic energy reference values for each element in the dataset.
-	"""
+        Returns:
+            torch.Tensor: Atomic energy reference values for each element in the dataset.
+        """
         refs = pt.zeros(max_z)
         for key, val in self._ELEMENT_ENERGIES.items():
             refs[key] = val * self.HARTREE_TO_EV
@@ -141,6 +141,7 @@ class ANIMD(COMP6Base):
     @property
     def raw_file_names(self):
         return ["ani_md_bench.h5"]
+
 
 class DrugBank(COMP6Base):
     """
@@ -247,7 +248,7 @@ class COMP6v1(Dataset):
 
         self.subsets = [
             DS(root, transform, pre_transform, pre_filter)
-           for DS in (ANIMD, DrugBank, GDB07to09, GDB10to13, Tripeptides, S66X8)
+            for DS in (ANIMD, DrugBank, GDB07to09, GDB10to13, Tripeptides, S66X8)
         ]
 
         self.num_samples = sum(len(subset) for subset in self.subsets)
@@ -347,12 +348,12 @@ class COMP6v2(ANIBase):
     def get_atomref(self, max_z=100):
         """Atomic energy reference values for the :py:mod:`torchmdnet.priors.Atomref` prior.
 
-	  Args:
-	      max_z (int): Maximum atomic number
+        Args:
+            max_z (int): Maximum atomic number
 
-	  Returns:
-	      torch.Tensor: Atomic energy reference values for each element in the dataset.
-	"""
+        Returns:
+            torch.Tensor: Atomic energy reference values for each element in the dataset.
+        """
         refs = pt.zeros(max_z)
         for key, val in self._ELEMENT_ENERGIES.items():
             refs[key] = val * self.HARTREE_TO_EV

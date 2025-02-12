@@ -225,7 +225,7 @@ def main():
             args.early_stopping_monitor, patience=args.early_stopping_patience
         )
         callbacks.append(early_stopping)
-    
+
     check_logs(args.log_dir)
     csv_logger = CSVLogger(args.log_dir, name="", version="")
     _logger = [csv_logger]
