@@ -10,6 +10,7 @@ from torch import nn
 from typing import Optional
 from torch_cluster import radius_graph
 
+
 class Distance(nn.Module):
     def __init__(
         self,

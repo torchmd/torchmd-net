@@ -14,6 +14,7 @@ from torchmdnet.utils import make_splits, MissingEnergyException
 from torchmdnet.models.utils import scatter
 import warnings
 
+
 class DataModule(LightningDataModule):
     """A LightningDataModule for loading datasets from the torchmdnet.datasets module.
 

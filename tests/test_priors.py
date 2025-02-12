@@ -38,10 +38,13 @@ def test_atomref(model_name, enable_atomref):
 
     # check if the output of both models differs by the expected atomref contribution
     if enable_atomref:
-        expected_offset = scatter(dataset.get_atomref().squeeze()[z], batch).unsqueeze(1)
+        expected_offset = scatter(dataset.get_atomref().squeeze()[z], batch).unsqueeze(
+            1
+        )
     else:
         expected_offset = 0
     torch.testing.assert_close(x_atomref, x_no_atomref + expected_offset)
+
 
 @mark.parametrize("trainable", [True, False])
 def test_atomref_trainable(trainable):
@@ -49,63 +52,101 @@ def test_atomref_trainable(trainable):
     atomref = Atomref(max_z=100, dataset=dataset, trainable=trainable)
     assert atomref.atomref.weight.requires_grad == trainable
 
+
 def test_learnableatomref():
     atomref = LearnableAtomref(max_z=100)
     assert atomref.atomref.weight.requires_grad == True
 
+
 def test_zbl():
-    pos = torch.tensor([[1.0, 0.0, 0.0], [2.5, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 0.0, -1.0]], dtype=torch.float32)  # Atom positions in Bohr
+    pos = torch.tensor(
+        [[1.0, 0.0, 0.0], [2.5, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 0.0, -1.0]],
+        dtype=torch.float32,
+    )  # Atom positions in Bohr
     types = torch.tensor([0, 1, 2, 1], dtype=torch.long)  # Atom types
-    atomic_number = torch.tensor([1, 6, 8], dtype=torch.int8)  # Mapping of atom types to atomic numbers
+    atomic_number = torch.tensor(
+        [1, 6, 8], dtype=torch.int8
+    )  # Mapping of atom types to atomic numbers
     distance_scale = 5.29177210903e-11  # Convert Bohr to meters
-    energy_scale = 1000.0/6.02214076e23  # Convert kJ/mol to Joules
+    energy_scale = 1000.0 / 6.02214076e23  # Convert kJ/mol to Joules
 
     # Use the ZBL class to compute the energy.
 
-    zbl = ZBL(10.0, 5, atomic_number, distance_scale=distance_scale, energy_scale=energy_scale)
-    energy = zbl.post_reduce(torch.zeros((1,)), types, pos, torch.zeros_like(types), None, {})[0]
+    zbl = ZBL(
+        10.0, 5, atomic_number, distance_scale=distance_scale, energy_scale=energy_scale
+    )
+    energy = zbl.post_reduce(
+        torch.zeros((1,)), types, pos, torch.zeros_like(types), None, {}
+    )[0]
 
     # Compare to the expected value.
 
     def compute_interaction(pos1, pos2, z1, z2):
-        delta = pos1-pos2
+        delta = pos1 - pos2
         r = torch.sqrt(torch.dot(delta, delta))
-        x = r / (0.8854/(z1**0.23 + z2**0.23))
-        phi = 0.1818*torch.exp(-3.2*x) + 0.5099*torch.exp(-0.9423*x) + 0.2802*torch.exp(-0.4029*x) + 0.02817*torch.exp(-0.2016*x)
-        cutoff = 0.5*(torch.cos(r*torch.pi/10.0) + 1.0)
-        return cutoff*phi*(138.935/5.29177210903e-2)*z1*z2/r
+        x = r / (0.8854 / (z1**0.23 + z2**0.23))
+        phi = (
+            0.1818 * torch.exp(-3.2 * x)
+            + 0.5099 * torch.exp(-0.9423 * x)
+            + 0.2802 * torch.exp(-0.4029 * x)
+            + 0.02817 * torch.exp(-0.2016 * x)
+        )
+        cutoff = 0.5 * (torch.cos(r * torch.pi / 10.0) + 1.0)
+        return cutoff * phi * (138.935 / 5.29177210903e-2) * z1 * z2 / r
 
     expected = 0
     for i in range(len(pos)):
         for j in range(i):
-            expected += compute_interaction(pos[i], pos[j], atomic_number[types[i]], atomic_number[types[j]])
+            expected += compute_interaction(
+                pos[i], pos[j], atomic_number[types[i]], atomic_number[types[j]]
+            )
     torch.testing.assert_close(expected, energy, rtol=1e-4, atol=1e-4)
+
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_coulomb(dtype):
-    pos = torch.tensor([[0.5, 0.0, 0.0], [1.5, 0.0, 0.0], [0.8, 0.8, 0.0], [0.0, 0.0, -0.4]], dtype=dtype)  # Atom positions in nm
+    pos = torch.tensor(
+        [[0.5, 0.0, 0.0], [1.5, 0.0, 0.0], [0.8, 0.8, 0.0], [0.0, 0.0, -0.4]],
+        dtype=dtype,
+    )  # Atom positions in nm
     charge = torch.tensor([0.2, -0.1, 0.8, -0.9], dtype=dtype)  # Partial charges
     types = torch.tensor([0, 1, 2, 1], dtype=torch.long)  # Atom types
     distance_scale = 1e-9  # Convert nm to meters
-    energy_scale = 1000.0/6.02214076e23  # Convert kJ/mol to Joules
+    energy_scale = 1000.0 / 6.02214076e23  # Convert kJ/mol to Joules
     lower_switch_distance = 0.9
     upper_switch_distance = 1.3
 
     # Use the Coulomb class to compute the energy.
 
-    coulomb = Coulomb(lower_switch_distance, upper_switch_distance, 5, distance_scale=distance_scale, energy_scale=energy_scale)
-    energy = coulomb.post_reduce(torch.zeros((1,)), types, pos, torch.zeros_like(types), extra_args={'partial_charges':charge})[0]
+    coulomb = Coulomb(
+        lower_switch_distance,
+        upper_switch_distance,
+        5,
+        distance_scale=distance_scale,
+        energy_scale=energy_scale,
+    )
+    energy = coulomb.post_reduce(
+        torch.zeros((1,)),
+        types,
+        pos,
+        torch.zeros_like(types),
+        extra_args={"partial_charges": charge},
+    )[0]
 
     # Compare to the expected value.
 
     def compute_interaction(pos1, pos2, z1, z2):
-        delta = pos1-pos2
+        delta = pos1 - pos2
         r = torch.sqrt(torch.dot(delta, delta))
         if r < lower_switch_distance:
             return 0
-        energy = 138.935*z1*z2/r
+        energy = 138.935 * z1 * z2 / r
         if r < upper_switch_distance:
-            energy *= 0.5-0.5*torch.cos(torch.pi*(r-lower_switch_distance)/(upper_switch_distance-lower_switch_distance))
+            energy *= 0.5 - 0.5 * torch.cos(
+                torch.pi
+                * (r - lower_switch_distance)
+                / (upper_switch_distance - lower_switch_distance)
+            )
         return energy
 
     expected = 0
@@ -120,10 +161,12 @@ def test_multiple_priors(dtype):
     # Create a model from a config file.
 
     dataset = DummyDataset(has_atomref=True)
-    config_file = join(dirname(__file__), 'priors.yaml')
-    args = load_example_args('equivariant-transformer', config_file=config_file, dtype=dtype)
+    config_file = join(dirname(__file__), "priors.yaml")
+    args = load_example_args(
+        "equivariant-transformer", config_file=config_file, dtype=dtype
+    )
     prior_models = create_prior_models(args, dataset)
-    args['prior_args'] = [p.get_init_args() for p in prior_models]
+    args["prior_args"] = [p.get_init_args() for p in prior_models]
     model = LNNP(args, prior_model=prior_models)
     priors = model.model.prior_model
 

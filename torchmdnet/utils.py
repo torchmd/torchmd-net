@@ -372,7 +372,9 @@ def write_as_hdf5(files, hdf5_dataset, tile_embed=True):
             num_samples = coord_data.shape[0]
             group.create_dataset("pos", data=coord_data)
             if tile_embed:
-                group.create_dataset("types", data=np.tile(embed_data, (num_samples, 1)))
+                group.create_dataset(
+                    "types", data=np.tile(embed_data, (num_samples, 1))
+                )
             else:
                 group.create_dataset("types", data=embed_data)
             if "y" in files:
@@ -402,10 +404,12 @@ def deprecated_class(cls):
     cls.__init__ = wrapped_init
     return cls
 
+
 def check_logs(log_dir):
-    import os 
+    import os
     import time
-    metr_file_path = os.path.join(log_dir, 'metrics.csv')
+
+    metr_file_path = os.path.join(log_dir, "metrics.csv")
     if os.path.exists(metr_file_path):
         # we make a backup of the metrics file (rename)
         bckp_date = f'{time.strftime("%Y%m%d")}-{time.strftime("%H%M%S")}'
