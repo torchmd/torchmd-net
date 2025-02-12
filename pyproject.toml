@@ -12,7 +12,7 @@ classifiers = [
 dependencies = [
   "h5py",
   # "nnpops",
-  "torch==2.5.1",
+  "torch==2.5.1.*",
   "torch_geometric",
   "lightning",
   "tqdm",
@@ -34,5 +34,5 @@ include = ["torchmdnet*"]
 namespaces = false
 
 [build-system]
-requires = ["setuptools>=64", "setuptools-scm>=8", "torch==2.5.1"]
+requires = ["setuptools>=64", "setuptools-scm>=8", "torch==2.5.1.*"]
 build-backend = "setuptools.build_meta"
