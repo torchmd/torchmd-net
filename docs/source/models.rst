@@ -342,7 +342,7 @@ To implement a new architecture, you need to follow these steps:
                 **shared_args,
             )
 
-4. Add any new parameters required to initialize your module to scripts.train.get_args:
+4. Add any new parameters required to initialize your module to torchmdnet.scripts.train.get_args:
 
     .. code-block:: python
 

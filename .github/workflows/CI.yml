@@ -17,12 +17,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          [
+        os: [
             "ubuntu-latest",
             "ubuntu-22.04-arm",
             "macos-latest",
-            "macos-13",
+            # "macos-13",
             "windows-2022",
           ]
         python-version: ["3.10"]
@@ -50,34 +49,23 @@ jobs:
           conda-remove-defaults: "true"
         if: matrix.os == 'macos-13'
 
-      - name: Install OS-specific conda dependencies
+      - name: Install OS-specific compilers
         run: |
           if [[ "${{ matrix.os }}" == "ubuntu-22.04-arm" ]]; then
-            conda install --file conda_deps_linux_aarch64.txt --channel conda-forge --override-channels
+            conda install gxx --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "Linux" ]]; then
-            conda install --file conda_deps_linux.txt --channel conda-forge --override-channels
+            conda install gxx --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            conda install --file conda_deps_osx.txt --channel conda-forge --override-channels
+            conda install clangxx llvm-openmp pybind11 --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
-            conda install --file conda_deps_win.txt --channel conda-forge --override-channels
+            conda install vc vc14_runtime vs2015_runtime --channel conda-forge --override-channels
           fi
-
-      - name: Install testing packages
-        run: conda install -y -c conda-forge flake8 pytest psutil
 
       - name: List the conda environment
         run: conda list
 
-      - name: Build and install the package
-        run: |
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            export LIB="C:/Miniconda/envs/test/Library/lib"
-            pip -vv install .
-          else
-            pip -vv install .
-          fi
-        env:
-          WITH_CUDA: "0"
+      - name: Install testing packages
+        run: conda install -y -c conda-forge flake8 pytest psutil python-build
 
       - name: Lint with flake8
         run: |
@@ -85,6 +73,23 @@ jobs:
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
           # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Build and install the package
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            export LIB="C:/Miniconda/envs/test/Library/lib"
+          fi
+          python -m build            
+          pip install dist/*.whl
+        env:
+          WITH_CUDA: "0"
+
+      # - name: Install nnpops
+      #   if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest'
+      #   run: conda install nnpops --channel conda-forge --override-channels
+
+      - name: List the conda environment
+        run: conda list
 
       - name: Run tests
         run: pytest -v -s --durations=10

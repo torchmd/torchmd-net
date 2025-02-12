@@ -346,12 +346,13 @@ class MissingEnergyException(Exception):
     pass
 
 
-def write_as_hdf5(files, hdf5_dataset):
+def write_as_hdf5(files, hdf5_dataset, tile_embed=True):
     """Transform the input numpy files to hdf5 format compatible with the HDF5 Dataset class.
     The input files to this function are the same as the ones required by the Custom dataset.
     Args:
         files (dict): Dictionary of numpy input files. Must contain "pos", "z" and at least one of "y" or "neg_dy".
         hdf5_dataset (string): Path to the output HDF5 dataset.
+        tile_embed (bool): Whether to tile the embeddings to match the number of samples. Default: True
     Example:
         >>> files = {}
         >>> files["pos"] = sorted(glob.glob(join(tmpdir, "coords*")))
@@ -370,7 +371,10 @@ def write_as_hdf5(files, hdf5_dataset):
             group = f.create_group(str(i))
             num_samples = coord_data.shape[0]
             group.create_dataset("pos", data=coord_data)
-            group.create_dataset("types", data=np.tile(embed_data, (num_samples, 1)))
+            if tile_embed:
+                group.create_dataset("types", data=np.tile(embed_data, (num_samples, 1)))
+            else:
+                group.create_dataset("types", data=embed_data)
             if "y" in files:
                 energy_data = np.load(files["y"][i], mmap_mode="r")
                 group.create_dataset("energy", data=energy_data)

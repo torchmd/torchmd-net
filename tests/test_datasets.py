@@ -10,6 +10,7 @@ import numpy as np
 import psutil
 from torchmdnet.datasets import Custom, HDF5, Ace
 from torchmdnet.utils import write_as_hdf5
+from torch_geometric.loader import DataLoader
 import h5py
 import glob
 
@@ -297,3 +298,36 @@ def test_ace(tmpdir):
     assert len(dataset_v2) == 8
     f2.flush()
     f2.close()
+
+
+@mark.parametrize("num_files", [1, 3])
+@mark.parametrize("tile_embed", [True, False])
+@mark.parametrize("batch_size", [1, 5])
+def test_hdf5_with_and_without_caching(num_files, tile_embed, batch_size, tmpdir):
+    """This test ensures that the output from the get of the HDF5 dataset is the same
+    when the dataset is loaded with and without caching."""
+
+    # set up necessary files
+    _ = write_sample_npy_files(True, True, tmpdir, num_files)
+    files = {}
+    files["pos"] = sorted(glob.glob(join(tmpdir, "coords*")))
+    files["z"] = sorted(glob.glob(join(tmpdir, "embed*")))
+    files["y"] = sorted(glob.glob(join(tmpdir, "energy*")))
+    files["neg_dy"] = sorted(glob.glob(join(tmpdir, "forces*")))
+
+    write_as_hdf5(files, join(tmpdir, "test.hdf5"), tile_embed)
+    # Assert file is present in the disk
+    assert os.path.isfile(join(tmpdir, "test.hdf5")), "HDF5 file was not created"
+
+    data = HDF5(join(tmpdir, "test.hdf5"), dataset_preload_limit=0)  # no caching
+    data_cached = HDF5(join(tmpdir, "test.hdf5"), dataset_preload_limit=256)  # caching
+    assert len(data) == len(data_cached), "Number of samples does not match"
+
+    dl = DataLoader(data, batch_size)
+    dl_cached = DataLoader(data_cached, batch_size)
+
+    for sample_cached, sample in zip(dl_cached, dl):
+        assert np.allclose(sample_cached.pos, sample.pos), "Sample has incorrect coords"
+        assert np.allclose(sample_cached.z, sample.z), "Sample has incorrect atom numbers"
+        assert np.allclose(sample_cached.y, sample.y), "Sample has incorrect energy"
+        assert np.allclose(sample_cached.neg_dy, sample.neg_dy), "Sample has incorrect forces"

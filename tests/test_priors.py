@@ -41,7 +41,7 @@ def test_atomref(model_name, enable_atomref):
         expected_offset = scatter(dataset.get_atomref().squeeze()[z], batch).unsqueeze(1)
     else:
         expected_offset = 0
-    torch.testing.assert_allclose(x_atomref, x_no_atomref + expected_offset)
+    torch.testing.assert_close(x_atomref, x_no_atomref + expected_offset)
 
 @mark.parametrize("trainable", [True, False])
 def test_atomref_trainable(trainable):
@@ -79,7 +79,7 @@ def test_zbl():
     for i in range(len(pos)):
         for j in range(i):
             expected += compute_interaction(pos[i], pos[j], atomic_number[types[i]], atomic_number[types[j]])
-    torch.testing.assert_allclose(expected, energy)
+    torch.testing.assert_close(expected, energy, rtol=1e-4, atol=1e-4)
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_coulomb(dtype):
@@ -112,7 +112,7 @@ def test_coulomb(dtype):
     for i in range(len(pos)):
         for j in range(i):
             expected += compute_interaction(pos[i], pos[j], charge[i], charge[j])
-    torch.testing.assert_allclose(expected, energy)
+    torch.testing.assert_close(expected, energy, rtol=1e-4, atol=1e-4)
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])

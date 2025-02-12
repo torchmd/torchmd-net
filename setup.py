@@ -2,33 +2,17 @@
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
-import subprocess
-from setuptools import setup, find_packages
+from setuptools import setup
 import torch
-from torch.utils.cpp_extension import (
-    BuildExtension,
-    CUDAExtension,
-    include_paths,
-    CppExtension,
-)
+from torch.utils.cpp_extension import BuildExtension, CUDAExtension, CppExtension
 import os
-import sys
 
-is_windows = sys.platform == "win32"
-
-try:
-    version = (
-        subprocess.check_output(["git", "describe", "--abbrev=0", "--tags"])
-        .strip()
-        .decode("utf-8")
-    )
-except Exception:
-    print("Failed to retrieve the current version, defaulting to 0")
-    version = "0"
 
 # If WITH_CUDA is defined
 if os.environ.get("WITH_CUDA", "0") == "1":
     use_cuda = True
+elif os.environ.get("WITH_CUDA", "0") == "0":
+    use_cuda = False
 else:
     use_cuda = torch.cuda._is_compiled()
 
@@ -37,13 +21,12 @@ def set_torch_cuda_arch_list():
     """Set the CUDA arch list according to the architectures the current torch installation was compiled for.
     This function is a no-op if the environment variable TORCH_CUDA_ARCH_LIST is already set or if torch was not compiled with CUDA support.
     """
-    if not os.environ.get("TORCH_CUDA_ARCH_LIST"):
-        if use_cuda:
-            arch_flags = torch._C._cuda_getArchFlags()
-            sm_versions = [x[3:] for x in arch_flags.split() if x.startswith("sm_")]
-            formatted_versions = ";".join([f"{y[0]}.{y[1]}" for y in sm_versions])
-            formatted_versions += "+PTX"
-            os.environ["TORCH_CUDA_ARCH_LIST"] = formatted_versions
+    if use_cuda and not os.environ.get("TORCH_CUDA_ARCH_LIST"):
+        arch_flags = torch._C._cuda_getArchFlags()
+        sm_versions = [x[3:] for x in arch_flags.split() if x.startswith("sm_")]
+        formatted_versions = ";".join([f"{y[0]}.{y[1]}" for y in sm_versions])
+        formatted_versions += "+PTX"
+        os.environ["TORCH_CUDA_ARCH_LIST"] = formatted_versions
 
 
 set_torch_cuda_arch_list()
@@ -61,30 +44,15 @@ extensions = ExtensionType(
     name="torchmdnet.extensions.torchmdnet_extensions",
     sources=[os.path.join(extension_root, "torchmdnet_extensions.cpp")]
     + neighbor_sources,
-    include_dirs=include_paths(),
     define_macros=[("WITH_CUDA", 1)] if use_cuda else [],
 )
 
 if __name__ == "__main__":
     setup(
-        name="torchmd-net",
-        version=version,
-        packages=find_packages(),
         ext_modules=[extensions],
         cmdclass={
             "build_ext": BuildExtension.with_options(
                 no_python_abi_suffix=True, use_ninja=False
-            )
-        },
-        include_package_data=True,
-        entry_points={
-            "console_scripts": ["torchmd-train = torchmdnet.scripts.train:main"]
-        },
-        package_data={
-            "torchmdnet": (
-                ["extensions/torchmdnet_extensions.so"]
-                if not is_windows
-                else ["extensions/torchmdnet_extensions.dll"]
             )
         },
     )
