@@ -24,7 +24,7 @@ def test_scalar_invariance():
 
     y = model(z, pos, batch)[0]
     y_rot = model(z, pos @ rotate, batch)[0]
-    torch.testing.assert_allclose(y, y_rot)
+    torch.testing.assert_close(y, y_rot)
 
 
 def test_vector_equivariance():
@@ -50,4 +50,4 @@ def test_vector_equivariance():
 
     y = model(z, pos, batch)[0]
     y_rot = model(z, pos @ rotate, batch)[0]
-    torch.testing.assert_allclose(y @ rotate, y_rot)
+    torch.testing.assert_close(y @ rotate, y_rot)

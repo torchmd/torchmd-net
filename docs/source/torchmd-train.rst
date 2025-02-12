@@ -89,7 +89,7 @@ Command line interface
 ~~~~~~~~~~~~~~~~~~~~~~
 
 
-.. autoprogram:: scripts.train:get_argparse()
+.. autoprogram:: torchmdnet.scripts.train:get_argparse()
    :prog: torchmd-train
 
 	     

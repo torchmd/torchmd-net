@@ -54,8 +54,7 @@ It is recommended to install the same version as the one used by torch.
 
 .. code-block:: shell
 
-   conda install -c conda-forge cuda-nvcc cuda-libraries-dev cuda-version gxx pytorch=*=*cuda*
-
+   conda install -c conda-forge python=3.10 cuda-version=12.6 cuda-nvvm cuda-nvcc cuda-libraries-dev
 
 
 * CUDA<12  

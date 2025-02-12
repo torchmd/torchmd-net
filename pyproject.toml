@@ -1,0 +1,38 @@
+[project]
+name = "torchmd-net"
+description = "TorchMD-NET provides state-of-the-art neural networks potentials for biomolecular systems"
+authors = [{ name = "Acellera", email = "info@acellera.com" }]
+readme = "README.md"
+requires-python = ">=3.8"
+dynamic = ["version"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: POSIX :: Linux",
+]
+dependencies = [
+  "h5py",
+  # "nnpops",
+  "torch==2.5.1.*",
+  "torch_geometric",
+  "lightning",
+  "tqdm",
+  "pandas",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/torchmd/torchmd-net"
+"Bug Tracker" = "https://github.com/torchmd/torchmd-net/issues"
+
+[project.scripts]
+torchmd-train = "torchmdnet.scripts.train:main"
+
+[tool.setuptools_scm]
+
+[tool.setuptools.packages.find]
+where = [""]
+include = ["torchmdnet*"]
+namespaces = false
+
+[build-system]
+requires = ["setuptools>=64", "setuptools-scm>=8", "torch==2.5.1.*"]
+build-backend = "setuptools.build_meta"
