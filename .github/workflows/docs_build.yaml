@@ -12,6 +12,10 @@ jobs:
   build-docs:
     runs-on: ubuntu-latest
 
+    defaults: # Needed for conda
+      run:
+        shell: bash -l {0}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -28,10 +32,10 @@ jobs:
         run: |
           pip install -vv .
           pip install -r docs/requirements.txt
-        shell: bash -el {0}
+        env:
+          WITH_CUDA: "0"
 
       - name: Build Sphinx Documentation
         run: |
           cd docs
           make html
-        shell: bash -el {0}
