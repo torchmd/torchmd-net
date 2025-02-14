@@ -9,9 +9,9 @@ import os
 
 
 # If WITH_CUDA is defined
-if os.environ.get("WITH_CUDA", "0") == "1":
+if os.environ.get("WITH_CUDA") == "1":
     use_cuda = True
-elif os.environ.get("WITH_CUDA", "0") == "0":
+elif os.environ.get("WITH_CUDA") == "0":
     use_cuda = False
 else:
     use_cuda = torch.cuda._is_compiled()
