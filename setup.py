@@ -9,10 +9,13 @@ import os
 
 
 # If WITH_CUDA is defined
-if os.environ.get("WITH_CUDA", "0") == "1":
-    use_cuda = True
-elif os.environ.get("WITH_CUDA", "0") == "0":
-    use_cuda = False
+if os.getenv("WITH_CUDA") is None:
+    if os.environ.get("WITH_CUDA", "0") == "1":
+        use_cuda = True
+    elif os.environ.get("WITH_CUDA", "0") == "0":
+        use_cuda = False
+    else:
+        raise ValueError("Invalid flag with WITH_CUDA environment variable. Expected '0' or '1'")
 else:
     use_cuda = torch.cuda._is_compiled()
 
