@@ -670,6 +670,17 @@ def test_per_batch_box(device, strategy, n_batches, use_forward):
 @pytest.mark.parametrize("include_transpose", [True, False])
 def test_torch_compile(device, dtype, loop, include_transpose):
     import sys
+    import torch._functorch.config
+
+    # ------ Patching the test for pytorch 2.6 which throws this error -------
+    # RuntimeError: This backward function was compiled with non-empty donated buffers
+    # which requires create_graph=False and retain_graph=False. Please keep
+    # backward(create_graph=False, retain_graph=False) across all backward() function calls,
+    # or set torch._functorch.config.donated_buffer=False to disable donated buffer.
+    # --------------------------------------------------------------------------
+    # stefdoerr: It might be a mistake from my side to bypass the issue like this but I'm lacking
+    # the knowledge to see if something is wrong in the neighbors code which causes this.
+    torch._functorch.config.donated_buffer = False
 
     # Skip if SKIP_TORCH_COMPILE is set to true
     if os.environ.get("SKIP_TORCH_COMPILE", "false") == "true":
