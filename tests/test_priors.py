@@ -186,7 +186,7 @@ def test_multiple_priors(dtype):
     with tempfile.NamedTemporaryFile() as f:
         torch.save(model, f)
         f.seek(0)
-        model2 = torch.load(f)
+        model2 = torch.load(f, weights_only=False)
         priors2 = model2.model.prior_model
         assert len(priors2) == 3
         assert isinstance(priors2[0], ZBL)
