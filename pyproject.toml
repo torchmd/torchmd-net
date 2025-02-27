@@ -16,7 +16,6 @@ dependencies = [
   "torch_geometric",
   "lightning",
   "tqdm",
-  "pandas",
 ]
 
 [project.urls]
