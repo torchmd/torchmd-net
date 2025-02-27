@@ -13,7 +13,7 @@ env_with_cuda = os.getenv("WITH_CUDA")
 if env_with_cuda is not None:
     if env_with_cuda not in ("0", "1"):
         raise ValueError(
-            "Invalid flag with WITH_CUDA environment variable. Expected '0' or '1'"
+            f"WITH_CUDA environment variable got invalid value {env_with_cuda}. Expected '0' or '1'"
         )
     use_cuda = env_with_cuda == "1"
 else:
