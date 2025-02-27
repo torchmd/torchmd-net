@@ -86,10 +86,6 @@ class MemmappedDataset(Dataset):
             self.mmaps["dp"] = np.memmap(
                 fnames["dp"], mode="r", dtype=np.float32, shape=(num_all_confs, 3)
             )
-        if "mol_idx" in self.properties:
-            self.mmaps["mol_idx"] = np.memmap(
-                fnames["mol_idx"], mode="r", dtype=np.uint64
-            )
 
         assert self.mmaps["idx"][0] == 0
         assert self.mmaps["idx"][-1] == len(self.mmaps["z"])
@@ -178,13 +174,6 @@ class MemmappedDataset(Dataset):
                 dtype=np.float32,
                 shape=(num_all_confs, 3),
             )
-        if "mol_idx" in self.properties:
-            mmaps["mol_idx"] = np.memmap(
-                fnames["mol_idx"] + ".tmp",
-                mode="w+",
-                dtype=np.uint64,
-                shape=(num_all_confs,),
-            )
 
         print("Storing data...")
         i_atom = 0
@@ -204,8 +193,6 @@ class MemmappedDataset(Dataset):
                 mmaps["pq"][i_atom:i_next_atom] = data.pq
             if "dp" in self.properties:
                 mmaps["dp"][i_conf] = data.dp
-            if "mol_idx" in self.properties:
-                mmaps["mol_idx"][i_conf] = data.mol_idx
             i_atom = i_next_atom
 
         mmaps["idx"][-1] = num_all_atoms
@@ -231,8 +218,6 @@ class MemmappedDataset(Dataset):
             os.rename(fnames["pq"] + ".tmp", fnames["pq"])
         if "dp" in self.properties:
             os.rename(fnames["dp"] + ".tmp", fnames["dp"])
-        if "mol_idx" in self.properties:
-            os.rename(fnames["mol_idx"] + ".tmp", fnames["mol_idx"])
 
     def len(self):
         return len(self.mmaps["idx"]) - 1
@@ -249,7 +234,6 @@ class MemmappedDataset(Dataset):
             - :obj:`q`: Total charge of the molecule.
             - :obj:`pq`: Partial charges of the atoms.
             - :obj:`dp`: Dipole moment of the molecule.
-            - :obj:`mol_idx`: The index of the molecule of the conformer.
 
         Args:
             idx (int): Index of the data object.
@@ -272,8 +256,6 @@ class MemmappedDataset(Dataset):
             props["pq"] = pt.tensor(self.mmaps["pq"][atoms])
         if "dp" in self.properties:
             props["dp"] = pt.tensor(self.mmaps["dp"][idx])
-        # if "mol_idx" in self.properties:
-        #     props["mol_idx"] = pt.tensor(self.mmaps["mol_idx"][idx], dtype=pt.int64).view(1, 1)
         return Data(z=z, pos=pos, **props)
 
     def __del__(self):

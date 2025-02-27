@@ -9,7 +9,6 @@ import torch as pt
 from torchmdnet.datasets.memdataset import MemmappedDataset
 from torch_geometric.data import Data
 from tqdm import tqdm
-import pandas as pd
 
 
 class Ace(MemmappedDataset):
@@ -133,7 +132,6 @@ class Ace(MemmappedDataset):
         paths=None,
         max_gradient=None,
         subsample_molecules=1,
-        index_csv=None,
     ):
         assert isinstance(paths, (str, list))
 
@@ -143,13 +141,8 @@ class Ace(MemmappedDataset):
         self.paths = paths
         self.max_gradient = max_gradient
         self.subsample_molecules = int(subsample_molecules)
-        if index_csv is not None:
-            df = pd.read_csv(index_csv, dtype=int, converters={"name": str})
-            self.mol_indexes = {mol_id: i for i, mol_id in enumerate(df.name)}
 
         props = ["y", "neg_dy", "q", "pq", "dp"]
-        if index_csv is not None:
-            props += ["mol_idx"]
         super().__init__(
             root,
             transform,
@@ -239,7 +232,7 @@ class Ace(MemmappedDataset):
     def sample_iter(self, mol_ids=False):
         assert self.subsample_molecules > 0
 
-        for path in tqdm(self.raw_paths, desc="Files"):
+        for i_path, path in tqdm(enumerate(self.raw_paths), desc="Files"):
             h5 = h5py.File(path)
             assert h5.attrs["layout"] == "Ace"
             version = h5.attrs["layout_version"]
@@ -285,10 +278,9 @@ class Ace(MemmappedDataset):
                         z=z, pos=pos, y=y.view(1, 1), neg_dy=neg_dy, q=q, pq=pq, dp=dp
                     )
                     if mol_ids:
+                        args["i_path"] = i_path
                         args["mol_id"] = mol_id
                         args["i_conf"] = i_conf
-                    if "mol_idx" in self.properties:
-                        args["mol_idx"] = self.mol_indexes[mol_id]
 
                     data = Data(**args)
 
