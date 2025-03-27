@@ -35,3 +35,22 @@ namespaces = false
 [build-system]
 requires = ["setuptools>=64", "setuptools-scm>=8", "torch>=2.5"]
 build-backend = "setuptools.build_meta"
+
+
+[tool.cibuildwheel]
+# Disable PyPy builds due to our Cython code not being compatible with it yet
+# Disable Windows 32 builds, Musllinux builds due to rdkit not building on it
+# Disable i686, ppc64le, s390x, universal2, armv7l due to numpy not building on them
+skip = ["cp38-*", "pp*", "*win32", "*armv7l", "*_i686", "*_ppc64le", "*_s390x", "*_universal2", "*musllinux_x86_64", "*musllinux_aarch64"]
+test-requires = ["pytest", "pytest-xdist"]
+test-command = "pytest {project}/tests/test_calculator.py"
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+# build-frontend = "build[uv]"
+
+[tool.cibuildwheel.linux]
+environment-pass = ["CIBW_ARCHS"]
+before-all = "cibuildwheel_support/prepare_build_environment_linux.sh"
+repair-wheel-command = [
+  "auditwheel repair --exclude libc10.so --exclude libc10_cuda.so --exclude libtorch.so --exclude libtorch_cuda.so --exclude libtorch_cpu.so --exclude libtorch_python.so -w {dest_dir} {wheel}",
+]
