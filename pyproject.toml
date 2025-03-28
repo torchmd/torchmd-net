@@ -57,6 +57,5 @@ repair-wheel-command = [
 before-all = "bash cibuildwheel_support/prepare_build_environment_windows.sh"
 
 [tool.cibuildwheel.macos]
-repair-wheel-command = [
-  "auditwheel repair --exclude libc10.dylib --exclude libc10_cuda.dylib --exclude libtorch.dylib --exclude libtorch_cuda.dylib --exclude libtorch_cpu.dylib --exclude libtorch_python.dylib -w {dest_dir} {wheel}",
-]
+# Don't repair wheels on macOS
+repair-wheel-command = ""
