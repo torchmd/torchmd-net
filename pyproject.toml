@@ -42,7 +42,7 @@ build-backend = "setuptools.build_meta"
 # Disable builds which can't support CUDA and pytorch
 skip = ["cp38-*", "pp*", "*win32", "*armv7l", "*_i686", "*_ppc64le", "*_s390x", "*_universal2", "*-musllinux_*"]
 test-requires = ["pytest", "pytest-xdist"]
-test-command = "pytest {project}/tests/test_calculator.py"
+test-command = "pytest {project}/tests/test_model_utils.py"
 manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
 environment-pass = ["CIBW_ARCHS"]
