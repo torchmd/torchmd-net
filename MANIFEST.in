@@ -1,0 +1,9 @@
+prune benchmarks
+prune cibuildwheel_support
+prune docs
+prune examples
+prune scripts
+prune tests
+exclude .readthedocs.yaml
+exclude environment.yml
+exclude Makefile

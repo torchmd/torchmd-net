@@ -28,9 +28,10 @@ torchmd-train = "torchmdnet.scripts.train:main"
 [tool.setuptools_scm]
 
 [tool.setuptools.packages.find]
-where = [""]
 include = ["torchmdnet*"]
-namespaces = false
+
+[tool.setuptools.exclude-package-data]
+"*" = ["*.c", "*.cpp", "*.h", "*.cuh", ".cu", ".gitignore"]
 
 [build-system]
 requires = ["setuptools>=64", "setuptools-scm>=8", "torch>=2.5"]
