@@ -8,5 +8,5 @@ curl --netrc-optional -L -nv -o cuda.exe https://developer.download.nvidia.com/c
 ./cuda.exe -s nvcc_12.4 cudart_12.4 cublas_dev_12.4 curand_dev_12.4 cusparse_dev_12.4 cusolver_dev_12.4
 rm cuda.exe
 
-WITH_CUDA=1
-CUDA_HOME="$CUDA_ROOT"
+export WITH_CUDA=1
+export CUDA_HOME="$CUDA_ROOT"
