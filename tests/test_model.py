@@ -66,6 +66,10 @@ def test_torchscript(model_name, device):
     )[0]
 
 
+@mark.skipif(
+    True,
+    reason="Test files are not contained in source distribution, so jit can't inspect this code",
+)
 def test_torchscript_output_modification():
     model = create_model(
         load_example_args("tensornet", remove_prior=True, derivative=True)
