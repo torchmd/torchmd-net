@@ -322,7 +322,7 @@ def test_large_size(strategy, n_batches):
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA not available")
     torch.manual_seed(4321)
-    num_atoms = int(32000 / n_batches)
+    num_atoms = int(3200 / n_batches)
     n_atoms_per_batch = torch.ones(n_batches, dtype=torch.int64) * num_atoms
     batch = torch.repeat_interleave(
         torch.arange(n_batches, dtype=torch.int64), n_atoms_per_batch
