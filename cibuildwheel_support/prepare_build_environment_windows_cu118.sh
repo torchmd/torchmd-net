@@ -10,7 +10,6 @@ rm cuda.exe
 
 export WITH_CUDA=1
 export CUDA_HOME="$CUDA_ROOT"
-export DISTUTILS_USE_SDK=1
 
 # Create pip directory in AppData if it doesn't exist
 mkdir -p "%APPDATA%\pip"
