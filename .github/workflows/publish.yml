@@ -42,6 +42,7 @@ jobs:
           python -m cibuildwheel --output-dir wheelhouse
         env:
           CIBW_BEFORE_ALL_LINUX: "cibuildwheel_support/prepare_build_environment_linux_${{ matrix.cuda }}.sh"
+          CIBW_BEFORE_ALL_MACOS: "cibuildwheel_support/prepare_build_environment_osx.sh"
           CIBW_BEFORE_ALL_WINDOWS: "bash cibuildwheel_support/prepare_build_environment_windows_${{ matrix.cuda }}.sh"
 
       - name: Build wheels on other platforms
