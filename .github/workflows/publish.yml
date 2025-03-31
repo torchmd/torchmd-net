@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    name: Build wheels on ${{ matrix.os }}
+    name: Build wheels on ${{ matrix.os }}-${{ matrix.cuda }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -50,7 +50,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          name: cibw-wheels-${{ matrix.os }}-${{ matrix.cuda }}-${{ strategy.job-index }}
           path: ./wheelhouse/*.whl
 
   # publish-to-pypi:
