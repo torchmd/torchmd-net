@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-2019, macos-latest]
         cuda: [cpu, cu118, cu124]
         exclude:
           - os: ubuntu-24.04-arm
@@ -46,7 +46,7 @@ jobs:
 
       - name: Install MSVC
         uses: ilammy/msvc-dev-cmd@v1
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-2019'
         with:
           toolset: "14.0"
 
