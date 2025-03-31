@@ -1,1 +1,2 @@
-brew install "llvm<20" pybind11
+brew update
+brew install llvm@19 pybind11
