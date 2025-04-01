@@ -8,9 +8,6 @@ curl --netrc-optional -L -nv -o cuda.exe https://developer.download.nvidia.com/c
 ./cuda.exe -s nvcc_11.8 cudart_11.8 cublas_dev_11.8 curand_dev_11.8 cusparse_dev_11.8 cusolver_dev_11.8 thrust_11.8
 rm cuda.exe
 
-export WITH_CUDA=1
-export CUDA_HOME="$CUDA_ROOT"
-
 # Create pip directory if it doesn't exist
 mkdir -p "C:\ProgramData\pip"
 
