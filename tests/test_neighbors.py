@@ -669,7 +669,7 @@ def test_per_batch_box(device, strategy, n_batches, use_forward):
 @pytest.mark.parametrize("dtype", [torch.float64])
 @pytest.mark.parametrize("loop", [True, False])
 @pytest.mark.parametrize("include_transpose", [True, False])
-@pytest.mark.skipIf(
+@pytest.mark.skipif(
     platform.machine() == "aarch64",
     reason="Test unstable on Linux aarch64 architectures",
 )
