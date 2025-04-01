@@ -10,7 +10,8 @@ rm cuda.exe
 
 export WITH_CUDA=1
 export CUDA_HOME="$CUDA_ROOT"
+export PATH="$CUDA_ROOT/bin:$PATH"
 
 # Debug CUDA installation
 ls -l "$CUDA_ROOT/bin"
-nvcc --version
+"$CUDA_ROOT/bin/nvcc.exe" --version
