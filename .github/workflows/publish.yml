@@ -47,8 +47,8 @@ jobs:
       - name: Activate MSVC
         uses: ilammy/msvc-dev-cmd@v1
         if: matrix.os == 'windows-2022'
-        # with:
-        #   toolset: "17.0"
+        with:
+          toolset: "17.0"
 
       - name: Build wheels
         if: matrix.os != 'windows-2022'
