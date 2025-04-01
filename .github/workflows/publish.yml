@@ -62,18 +62,6 @@ jobs:
           CPU_TRAIN: ${{ runner.os == 'macOS' && 'true' || 'false' }}
           WITH_CUDA: ${{ matrix.cuda != 'cpu' && '1' || '0' }}
 
-      - name: Set CUDA arch list for Windows
-        if: matrix.os == 'windows-2019'
-        shell: bash -l {0}
-        run: |
-          if [[ "${{ matrix.cuda }}" == "cu118" ]]; then
-            echo 'TORCH_CUDA_ARCH_LIST="3.5;5.0;6.0;6.1;7.0;7.5;8.0;8.6;8.9+PTX"' >> $GITHUB_ENV
-            echo 'CUDA_HOME="C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8"' >> $GITHUB_ENV
-          elif [[ "${{ matrix.cuda }}" == "cu124" ]]; then
-            echo 'TORCH_CUDA_ARCH_LIST="5.0;6.0;6.1;7.0;7.5;8.0;8.6;8.9;9.0+PTX"' >> $GITHUB_ENV
-            echo 'CUDA_HOME="C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.4"' >> $GITHUB_ENV
-          fi
-
       - name: Build wheels
         if: matrix.os == 'windows-2019'
         shell: cmd # Use cmd on Windows to avoid bash environment taking priority over MSVC variables
@@ -84,8 +72,6 @@ jobs:
           DISTUTILS_USE_SDK: "1" # Windows requires this to use vc for building
           SKIP_TORCH_COMPILE: "true"
           CIBW_BUILD_VERBOSITY_WINDOWS: "1"
-          TORCH_CUDA_ARCH_LIST: ${{ env.TORCH_CUDA_ARCH_LIST }}
-          CUDA_HOME: ${{ env.CUDA_HOME }}
 
       - uses: actions/upload-artifact@v4
         with:
