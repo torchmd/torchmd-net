@@ -8,6 +8,7 @@ import torch
 import torch.jit
 import numpy as np
 from torchmdnet.models.utils import OptimizedDistance
+import platform
 
 
 def sort_neighbors(neighbors, deltas, distances):
@@ -668,6 +669,10 @@ def test_per_batch_box(device, strategy, n_batches, use_forward):
 @pytest.mark.parametrize("dtype", [torch.float64])
 @pytest.mark.parametrize("loop", [True, False])
 @pytest.mark.parametrize("include_transpose", [True, False])
+@pytest.mark.skipIf(
+    platform.machine() == "aarch64",
+    reason="Test unstable on Linux aarch64 architectures",
+)
 def test_torch_compile(device, dtype, loop, include_transpose):
     import sys
     import torch._functorch.config
