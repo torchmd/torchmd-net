@@ -10,3 +10,10 @@ rm cuda.exe
 
 export WITH_CUDA=1
 export CUDA_HOME="$CUDA_ROOT"
+
+# Create pip directory if it doesn't exist
+mkdir -p "C:\ProgramData\pip"
+
+# Create pip.ini file with PyTorch CUDA 12.4 index
+echo "[global]
+extra-index-url = https://download.pytorch.org/whl/cu124" > "C:\ProgramData\pip\pip.ini"
