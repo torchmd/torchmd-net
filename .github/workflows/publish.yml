@@ -63,7 +63,7 @@ jobs:
           CIBW_BEFORE_ALL_WINDOWS: "bash cibuildwheel_support/prepare_build_environment_windows_${{ matrix.cuda }}.sh"
           CPU_TRAIN: ${{ runner.os == 'macOS' && 'true' || 'false' }}
           WITH_CUDA: ${{ matrix.cuda != 'cpu' && '1' || '0' }}
-          DISTUTILS_USE_SDK: "0" # Windows requires this to not use vc for building but for testing only
+          DISTUTILS_USE_SDK: "1" # Windows requires this to use vc for building
           SKIP_TORCH_COMPILE: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
       - uses: actions/upload-artifact@v4
