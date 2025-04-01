@@ -16,4 +16,4 @@ mkdir -p "%APPDATA%\pip"
 
 # Create pip.ini file with PyTorch CUDA 11.8 index
 echo "[global]
-extra-index-url = https://download.pytorch.org/whl/cu118" > "%APPDATA%\pip\pip.ini"
+extra-index-url = https://download.pytorch.org/whl/cu118" > "C:\ProgramData\pip\pip.ini"
