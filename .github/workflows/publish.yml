@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, windows-2022, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-2019, macos-latest]
         cuda: [cpu, cu118, cu124]
         exclude:
           - os: ubuntu-24.04-arm
@@ -46,10 +46,10 @@ jobs:
 
       - name: Activate MSVC
         uses: ilammy/msvc-dev-cmd@v1
-        if: matrix.os == 'windows-2022'
+        if: matrix.os == 'windows-2019'
 
       - name: Build wheels
-        if: matrix.os != 'windows-2022'
+        if: matrix.os != 'windows-2019'
         shell: bash -l {0}
         run: |
           if [[ "${{ runner.os }}" == "Linux" ]]; then
@@ -63,7 +63,7 @@ jobs:
           WITH_CUDA: ${{ matrix.cuda != 'cpu' && '1' || '0' }}
 
       - name: Build wheels
-        if: matrix.os == 'windows-2022'
+        if: matrix.os == 'windows-2019'
         shell: cmd # Use cmd on Windows to avoid bash environment taking priority over MSVC variables
         run: python -m cibuildwheel --output-dir wheelhouse
         env:
