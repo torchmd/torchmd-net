@@ -5,13 +5,9 @@ set -x
 
 CUDA_ROOT="C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.4"
 curl --netrc-optional -L -nv -o cuda.exe https://developer.download.nvidia.com/compute/cuda/12.4.0/local_installers/cuda_12.4.0_551.61_windows.exe
-./cuda.exe -s nvcc_12.4 cudart_12.4 cublas_dev_12.4 curand_dev_12.4 cusparse_dev_12.4 cusolver_dev_12.4 thrust_12.4 npp_dev_12.4
+./cuda.exe -s nvcc_12.4 cudart_12.4 cublas_dev_12.4 curand_dev_12.4 cusparse_dev_12.4 cusolver_dev_12.4
 rm cuda.exe
 
 export WITH_CUDA=1
 export CUDA_HOME="$CUDA_ROOT"
-export PATH="$CUDA_ROOT/bin:$PATH"
-
-# Debug CUDA installation
-ls -l "$CUDA_ROOT/bin"
-"$CUDA_ROOT/bin/nvcc.exe" --version
+export TORCH_CUDA_ARCH_LIST="5.0;6.0;6.1;7.0;7.5;8.0;8.6;8.9;9.0+PTX"
