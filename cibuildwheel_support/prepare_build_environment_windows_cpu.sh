@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Create pip directory in AppData if it doesn't exist
-mkdir -p "%APPDATA%\pip"
+# Create pip directory if it doesn't exist
+mkdir -p "C:\ProgramData\pip"
 
 # Create pip.ini file with PyTorch CPU index
 echo "[global]

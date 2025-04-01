@@ -11,8 +11,8 @@ rm cuda.exe
 export WITH_CUDA=1
 export CUDA_HOME="$CUDA_ROOT"
 
-# Create pip directory in AppData if it doesn't exist
-mkdir -p "%APPDATA%\pip"
+# Create pip directory if it doesn't exist
+mkdir -p "C:\ProgramData\pip"
 
 # Create pip.ini file with PyTorch CUDA 11.8 index
 echo "[global]
