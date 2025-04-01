@@ -67,9 +67,9 @@ jobs:
         shell: bash -l {0}
         run: |
           if [[ "${{ matrix.cuda }}" == "cu118" ]]; then
-            echo 'TORCH_CUDA_ARCH_LIST="3.5;5.0;6.0;6.1;7.0;7.5;8.0;8.6;8.9+PTX"' >> $env:GITHUB_ENV
+            echo 'TORCH_CUDA_ARCH_LIST="3.5;5.0;6.0;6.1;7.0;7.5;8.0;8.6;8.9+PTX"' >> $GITHUB_ENV
           elif [[ "${{ matrix.cuda }}" == "cu124" ]]; then
-            echo 'TORCH_CUDA_ARCH_LIST="5.0;6.0;6.1;7.0;7.5;8.0;8.6;8.9;9.0+PTX"' >> $env:GITHUB_ENV
+            echo 'TORCH_CUDA_ARCH_LIST="5.0;6.0;6.1;7.0;7.5;8.0;8.6;8.9;9.0+PTX"' >> $GITHUB_ENV
           fi
 
       - name: just print the envvar
