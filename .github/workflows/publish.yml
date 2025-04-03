@@ -95,6 +95,8 @@ jobs:
         cuda: [cpu, cu118, cu124]
 
     steps:
+      - uses: actions/checkout@v4 # Needed for GCP authentication for some reason
+
       - name: Set up Cloud SDK
         uses: google-github-actions/auth@v2
         with:
