@@ -111,6 +111,7 @@ jobs:
       - name: Publish distribution 📦 to Acellera PyPI
         run: |
           pip install build twine keyring keyrings.google-artifactregistry-auth
+          pip install -U packaging
           twine upload --repository-url https://us-central1-python.pkg.dev/985405645423/${{ matrix.cuda }} dist/* --verbose
 
   # publish-to-official-pypi:
