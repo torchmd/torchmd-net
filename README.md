@@ -1,5 +1,5 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![CI](https://github.com/torchmd/torchmd-net/actions/workflows/CI.yml/badge.svg)](https://github.com/torchmd/torchmd-net/actions/workflows/CI.yml)
+[![CI](https://github.com/torchmd/torchmd-net/actions/workflows/workflow.yml/badge.svg)](https://github.com/torchmd/torchmd-net/actions/workflows/workflow.yml)
 [![Documentation Status](https://readthedocs.org/projects/torchmd-net/badge/?version=latest)](https://torchmd-net.readthedocs.io/en/latest/?badge=latest)  
 
 # TorchMD-NET
