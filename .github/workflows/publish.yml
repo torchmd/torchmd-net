@@ -1,4 +1,4 @@
-name: Build for CUDA 12.4 and publish
+name: Build wheels and publish
 
 on:
   workflow_dispatch:
