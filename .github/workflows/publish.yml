@@ -61,7 +61,6 @@ jobs:
           CIBW_BEFORE_ALL_MACOS: "cibuildwheel_support/prepare_build_environment_osx.sh"
           CPU_TRAIN: ${{ runner.os == 'macOS' && 'true' || 'false' }}
           WITH_CUDA: ${{ matrix.cuda != 'cpu' && '1' || '0' }}
-          CIBW_BUILD: "cp310-*"
 
       - name: Build wheels
         if: matrix.os == 'windows-2019'
@@ -73,7 +72,6 @@ jobs:
           DISTUTILS_USE_SDK: "1" # Windows requires this to use vc for building
           SKIP_TORCH_COMPILE: "true"
           CIBW_BUILD_VERBOSITY_WINDOWS: "1"
-          CIBW_BUILD: "cp310-*"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -142,47 +140,47 @@ jobs:
           password: ${{ secrets.TMDNET_PYPI_API_TOKEN }}
           skip_existing: true
 
-  # github-release:
-  #   name: >-
-  #     Sign the Python 🐍 distribution 📦 with Sigstore
-  #     and upload them to GitHub Release
-  #   needs:
-  #     - publish-to-pypi
-  #   runs-on: ubuntu-latest
+  github-release:
+    name: >-
+      Sign the Python 🐍 distribution 📦 with Sigstore
+      and upload them to GitHub Release
+    needs:
+      - publish-to-pypi
+    runs-on: ubuntu-latest
 
-  #   permissions:
-  #     contents: write # IMPORTANT: mandatory for making GitHub Releases
-  #     id-token: write # IMPORTANT: mandatory for sigstore
+    permissions:
+      contents: write # IMPORTANT: mandatory for making GitHub Releases
+      id-token: write # IMPORTANT: mandatory for sigstore
 
-  #   steps:
-  #     - name: Download all the dists
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         path: dist/
-  #         merge-multiple: true
+    steps:
+      - name: Download all the dists
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: true
 
-  #     - name: Sign the dists with Sigstore
-  #       uses: sigstore/gh-action-sigstore-python@v3.0.0
-  #       with:
-  #         inputs: >-
-  #           ./dist/*.whl
+      - name: Sign the dists with Sigstore
+        uses: sigstore/gh-action-sigstore-python@v3.0.0
+        with:
+          inputs: >-
+            ./dist/*.whl
 
-  #     - name: Create GitHub Release
-  #       env:
-  #         GITHUB_TOKEN: ${{ github.token }}
-  #       run: >-
-  #         gh release create
-  #         "$GITHUB_REF_NAME"
-  #         --repo "$GITHUB_REPOSITORY"
-  #         --notes ""
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create
+          "$GITHUB_REF_NAME"
+          --repo "$GITHUB_REPOSITORY"
+          --notes ""
 
-  #     - name: Upload artifact signatures to GitHub Release
-  #       env:
-  #         GITHUB_TOKEN: ${{ github.token }}
-  #       # Upload to GitHub Release using the `gh` CLI.
-  #       # `dist/` contains the built packages, and the
-  #       # sigstore-produced signatures and certificates.
-  #       run: >-
-  #         gh release upload
-  #         "$GITHUB_REF_NAME" dist/**
-  #         --repo "$GITHUB_REPOSITORY"
+      - name: Upload artifact signatures to GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        # Upload to GitHub Release using the `gh` CLI.
+        # `dist/` contains the built packages, and the
+        # sigstore-produced signatures and certificates.
+        run: >-
+          gh release upload
+          "$GITHUB_REF_NAME" dist/**
+          --repo "$GITHUB_REPOSITORY"
