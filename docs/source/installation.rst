@@ -1,13 +1,32 @@
 Installation
 ============
 
-TorchMD-Net is available in `conda-forge <https://conda-forge.org/>`_ and can be installed with:
+TorchMD-Net is available as a pip installable wheel as well as in `conda-forge <https://conda-forge.org/>`_
+
+TorchMD-Net provides builds for CPU-only, CUDA 11.8 and CUDA 12.4. 
+CPU versions are only provided as reference, as the performance will be extremely limited.
+Depending on which variant you wish to install, you can install it with one of the following commands:
 
 .. code-block:: shell
 
-   mamba install torchmd-net
+   # The following will install the CUDA 12.4 version by default
+   pip install torchmd-net 
+   # The following will install the CUDA 11.8 version
+   pip install torchmd-net --extra-index-url https://download.pytorch.org/whl/cu118 --extra-index-url https://us-central1-python.pkg.dev/pypi-packages-455608/cu118/simple
+   # The following will install the CUDA 12.4 version
+   pip install torchmd-net --extra-index-url https://download.pytorch.org/whl/cu124 --extra-index-url https://us-central1-python.pkg.dev/pypi-packages-455608/cu124/simple
+   # The following will install the CPU only version (not recommended)
+   pip install torchmd-net --extra-index-url https://download.pytorch.org/whl/cpu --extra-index-url https://us-central1-python.pkg.dev/pypi-packages-455608/cpu/simple   
 
-We recommend using `Mamba <https://github.com/conda-forge/miniforge/#mambaforge>`_ instead of conda.
+
+Alternatively it can be installed with conda or mamba with one of the following commands.
+We recommend using `Miniforge <https://github.com/conda-forge/miniforge/>`_ instead of anaconda.
+
+.. code-block:: shell
+
+   mamba install torchmd-net cuda-version=11.8
+   mamba install torchmd-net cuda-version=12.4
+
 
 Install from source
 -------------------
@@ -16,15 +35,15 @@ Install from source
 
 .. code-block:: shell
 
-      git clone https://github.com/torchmd/torchmd-net.git
-      cd torchmd-net
+   git clone https://github.com/torchmd/torchmd-net.git
+   cd torchmd-net
 
 2. Install the dependencies in environment.yml.
 
 .. code-block:: shell
 
-      conda env create -f environment.yml
-      conda activate torchmd-net
+   conda env create -f environment.yml
+   conda activate torchmd-net
 
 3. CUDA enabled installation
 
@@ -63,14 +82,14 @@ The nvidia channel provides the developer tools for CUDA<12.
   
 .. code-block:: shell
 		 
-    conda install -c nvidia "cuda-nvcc<12" "cuda-libraries-dev<12" "cuda-version<12" "gxx<12" pytorch=*=*cuda*
+   conda install -c nvidia "cuda-nvcc<12" "cuda-libraries-dev<12" "cuda-version<12" "gxx<12" pytorch=*=*cuda*
 
 
 4. Install TorchMD-NET into the environment:
 
 .. code-block:: shell
 
-      pip install -e .
+   pip install -e .
 
 
 .. note:: Pip installation in CUDA mode requires compiling CUDA source codes, this can take a really long time and the process might appear as if it is "stuck". Run pip with `-vv` to see the compilation process.

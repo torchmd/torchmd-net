@@ -114,33 +114,33 @@ jobs:
         run: |
           pip install build twine keyring keyrings.google-artifactregistry-auth
           pip install -U packaging
-          twine upload --repository-url https://us-central1-python.pkg.dev/pypi-packages-455608/${{ matrix.cuda }} dist/* --verbose
+          twine upload --repository-url https://us-central1-python.pkg.dev/pypi-packages-455608/${{ matrix.cuda }} dist/* --verbose --skip-existing
 
-  # publish-to-official-pypi:
-  #   name: >-
-  #     Publish Python 🐍 distribution 📦 to PyPI
-  #   needs:
-  #     - build
-  #   runs-on: ubuntu-latest
-  #   environment:
-  #     name: pypi
-  #     url: https://pypi.org/p/torchmd-net
-  #   permissions:
-  #     id-token: write # IMPORTANT: mandatory for trusted publishing
+  publish-to-official-pypi:
+    name: >-
+      Publish Python 🐍 distribution 📦 to PyPI
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/torchmd-net
+    permissions:
+      id-token: write # IMPORTANT: mandatory for trusted publishing
 
-  #   steps:
-  #     - name: Download all the dists
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         pattern: "cu124-cibw-wheels*"
-  #         path: dist/
-  #         merge-multiple: true
+    steps:
+      - name: Download all the dists
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "cu124-cibw-wheels*"
+          path: dist/
+          merge-multiple: true
 
-  #     - name: Publish distribution 📦 to PyPI
-  #       uses: pypa/gh-action-pypi-publish@release/v1
-  #       with:
-  #         password: ${{ secrets.TMDNET_PYPI_API_TOKEN }}
-  #         skip_existing: true
+      - name: Publish distribution 📦 to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.TMDNET_PYPI_API_TOKEN }}
+          skip_existing: true
 
   # github-release:
   #   name: >-
