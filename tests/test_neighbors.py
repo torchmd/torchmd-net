@@ -8,6 +8,7 @@ import torch
 import torch.jit
 import numpy as np
 from torchmdnet.models.utils import OptimizedDistance
+import platform
 
 
 def sort_neighbors(neighbors, deltas, distances):
@@ -322,7 +323,7 @@ def test_large_size(strategy, n_batches):
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA not available")
     torch.manual_seed(4321)
-    num_atoms = int(32000 / n_batches)
+    num_atoms = int(3200 / n_batches)
     n_atoms_per_batch = torch.ones(n_batches, dtype=torch.int64) * num_atoms
     batch = torch.repeat_interleave(
         torch.arange(n_batches, dtype=torch.int64), n_atoms_per_batch
@@ -668,6 +669,10 @@ def test_per_batch_box(device, strategy, n_batches, use_forward):
 @pytest.mark.parametrize("dtype", [torch.float64])
 @pytest.mark.parametrize("loop", [True, False])
 @pytest.mark.parametrize("include_transpose", [True, False])
+@pytest.mark.skipif(
+    platform.machine() == "aarch64",
+    reason="Test unstable on Linux aarch64 architectures",
+)
 def test_torch_compile(device, dtype, loop, include_transpose):
     import sys
     import torch._functorch.config

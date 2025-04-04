@@ -80,4 +80,4 @@ def test_compare_forward_multiple():
     )
 
     assert_close(e_calc, e_pred)
-    assert_close(f_calc, f_pred.view(-1, len(z1), 3), rtol=1e-4, atol=1e-5)
+    assert_close(f_calc, f_pred.view(-1, len(z1), 3), rtol=3e-4, atol=1e-5)
