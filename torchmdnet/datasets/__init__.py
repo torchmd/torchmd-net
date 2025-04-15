@@ -2,7 +2,7 @@
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
-from .ace import Ace
+from .ace import Ace, AceHF
 from .ani import ANI1, ANI1CCX, ANI1X, ANI2X
 from .comp6 import (
     ANIMD,
@@ -28,6 +28,7 @@ from .maceoff import MACEOFF
 
 __all__ = [
     "Ace",
+    "AceHF",
     "ANIMD",
     "ANI1",
     "ANI1CCX",
