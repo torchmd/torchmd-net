@@ -7,7 +7,7 @@ import h5py
 import os
 import torch as pt
 from torchmdnet.datasets.memdataset import MemmappedDataset
-from torch_geometric.data import Data
+from torch_geometric.data import Data, Dataset
 from tqdm import tqdm
 
 
@@ -291,3 +291,51 @@ class Ace(MemmappedDataset):
                         data = self.pre_transform(data)
 
                     yield data
+
+
+class AceHF(Dataset):
+    def __init__(self, root="parquet", paths=None, split="train") -> None:
+        from datasets import load_dataset
+
+        self.properties = ("y", "neg_dy", "q", "pq", "dp")
+        self.split = split
+
+        self.dataset = load_dataset(root, data_files=paths, split=split)
+        self.dataset = self.dataset.with_format("torch")
+
+    def __len__(self):
+        return self.dataset.num_rows
+
+    def __getitem__(self, idx):
+        """Gets the data object at index :obj:`idx`.
+
+        The data object contains the following attributes:
+
+            - :obj:`z`: Atomic numbers of the atoms.
+            - :obj:`pos`: Positions of the atoms.
+            - :obj:`y`: Formation energy of the molecule.
+            - :obj:`neg_dy`: Forces on the atoms.
+            - :obj:`q`: Total charge of the molecule.
+            - :obj:`pq`: Partial charges of the atoms.
+            - :obj:`dp`: Dipole moment of the molecule.
+
+        Args:
+            idx (int): Index of the data object.
+
+        Returns:
+            :obj:`torch_geometric.data.Data`: The data object.
+        """
+        data = self.dataset[int(idx)]
+
+        props = {}
+        if "y" in self.properties:
+            props["y"] = data["formation_energy"].view(1, 1)
+        if "neg_dy" in self.properties:
+            props["neg_dy"] = data["forces"]
+        if "q" in self.properties:
+            props["q"] = sum(data["formal_charges"])
+        if "pq" in self.properties:
+            props["pq"] = data["partial_charges"]
+        if "dp" in self.properties:
+            props["dp"] = data["dipole_moment"]
+        return Data(z=data["atomic_numbers"], pos=data["positions"], **props)
