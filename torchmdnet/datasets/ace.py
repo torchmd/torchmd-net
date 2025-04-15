@@ -297,9 +297,6 @@ class AceHF(Dataset):
     def __init__(self, root="parquet", paths=None, split="train") -> None:
         from datasets import load_dataset
 
-        self.properties = ("y", "neg_dy", "q", "pq", "dp")
-        self.split = split
-
         self.dataset = load_dataset(root, data_files=paths, split=split)
         self.dataset = self.dataset.with_format("torch")
 
@@ -326,16 +323,12 @@ class AceHF(Dataset):
             :obj:`torch_geometric.data.Data`: The data object.
         """
         data = self.dataset[int(idx)]
-
-        props = {}
-        if "y" in self.properties:
-            props["y"] = data["formation_energy"].view(1, 1)
-        if "neg_dy" in self.properties:
-            props["neg_dy"] = data["forces"]
-        if "q" in self.properties:
-            props["q"] = sum(data["formal_charges"])
-        if "pq" in self.properties:
-            props["pq"] = data["partial_charges"]
-        if "dp" in self.properties:
-            props["dp"] = data["dipole_moment"]
-        return Data(z=data["atomic_numbers"], pos=data["positions"], **props)
+        return Data(
+            z=data["atomic_numbers"],
+            pos=data["positions"],
+            y=data["formation_energy"].view(1, 1),
+            neg_dy=data["forces"],
+            q=sum(data["formal_charges"]),
+            pq=data["partial_charges"],
+            dp=data["dipole_moment"],
+        )
