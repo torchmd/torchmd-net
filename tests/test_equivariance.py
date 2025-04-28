@@ -2,6 +2,7 @@
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
+import pytest
 import torch
 from torchmdnet.models.model import create_model
 from utils import load_example_args
@@ -27,7 +28,8 @@ def test_scalar_invariance():
     torch.testing.assert_close(y, y_rot)
 
 
-def test_vector_equivariance():
+@pytest.mark.parametrize("model_name", ["equivariant-transformer", "tensornet"])
+def test_vector_equivariance(model_name):
     torch.manual_seed(1234)
     rotate = torch.tensor(
         [
@@ -36,14 +38,23 @@ def test_vector_equivariance():
             [-0.0626055, 0.3134752, 0.9475304],
         ]
     )
-
-    model = create_model(
-        load_example_args(
-            "equivariant-transformer",
-            prior_model=None,
-            output_model="VectorOutput",
+    if model_name == "equivariant_transformer":
+        model = create_model(
+            load_example_args(
+                model_name,
+                prior_model=None,
+                output_model="VectorOutput",
+            )
         )
-    )
+    if model_name == "tensornet":
+        model = create_model(
+            load_example_args(
+                model_name,
+                prior_model=None,
+                vector_output=True,
+                output_model="VectorOutput",
+            )
+        )
     z = torch.ones(100, dtype=torch.long)
     pos = torch.randn(100, 3)
     batch = torch.arange(50, dtype=torch.long).repeat_interleave(2)
