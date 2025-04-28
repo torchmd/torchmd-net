@@ -6,22 +6,26 @@ on:
 
 jobs:
   build:
-    name: Build wheels on ${{ matrix.os }}-${{ matrix.cuda }}
+    name: Build wheels on ${{ matrix.os }}-${{ matrix.accelerator }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, windows-2019, macos-latest]
-        cuda: [cpu, cu118, cu124]
+        accelerator: [cpu, cu118, cu126, cu128]
         exclude:
           - os: ubuntu-24.04-arm
-            cuda: cu118
+            accelerator: cu118
           - os: ubuntu-24.04-arm
-            cuda: cu124
+            accelerator: cu126
+          - os: ubuntu-24.04-arm
+            accelerator: cu128
           - os: macos-latest
-            cuda: cu118
+            accelerator: cu118
           - os: macos-latest
-            cuda: cu124
+            accelerator: cu126
+          - os: macos-latest
+            accelerator: cu128
 
     steps:
       - name: Free space of Github Runner (otherwise it will fail by running out of disk)
@@ -51,31 +55,23 @@ jobs:
       - name: Build wheels
         if: matrix.os != 'windows-2019'
         shell: bash -l {0}
-        run: |
-          if [[ "${{ runner.os }}" == "Linux" ]]; then
-            export CIBW_ARCHS="${{ matrix.os == 'ubuntu-24.04-arm' && 'aarch64' || 'auto64' }}"
-          fi
-          python -m cibuildwheel --output-dir wheelhouse
+        run: python -m cibuildwheel --output-dir wheelhouse
         env:
-          CIBW_BEFORE_ALL_LINUX: "cibuildwheel_support/prepare_build_environment_linux_${{ matrix.cuda }}.sh"
-          CIBW_BEFORE_ALL_MACOS: "cibuildwheel_support/prepare_build_environment_osx.sh"
           CPU_TRAIN: ${{ runner.os == 'macOS' && 'true' || 'false' }}
-          WITH_CUDA: ${{ matrix.cuda != 'cpu' && '1' || '0' }}
+          WITH_CUDA: ${{ matrix.accelerator != 'cpu' && '1' || '0' }}
 
       - name: Build wheels
         if: matrix.os == 'windows-2019'
         shell: cmd # Use cmd on Windows to avoid bash environment taking priority over MSVC variables
         run: python -m cibuildwheel --output-dir wheelhouse
         env:
-          CIBW_BEFORE_ALL_WINDOWS: "bash cibuildwheel_support/prepare_build_environment_windows_${{ matrix.cuda }}.sh"
-          WITH_CUDA: ${{ matrix.cuda != 'cpu' && '1' || '0' }}
+          WITH_CUDA: ${{ matrix.accelerator != 'cpu' && '1' || '0' }}
           DISTUTILS_USE_SDK: "1" # Windows requires this to use vc for building
           SKIP_TORCH_COMPILE: "true"
-          CIBW_BUILD_VERBOSITY_WINDOWS: "1"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.cuda }}-cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          name: ${{ matrix.accelerator }}-cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
           path: ./wheelhouse/*.whl
 
   publish-to-accelera-pypi:
@@ -90,7 +86,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cuda: [cpu, cu118, cu124]
+        cuda: [cpu, cu118, cu126, cu128]
 
     steps:
       - uses: actions/checkout@v4 # Needed for GCP authentication for some reason
@@ -104,7 +100,7 @@ jobs:
       - name: Download all the dists
         uses: actions/download-artifact@v4
         with:
-          pattern: "${{ matrix.cuda }}-cibw-wheels*"
+          pattern: "${{ matrix.accelerator }}-cibw-wheels*"
           path: dist/
           merge-multiple: true
 
@@ -112,7 +108,7 @@ jobs:
         run: |
           pip install build twine keyring keyrings.google-artifactregistry-auth
           pip install -U packaging
-          twine upload --repository-url https://us-central1-python.pkg.dev/pypi-packages-455608/${{ matrix.cuda }} dist/* --verbose --skip-existing
+          twine upload --repository-url https://us-central1-python.pkg.dev/pypi-packages-455608/${{ matrix.accelerator }} dist/* --verbose --skip-existing
 
   publish-to-official-pypi:
     name: >-
@@ -130,7 +126,7 @@ jobs:
       - name: Download all the dists
         uses: actions/download-artifact@v4
         with:
-          pattern: "cu124-cibw-wheels*"
+          pattern: "cu128-cibw-wheels*"
           path: dist/
           merge-multiple: true
 

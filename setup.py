@@ -27,7 +27,7 @@ def set_torch_cuda_arch_list():
     if use_cuda and not os.environ.get("TORCH_CUDA_ARCH_LIST"):
         arch_flags = torch._C._cuda_getArchFlags()
         sm_versions = [x[3:] for x in arch_flags.split() if x.startswith("sm_")]
-        formatted_versions = ";".join([f"{y[0]}.{y[1]}" for y in sm_versions])
+        formatted_versions = ";".join([f"{y[:-1]}.{y[-1]}" for y in sm_versions])
         formatted_versions += "+PTX"
         os.environ["TORCH_CUDA_ARCH_LIST"] = formatted_versions
 
