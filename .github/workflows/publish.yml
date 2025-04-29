@@ -60,6 +60,7 @@ jobs:
           ACCELERATOR: ${{ matrix.accelerator }}
           CPU_TRAIN: ${{ runner.os == 'macOS' && 'true' || 'false' }}
           WITH_CUDA: ${{ matrix.accelerator != 'cpu' && '1' || '0' }}
+          CIBW_BUILD: "cp312-*"
 
       - name: Build wheels
         if: matrix.os == 'windows-2019'
