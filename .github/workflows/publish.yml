@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, windows-2019, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-2019] #, macos-latest]
         accelerator: [cpu, cu118, cu126, cu128]
         exclude:
           - os: ubuntu-24.04-arm
@@ -60,7 +60,6 @@ jobs:
           ACCELERATOR: ${{ matrix.accelerator }}
           CPU_TRAIN: ${{ runner.os == 'macOS' && 'true' || 'false' }}
           WITH_CUDA: ${{ matrix.accelerator != 'cpu' && '1' || '0' }}
-          CIBW_BUILD: "cp313-*"
 
       - name: Build wheels
         if: matrix.os == 'windows-2019'
