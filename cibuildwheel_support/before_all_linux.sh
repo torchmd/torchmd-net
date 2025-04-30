@@ -30,8 +30,6 @@ if [ "$ACCELERATOR" == "cu118" ]; then
     ln -s /opt/rh/gcc-toolset-11/root/usr/bin/g++ /usr/local/cuda/bin/g++
 
     export CUDA_HOME="/usr/local/cuda"
-    export WITH_CUDA=1
-
     
     # Configure pip to use PyTorch extra-index-url for CUDA 11.8
     mkdir -p $HOME/.config/pip

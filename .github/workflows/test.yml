@@ -73,7 +73,7 @@ jobs:
           python -m build            
           pip install dist/*.whl
         env:
-          WITH_CUDA: "0"
+          ACCELERATOR: "cpu"
 
       # - name: Install nnpops
       #   if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest'
@@ -85,7 +85,7 @@ jobs:
       - name: Run tests
         run: pytest -v -s --durations=10
         env:
-          WITH_CUDA: "0"
+          ACCELERATOR: "cpu"
           SKIP_TORCH_COMPILE: ${{ runner.os == 'Windows' && 'true' || 'false' }}
           OMP_PREFIX: ${{ runner.os == 'macOS' && '/Users/runner/miniconda3/envs/test' || '' }}
           CPU_TRAIN: ${{ runner.os == 'macOS' && 'true' || 'false' }}

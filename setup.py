@@ -9,16 +9,9 @@ import os
 import platform
 
 
-# If WITH_CUDA is defined
-env_with_cuda = os.getenv("WITH_CUDA")
-if env_with_cuda is not None:
-    if env_with_cuda not in ("0", "1"):
-        raise ValueError(
-            f"WITH_CUDA environment variable got invalid value {env_with_cuda}. Expected '0' or '1'"
-        )
-    use_cuda = env_with_cuda == "1"
-else:
-    use_cuda = torch.cuda._is_compiled()
+use_cuda = (
+    os.environ.get("ACCELERATOR", "").startswith("cu") or torch.cuda._is_compiled()
+)
 
 
 def set_torch_cuda_arch_list():
@@ -56,8 +49,8 @@ elif platform.system() == "Linux":
     ]
 
 extra_deps = []
-if use_cuda:
-    cuda_ver = os.getenv("ACCELERATOR", "")[2:4]
+if os.getenv("ACCELERATOR", "").startswith("cu"):
+    cuda_ver = os.getenv("ACCELERATOR")[2:4]
     extra_deps = [f"nvidia-cuda-runtime-cu{cuda_ver}"]
 
 ExtensionType = CppExtension if not use_cuda else CUDAExtension

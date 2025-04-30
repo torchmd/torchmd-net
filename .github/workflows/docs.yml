@@ -26,10 +26,10 @@ jobs:
 
       - name: Install docs dependencies
         run: |
-          pip install -vv .
+          pip install -vv . --no-deps
           pip install -r docs/requirements.txt
         env:
-          WITH_CUDA: "0"
+          ACCELERATOR: "cpu"
 
       - name: Build Sphinx Documentation
         run: |
