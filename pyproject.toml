@@ -5,19 +5,10 @@ authors = [{ name = "Acellera", email = "info@acellera.com" }]
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.8"
-dynamic = ["version"]
+dynamic = ["version", "dependencies"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Operating System :: POSIX :: Linux",
-]
-dependencies = [
-  "h5py",
-  # "nnpops",
-  "torch>=2.5",
-  "torch_geometric",
-  "lightning",
-  "tqdm",
-  "numpy",
 ]
 
 [project.urls]
@@ -63,7 +54,7 @@ environment-pass = ["ACCELERATOR"]
 [tool.cibuildwheel.linux]
 before-all = "bash {project}/cibuildwheel_support/before_all_linux.sh"
 repair-wheel-command = [
-  "auditwheel repair --exclude libc10.so --exclude libc10_cuda.so --exclude libtorch.so --exclude libtorch_cuda.so --exclude libtorch_cpu.so --exclude libtorch_python.so -w {dest_dir} {wheel}",
+  "auditwheel repair --exclude libcudart.so --exclude libc10.so --exclude libc10_cuda.so --exclude libtorch.so --exclude libtorch_cuda.so --exclude libtorch_cpu.so --exclude libtorch_python.so -w {dest_dir} {wheel}",
 ]
 
 [tool.cibuildwheel.macos]
