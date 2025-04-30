@@ -140,8 +140,7 @@ jobs:
 
   github-release:
     name: >-
-      Sign the Python 🐍 distribution 📦 with Sigstore
-      and upload them to GitHub Release
+      Create GitHub Release
     needs:
       - build
     runs-on: ubuntu-latest
@@ -151,18 +150,6 @@ jobs:
       id-token: write # IMPORTANT: mandatory for sigstore
 
     steps:
-      - name: Download all the dists
-        uses: actions/download-artifact@v4
-        with:
-          path: dist/
-          merge-multiple: true
-
-      - name: Sign the dists with Sigstore
-        uses: sigstore/gh-action-sigstore-python@v3.0.0
-        with:
-          inputs: >-
-            ./dist/*.whl
-
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -171,14 +158,3 @@ jobs:
           "$GITHUB_REF_NAME"
           --repo "$GITHUB_REPOSITORY"
           --notes ""
-
-      - name: Upload artifact signatures to GitHub Release
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        # Upload to GitHub Release using the `gh` CLI.
-        # `dist/` contains the built packages, and the
-        # sigstore-produced signatures and certificates.
-        run: >-
-          gh release upload
-          "$GITHUB_REF_NAME" dist/**
-          --repo "$GITHUB_REPOSITORY"
