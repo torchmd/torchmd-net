@@ -75,85 +75,85 @@ jobs:
           name: ${{ matrix.accelerator }}-cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
           path: ./wheelhouse/*.whl
 
-  publish-to-accelera-pypi:
-    name: >-
-      Publish Python 🐍 distribution 📦 to Acellera PyPI
-    needs:
-      - build
-    runs-on: ubuntu-latest
-    permissions: # Needed for GCP authentication
-      contents: "read"
-      id-token: "write"
-    strategy:
-      fail-fast: false
-      matrix:
-        accelerator: [cpu, cu118, cu126, cu128]
+  # publish-to-accelera-pypi:
+  #   name: >-
+  #     Publish Python 🐍 distribution 📦 to Acellera PyPI
+  #   needs:
+  #     - build
+  #   runs-on: ubuntu-latest
+  #   permissions: # Needed for GCP authentication
+  #     contents: "read"
+  #     id-token: "write"
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       accelerator: [cpu, cu118, cu126, cu128]
 
-    steps:
-      - uses: actions/checkout@v4 # Needed for GCP authentication for some reason
+  #   steps:
+  #     - uses: actions/checkout@v4 # Needed for GCP authentication for some reason
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_PYPI_SERVICE_ACCOUNT }}
+  #     - name: Set up Cloud SDK
+  #       uses: google-github-actions/auth@v2
+  #       with:
+  #         workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+  #         service_account: ${{ secrets.GCP_PYPI_SERVICE_ACCOUNT }}
 
-      - name: Download all the dists
-        uses: actions/download-artifact@v4
-        with:
-          pattern: "${{ matrix.accelerator }}-cibw-wheels*"
-          path: dist/
-          merge-multiple: true
+  #     - name: Download all the dists
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         pattern: "${{ matrix.accelerator }}-cibw-wheels*"
+  #         path: dist/
+  #         merge-multiple: true
 
-      - name: Publish distribution 📦 to Acellera PyPI
-        run: |
-          pip install build twine keyring keyrings.google-artifactregistry-auth
-          pip install -U packaging
-          twine upload --repository-url https://us-central1-python.pkg.dev/pypi-packages-455608/${{ matrix.accelerator }} dist/* --verbose --skip-existing
+  #     - name: Publish distribution 📦 to Acellera PyPI
+  #       run: |
+  #         pip install build twine keyring keyrings.google-artifactregistry-auth
+  #         pip install -U packaging
+  #         twine upload --repository-url https://us-central1-python.pkg.dev/pypi-packages-455608/${{ matrix.accelerator }} dist/* --verbose --skip-existing
 
-  publish-to-official-pypi:
-    name: >-
-      Publish Python 🐍 distribution 📦 to PyPI
-    needs:
-      - build
-    runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/torchmd-net
-    permissions:
-      id-token: write # IMPORTANT: mandatory for trusted publishing
+  # publish-to-official-pypi:
+  #   name: >-
+  #     Publish Python 🐍 distribution 📦 to PyPI
+  #   needs:
+  #     - build
+  #   runs-on: ubuntu-latest
+  #   environment:
+  #     name: pypi
+  #     url: https://pypi.org/p/torchmd-net
+  #   permissions:
+  #     id-token: write # IMPORTANT: mandatory for trusted publishing
 
-    steps:
-      - name: Download all the dists
-        uses: actions/download-artifact@v4
-        with:
-          pattern: "cu128-cibw-wheels*"
-          path: dist/
-          merge-multiple: true
+  #   steps:
+  #     - name: Download all the dists
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         pattern: "cu128-cibw-wheels*"
+  #         path: dist/
+  #         merge-multiple: true
 
-      - name: Publish distribution 📦 to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.TMDNET_PYPI_API_TOKEN }}
-          skip_existing: true
+  #     - name: Publish distribution 📦 to PyPI
+  #       uses: pypa/gh-action-pypi-publish@release/v1
+  #       with:
+  #         password: ${{ secrets.TMDNET_PYPI_API_TOKEN }}
+  #         skip_existing: true
 
-  github-release:
-    name: >-
-      Create GitHub Release
-    needs:
-      - build
-    runs-on: ubuntu-latest
+  # github-release:
+  #   name: >-
+  #     Create GitHub Release
+  #   needs:
+  #     - build
+  #   runs-on: ubuntu-latest
 
-    permissions:
-      contents: write # IMPORTANT: mandatory for making GitHub Releases
-      id-token: write # IMPORTANT: mandatory for sigstore
+  #   permissions:
+  #     contents: write # IMPORTANT: mandatory for making GitHub Releases
+  #     id-token: write # IMPORTANT: mandatory for sigstore
 
-    steps:
-      - name: Create GitHub Release
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create
-          "$GITHUB_REF_NAME"
-          --repo "$GITHUB_REPOSITORY"
-          --notes ""
+  #   steps:
+  #     - name: Create GitHub Release
+  #       env:
+  #         GITHUB_TOKEN: ${{ github.token }}
+  #       run: >-
+  #         gh release create
+  #         "$GITHUB_REF_NAME"
+  #         --repo "$GITHUB_REPOSITORY"
+  #         --notes ""
