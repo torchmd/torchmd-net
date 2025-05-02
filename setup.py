@@ -9,9 +9,10 @@ import os
 import platform
 
 
-use_cuda = (
-    os.environ.get("ACCELERATOR", "").startswith("cu") or torch.cuda._is_compiled()
-)
+if os.environ.get("ACCELERATOR", None) is not None:
+    use_cuda = os.environ.get("ACCELERATOR", "").startswith("cu")
+else:
+    use_cuda = torch.cuda._is_compiled()
 
 
 def set_torch_cuda_arch_list():
