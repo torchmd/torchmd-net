@@ -68,6 +68,7 @@ jobs:
           ACCELERATOR: ${{ matrix.accelerator }}
           DISTUTILS_USE_SDK: "1" # Windows requires this to use vc for building
           SKIP_TORCH_COMPILE: "true"
+          CIBW_BUILD_VERBOSITY: "1"
 
       - uses: actions/upload-artifact@v4
         with:
