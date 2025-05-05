@@ -15,7 +15,7 @@ jobs:
       matrix:
         os:
           ["ubuntu-latest", "ubuntu-22.04-arm", "macos-latest", "windows-2022"]
-        python-version: ["3.10"]
+        python-version: ["3.13"]
 
     defaults: # Needed for conda
       run:
