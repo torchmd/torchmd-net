@@ -293,6 +293,45 @@ class Ace(MemmappedDataset):
                     yield data
 
 
+def download_gitea_dataset(path, tmpdir):
+    try:
+        from git import Repo
+    except ImportError:
+        raise ImportError(
+            "Could not import GitPython library. Please install it first with `pip install GitPython`"
+        )
+
+    assert path.startswith("ssh://")
+
+    # Parse the gitea URL
+    pieces = path.split("/")
+    repo_url = "/".join(pieces[:5])
+    user = pieces[3]
+    repo_name = pieces[4]
+    file_name = pieces[-1]
+    branch = "main"
+    commit = None
+    if "branch" in pieces:
+        branch = pieces[pieces.index("branch") + 1]
+    if "commit" in pieces:
+        commit = pieces[pieces.index("commit") + 1]
+
+    outdir = os.path.join(tmpdir, f"{user}_{repo_name}")
+    if not os.path.exists(outdir):
+        repo = Repo.clone_from(repo_url, outdir, no_checkout=True)
+    else:
+        repo = Repo(outdir)
+
+    origin = repo.remotes.origin
+    origin.pull()
+    if commit is not None:
+        repo.git.checkout(commit)
+    else:
+        repo.git.checkout(branch)
+
+    return os.path.join(outdir, file_name)
+
+
 class AceHF(Dataset):
     def __init__(
         self, root="parquet", paths=None, split="train", max_gradient=None
@@ -300,7 +339,13 @@ class AceHF(Dataset):
         from datasets import load_dataset
         import numpy as np
 
-        self.dataset = load_dataset(root, data_files=paths, split=split)
+        # Handle gitea parquet datasets
+        newpaths = paths.copy()
+        for i, path in enumerate(paths):
+            if "gitea" in path:
+                newpaths[i] = download_gitea_dataset(path, "/tmp")
+
+        self.dataset = load_dataset(root, data_files=newpaths, split=split)
         if max_gradient is not None:
 
             def _filter(x):
