@@ -294,10 +294,23 @@ class Ace(MemmappedDataset):
 
 
 class AceHF(Dataset):
-    def __init__(self, root="parquet", paths=None, split="train") -> None:
+    def __init__(
+        self, root="parquet", paths=None, split="train", max_gradient=None
+    ) -> None:
         from datasets import load_dataset
+        import numpy as np
 
         self.dataset = load_dataset(root, data_files=paths, split=split)
+        if max_gradient is not None:
+
+            def _filter(x):
+                if np.isnan(x["forces"]).any() or np.isnan(x["formation_energy"]).any():
+                    return False
+                return np.max(np.linalg.norm(x["forces"], axis=1)) < max_gradient
+
+            self.dataset = self.dataset.filter(
+                _filter, desc="Filtering", num_proc=os.cpu_count() // 2
+            )
         self.dataset = self.dataset.with_format("torch")
 
     def __len__(self):
