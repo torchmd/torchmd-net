@@ -6,10 +6,17 @@ import torch as pt
 from tempfile import TemporaryDirectory
 from torch_geometric.loader import DataLoader
 from torchmdnet.datasets import S66X8
+import platform
+import pytest
 
 
 # Test smallet dataset from COMP6
 def test_dataset_s66x8():
+
+    if platform.system() == "Darwin":
+        pytest.skip(
+            "Skip test on MacOS. pytest gets stuck on the cleanup on python >=3.12"
+        )
 
     with TemporaryDirectory() as root:
         data_set = S66X8(root)
