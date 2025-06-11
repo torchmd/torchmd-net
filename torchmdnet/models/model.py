@@ -61,6 +61,8 @@ def create_model(args, prior_model=None, mean=None, std=None):
         ),
         dtype=dtype,
     )
+    if args.get("onnx_export", False):
+        shared_args["onnx_export"] = True
 
     # representation network
     if args["model"] == "graph-network":
@@ -139,6 +141,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         std=std,
         derivative=args["derivative"],
         dtype=dtype,
+        onnx_export=args.get("onnx_export", False),
     )
     return model
 
@@ -371,6 +374,7 @@ class TorchMD_Net(nn.Module):
         std=None,
         derivative=False,
         dtype=torch.float32,
+        onnx_export=False,
     ):
         super(TorchMD_Net, self).__init__()
         self.representation_model = representation_model.to(dtype=dtype)
@@ -393,6 +397,7 @@ class TorchMD_Net(nn.Module):
         )
 
         self.derivative = derivative
+        self.onnx_export = onnx_export
 
         mean = torch.scalar_tensor(0) if mean is None else mean
         self.register_buffer("mean", mean.to(dtype=dtype))
@@ -407,6 +412,50 @@ class TorchMD_Net(nn.Module):
         if self.prior_model is not None:
             for prior in self.prior_model:
                 prior.reset_parameters()
+
+    def energy_fn(
+        self,
+        z: Tensor,
+        pos: Tensor,
+        batch: Optional[Tensor] = None,
+        box: Optional[Tensor] = None,
+        q: Optional[Tensor] = None,
+        s: Optional[Tensor] = None,
+        extra_args: Optional[Dict[str, Tensor]] = None,
+    ):
+        # run the potentially wrapped representation model
+        x, v, z, pos, batch = self.representation_model(
+            z, pos, batch, box=box, q=q, s=s
+        )
+
+        # apply the output network
+        x = self.output_model.pre_reduce(x, v, z, pos, batch)
+
+        # scale by data standard deviation
+        if self.std is not None:
+            x = x * self.std
+
+        # apply atom-wise prior model
+        if self.prior_model is not None:
+            for prior in self.prior_model:
+                x = prior.pre_reduce(x, z, pos, batch, extra_args)
+
+        # aggregate atoms
+        x = self.output_model.reduce(x, batch)
+
+        # shift by data mean
+        if self.mean is not None:
+            x = x + self.mean
+
+        # apply output model after reduction
+        y = self.output_model.post_reduce(x)
+
+        # apply molecular-wise prior model
+        if self.prior_model is not None:
+            for prior in self.prior_model:
+                y = prior.post_reduce(y, z, pos, batch, box, extra_args)
+
+        return y
 
     def forward(
         self,
@@ -458,47 +507,24 @@ class TorchMD_Net(nn.Module):
 
         if self.derivative:
             pos.requires_grad_(True)
-        # run the potentially wrapped representation model
-        x, v, z, pos, batch = self.representation_model(
-            z, pos, batch, box=box, q=q, s=s
-        )
-        # apply the output network
-        x = self.output_model.pre_reduce(x, v, z, pos, batch)
 
-        # scale by data standard deviation
-        if self.std is not None:
-            x = x * self.std
+        y = self.energy_fn(z, pos, batch, box, q, s, extra_args)
 
-        # apply atom-wise prior model
-        if self.prior_model is not None:
-            for prior in self.prior_model:
-                x = prior.pre_reduce(x, z, pos, batch, extra_args)
-
-        # aggregate atoms
-        x = self.output_model.reduce(x, batch)
-
-        # shift by data mean
-        if self.mean is not None:
-            x = x + self.mean
-
-        # apply output model after reduction
-        y = self.output_model.post_reduce(x)
-
-        # apply molecular-wise prior model
-        if self.prior_model is not None:
-            for prior in self.prior_model:
-                y = prior.post_reduce(y, z, pos, batch, box, extra_args)
-        # compute gradients with respect to coordinates
+        def energy_wrapper(pos):
+            return self.energy_fn(z, pos, batch, box, q, s, extra_args)
 
         if self.derivative:
-            grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(y)]
-            dy = grad(
-                [y],
-                [pos],
-                grad_outputs=grad_outputs,
-                create_graph=self.training,
-                retain_graph=self.training,
-            )[0]
+            if self.onnx_export:
+                dy = torch.autograd.functional.jacobian(energy_wrapper, pos)[0][0]
+            else:
+                grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(y)]
+                dy = grad(
+                    [y],
+                    [pos],
+                    grad_outputs=grad_outputs,
+                    create_graph=self.training,
+                    retain_graph=self.training,
+                )[0]
             assert dy is not None, "Autograd returned None for the force prediction."
             return y, -dy
         # Returning an empty tensor allows to decorate this method as always returning two tensors.
