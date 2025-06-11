@@ -6,14 +6,8 @@ from abc import abstractmethod, ABCMeta
 from typing import Optional
 import torch
 from torch import nn
-from torchmdnet.models.utils import (
-    act_class_mapping,
-    GatedEquivariantBlock,
-    scatter,
-    MLP,
-)
+from torchmdnet.models.utils import GatedEquivariantBlock, scatter, MLP
 from torchmdnet.utils import atomic_masses
-from torchmdnet.extensions import is_current_stream_capturing
 from warnings import warn
 
 __all__ = ["Scalar", "DipoleMoment", "ElectronicSpatialExtent"]
@@ -30,7 +24,7 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
         super(OutputModel, self).__init__()
         self.allow_prior_model = allow_prior_model
         self.reduce_op = reduce_op
-        self.dim_size = 0
+        self.dim_size = -1
 
     def reset_parameters(self):
         pass
@@ -40,18 +34,16 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
         return
 
     def reduce(self, x, batch):
-        is_capturing = x.is_cuda and is_current_stream_capturing()
-        if not x.is_cuda or not is_capturing:
+        if self.dim_size < 0:
             self.dim_size = int(batch.max().item() + 1)
-        if is_capturing:
-            assert (
-                self.dim_size > 0
-            ), "Warming up is needed before capturing the model into a CUDA graph"
-            warn(
-                "CUDA graph capture will lock the batch to the current number of samples ({}). Changing this will result in a crash".format(
-                    self.dim_size
-                )
+        assert (
+            self.dim_size > 0
+        ), "Warming up is needed before capturing the model into a CUDA graph"
+        warn(
+            "CUDA graph capture will lock the batch to the current number of samples ({}). Changing this will result in a crash".format(
+                self.dim_size
             )
+        )
         return scatter(x, batch, dim=0, dim_size=self.dim_size, reduce=self.reduce_op)
 
     def post_reduce(self, x):
