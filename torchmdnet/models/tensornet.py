@@ -7,7 +7,6 @@ from typing import Optional, Tuple
 from torch import Tensor, nn
 from torchmdnet.models.utils import (
     CosineCutoff,
-    OptimizedDistance,
     rbf_class_mapping,
     act_class_mapping,
 )
@@ -137,6 +136,7 @@ class TensorNet(nn.Module):
         check_errors=True,
         dtype=torch.float32,
         box_vecs=None,
+        onnx_export=True,
     ):
         super(TensorNet, self).__init__()
 
@@ -197,17 +197,26 @@ class TensorNet(nn.Module):
         # negative max_num_pairs argument means "per particle"
         # long_edge_index set to False saves memory and spares some kernel launches by keeping neighbor indices as int32.
         self.static_shapes = static_shapes
-        self.distance = OptimizedDistance(
-            cutoff_lower,
-            cutoff_upper,
-            max_num_pairs=-max_num_neighbors,
-            return_vecs=True,
-            loop=True,
-            check_errors=check_errors,
-            resize_to_fit=not self.static_shapes,
-            box=box_vecs,
-            long_edge_index=True,
-        )
+        self.onnx_export = onnx_export
+        if not self.onnx_export:
+            from torchmdnet.models.utils import OptimizedDistance
+
+            self.distance = OptimizedDistance(
+                cutoff_lower,
+                cutoff_upper,
+                max_num_pairs=-max_num_neighbors,
+                return_vecs=True,
+                loop=True,
+                check_errors=check_errors,
+                resize_to_fit=not self.static_shapes,
+                box=box_vecs,
+                long_edge_index=True,
+            )
+        else:
+            # TODO: Make this work with given size
+            self.register_buffer(
+                "edge_index", torch.tensor([[1, 2, 2], [0, 0, 1]], dtype=torch.long)
+            )
 
         self.reset_parameters()
 
@@ -228,7 +237,13 @@ class TensorNet(nn.Module):
         s: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
         # Obtain graph, with distances and relative position vectors
-        edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
+        if not self.onnx_export:
+            edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
+        else:
+            edge_index = self.edge_index
+            edge_vec = pos[edge_index[0]] - pos[edge_index[1]]
+            edge_weight = torch.norm(edge_vec, dim=-1)
+
         # This assert convinces TorchScript that edge_vec is a Tensor and not an Optional[Tensor]
         assert (
             edge_vec is not None
@@ -491,5 +506,5 @@ class Interaction(nn.Module):
         A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         dX = I + A + S
-        X = X + dX + (1 + 0.1 * q[..., None, None, None]) * torch.matrix_power(dX, 2)
+        X = X + dX + (1 + 0.1 * q[..., None, None, None]) * (dX @ dX)
         return X
