@@ -130,6 +130,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         reduce_op=args["reduce_op"],
         dtype=dtype,
         num_hidden_layers=args.get("output_mlp_num_layers", 0),
+        onnx_export=args.get("onnx_export", False),
     )
 
     # combine representation and output network
@@ -515,7 +516,7 @@ class TorchMD_Net(nn.Module):
 
         if self.derivative:
             if self.onnx_export:
-                dy = torch.autograd.functional.jacobian(energy_wrapper, pos)[0][0]
+                dy = torch.autograd.functional.jacobian(energy_wrapper, pos)
             else:
                 grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(y)]
                 dy = grad(

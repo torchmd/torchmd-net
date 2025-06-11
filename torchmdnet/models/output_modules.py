@@ -8,6 +8,7 @@ import torch
 from torch import nn
 from torchmdnet.models.utils import GatedEquivariantBlock, scatter, MLP
 from torchmdnet.utils import atomic_masses
+from torchmdnet.extensions import is_current_stream_capturing
 from warnings import warn
 
 __all__ = ["Scalar", "DipoleMoment", "ElectronicSpatialExtent"]
@@ -20,11 +21,12 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
     As an example, have a look at the :py:mod:`torchmdnet.output_modules.Scalar` output model.
     """
 
-    def __init__(self, allow_prior_model, reduce_op):
+    def __init__(self, allow_prior_model, reduce_op, onnx_export=False):
         super(OutputModel, self).__init__()
         self.allow_prior_model = allow_prior_model
         self.reduce_op = reduce_op
-        self.dim_size = -1
+        self.onnx_export = onnx_export
+        self.dim_size = 0 if not onnx_export else 1
 
     def reset_parameters(self):
         pass
@@ -34,17 +36,24 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
         return
 
     def reduce(self, x, batch):
-        if self.dim_size < 0:
-            self.dim_size = int(batch.max().item() + 1)
-        assert (
-            self.dim_size > 0
-        ), "Warming up is needed before capturing the model into a CUDA graph"
-        warn(
-            "CUDA graph capture will lock the batch to the current number of samples ({}). Changing this will result in a crash".format(
-                self.dim_size
+        if not self.onnx_export:
+            is_capturing = x.is_cuda and is_current_stream_capturing()
+            if not x.is_cuda or not is_capturing:
+                self.dim_size = int(batch.max().item() + 1)
+            if is_capturing:
+                assert (
+                    self.dim_size > 0
+                ), "Warming up is needed before capturing the model into a CUDA graph"
+                warn(
+                    "CUDA graph capture will lock the batch to the current number of samples ({}). Changing this will result in a crash".format(
+                        self.dim_size
+                    )
+                )
+            return scatter(
+                x, batch, dim=0, dim_size=self.dim_size, reduce=self.reduce_op
             )
-        )
-        return scatter(x, batch, dim=0, dim_size=self.dim_size, reduce=self.reduce_op)
+        else:
+            return x.sum()
 
     def post_reduce(self, x):
         return x
@@ -61,7 +70,9 @@ class Scalar(OutputModel):
         **kwargs,
     ):
         super(Scalar, self).__init__(
-            allow_prior_model=allow_prior_model, reduce_op=reduce_op
+            allow_prior_model=allow_prior_model,
+            reduce_op=reduce_op,
+            onnx_export=kwargs.get("onnx_export", False),
         )
         self.output_network = MLP(
             in_channels=hidden_channels,
@@ -91,7 +102,9 @@ class EquivariantScalar(OutputModel):
         **kwargs,
     ):
         super(EquivariantScalar, self).__init__(
-            allow_prior_model=allow_prior_model, reduce_op=reduce_op
+            allow_prior_model=allow_prior_model,
+            reduce_op=reduce_op,
+            onnx_export=kwargs.get("onnx_export", False),
         )
         if kwargs.get("num_layers", 0) > 0:
             warn("num_layers is not used in EquivariantScalar")
@@ -200,7 +213,9 @@ class ElectronicSpatialExtent(OutputModel):
         **kwargs,
     ):
         super(ElectronicSpatialExtent, self).__init__(
-            allow_prior_model=False, reduce_op=reduce_op
+            allow_prior_model=False,
+            reduce_op=reduce_op,
+            onnx_export=kwargs.get("onnx_export", False),
         )
         self.output_network = MLP(
             in_channels=hidden_channels,
