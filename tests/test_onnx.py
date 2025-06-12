@@ -13,16 +13,17 @@ curr_dir = os.path.dirname(os.path.abspath(__file__))
 
 @pytest.mark.skipif(not ONNXSCRIPT_AVAILABLE, reason="onnxscript not available")
 def test_onnx_export(tmp_path):
-    from torchmdnet.models.model import create_model
+    from torchmdnet.models.model import create_model, load_model
     from utils import load_example_args
     import torch as pt
+    import numpy as np
 
     device = "cuda"  # "cuda" if pt.cuda.is_available() else "cpu"
 
     ben = {
         "z": pt.tensor(
             [6, 6, 6, 6, 6, 6, 6, 7, 7, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            dtype=pt.long,
+            dtype=pt.int,
             device=device,
         ),
         "pos": pt.tensor(
@@ -52,7 +53,7 @@ def test_onnx_export(tmp_path):
         ),
         "batch": pt.tensor(
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            dtype=pt.long,
+            dtype=pt.int,
             device=device,
         ),
         "box": pt.tensor(
@@ -64,11 +65,11 @@ def test_onnx_export(tmp_path):
             dtype=pt.float32,
             device=device,
         ),
-        "q": pt.tensor([1], dtype=pt.long, device=device),
+        "q": pt.tensor([1], dtype=pt.int, device=device),
     }
     # Water example
-    example = {
-        "z": pt.tensor([8, 1, 1], dtype=pt.long, device=device, requires_grad=False),
+    water = {
+        "z": pt.tensor([8, 1, 1], dtype=pt.int, device=device, requires_grad=False),
         "pos": pt.tensor(
             [
                 [60.243, 56.013, 55.451],
@@ -81,7 +82,7 @@ def test_onnx_export(tmp_path):
         ),
         "batch": pt.tensor(
             [0, 0, 0],
-            dtype=pt.long,
+            dtype=pt.int,
             device=device,
             requires_grad=False,
         ),
@@ -95,7 +96,7 @@ def test_onnx_export(tmp_path):
             device=device,
             requires_grad=False,
         ),
-        "q": pt.tensor([0], dtype=pt.long, device=device, requires_grad=False),
+        "q": pt.tensor([0], dtype=pt.int, device=device, requires_grad=False),
     }
 
     model = create_model(
@@ -108,11 +109,53 @@ def test_onnx_export(tmp_path):
             onnx_export=True,
         )
     )
+    model = load_model(
+        os.path.join(curr_dir, "aceff-1.2-xtb.ckpt"),
+        static_shapes=False,
+        onnx_export=True,
+    )
 
+    example = ben
     model.to(device)
     model.eval()
-    out = model(**example)
-    print(out)
+    ref_energy, ref_forces = model(**example)
+    ref_energy = ref_energy.detach().cpu().numpy()
+    ref_forces = ref_forces.detach().cpu().numpy()
+    print(ref_energy, "\n", ref_forces)
+
+    n_atoms = 573
+    pt.onnx.export(
+        model,  # model to export
+        (
+            pt.ones(n_atoms, dtype=pt.int, device=device, requires_grad=False),
+            pt.ones((n_atoms, 3), dtype=pt.float32, device=device, requires_grad=True),
+            pt.zeros(n_atoms, dtype=pt.int, device=device, requires_grad=False),
+            pt.ones((3, 3), dtype=pt.float32, device=device, requires_grad=False),
+            pt.zeros(1, dtype=pt.int, device=device, requires_grad=False),
+        ),  # inputs of the model,
+        os.path.join(
+            tmp_path, f"aceff-1.2-xtb-{n_atoms}atoms.onnx"
+        ),  # filename of the ONNX model
+        input_names=[
+            "atomic_numbers",
+            "positions",
+            "batch",
+            "box",
+            "total_charge",
+        ],  # Rename inputs for the ONNX model
+        output_names=["energy", "forces"],
+        dynamic_axes={
+            "atomic_numbers": {0: "atoms"},
+            "positions": {0: "atoms"},
+            "batch": {0: "atoms"},
+            "forces": {0: "atoms"},
+        },
+        dynamo=False,
+        # report=True,
+        # opset_version=20,
+        do_constant_folding=True,
+        export_params=True,
+    )
 
     pt.onnx.export(
         model,  # model to export
@@ -123,39 +166,51 @@ def test_onnx_export(tmp_path):
             example["box"],
             example["q"],
         ),  # inputs of the model,
-        os.path.join(tmp_path, "my_model.onnx"),  # filename of the ONNX model
+        os.path.join(
+            tmp_path, f"aceff-1.2-xtb-18atoms.onnx"
+        ),  # filename of the ONNX model
         input_names=[
-            "z",
-            "pos",
+            "atomic_numbers",
+            "positions",
             "batch",
             "box",
-            "q",
+            "total_charge",
         ],  # Rename inputs for the ONNX model
         output_names=["energy", "forces"],
         dynamic_axes={
-            "z": {0: "atoms"},
-            "pos": {0: "atoms"},
+            "atomic_numbers": {0: "atoms"},
+            "positions": {0: "atoms"},
             "batch": {0: "atoms"},
-            # "energy": {0: "batch"},
             "forces": {0: "atoms"},
         },
-        dynamo=False,  # True or False to select the exporter to use
-        report=True,
-        opset_version=20,
+        dynamo=False,
+        # report=True,
+        # opset_version=20,
+        do_constant_folding=True,
+        export_params=True,
     )
 
     # Test the exported ONNX model
-    import onnx
     import onnxruntime as ort
+    import onnx
 
+    example = ben
     model_path = os.path.join(tmp_path, "my_model.onnx")
-    session = ort.InferenceSession(model_path)
+    onnx.checker.check_model(onnx.load(model_path))
+    session = ort.InferenceSession(model_path, providers=["CUDAExecutionProvider"])
     inputs = {
-        "z": example["z"].cpu().numpy(),
-        "pos": example["pos"].detach().cpu().numpy(),
+        "atomic_numbers": example["z"].cpu().numpy(),
+        "positions": example["pos"].detach().cpu().numpy(),
         "batch": example["batch"].cpu().numpy(),
-        # "box": example["box"].cpu().numpy(),
-        "q": example["q"].cpu().numpy(),
+        "total_charge": example["q"].cpu().numpy(),
     }
-    outputs = session.run(None, inputs)
-    print(outputs)
+    onnx_energy, onnx_forces = session.run(None, inputs)
+    print(onnx_energy, "\n", onnx_forces)
+    print("Forces diff", np.abs(ref_forces - onnx_forces).max())
+    print("Energy diff", np.abs(ref_energy - onnx_energy).max())
+    assert np.allclose(ref_forces, onnx_forces), "Forces are not close"
+    assert np.allclose(ref_energy, onnx_energy), "Energy is not close"
+
+
+if __name__ == "__main__":
+    test_onnx_export("/tmp/")

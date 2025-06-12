@@ -56,6 +56,19 @@ def decompose_tensor(tensor):
     return I, A, S
 
 
+def custom_tril_indices(rows, cols, offset=0, device=None, dtype=torch.long):
+    row_indices = torch.arange(rows, device=device).view(-1, 1)  # shape (rows, 1)
+    col_indices = torch.arange(cols, device=device).view(1, -1)  # shape (1, cols)
+
+    # Create a mask for the lower triangle
+    mask = row_indices - col_indices >= -offset  # broadcasting comparison
+
+    # Get indices where the mask is True
+    result = mask.nonzero(as_tuple=False).t().to(dtype)  # shape (2, N)
+
+    return result
+
+
 def tensor_norm(tensor):
     """Computes Frobenius norm."""
     return (tensor**2).sum((-2, -1))
@@ -136,7 +149,7 @@ class TensorNet(nn.Module):
         check_errors=True,
         dtype=torch.float32,
         box_vecs=None,
-        onnx_export=True,
+        onnx_export=False,
     ):
         super(TensorNet, self).__init__()
 
@@ -212,11 +225,6 @@ class TensorNet(nn.Module):
                 box=box_vecs,
                 long_edge_index=True,
             )
-        else:
-            # TODO: Make this work with given size
-            self.register_buffer(
-                "edge_index", torch.tensor([[1, 2, 2], [0, 0, 1]], dtype=torch.long)
-            )
 
         self.reset_parameters()
 
@@ -240,7 +248,9 @@ class TensorNet(nn.Module):
         if not self.onnx_export:
             edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
         else:
-            edge_index = self.edge_index
+            edge_index = custom_tril_indices(
+                pos.shape[0], pos.shape[0], device=pos.device, offset=pos.shape[0]
+            )
             edge_vec = pos[edge_index[0]] - pos[edge_index[1]]
             edge_weight = torch.norm(edge_vec, dim=-1)
 

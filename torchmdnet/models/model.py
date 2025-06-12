@@ -456,6 +456,9 @@ class TorchMD_Net(nn.Module):
             for prior in self.prior_model:
                 y = prior.post_reduce(y, z, pos, batch, box, extra_args)
 
+        if self.onnx_export:
+            self.y = y
+
         return y
 
     def forward(
@@ -503,20 +506,23 @@ class TorchMD_Net(nn.Module):
         Returns:
             Tuple[Tensor, Optional[Tensor]]: The output of the model and the derivative of the output with respect to the positions if derivative is True, None otherwise.
         """
-        assert z.dim() == 1 and z.dtype == torch.long
+        assert z.dim() == 1 and z.dtype == torch.int
         batch = torch.zeros_like(z) if batch is None else batch
 
         if self.derivative:
             pos.requires_grad_(True)
 
-        y = self.energy_fn(z, pos, batch, box, q, s, extra_args)
-
-        def energy_wrapper(pos):
-            return self.energy_fn(z, pos, batch, box, q, s, extra_args)
+        if not self.onnx_export:
+            y = self.energy_fn(z, pos, batch, box, q, s, extra_args)
 
         if self.derivative:
             if self.onnx_export:
+
+                def energy_wrapper(pos):
+                    return self.energy_fn(z, pos, batch, box, q, s, extra_args)
+
                 dy = torch.autograd.functional.jacobian(energy_wrapper, pos)
+                y = self.y
             else:
                 grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(y)]
                 dy = grad(
