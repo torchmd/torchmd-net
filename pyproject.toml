@@ -1,5 +1,5 @@
 [project]
-name = "torchmd-net"
+name = "PLACEHOLDER"
 description = "TorchMD-NET provides state-of-the-art neural networks potentials for biomolecular systems"
 authors = [{ name = "Acellera", email = "info@acellera.com" }]
 readme = "README.md"
@@ -27,7 +27,7 @@ include = ["torchmdnet*"]
 "*" = ["*.c", "*.cpp", "*.h", "*.cuh", "*.cu", ".gitignore"]
 
 [build-system]
-requires = ["setuptools>=78", "setuptools-scm>=8", "torch>=2.5", "numpy"]
+requires = ["setuptools>=78", "setuptools-scm>=8", "torch==2.7.1", "numpy"]
 build-backend = "setuptools.build_meta"
 
 
@@ -35,6 +35,7 @@ build-backend = "setuptools.build_meta"
 # Disable builds which can't support CUDA and pytorch
 skip = [
   "cp38-*",
+  "cp314t-*",
   "pp*",
   "*win32",
   "*armv7l",
@@ -46,8 +47,6 @@ skip = [
 ]
 test-requires = ["pytest", "pytest-xdist"]
 test-command = "pytest {project}/tests"
-manylinux-x86_64-image = "manylinux_2_28"
-manylinux-aarch64-image = "manylinux_2_28"
 environment-pass = ["ACCELERATOR"]
 # container-engine = "docker; create_args: --gpus all"
 

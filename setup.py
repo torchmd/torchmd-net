@@ -15,6 +15,24 @@ else:
     use_cuda = torch.cuda._is_compiled()
 
 
+def _replace_name(name):
+    import pathlib
+
+    pyproject_path = pathlib.Path(__file__).parent / "pyproject.toml"
+    with open(pyproject_path, "r") as f:
+        pyproject_text = f.read()
+    pyproject_text = pyproject_text.replace("PLACEHOLDER", name)
+    with open(pyproject_path, "w") as f:
+        f.write(pyproject_text)
+
+
+if os.getenv("ACCELERATOR", "").startswith("cpu"):
+    _replace_name("torchmd-net-cpu")
+if os.getenv("ACCELERATOR", "").startswith("cu"):
+    cuda_ver = os.getenv("ACCELERATOR", "")[2:4]
+    _replace_name(f"torchmd-net-cu{cuda_ver}")
+
+
 def set_torch_cuda_arch_list():
     """Set the CUDA arch list according to the architectures the current torch installation was compiled for.
     This function is a no-op if the environment variable TORCH_CUDA_ARCH_LIST is already set or if torch was not compiled with CUDA support.
