@@ -5,29 +5,26 @@
  */
 #ifndef NEIGHBORS_COMMON_CUH
 #define NEIGHBORS_COMMON_CUH
-#include <ATen/cuda/CUDAContext.h>
+#include <ATen/Operators.h>
+#include <torch/all.h>
+#include <torch/library.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAStream.h>
-#include <torch/extension.h>
 
-using c10::cuda::CUDAStreamGuard;
 using c10::cuda::getCurrentCUDAStream;
+using c10::cuda::CUDAStreamGuard;
+using at::Tensor;
+using at::TensorOptions;
+using at::TensorAccessor;
+using torch::Scalar;
 using torch::empty;
 using torch::full;
-using torch::kInt32;
-using torch::Scalar;
-using torch::Tensor;
-using torch::TensorOptions;
-using torch::zeros;
-using torch::autograd::AutogradContext;
-using torch::autograd::Function;
-using torch::autograd::tensor_list;
 
 template <typename scalar_t, int num_dims>
 using Accessor = torch::PackedTensorAccessor32<scalar_t, num_dims, torch::RestrictPtrTraits>;
 
 template <typename scalar_t, int num_dims>
-using KernelAccessor = at::TensorAccessor<scalar_t, num_dims, at::RestrictPtrTraits, signed int>;
+using KernelAccessor = TensorAccessor<scalar_t, num_dims, at::RestrictPtrTraits, signed int>;
 
 template <typename scalar_t, int num_dims>
 inline Accessor<scalar_t, num_dims> get_accessor(const Tensor& tensor) {
@@ -73,12 +70,12 @@ struct PairList {
     Tensor deltas;
     Tensor distances;
     const bool loop, include_transpose, use_periodic;
-    PairList(int max_num_pairs, TensorOptions options, bool loop, bool include_transpose,
+    PairList(int max_num_pairs, torch::TensorOptions options, bool loop, bool include_transpose,
              bool use_periodic)
-        : i_curr_pair(zeros({1}, options.dtype(torch::kInt))),
-          neighbors(full({2, max_num_pairs}, -1, options.dtype(torch::kInt))),
-          deltas(full({max_num_pairs, 3}, 0, options)),
-          distances(full({max_num_pairs}, 0, options)), loop(loop),
+        : i_curr_pair(torch::zeros({1}, options.dtype(at::kInt))),
+          neighbors(torch::full({2, max_num_pairs}, -1, options.dtype(at::kInt))),
+          deltas(torch::full({max_num_pairs, 3}, 0, options)),
+          distances(torch::full({max_num_pairs}, 0, options)), loop(loop),
           include_transpose(include_transpose), use_periodic(use_periodic) {
     }
 };
@@ -134,7 +131,7 @@ static void checkInput(const Tensor& positions, const Tensor& batch) {
                 "Expected the 1st dimension size of \"batch\" to be the same as the 1st dimension "
                 "size of \"positions\"");
     TORCH_CHECK(batch.is_contiguous(), "Expected \"batch\" to be contiguous");
-    TORCH_CHECK(batch.dtype() == torch::kInt64, "Expected \"batch\" to be of type torch::kLong");
+    TORCH_CHECK(batch.dtype() == torch::kInt64, "Expected \"batch\" to be of type at::kLong");
 }
 
 namespace rect {

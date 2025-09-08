@@ -13,7 +13,7 @@ from torchmdnet.models.utils import (
     MLP,
 )
 from torchmdnet.utils import atomic_masses
-from torchmdnet.extensions import is_current_stream_capturing
+from torchmdnet.extensions.ops import is_current_stream_capturing
 from warnings import warn
 
 __all__ = ["Scalar", "DipoleMoment", "ElectronicSpatialExtent"]

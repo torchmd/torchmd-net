@@ -2,7 +2,10 @@
  * Distributed under the MIT License.
  *(See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
  */
-#include <torch/extension.h>
+#include <Python.h>
+#include <ATen/Operators.h>
+#include <torch/all.h>
+#include <torch/library.h>
 #include <tuple>
 
 using std::tuple;
@@ -13,16 +16,14 @@ using torch::full;
 using torch::hstack;
 using torch::index_select;
 using torch::kInt32;
-using torch::outer;
 using torch::round;
 using torch::Scalar;
-using torch::Tensor;
 using torch::vstack;
 using torch::autograd::AutogradContext;
 using torch::autograd::Function;
 using torch::autograd::tensor_list;
-using torch::indexing::None;
 using torch::indexing::Slice;
+using at::Tensor;
 
 static tuple<Tensor, Tensor, Tensor, Tensor>
 forward_impl(const std::string& strategy, const Tensor& positions, const Tensor& batch,
@@ -133,26 +134,28 @@ forward_impl(const std::string& strategy, const Tensor& positions, const Tensor&
 // The backwards operation is implemented fully in pytorch so that it can be differentiated a second
 // time automatically via Autograd.
 static Tensor backward_impl(const Tensor& grad_edge_vec, const Tensor& grad_edge_weight,
-                            const Tensor& edge_index, const Tensor& edge_vec,
-                            const Tensor& edge_weight, const int64_t num_atoms) {
-    auto zero_mask = edge_weight.eq(0);
-    auto zero_mask3 = zero_mask.unsqueeze(-1).expand_as(grad_edge_vec);
-    // We need to avoid dividing by 0. Otherwise Autograd fills the gradient with NaNs in the
-    // case of a double backwards. This is why we index_select like this.
-    auto grad_distances_ = edge_vec / edge_weight.masked_fill(zero_mask, 1).unsqueeze(-1) *
-                           grad_edge_weight.masked_fill(zero_mask, 0).unsqueeze(-1);
-    auto result = grad_edge_vec.masked_fill(zero_mask3, 0) + grad_distances_;
-    // Given that there is no masked_index_add function, in order to make the operation
-    // CUDA-graph compatible I need to transform masked indices into a dummy value (num_atoms)
-    // and then exclude that value from the output.
-    // TODO: replace this once masked_index_add  or masked_scatter_add are available
-    auto grad_positions_ = torch::zeros({num_atoms + 1, 3}, edge_vec.options());
-    auto edge_index_ =
-        edge_index.masked_fill(zero_mask.unsqueeze(0).expand_as(edge_index), num_atoms);
-    grad_positions_.index_add_(0, edge_index_[0], result);
-    grad_positions_.index_add_(0, edge_index_[1], -result);
-    auto grad_positions = grad_positions_.index({Slice(0, num_atoms), Slice()});
-    return grad_positions;
+    const Tensor& edge_index, const Tensor& edge_vec,
+    const Tensor& edge_weight, const int64_t num_atoms) {
+auto zero_mask = edge_weight.eq(0);
+auto zero_mask3 = zero_mask.unsqueeze(-1).expand_as(grad_edge_vec);
+// We need to avoid dividing by 0. Otherwise Autograd fills the gradient with NaNs in the
+// case of a double backwards. This is why we index_select like this.
+auto grad_distances_ = edge_vec / edge_weight.masked_fill(zero_mask, 1).unsqueeze(-1) *
+   grad_edge_weight.masked_fill(zero_mask, 0).unsqueeze(-1);
+auto result = grad_edge_vec.masked_fill(zero_mask3, 0) + grad_distances_;
+// Given that there is no masked_index_add function, in order to make the operation
+// CUDA-graph compatible I need to transform masked indices into a dummy value (num_atoms)
+// and then exclude that value from the output.
+// TODO: replace this once masked_index_add  or masked_scatter_add are available
+auto grad_positions_ = torch::zeros({num_atoms + 1, 3}, edge_vec.options());
+auto edge_index_ =
+edge_index.masked_fill(zero_mask.unsqueeze(0).expand_as(edge_index), num_atoms);
+grad_positions_ = grad_positions_.scatter_add(
+    0, edge_index_[0].unsqueeze(-1).expand_as(result), result);
+grad_positions_ = grad_positions_.scatter_add(
+    0, edge_index_[1].unsqueeze(-1).expand_as(result), -result);
+auto grad_positions = grad_positions_.index({Slice(0, num_atoms), Slice()});
+return grad_positions;
 }
 
 // This is the autograd function that is called when the user calls get_neighbor_pairs.

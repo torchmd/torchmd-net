@@ -9,7 +9,11 @@
  */
 
 
-#include <torch/extension.h>
+#include <Python.h>
+#include <ATen/Operators.h>
+#include <torch/all.h>
+#include <torch/library.h>
+
 #if defined(WITH_CUDA)
 #include <c10/cuda/CUDAStream.h>
 #include <cuda_runtime_api.h>
@@ -21,6 +25,26 @@ PyMODINIT_FUNC PyInit_torchmdnet_extensions(void) {
   return NULL; 
 } 
 #endif 
+
+
+extern "C" {
+  /* Creates a dummy empty torchmdnet_extensions module that can be imported from Python.
+     The import from Python will load the .so consisting of this file
+     in this extension, so that the TORCH_LIBRARY static initializers
+     below are run. */
+  PyObject* PyInit_torchmdnet_extensions(void)
+  {
+      static struct PyModuleDef module_def = {
+          PyModuleDef_HEAD_INIT,
+          "torchmdnet_extensions",   /* name of module */
+          NULL,   /* module documentation, may be NULL */
+          -1,     /* size of per-interpreter state of the module,
+                     or -1 if the module keeps state in global variables. */
+          NULL,   /* methods */
+      };
+      return PyModule_Create(&module_def);
+  }
+}
 
 /* @brief Returns true if the current torch CUDA stream is capturing.
  * This function is required because the one available in torch is not compatible with TorchScript.
@@ -40,18 +64,8 @@ bool is_current_stream_capturing() {
 #endif
 }
 
-#define TORCH_VERSION_CODE(MAJOR, MINOR, PATCH) ((MAJOR)*10000 + (MINOR)*100 + (PATCH))
-#define TORCH_VERSION_COMPARE_LE(MAJOR, MINOR, PATCH) \
-    (TORCH_VERSION_CODE(TORCH_VERSION_MAJOR, TORCH_VERSION_MINOR, TORCH_VERSION_PATCH) >= \
-     TORCH_VERSION_CODE(MAJOR, MINOR, PATCH))
-
 TORCH_LIBRARY(torchmdnet_extensions, m) {
     m.def("is_current_stream_capturing", is_current_stream_capturing);
-#if TORCH_VERSION_COMPARE_LE(2, 2, 0)
-    //This line is required to signal to torch that the meta registration is implemented in python.
-    // Specifically, it will look for them in the torchmdnet.extensions module.
-    m.impl_abstract_pystub("torchmdnet.extensions");
-#endif
     m.def("get_neighbor_pairs(str strategy, Tensor positions, Tensor batch, Tensor box_vectors, "
           "bool use_periodic, Scalar cutoff_lower, Scalar cutoff_upper, Scalar max_num_pairs, bool "
           "loop, bool include_transpose) -> (Tensor neighbors, Tensor distances, Tensor "

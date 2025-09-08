@@ -13,7 +13,6 @@
 #define NEIGHBORS_BRUTE_CUH
 #include "common.cuh"
 #include <algorithm>
-#include <torch/extension.h>
 
 __device__ uint32_t get_row(uint32_t index) {
     uint32_t row = floor((sqrtf(8 * index + 1) + 1) / 2);

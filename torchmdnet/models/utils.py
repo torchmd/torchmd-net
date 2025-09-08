@@ -7,7 +7,7 @@ from typing import Optional, Tuple
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
-from torchmdnet.extensions import get_neighbor_pairs_kernel
+from torchmdnet.extensions.ops import get_neighbor_pairs_kernel
 import warnings
 
 
@@ -288,6 +288,7 @@ class OptimizedDistance(torch.nn.Module):
             edge_vec = edge_vec[mask, :]
         if self.long_edge_index:
             edge_index = edge_index.to(torch.long)
+        assert edge_index.dtype == torch.long
         if self.return_vecs:
             return edge_index, edge_weight, edge_vec
         else:

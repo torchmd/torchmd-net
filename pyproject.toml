@@ -1,5 +1,5 @@
 [project]
-name = "PLACEHOLDER"
+name = "torchmd-net-cu12"
 description = "TorchMD-NET provides state-of-the-art neural networks potentials for biomolecular systems"
 authors = [{ name = "Acellera", email = "info@acellera.com" }]
 readme = "README.md"
@@ -27,7 +27,7 @@ include = ["torchmdnet*"]
 "*" = ["*.c", "*.cpp", "*.h", "*.cuh", "*.cu", ".gitignore"]
 
 [build-system]
-requires = ["setuptools>=78", "setuptools-scm>=8", "torch==2.7.1", "numpy"]
+requires = ["setuptools>=78", "setuptools-scm>=8", "torch", "numpy"]
 build-backend = "setuptools.build_meta"
 
 

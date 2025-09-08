@@ -710,12 +710,25 @@ def test_torch_compile(device, dtype, loop, include_transpose):
         resize_to_fit=False,
         check_errors=False,
     ).to(device)
+    # Warm up
     for _ in range(50):
         model(example_pos)
+    # Pre-compilation testing
     example_pos = example_pos.detach().requires_grad_(True)
     edge_index, edge_vec, edge_distance = model(example_pos)
     edge_vec.sum().backward()
+    lambda_dist = lambda x: model(x)[1].float()
+    torch.autograd.gradcheck(
+        lambda_dist,
+        example_pos.float(),
+        eps=1e-3,
+        atol=1e-3,
+        rtol=1e-3,
+        nondet_tol=1e-3,
+    )
+
     example_pos.grad.zero_()
+    # Testing with torch.compile
     fullgraph = torch.__version__ >= "2.2.0"
     model = torch.compile(
         model,
