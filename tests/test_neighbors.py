@@ -305,7 +305,7 @@ def test_neighbor_autograds(
     batch = torch.zeros((num_atoms,), dtype=torch.long, device=device)
     neighbors, distances, deltas = nl(positions, batch)
     # Lambda that returns only the distances and deltas
-    lambda_dist = lambda x, y: nl(x, y)[1]
+    lambda_dist = lambda x, y: nl(x, y)[1].sum()
     torch.autograd.gradcheck(
         lambda_dist, (positions, batch), eps=1e-4, atol=1e-4, rtol=1e-4, nondet_tol=1e-4
     )
