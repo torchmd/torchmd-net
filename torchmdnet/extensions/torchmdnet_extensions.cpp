@@ -19,13 +19,6 @@
 #include <cuda_runtime_api.h>
 #endif
 
-#ifdef _WIN32 
-PyMODINIT_FUNC PyInit_torchmdnet_extensions(void) { 
-  // No need to do anything. 
-  return NULL; 
-} 
-#endif 
-
 
 extern "C" {
   /* Creates a dummy empty torchmdnet_extensions module that can be imported from Python.
