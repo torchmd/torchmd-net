@@ -728,7 +728,7 @@ def test_torch_compile(device, dtype, loop, include_transpose):
     )
     edge_index, edge_distance, edge_vec = model(example_pos)
     edge_distance.sum().backward()
-    lambda_dist = lambda x: model(x)[1]
+    lambda_dist = lambda x: model(x)[1].sum()
     torch.autograd.gradcheck(
         lambda_dist, example_pos, eps=1e-5, atol=1e-4, rtol=1e-4, nondet_tol=1e-3
     )

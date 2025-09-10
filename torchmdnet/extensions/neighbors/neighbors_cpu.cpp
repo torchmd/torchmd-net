@@ -188,12 +188,12 @@ public:
         auto num_atoms = ctx->saved_data["num_atoms"].toInt();
         auto grad_edge_vec = grad_outputs[1];
         auto grad_edge_weight = grad_outputs[2];
-        // static auto backward =
-        //     torch::Dispatcher::singleton()
-        //         .findSchemaOrThrow("torchmdnet_extensions::get_neighbor_pairs_bkwd", "")
-        //         .typed<decltype(backward_impl)>();
-        auto grad_positions = backward_impl(
-            grad_edge_vec, grad_edge_weight, edge_index, edge_vec, edge_weight, num_atoms);
+        static auto backward =
+            torch::Dispatcher::singleton()
+                .findSchemaOrThrow("torchmdnet_extensions::get_neighbor_pairs_bkwd", "")
+                .typed<decltype(backward_impl)>();
+        auto grad_positions = backward.call(grad_edge_vec, grad_edge_weight, edge_index, edge_vec,
+                                            edge_weight, num_atoms);
         Tensor ignore;
         return {ignore, grad_positions, ignore, ignore, ignore, ignore,
                 ignore, ignore,         ignore, ignore, ignore};
