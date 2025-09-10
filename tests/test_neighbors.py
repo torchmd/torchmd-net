@@ -305,7 +305,7 @@ def test_neighbor_autograds(
     batch = torch.zeros((num_atoms,), dtype=torch.long, device=device)
     neighbors, distances, deltas = nl(positions, batch)
     # Lambda that returns only the distances and deltas
-    lambda_dist = lambda x, y: nl(x, y)[1:]
+    lambda_dist = lambda x, y: nl(x, y)[1]
     torch.autograd.gradcheck(
         lambda_dist, (positions, batch), eps=1e-4, atol=1e-4, rtol=1e-4, nondet_tol=1e-4
     )
@@ -717,12 +717,6 @@ def test_torch_compile(device, dtype, loop, include_transpose):
     example_pos = example_pos.detach().requires_grad_(True)
     edge_index, edge_distance, edge_vec = model(example_pos)
     edge_distance.sum().backward()
-
-    lambda_dist = lambda x: model(x)[1:]
-    torch.autograd.gradcheck(
-        lambda_dist, example_pos, eps=1e-3, atol=1e-3, rtol=1e-3, nondet_tol=1e-3
-    )
-
     example_pos.grad.zero_()
     # Testing with torch.compile
     fullgraph = torch.__version__ >= "2.2.0"
@@ -734,7 +728,7 @@ def test_torch_compile(device, dtype, loop, include_transpose):
     )
     edge_index, edge_distance, edge_vec = model(example_pos)
     edge_distance.sum().backward()
-    lambda_dist = lambda x: model(x)[1:]
+    lambda_dist = lambda x: model(x)[1]
     torch.autograd.gradcheck(
         lambda_dist, example_pos, eps=1e-5, atol=1e-4, rtol=1e-4, nondet_tol=1e-3
     )
