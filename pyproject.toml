@@ -1,5 +1,5 @@
 [project]
-name = "torchmd-net-cu12"
+name = "PLACEHOLDER"
 description = "TorchMD-NET provides state-of-the-art neural networks potentials for biomolecular systems"
 authors = [{ name = "Acellera", email = "info@acellera.com" }]
 readme = "README.md"
