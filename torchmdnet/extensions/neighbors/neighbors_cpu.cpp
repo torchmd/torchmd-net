@@ -143,16 +143,14 @@ static Tensor backward_impl(const Tensor& grad_edge_vec, const Tensor& grad_edge
     auto grad_distances_ = edge_vec / edge_weight.masked_fill(zero_mask, 1).unsqueeze(-1) *
     grad_edge_weight.masked_fill(zero_mask, 0).unsqueeze(-1);
     auto result = grad_edge_vec.masked_fill(zero_mask3, 0) + grad_distances_;
-    // Given that there is no masked_index_add function, in order to make the operation
-    // CUDA-graph compatible I need to transform masked indices into a dummy value (num_atoms)
-    // and then exclude that value from the output.
-    // TODO: replace this once masked_index_add  or masked_scatter_add are available
-    auto grad_positions_ = torch::zeros({num_atoms + 1, 3}, edge_vec.options());
+    // Avoid out-of-bounds indices under compiler fusion by mapping masked indices to 0
+    // and ensuring their contributions are exactly zero.
+    // This removes the need for allocating an extra dummy row (num_atoms + 1).
+    auto grad_positions = torch::zeros({num_atoms, 3}, edge_vec.options());
     auto edge_index_ =
-    edge_index.masked_fill(zero_mask.unsqueeze(0).expand_as(edge_index), num_atoms);
-    grad_positions_.index_add_(0, edge_index_[0], result);
-    grad_positions_.index_add_(0, edge_index_[1], -result);
-    auto grad_positions = grad_positions_.index({Slice(0, num_atoms), Slice()});
+        edge_index.masked_fill(zero_mask.unsqueeze(0).expand_as(edge_index), 0);
+    grad_positions.index_add_(0, edge_index_[0], result);
+    grad_positions.index_add_(0, edge_index_[1], -result);
     return grad_positions;
 }
 
