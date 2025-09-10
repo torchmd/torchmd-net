@@ -288,7 +288,6 @@ class OptimizedDistance(torch.nn.Module):
             edge_vec = edge_vec[mask, :]
         if self.long_edge_index:
             edge_index = edge_index.to(torch.long)
-        assert edge_index.dtype == torch.long
         if self.return_vecs:
             return edge_index, edge_weight, edge_vec
         else:

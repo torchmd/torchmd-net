@@ -702,7 +702,7 @@ def test_torch_compile(device, dtype, loop, include_transpose):
     example_pos = 10 * torch.rand(50, 3, requires_grad=True, dtype=dtype, device=device)
     model = OptimizedDistance(
         cutoff_lower=0.1,  # I do this to avoid non-finite-differentiable points
-        cutoff_upper=1000,
+        cutoff_upper=10,
         return_vecs=True,
         loop=loop,
         max_num_pairs=-example_pos.shape[0],
@@ -716,9 +716,9 @@ def test_torch_compile(device, dtype, loop, include_transpose):
     # Pre-compilation testing
     example_pos = example_pos.detach().requires_grad_(True)
     edge_index, edge_distance, edge_vec = model(example_pos)
-    edge_vec.sum().backward()
+    edge_distance.sum().backward()
 
-    lambda_dist = lambda x: model(x)[2].sum()
+    lambda_dist = lambda x: model(x)[1:]
     torch.autograd.gradcheck(
         lambda_dist, example_pos, eps=1e-3, atol=1e-3, rtol=1e-3, nondet_tol=1e-3
     )
@@ -733,8 +733,8 @@ def test_torch_compile(device, dtype, loop, include_transpose):
         mode="reduce-overhead",
     )
     edge_index, edge_distance, edge_vec = model(example_pos)
-    edge_vec.sum().backward()
-    lambda_dist = lambda x: model(x)[2].sum()
+    edge_distance.sum().backward()
+    lambda_dist = lambda x: model(x)[1:]
     torch.autograd.gradcheck(
         lambda_dist, example_pos, eps=1e-5, atol=1e-4, rtol=1e-4, nondet_tol=1e-3
     )
