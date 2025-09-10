@@ -4,14 +4,22 @@
  * (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
  * Raul P. Pelaez 2023
  */
+#include <ATen/Operators.h>
+#include <torch/all.h>
+#include <torch/library.h>
+
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <ATen/cuda/CUDAContext.h>
+
 #include "neighbors_cuda_brute.cuh"
 #include "neighbors_cuda_cell.cuh"
 #include "neighbors_cuda_shared.cuh"
-#include <torch/extension.h>
-static std::tuple<Tensor, Tensor, Tensor, Tensor>
-forward_impl_cuda(const std::string& strategy, const Tensor& positions, const Tensor& batch,
-                  const Tensor& in_box_vectors, bool use_periodic, const Scalar& cutoff_lower,
-                  const Scalar& cutoff_upper, const Scalar& max_num_pairs, bool loop,
+
+static std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor>
+forward_impl_cuda(const std::string& strategy, const at::Tensor& positions, const at::Tensor& batch,
+                  const at::Tensor& in_box_vectors, bool use_periodic, const at::Scalar& cutoff_lower,
+                  const at::Scalar& cutoff_upper, const at::Scalar& max_num_pairs, bool loop,
                   bool include_transpose) {
     auto kernel = forward_brute;
     if (positions.size(0) >= 32768 && strategy == "brute") {

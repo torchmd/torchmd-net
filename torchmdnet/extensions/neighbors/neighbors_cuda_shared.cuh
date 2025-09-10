@@ -11,7 +11,6 @@
 #define NEIGHBORS_SHARED_CUH
 #include "common.cuh"
 #include <algorithm>
-#include <torch/extension.h>
 
 template <int BLOCKSIZE, typename scalar_t>
 __global__ void forward_kernel_shared(uint32_t num_atoms, const Accessor<scalar_t, 2> positions,

@@ -47,7 +47,9 @@ jobs:
           elif [[ "${{ runner.os }}" == "Linux" ]]; then
             conda install gxx --channel conda-forge --override-channels
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            conda install "clangxx<20" "llvm-openmp<20" pybind11 --channel conda-forge --override-channels
+            conda install llvm-openmp pybind11 --channel conda-forge --override-channels
+            echo "CC=clang" >> $GITHUB_ENV
+            echo "CXX=clang++" >> $GITHUB_ENV
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
             conda install vc vc14_runtime vs2015_runtime --channel conda-forge --override-channels
           fi

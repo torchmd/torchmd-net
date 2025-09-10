@@ -7,7 +7,7 @@ from typing import Optional, Tuple
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
-from torchmdnet.extensions import get_neighbor_pairs_kernel
+from torchmdnet.extensions.ops import get_neighbor_pairs_kernel
 import warnings
 
 
