@@ -67,6 +67,18 @@ jobs:
           # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
+      - name: Set pytorch index
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            mkdir -p "C:\ProgramData\pip"
+            echo "[global]
+            extra-index-url = https://download.pytorch.org/whl/cpu" > "C:\ProgramData\pip\pip.ini"
+          else
+            mkdir -p $HOME/.config/pip
+            echo "[global]
+            extra-index-url = https://download.pytorch.org/whl/cpu" > $HOME/.config/pip/pip.conf
+          fi
+
       - name: Build and install the package
         run: |
           if [[ "${{ runner.os }}" == "Windows" ]]; then
