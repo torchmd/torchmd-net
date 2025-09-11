@@ -71,6 +71,7 @@ jobs:
         run: |
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             echo "[global]
+            mkdir -p "C:\ProgramData\pip"
             extra-index-url = https://download.pytorch.org/whl/cpu" > "C:\ProgramData\pip\pip.ini"
           else
             mkdir -p $HOME/.config/pip
