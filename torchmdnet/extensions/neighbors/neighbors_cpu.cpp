@@ -218,6 +218,34 @@ TORCH_LIBRARY_IMPL(torchmdnet_extensions, CompositeImplicitAutograd, m) {
            });
 }
 
+// Explicit device backend registrations for PyTorch versions that do not
+// automatically fall back to CompositeImplicitAutograd for device dispatch.
+TORCH_LIBRARY_IMPL(torchmdnet_extensions, CPU, m) {
+    m.impl("get_neighbor_pairs",
+           [](const std::string& strategy, const Tensor& positions, const Tensor& batch,
+              const Tensor& box_vectors, bool use_periodic, const Scalar& cutoff_lower,
+              const Scalar& cutoff_upper, const Scalar& max_num_pairs, bool loop,
+              bool include_transpose) {
+               auto result = NeighborAutograd::apply(strategy, positions, batch, box_vectors,
+                                                     use_periodic, cutoff_lower, cutoff_upper,
+                                                     max_num_pairs, loop, include_transpose);
+               return std::make_tuple(result[0], result[1], result[2], result[3]);
+           });
+}
+
+TORCH_LIBRARY_IMPL(torchmdnet_extensions, CUDA, m) {
+    m.impl("get_neighbor_pairs",
+           [](const std::string& strategy, const Tensor& positions, const Tensor& batch,
+              const Tensor& box_vectors, bool use_periodic, const Scalar& cutoff_lower,
+              const Scalar& cutoff_upper, const Scalar& max_num_pairs, bool loop,
+              bool include_transpose) {
+               auto result = NeighborAutograd::apply(strategy, positions, batch, box_vectors,
+                                                     use_periodic, cutoff_lower, cutoff_upper,
+                                                     max_num_pairs, loop, include_transpose);
+               return std::make_tuple(result[0], result[1], result[2], result[3]);
+           });
+}
+
 // The registration for the CUDA version of the forward function is done in a separate .cu file.
 TORCH_LIBRARY_IMPL(torchmdnet_extensions, CPU, m) {
     m.impl("get_neighbor_pairs_fwd", forward_impl);
