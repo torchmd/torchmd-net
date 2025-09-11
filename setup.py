@@ -81,7 +81,14 @@ extensions = ExtensionType(
     runtime_library_dirs=runtime_library_dirs,
 )
 
-from setuptools_scm import get_version
+kwargs = {}
+if "CI" in os.environ:
+    from setuptools_scm import get_version
+
+    # Drop the dev version suffix because we modify pyproject.toml
+    # We do this only in CI because we need to upload to PyPI
+
+    kwargs = {"version": ".".join(get_version().split(".")[:3])}
 
 if __name__ == "__main__":
     setup(
@@ -101,7 +108,5 @@ if __name__ == "__main__":
             "numpy",
         ]
         + extra_deps,
-        version=".".join(
-            get_version().split(".")[:3]
-        ),  # Drop the dev version suffix because we modify pyproject.toml
+        **kwargs,
     )

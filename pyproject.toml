@@ -48,7 +48,7 @@ skip = [
 ]
 test-requires = ["pytest", "pytest-xdist"]
 test-command = "pytest {project}/tests"
-environment-pass = ["ACCELERATOR"]
+environment-pass = ["ACCELERATOR", "CI"]
 # container-engine = "docker; create_args: --gpus all"
 
 [tool.cibuildwheel.linux]
