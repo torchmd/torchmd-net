@@ -10,10 +10,49 @@
 import torch
 from torch import Tensor
 from typing import Tuple
-from torch.library import register_fake
 
 
 __all__ = ["is_current_stream_capturing", "get_neighbor_pairs_kernel"]
+
+
+from torch.utils.cpp_extension import load
+
+
+def set_torch_cuda_arch_list():
+    """Set the CUDA arch list according to the architectures the current torch installation was compiled for.
+    This function is a no-op if the environment variable TORCH_CUDA_ARCH_LIST is already set or if torch was not compiled with CUDA support.
+    """
+    import os
+    import sys
+
+    if not os.environ.get("TORCH_CUDA_ARCH_LIST"):
+        arch_flags = torch._C._cuda_getArchFlags()
+        sm_versions = [x[3:] for x in arch_flags.split() if x.startswith("sm_")]
+        formatted_versions = ";".join([f"{y[:-1]}.{y[-1]}" for y in sm_versions])
+        formatted_versions += "+PTX"
+        os.environ["TORCH_CUDA_ARCH_LIST"] = formatted_versions
+    # Find where the python interpreter is installed
+    python_interpreter = sys.executable
+    CUDA_HOME = os.path.dirname(os.path.dirname(python_interpreter))
+    print(f"CUDA_HOME: {CUDA_HOME}")
+    os.environ["CUDA_HOME"] = CUDA_HOME
+
+
+sources = [
+    "torchmdnet/extensions/torchmdnet_extensions.cpp",
+    "torchmdnet/extensions/neighbors/neighbors_cpu.cpp",
+]
+if torch.cuda.is_available():
+    set_torch_cuda_arch_list()
+    sources.append("torchmdnet/extensions/neighbors/neighbors_cuda.cu")
+
+
+torchmdnet_extensions = load(
+    name="torchmdnet_extensions",
+    sources=sources,
+    extra_cuda_cflags=["-O3", "-lineinfo"],  # optional
+    verbose=True,
+)
 
 
 def is_current_stream_capturing():
