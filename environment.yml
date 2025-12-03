@@ -9,6 +9,7 @@ dependencies:
   - pytorch_geometric
   - lightning
   - torchmetrics
+  - ase
   - tqdm
   # Dev tools
   - flake8
