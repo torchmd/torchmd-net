@@ -106,6 +106,7 @@ if __name__ == "__main__":
             "lightning",
             "tqdm",
             "numpy",
+            "ase",
         ]
         + extra_deps,
         **kwargs,
