@@ -221,6 +221,14 @@ class OptimizedDistance(torch.nn.Module):
         self.check_errors = check_errors
         self.long_edge_index = long_edge_index
 
+    def setup_for_compile_cudagraphs(self):
+        # box needs to be a buffer to it moves to correct device, otherwise we can end
+        # up with torch.compile failing to use cuda graphs with "skipping cudagraphs due to skipping cudagraphs due to cpu device (primals_3)."
+        # we cant just make it a buffer in the constructor above because then old state dicts will fail to load
+        _box = self.box
+        del self.box
+        self.register_buffer('box', _box)
+
     def forward(
         self, pos: Tensor, batch: Optional[Tensor] = None, box: Optional[Tensor] = None
     ) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
