@@ -46,7 +46,7 @@ skip = [
   "*_universal2",
   "*-musllinux_*",
 ]
-test-requires = ["pytest", "pytest-xdist"]
+test-requires = ["pytest", "pytest-xdist", "ase"]
 test-command = "pytest {project}/tests"
 environment-pass = ["ACCELERATOR", "CI"]
 # container-engine = "docker; create_args: --gpus all"
