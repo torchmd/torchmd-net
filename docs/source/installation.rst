@@ -3,21 +3,18 @@ Installation
 
 TorchMD-Net is available as a pip installable wheel as well as in `conda-forge <https://conda-forge.org/>`_
 
-TorchMD-Net provides builds for CPU-only, CUDA 11.8 and CUDA 12.4. 
+TorchMD-Net provides builds for CPU-only, CUDA 11 and CUDA 12. 
 CPU versions are only provided as reference, as the performance will be extremely limited.
 Depending on which variant you wish to install, you can install it with one of the following commands:
 
 .. code-block:: shell
 
-   # The following will install the CUDA 12.4 version by default
-   pip install torchmd-net 
    # The following will install the CUDA 11.8 version
-   pip install torchmd-net --extra-index-url https://download.pytorch.org/whl/cu118 --extra-index-url https://us-central1-python.pkg.dev/pypi-packages-455608/cu118/simple
+   pip install torchmd-net-cu11 --extra-index-url https://download.pytorch.org/whl/cu118
    # The following will install the CUDA 12.4 version
-   pip install torchmd-net --extra-index-url https://download.pytorch.org/whl/cu124 --extra-index-url https://us-central1-python.pkg.dev/pypi-packages-455608/cu124/simple
+   pip install torchmd-net-cu12 --extra-index-url https://download.pytorch.org/whl/cu124
    # The following will install the CPU only version (not recommended)
-   pip install torchmd-net --extra-index-url https://download.pytorch.org/whl/cpu --extra-index-url https://us-central1-python.pkg.dev/pypi-packages-455608/cpu/simple   
-
+   pip install torchmd-net-cpu --extra-index-url https://download.pytorch.org/whl/cpu
 
 Alternatively it can be installed with conda or mamba with one of the following commands.
 We recommend using `Miniforge <https://github.com/conda-forge/miniforge/>`_ instead of anaconda.
