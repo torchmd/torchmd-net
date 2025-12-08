@@ -218,6 +218,9 @@ class TensorNet(nn.Module):
         self.linear.reset_parameters()
         self.out_norm.reset_parameters()
 
+    def setup_for_compile_cudagraphs(self, batch):
+        self.distance.setup_for_compile_cudagraphs()
+
     def forward(
         self,
         z: Tensor,

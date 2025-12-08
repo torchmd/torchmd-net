@@ -178,3 +178,116 @@ class External:
             self.energy.clone().detach(),
             self.forces.clone().reshape(-1, self.n_atoms, 3).detach(),
         )
+
+
+
+import ase.calculators.calculator as ase_calc
+
+class TMDNETCalculator(ase_calc.Calculator):
+    """This is an adapter to use TorchMD-Net models as an ASE Calculator.
+
+    Parameters
+    ----------
+    model_file : str
+        Path to the checkpoint file of the model.
+    device : str, optional
+        Device on which the model should be run. Default: "cpu"
+    dtype : torch.dtype or str, optional
+        Cast the input to this dtype if defined. If passed as a string it should be a valid torch dtype. Default: torch.float32
+    compile: bool
+        Whether to use torch.compile to speed up calcuations, useful for molecular dynamics. Default: False
+    kwargs : dict, optional
+        Extra arguments to pass to the model when loading it.
+    """
+
+    implemented_properties = [
+        "energy",
+        "forces"
+    ]
+
+    def __init__(
+        self,  model_file, device = 'cpu', dtype=torch.float32, compile=False, **kwargs,
+    ):
+        
+        
+        ase_calc.Calculator.__init__(self)
+        self.device=device
+        self.model = load_model(
+            model_file,
+            derivative=False,
+            remove_ref_energy = kwargs.get('remove_ref_energy', True),
+            max_num_neighbors = kwargs.get('max_num_neighbors', 64),
+            static_shapes = True if compile else False,
+            check_errors = False if compile else True,
+            **kwargs,
+        )
+        for parameter in self.model.parameters():
+            parameter.requires_grad = False
+
+        self.model.to(device=self.device, dtype=dtype)
+
+        if compile:
+            self.compile=True
+        else:
+            self.compile=False
+        
+        self.compiled=False
+
+        self.evals = 0
+
+
+
+    def calculate(
+        self,
+        atoms = None,
+        properties = None,
+        system_changes = ase_calc.all_changes,
+    ):
+
+
+        if not properties:
+            properties = ["energy"]
+
+
+        ase_calc.Calculator.calculate(self, atoms, properties, system_changes)
+
+        numbers = atoms.numbers
+
+        positions = atoms.positions
+        total_charge = atoms.info['charge']
+        batch = [0 for _ in range(len(numbers))]
+
+        batch = torch.tensor(batch, device=self.device, dtype=torch.long)
+        numbers = torch.tensor(numbers, device=self.device, dtype=torch.long)
+        positions = torch.tensor(positions, device=self.device, dtype=torch.float32, requires_grad=True)
+        total_charge = torch.tensor([total_charge], device=self.device, dtype=torch.float32)
+
+        if self.compile and "numbers" in system_changes:
+            if self.evals == 0:
+                print("compiling...")
+            else:
+                print("atomic numbers changed, re-compiling...")
+
+            
+            self.model.representation_model.setup_for_compile_cudagraphs(batch)
+            self.model.output_model.setup_for_compile_cudagraphs(batch)
+            self.model.to(self.device)
+            self.compiled_model = torch.compile(self.model, backend='inductor', dynamic=False, fullgraph=True, mode='reduce-overhead')
+            self.compiled = True
+
+
+        if self.compiled:
+            energy, _ = self.compiled_model(
+                numbers, positions, batch=batch, q=total_charge
+            )
+        else:
+            energy, _ = self.model(
+                numbers, positions, batch=batch, q=total_charge
+            )
+
+        energy.backward()
+        forces = -positions.grad
+
+        self.results["energy"] = energy.detach().cpu().item()
+        self.results["forces"] = forces.detach().cpu().numpy()
+        self.evals +=1 

@@ -124,8 +124,8 @@ def _(
 ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
     """Returns empty vectors with the correct shape for the output of get_neighbor_pairs_kernel."""
     size = max_num_pairs
-    edge_index = torch.empty((2, size), dtype=torch.long, device=positions.device)
+    edge_index = torch.empty((2, size), dtype=torch.int32, device=positions.device)
     edge_distance = torch.empty((size,), dtype=positions.dtype, device=positions.device)
     edge_vec = torch.empty((size, 3), dtype=positions.dtype, device=positions.device)
-    num_pairs = torch.empty((1,), dtype=torch.long, device=positions.device)
+    num_pairs = torch.empty((1,), dtype=torch.int32, device=positions.device)
     return edge_index, edge_vec, edge_distance, num_pairs

@@ -58,8 +58,14 @@ CUDA_VISIBLE_DEVICES=0 torchmd-train --conf torchmd-net/examples/ET-QM9.yaml --l
 ``` 
 Run `torchmd-train --help` to see all available options and their descriptions.
 
-## Pretrained models
-See [here](https://github.com/torchmd/torchmd-net/tree/main/examples#loading-checkpoints) for instructions on how to load pretrained models.
+## Inference with Pretrained models
+
+### AceFF
+Trained [AceFF models](https://huggingface.co/collections/Acellera/aceff-machine-learning-potentials) can be loaded and used for inference.
+please see [here](https://github.com/torchmd/torchmd-net/tree/main/examples/aceff_examples) 
+
+
+To load your own trained models see [here](https://github.com/torchmd/torchmd-net/tree/main/examples#loading-checkpoints) for instructions on how to load pretrained models.
 
 ## Creating a new dataset
 If you want to train on custom data, first have a look at `torchmdnet.datasets.Custom`, which provides functionalities for 

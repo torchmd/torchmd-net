@@ -1,4 +1,7 @@
 # Examples
+## Inference with AceFF pretrained models
+To run inference with AceFF pretrained models please look in the aceff_examples folder.
+
 
 ## Training
 
