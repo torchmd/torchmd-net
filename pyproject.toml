@@ -27,7 +27,7 @@ include = ["torchmdnet*"]
 "*" = ["*.c", "*.cpp", "*.h", "*.cuh", "*.cu", ".gitignore"]
 
 [build-system]
-requires = ["setuptools>=78", "setuptools-scm>=8", "torch==2.7.1", "numpy"]
+requires = ["setuptools>=78", "setuptools-scm>=8", "torch==2.9.1", "numpy"]
 build-backend = "setuptools.build_meta"
 
 
