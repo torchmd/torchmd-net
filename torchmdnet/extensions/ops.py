@@ -12,6 +12,8 @@ from torch import Tensor
 from typing import Tuple
 from torch.library import register_fake
 
+from . import triton_neighbors
+
 
 __all__ = ["is_current_stream_capturing", "get_neighbor_pairs_kernel"]
 
@@ -27,6 +29,17 @@ def is_current_stream_capturing():
         torch.ops.torchmdnet_extensions.is_current_stream_capturing
     )
     return _is_current_stream_capturing()
+
+
+@torch.jit.ignore
+def _stream_is_capturing_runtime() -> bool:
+    try:
+        return torch.cuda.is_current_stream_capturing()
+    except Exception:
+        try:
+            return is_current_stream_capturing()
+        except Exception:
+            return False
 
 
 def get_neighbor_pairs_kernel(
@@ -79,7 +92,23 @@ def get_neighbor_pairs_kernel(
     num_pairs : Tensor
         The number of pairs found.
     """
-    return torch.ops.torchmdnet_extensions.get_neighbor_pairs(
+    use_triton = positions.is_cuda and strategy in ("brute", "shared", "cell")
+
+    if torch.jit.is_scripting() or not use_triton:
+        return triton_neighbors.torch_neighbor_pairs(
+            strategy,
+            positions,
+            batch,
+            box_vectors,
+            use_periodic,
+            cutoff_lower,
+            cutoff_upper,
+            max_num_pairs,
+            loop,
+            include_transpose,
+        )
+
+    return triton_neighbors.triton_neighbor_pairs(
         strategy,
         positions,
         batch,
