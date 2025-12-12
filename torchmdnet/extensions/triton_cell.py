@@ -146,6 +146,8 @@ def _traverse_cell_kernel(
 
     offs_nei = tl.arange(0, BLOCK_NEI)
 
+    counter_broadcast = counter_ptr + tl.zeros_like(i_idx)
+
     for neigh in range(27):
         dx_cell = (neigh % 3) - 1
         dy_cell = ((neigh // 3) % 3) - 1
@@ -210,15 +212,17 @@ def _traverse_cell_kernel(
                 ((dist2 < cutoff_upper2) & (dist2 >= cutoff_lower2)) | (loop & is_self)
             )
 
-            ori = tl.load(
-                sorted_index_ptr + i_idx * stride_sorted, mask=valid_pair, other=0
+            ori_i = tl.load(
+                sorted_index_ptr + i_idx * stride_sorted, mask=mask_i, other=0
             )
             orj = tl.load(
-                sorted_index_ptr + j_idx * stride_sorted, mask=valid_pair, other=0
+                sorted_index_ptr + j_idx * stride_sorted, mask=valid_j, other=0
             )
+            ori = ori_i
 
-            ni = tl.max(ori, orj)
-            nj = tl.min(ori, orj)
+            # Elementwise max/min; tl.max would perform a reduction over an axis
+            ni = tl.maximum(ori, orj)
+            nj = tl.minimum(ori, orj)
             sign = tl.where(ni == ori, 1.0, -1.0).to(dx.dtype)
 
             dx_out = dx * sign
@@ -226,7 +230,13 @@ def _traverse_cell_kernel(
             dz_out = dz * sign
             dist = tl.sqrt(dist2)
 
-            out_idx = tl.atomic_add(counter_ptr, 1, mask=valid_pair)
+            # Reserve contiguous slots for valid pairs in this block (BLOCK_ATOMS=1 -> 1D)
+            valid_pair_int = valid_pair.to(tl.int32)
+            total_pairs = tl.sum(valid_pair_int)
+            base_idx = tl.atomic_add(counter_ptr, total_pairs, mask=total_pairs > 0)
+            local_idx = tl.cumsum(valid_pair_int, axis=0) - 1
+            out_idx = base_idx + local_idx
+
             mask_store = valid_pair & (out_idx < max_pairs)
             tl.store(neighbors0_ptr + out_idx, ni, mask=mask_store)
             tl.store(neighbors1_ptr + out_idx, nj, mask=mask_store)
@@ -237,7 +247,14 @@ def _traverse_cell_kernel(
 
             if include_transpose:
                 valid_t = valid_pair & (ni != nj)
-                out_idx_t = tl.atomic_add(counter_ptr, 1, mask=valid_t)
+                valid_t_int = valid_t.to(tl.int32)
+                total_pairs_t = tl.sum(valid_t_int)
+                base_idx_t = tl.atomic_add(
+                    counter_ptr, total_pairs_t, mask=total_pairs_t > 0
+                )
+                local_idx_t = tl.cumsum(valid_t_int, axis=0) - 1
+                out_idx_t = base_idx_t + local_idx_t
+
                 mask_store_t = valid_t & (out_idx_t < max_pairs)
                 tl.store(neighbors0_ptr + out_idx_t, nj, mask=mask_store_t)
                 tl.store(neighbors1_ptr + out_idx_t, ni, mask=mask_store_t)
@@ -278,6 +295,8 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
         # Ensure box is well-formed and diagonal (cell list only supports rectangular boxes)
         box_vectors = _validate_box(box_vectors, float(cutoff_upper), 1)
         box_vectors = box_vectors.to(device=device, dtype=dtype).contiguous()
+        # CUDA version squeezes (1, 3, 3) to (3, 3); do the same to avoid OOB indexing
+        box_diag = box_vectors[0] if box_vectors.dim() == 3 else box_vectors
 
         # Cell grid dimensions (host math to match CUDA getCellDimensions)
         cell_dim_x, cell_dim_y, cell_dim_z = _get_cell_dimensions(
@@ -297,9 +316,9 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
             positions.stride(0),
             positions.stride(1),
             n_atoms,
-            float(box_vectors[0, 0, 0]),
-            float(box_vectors[1, 1, 1]),
-            float(box_vectors[2, 2, 2]),
+            float(box_diag[0, 0]),
+            float(box_diag[1, 1]),
+            float(box_diag[2, 2]),
             float(cutoff_upper),
             cell_dim_x,
             cell_dim_y,
@@ -352,9 +371,9 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
             cell_dim_x,
             cell_dim_y,
             cell_dim_z,
-            float(box_vectors[0, 0, 0]),
-            float(box_vectors[1, 1, 1]),
-            float(box_vectors[2, 2, 2]),
+            float(box_diag[0, 0]),
+            float(box_diag[1, 1]),
+            float(box_diag[2, 2]),
             float(cutoff_upper),
             float(cutoff_lower * cutoff_lower),
             float(cutoff_upper * cutoff_upper),
@@ -362,7 +381,7 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
             include_transpose,
             loop,
             max_num_pairs,
-            BLOCK_ATOMS=64,
+            BLOCK_ATOMS=1,
             BLOCK_NEI=64,
             MAX_CELL_ITERS=16,
         )
