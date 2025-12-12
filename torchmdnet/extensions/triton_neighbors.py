@@ -211,6 +211,7 @@ def _neighbor_brute_kernel(
     stride_box_r: tl.constexpr,
     stride_box_c: tl.constexpr,
     n_atoms: tl.constexpr,
+    num_all_pairs: tl.constexpr,
     use_periodic: tl.constexpr,
     include_transpose: tl.constexpr,
     loop: tl.constexpr,
@@ -219,18 +220,47 @@ def _neighbor_brute_kernel(
     cutoff_upper: tl.constexpr,
     BLOCK: tl.constexpr,
 ):
-    """Brute-force neighbor list kernel using atomic operations for compaction."""
+    """Brute-force neighbor list kernel using triangular indexing and atomic compaction.
+
+    Uses triangular indexing to iterate over only n*(n-1)/2 pairs (or n*(n+1)/2 with loop),
+    achieving 100% thread utilization while maintaining block-level atomic compaction.
+    """
     pid = tl.program_id(axis=0)
     start = pid * BLOCK
     idx = start + tl.arange(0, BLOCK)
-    i = idx // n_atoms
-    j = idx - i * n_atoms
 
-    valid = idx < n_atoms * n_atoms
-    tri_mask = j < i
+    valid = idx < num_all_pairs
+
+    # Convert linear index to (i, j) using triangular formula (same as CUDA get_row)
+    # Do integer arithmetic first, only convert to float for sqrt
     if loop:
-        tri_mask = j <= i
-    valid = valid & tri_mask
+        # With self-loops: j <= i, num_pairs = n*(n+1)/2
+        # row = floor((-1 + sqrt(1 + 8k)) / 2)
+        sqrt_arg = (1 + 8 * idx).to(tl.float32)
+        row_f = tl.math.floor((-1.0 + tl.math.sqrt(sqrt_arg)) * 0.5)
+        i = row_f.to(tl.int32)
+        # Handle floating-point edge case: if i*(i+1)/2 > idx, decrement i
+        i = tl.where(i * (i + 1) > 2 * idx, i - 1, i)
+        # col = k - row*(row+1)/2
+        j = idx - (i * (i + 1)) // 2
+    else:
+        # Without self-loops: j < i, num_pairs = n*(n-1)/2
+        # row = floor((1 + sqrt(1 + 8k)) / 2)
+        sqrt_arg = (1 + 8 * idx).to(tl.float32)
+        row_f = tl.math.floor((1.0 + tl.math.sqrt(sqrt_arg)) * 0.5)
+        i = row_f.to(tl.int32)
+        # Handle floating-point edge case (same correction as CUDA)
+        i = tl.where(i * (i - 1) > 2 * idx, i - 1, i)
+        # col = k - row*(row-1)/2
+        j = idx - (i * (i - 1)) // 2
+
+    # Validate indices: check bounds and triangular constraint
+    # Due to float precision, we may get invalid (i, j) pairs
+    valid = valid & (i >= 0) & (i < n_atoms) & (j >= 0) & (j <= i)
+    if not loop:
+        # For non-loop case, also require j < i (no self-loops)
+        valid = valid & (j < i)
+
     batch_i = tl.load(batch_ptr + i * stride_batch, mask=valid, other=0)
     batch_j = tl.load(batch_ptr + j * stride_batch, mask=valid, other=0)
     valid = valid & (batch_i == batch_j)
@@ -376,8 +406,14 @@ class TritonNeighborAutograd(torch.autograd.Function):
         distances = torch.zeros((max_num_pairs,), device=device, dtype=dtype)
         counter = torch.zeros((1,), device=device, dtype=torch.int32)
 
-        # Grid covers all (i, j) pairs
-        grid = lambda meta: (triton.cdiv(n_atoms * n_atoms, meta["BLOCK"]),)
+        # Compute triangular pair count: n*(n-1)/2 without self-loops, n*(n+1)/2 with
+        if loop:
+            num_all_pairs = n_atoms * (n_atoms + 1) // 2
+        else:
+            num_all_pairs = n_atoms * (n_atoms - 1) // 2
+
+        # Grid covers only triangular pairs (not n²)
+        grid = lambda meta: (triton.cdiv(num_all_pairs, meta["BLOCK"]),)
 
         _neighbor_brute_kernel[grid](
             positions,
@@ -395,6 +431,7 @@ class TritonNeighborAutograd(torch.autograd.Function):
             box_vectors.stride(1) if use_periodic else 0,
             box_vectors.stride(2) if use_periodic else 0,
             n_atoms,
+            num_all_pairs,
             use_periodic,
             include_transpose,
             loop,
