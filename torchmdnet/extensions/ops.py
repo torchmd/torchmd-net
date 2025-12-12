@@ -92,9 +92,7 @@ def get_neighbor_pairs_kernel(
     num_pairs : Tensor
         The number of pairs found.
     """
-    use_triton = positions.is_cuda and strategy in ("brute", "shared", "cell")
-
-    if torch.jit.is_scripting() or not use_triton:
+    if torch.jit.is_scripting() or not positions.is_cuda:
         return triton_neighbors.torch_neighbor_pairs(
             strategy,
             positions,
