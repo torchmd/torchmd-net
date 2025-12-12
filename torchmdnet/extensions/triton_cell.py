@@ -169,11 +169,14 @@ def _traverse_cell_kernel(
         start = start[:, None]
         end = end[:, None]
         has_atoms = has_atoms[:, None]
+        cell_len = tl.maximum(end - start, 0)
+        max_iters = tl.cdiv(cell_len + BLOCK_NEI - 1, BLOCK_NEI)
 
         for it in range(MAX_CELL_ITERS):
+            active_iter = it < max_iters
             base = start + it * BLOCK_NEI
             j_idx = base + offs_nei[None, :]
-            valid_j = mask_i[:, None] & has_atoms & (j_idx < end)
+            valid_j = mask_i[:, None] & has_atoms & active_iter & (j_idx < end)
             if loop:
                 valid_j = valid_j & (
                     (j_idx < i_idx[:, None]) | (j_idx == i_idx[:, None])
@@ -396,8 +399,8 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
             loop,
             max_num_pairs,
             BLOCK_ATOMS=32,
-            BLOCK_NEI=64,
-            MAX_CELL_ITERS=16,
+            BLOCK_NEI=32,
+            MAX_CELL_ITERS=64,
         )
 
         num_pairs = counter.to(torch.long)
