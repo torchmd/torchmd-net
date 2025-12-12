@@ -146,8 +146,6 @@ def _traverse_cell_kernel(
 
     offs_nei = tl.arange(0, BLOCK_NEI)
 
-    counter_broadcast = counter_ptr + tl.zeros_like(i_idx)
-
     for neigh in range(27):
         dx_cell = (neigh % 3) - 1
         dy_cell = ((neigh // 3) % 3) - 1
@@ -168,18 +166,23 @@ def _traverse_cell_kernel(
         start = tl.load(cell_start_ptr + neighbor_cell, mask=mask_i, other=-1)
         end = tl.load(cell_end_ptr + neighbor_cell, mask=mask_i, other=0)
         has_atoms = start != -1
+        start = start[:, None]
+        end = end[:, None]
+        has_atoms = has_atoms[:, None]
 
         for it in range(MAX_CELL_ITERS):
             base = start + it * BLOCK_NEI
-            j_idx = base + offs_nei
-            valid_j = mask_i & has_atoms & (j_idx < end)
+            j_idx = base + offs_nei[None, :]
+            valid_j = mask_i[:, None] & has_atoms & (j_idx < end)
             if loop:
-                valid_j = valid_j & ((j_idx < i_idx) | (j_idx == i_idx))
+                valid_j = valid_j & (
+                    (j_idx < i_idx[:, None]) | (j_idx == i_idx[:, None])
+                )
             else:
-                valid_j = valid_j & (j_idx < i_idx)
+                valid_j = valid_j & (j_idx < i_idx[:, None])
 
             batch_j = tl.load(batch_ptr + j_idx * stride_batch, mask=valid_j, other=0)
-            valid_j = valid_j & (batch_j == batch_i)
+            valid_j = valid_j & (batch_j == batch_i[:, None])
 
             pos_jx = tl.load(
                 pos_ptr + j_idx * stride_pos_0 + 0 * stride_pos_1,
@@ -197,9 +200,9 @@ def _traverse_cell_kernel(
                 other=0.0,
             )
 
-            dx = pos_ix - pos_jx
-            dy = pos_iy - pos_jy
-            dz = pos_iz - pos_jz
+            dx = pos_ix[:, None] - pos_jx
+            dy = pos_iy[:, None] - pos_jy
+            dz = pos_iz[:, None] - pos_jz
 
             if use_periodic:
                 dx = dx - _tl_round(dx / box_x) * box_x
@@ -207,7 +210,7 @@ def _traverse_cell_kernel(
                 dz = dz - _tl_round(dz / box_z) * box_z
 
             dist2 = dx * dx + dy * dy + dz * dz
-            is_self = j_idx == i_idx
+            is_self = j_idx == i_idx[:, None]
             valid_pair = valid_j & (
                 ((dist2 < cutoff_upper2) & (dist2 >= cutoff_lower2)) | (loop & is_self)
             )
@@ -218,7 +221,7 @@ def _traverse_cell_kernel(
             orj = tl.load(
                 sorted_index_ptr + j_idx * stride_sorted, mask=valid_j, other=0
             )
-            ori = ori_i
+            ori = ori_i[:, None] + tl.zeros((BLOCK_NEI,), dtype=ori_i.dtype)
 
             # Elementwise max/min; tl.max would perform a reduction over an axis
             ni = tl.maximum(ori, orj)
@@ -230,38 +233,47 @@ def _traverse_cell_kernel(
             dz_out = dz * sign
             dist = tl.sqrt(dist2)
 
-            # Reserve contiguous slots for valid pairs in this block (BLOCK_ATOMS=1 -> 1D)
-            valid_pair_int = valid_pair.to(tl.int32)
+            # Flatten per-atom neighbor results to 1D for contiguous writes
+            valid_pair_flat = tl.reshape(valid_pair, (BLOCK_ATOMS * BLOCK_NEI,))
+            valid_pair_int = valid_pair_flat.to(tl.int32)
             total_pairs = tl.sum(valid_pair_int)
+            prefix = tl.cumsum(valid_pair_int, axis=0) - 1
             base_idx = tl.atomic_add(counter_ptr, total_pairs, mask=total_pairs > 0)
-            local_idx = tl.cumsum(valid_pair_int, axis=0) - 1
-            out_idx = base_idx + local_idx
+            out_idx = base_idx + prefix
 
-            mask_store = valid_pair & (out_idx < max_pairs)
-            tl.store(neighbors0_ptr + out_idx, ni, mask=mask_store)
-            tl.store(neighbors1_ptr + out_idx, nj, mask=mask_store)
-            tl.store(deltas_ptr + out_idx * 3 + 0, dx_out, mask=mask_store)
-            tl.store(deltas_ptr + out_idx * 3 + 1, dy_out, mask=mask_store)
-            tl.store(deltas_ptr + out_idx * 3 + 2, dz_out, mask=mask_store)
-            tl.store(distances_ptr + out_idx, dist, mask=mask_store)
+            ni_flat = tl.reshape(ni, (BLOCK_ATOMS * BLOCK_NEI,))
+            nj_flat = tl.reshape(nj, (BLOCK_ATOMS * BLOCK_NEI,))
+            dx_flat = tl.reshape(dx_out, (BLOCK_ATOMS * BLOCK_NEI,))
+            dy_flat = tl.reshape(dy_out, (BLOCK_ATOMS * BLOCK_NEI,))
+            dz_flat = tl.reshape(dz_out, (BLOCK_ATOMS * BLOCK_NEI,))
+            dist_flat = tl.reshape(dist, (BLOCK_ATOMS * BLOCK_NEI,))
+
+            mask_store = valid_pair_flat & (out_idx < max_pairs)
+            tl.store(neighbors0_ptr + out_idx, ni_flat, mask=mask_store)
+            tl.store(neighbors1_ptr + out_idx, nj_flat, mask=mask_store)
+            tl.store(deltas_ptr + out_idx * 3 + 0, dx_flat, mask=mask_store)
+            tl.store(deltas_ptr + out_idx * 3 + 1, dy_flat, mask=mask_store)
+            tl.store(deltas_ptr + out_idx * 3 + 2, dz_flat, mask=mask_store)
+            tl.store(distances_ptr + out_idx, dist_flat, mask=mask_store)
 
             if include_transpose:
                 valid_t = valid_pair & (ni != nj)
-                valid_t_int = valid_t.to(tl.int32)
+                valid_t_flat = tl.reshape(valid_t, (BLOCK_ATOMS * BLOCK_NEI,))
+                valid_t_int = valid_t_flat.to(tl.int32)
                 total_pairs_t = tl.sum(valid_t_int)
+                prefix_t = tl.cumsum(valid_t_int, axis=0) - 1
                 base_idx_t = tl.atomic_add(
                     counter_ptr, total_pairs_t, mask=total_pairs_t > 0
                 )
-                local_idx_t = tl.cumsum(valid_t_int, axis=0) - 1
-                out_idx_t = base_idx_t + local_idx_t
+                out_idx_t = base_idx_t + prefix_t
 
-                mask_store_t = valid_t & (out_idx_t < max_pairs)
-                tl.store(neighbors0_ptr + out_idx_t, nj, mask=mask_store_t)
-                tl.store(neighbors1_ptr + out_idx_t, ni, mask=mask_store_t)
-                tl.store(deltas_ptr + out_idx_t * 3 + 0, -dx_out, mask=mask_store_t)
-                tl.store(deltas_ptr + out_idx_t * 3 + 1, -dy_out, mask=mask_store_t)
-                tl.store(deltas_ptr + out_idx_t * 3 + 2, -dz_out, mask=mask_store_t)
-                tl.store(distances_ptr + out_idx_t, dist, mask=mask_store_t)
+                mask_store_t = valid_t_flat & (out_idx_t < max_pairs)
+                tl.store(neighbors0_ptr + out_idx_t, nj_flat, mask=mask_store_t)
+                tl.store(neighbors1_ptr + out_idx_t, ni_flat, mask=mask_store_t)
+                tl.store(deltas_ptr + out_idx_t * 3 + 0, -dx_flat, mask=mask_store_t)
+                tl.store(deltas_ptr + out_idx_t * 3 + 1, -dy_flat, mask=mask_store_t)
+                tl.store(deltas_ptr + out_idx_t * 3 + 2, -dz_flat, mask=mask_store_t)
+                tl.store(distances_ptr + out_idx_t, dist_flat, mask=mask_store_t)
 
 
 class TritonCellNeighborAutograd(TritonNeighborAutograd):
@@ -383,7 +395,7 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
             include_transpose,
             loop,
             max_num_pairs,
-            BLOCK_ATOMS=1,
+            BLOCK_ATOMS=32,
             BLOCK_NEI=64,
             MAX_CELL_ITERS=16,
         )
