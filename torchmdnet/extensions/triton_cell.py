@@ -294,8 +294,10 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
 
         # Ensure box is well-formed and diagonal (cell list only supports rectangular boxes)
         box_vectors = _validate_box(box_vectors, float(cutoff_upper), 1)
-        box_vectors = box_vectors.to(device=device, dtype=dtype).contiguous()
-        # CUDA version squeezes (1, 3, 3) to (3, 3); do the same to avoid OOB indexing
+        # Keep box on host to avoid H2D during CUDA graph capture; only scalars are used in kernels
+        box_vectors = box_vectors.to(
+            dtype=dtype, device=box_vectors.device
+        ).contiguous()
         box_diag = box_vectors[0] if box_vectors.dim() == 3 else box_vectors
 
         # Cell grid dimensions (host math to match CUDA getCellDimensions)
