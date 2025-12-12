@@ -138,8 +138,12 @@ def _torch_neighbor_bruteforce(
         valid_mask = valid_mask & same_batch
 
     # Apply cutoff constraints
+    # Self-loops (i == j) are exempt from cutoff_lower since they have distance 0
+    is_self_loop = i_idx == j_idx
     valid_mask = (
-        valid_mask & (distances_grid < cutoff_upper) & (distances_grid >= cutoff_lower)
+        valid_mask
+        & (distances_grid < cutoff_upper)
+        & ((distances_grid >= cutoff_lower) | is_self_loop)
     )
 
     # Flatten everything: (n²)
@@ -288,7 +292,9 @@ def _neighbor_brute_kernel(
 
     dist2 = dx * dx + dy * dy + dz * dz
     dist = tl.sqrt(dist2)
-    valid = valid & (dist >= cutoff_lower) & (dist < cutoff_upper)
+    # Self-loops (i == j) are exempt from cutoff_lower since they have distance 0
+    is_self_loop = i == j
+    valid = valid & (dist < cutoff_upper) & ((dist >= cutoff_lower) | is_self_loop)
 
     valid_int = valid.to(tl.int32)
     local_idx = tl.cumsum(valid_int, axis=0) - 1
