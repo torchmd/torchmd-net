@@ -269,6 +269,7 @@ def triton_neighbor_pairs(
 ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
     from torchmdnet.extensions.triton_cell import TritonCellNeighborAutograd
     from torchmdnet.extensions.triton_brute import TritonBruteNeighborAutograd
+    from torchmdnet.extensions.triton_shared import TritonSharedNeighborAutograd
 
     if not _HAS_TRITON:
         raise RuntimeError("Triton is not available")
@@ -302,16 +303,17 @@ def triton_neighbor_pairs(
             bool(include_transpose),
         )
     elif strategy == "shared":
-        # return TritonSharedNeighborAutograd.apply(
-        #     positions,
-        #     batch,
-        #     box_vectors,
-        #     use_periodic,
-        #     float(cutoff_lower),
-        #     float(cutoff_upper),
-        #     int(max_num_pairs),
-        # )
-        pass
+        return TritonSharedNeighborAutograd.apply(
+            positions,
+            batch,
+            box_vectors,
+            use_periodic,
+            float(cutoff_lower),
+            float(cutoff_upper),
+            int(max_num_pairs),
+            bool(loop),
+            bool(include_transpose),
+        )
     else:
         raise ValueError(f"Unsupported strategy {strategy}")
 
