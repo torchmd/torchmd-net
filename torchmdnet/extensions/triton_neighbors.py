@@ -180,8 +180,8 @@ def _torch_neighbor_bruteforce(
     deltas_out = torch.where(valid_out.unsqueeze(1), deltas_out, zero_deltas)
     distances_out = torch.where(valid_out, distances_out, zero_distances)
 
-    # Count valid pairs
-    num_pairs_tensor = valid_out.sum().clamp(max=max_num_pairs).view(1).to(torch.long)
+    # Count ALL valid pairs (before slicing) to detect overflow
+    num_pairs_tensor = valid_flat.sum().view(1).to(torch.long)
     return neighbors_out, deltas_out, distances_out, num_pairs_tensor
 
 
@@ -398,9 +398,7 @@ class TritonNeighborAutograd(torch.autograd.Function):
             BLOCK=256,
         )
 
-        # Clamp num_pairs to written region
         num_pairs = counter.to(torch.long)
-        num_pairs = num_pairs.clamp(max=max_num_pairs)
 
         ctx.save_for_backward(neighbors, deltas, distances)
         ctx.num_atoms = n_atoms
