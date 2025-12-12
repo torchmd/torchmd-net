@@ -10,7 +10,7 @@ except Exception:
 
 from torch import Tensor
 import torch
-from .triton_neighbors import (
+from torchmdnet.extensions.triton_neighbors import (
     _tl_round,
     TritonNeighborAutograd,
     _validate_box,
