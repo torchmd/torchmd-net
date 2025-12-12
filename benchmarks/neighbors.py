@@ -120,6 +120,8 @@ def benchmark_neighbors(
                 n_atoms_per_batch[i] -= 1
                 difference += 1
     lbox = np.cbrt(num_particles / density)
+    lbox = max(lbox, 2 * cutoff + 0.01)
+    assert lbox > 2 * cutoff, "Box size must be greater than 2*cutoff"
     batch = torch.repeat_interleave(
         torch.arange(n_batches, dtype=torch.int64), n_atoms_per_batch
     ).to(device)
@@ -178,7 +180,7 @@ def benchmark_neighbors(
 
 
 if __name__ == "__main__":
-    strategies = ["distance", "brute"]  # , "cell", "shared"]
+    strategies = ["distance", "brute", "cell", "shared"]
     n_particles = 32767
     mean_num_neighbors = min(n_particles, 64)
     density = 0.8
