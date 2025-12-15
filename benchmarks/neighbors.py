@@ -212,7 +212,7 @@ if __name__ == "__main__":
     # Print a column per strategy, show speedup over Distance in parenthesis
     for n_batches in batch_sizes:
         base = results["distance", n_batches]
-        row = f"{n_batches:<10}"
+        row = f"{n_batches:<11}"
         for strategy in strategies:
             row += f"{results[strategy, n_batches]:<4.2f} x{base / results[strategy, n_batches]:<14.2f} "
         print(row)
@@ -243,7 +243,7 @@ if __name__ == "__main__":
         print("-------")
         headers = "N Particles "
         for strategy in strategies:
-            headers += f"{strategy.capitalize()}(ms) "
+            headers += f"{strategy.capitalize()+'(ms)':<21}"
         print(headers)
         print("-" * len(headers))
         # Print a column per strategy, show speedup over Distance in parenthesis
@@ -253,7 +253,7 @@ if __name__ == "__main__":
             # if n_particles > 32000:
             #     results["brute", n_particles] = 0
             #     brute_speedup = 0
-            row = f"{n_particles:<10}"
+            row = f"{n_particles:<12}"
             for strategy in strategies:
                 row += f"{results[strategy, n_particles]:<4.2f} x{base / results[strategy, n_particles]:<14.2f} "
             print(row)
