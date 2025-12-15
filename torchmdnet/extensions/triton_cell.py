@@ -8,8 +8,8 @@ except Exception:
     tl = None
     _HAS_TRITON = False
 
-from torch import Tensor
 import torch
+from torch import Tensor
 from torchmdnet.extensions.triton_neighbors import (
     _tl_round,
     TritonNeighborAutograd,
@@ -18,289 +18,375 @@ from torchmdnet.extensions.triton_neighbors import (
 )
 
 
-@triton.jit
-def _assign_cell_indices_kernel(
-    pos_ptr,
-    cell_index_ptr,
-    stride_pos_0: tl.constexpr,
-    stride_pos_1: tl.constexpr,
-    n_atoms: tl.constexpr,
-    box_x: tl.constexpr,
-    box_y: tl.constexpr,
-    box_z: tl.constexpr,
-    cutoff: tl.constexpr,
-    cell_x: tl.constexpr,
-    cell_y: tl.constexpr,
-    cell_z: tl.constexpr,
-    BLOCK: tl.constexpr,
-):
-    pid = tl.program_id(axis=0)
-    idx = pid * BLOCK + tl.arange(0, BLOCK)
-    mask = idx < n_atoms
+import torch
+import triton
+import triton.language as tl
 
-    px = tl.load(pos_ptr + idx * stride_pos_0 + 0 * stride_pos_1, mask=mask, other=0.0)
-    py = tl.load(pos_ptr + idx * stride_pos_0 + 1 * stride_pos_1, mask=mask, other=0.0)
-    pz = tl.load(pos_ptr + idx * stride_pos_0 + 2 * stride_pos_1, mask=mask, other=0.0)
 
-    # Bring to [-0.5*box, 0.5*box] (rectangular PBC)
-    px = px - _tl_round(px / box_x) * box_x
-    py = py - _tl_round(py / box_y) * box_y
-    pz = pz - _tl_round(pz / box_z) * box_z
-
-    cx = tl.math.floor((px + 0.5 * box_x) / cutoff).to(tl.int32)
-    cy = tl.math.floor((py + 0.5 * box_y) / cutoff).to(tl.int32)
-    cz = tl.math.floor((pz + 0.5 * box_z) / cutoff).to(tl.int32)
-
-    cx = tl.where(cx == cell_x, 0, cx)
-    cy = tl.where(cy == cell_y, 0, cy)
-    cz = tl.where(cz == cell_z, 0, cz)
-
-    cell_index = cx + cell_x * (cy + cell_y * cz)
-    tl.store(cell_index_ptr + idx, cell_index, mask=mask)
+import torch
+import triton
+import triton.language as tl
 
 
 @triton.jit
-def _fill_cell_offsets_kernel(
-    sorted_cell_ptr,
-    cell_start_ptr,
-    cell_end_ptr,
-    n_atoms: tl.constexpr,
-    BLOCK: tl.constexpr,
+def neighbor_list_kernel(
+    # Pointers
+    SortedCoords,
+    SortedBatch,
+    SortedToOrig,
+    CellStart,
+    CellEnd,
+    OutPairs,
+    OutDeltas,
+    OutDists,
+    GlobalCounter,
+    # Parameters
+    n_atoms,
+    max_pairs,
+    cutoff_lower_sq,
+    cutoff_upper_sq,
+    box_x,
+    box_y,
+    box_z,
+    n_cells_x,
+    n_cells_y,
+    n_cells_z,
+    # Flags
+    use_periodic: tl.constexpr,  # Enable/Disable PBC
+    loop: tl.constexpr,  # Enable/Disable Self-interactions
+    include_transpose: tl.constexpr,  # True: i!=j (Full), False: i<j (Half)
+    BLOCK_M: tl.constexpr,
+    MAX_TILES: tl.constexpr,  # Maximum number of tiles for inner loop (n_atoms / BLOCK_M)
 ):
-    pid = tl.program_id(axis=0)
-    idx = pid * BLOCK + tl.arange(0, BLOCK)
-    mask = idx < n_atoms
+    pid = tl.program_id(0)
+    idx_m = pid * BLOCK_M + tl.arange(0, BLOCK_M)
+    mask_m = idx_m < n_atoms
 
-    icell = tl.load(sorted_cell_ptr + idx, mask=mask, other=0)
-    prev = tl.load(sorted_cell_ptr + idx - 1, mask=mask & (idx > 0), other=0)
+    # Load Query Data
+    off_m = idx_m
+    pos_mx = tl.load(SortedCoords + off_m * 3 + 0, mask=mask_m, other=0.0)
+    pos_my = tl.load(SortedCoords + off_m * 3 + 1, mask=mask_m, other=0.0)
+    pos_mz = tl.load(SortedCoords + off_m * 3 + 2, mask=mask_m, other=0.0)
+    batch_m = tl.load(SortedBatch + off_m, mask=mask_m, other=-1)
 
-    is_first = idx == 0
-    is_new = is_first | (icell != prev)
+    # Identify Home Cell - vectorized for all BLOCK_M atoms
+    cell_sx = box_x / n_cells_x
+    cell_sy = box_y / n_cells_y
+    cell_sz = box_z / n_cells_z
 
-    tl.store(cell_start_ptr + icell, idx, mask=mask & is_new)
-    tl.store(cell_end_ptr + prev, idx, mask=mask & (is_new & (idx > 0)))
-    tl.store(cell_end_ptr + icell, idx + 1, mask=mask & (idx == n_atoms - 1))
+    # Local coords for cell calculation (vectorized for all atoms in block)
+    px = pos_mx
+    py = pos_my
+    pz = pos_mz
 
+    if use_periodic:
+        px = px - box_x * tl.math.floor(px / box_x)
+        py = py - box_y * tl.math.floor(py / box_y)
+        pz = pz - box_z * tl.math.floor(pz / box_z)
 
-@triton.jit
-def _process_neighbor(
-    j,
-    i_idx,
-    pos_ix,
-    pos_iy,
-    pos_iz,
-    batch_i,
-    ori,
-    pos_ptr,
-    batch_ptr,
-    sorted_index_ptr,
-    neighbors0_ptr,
-    neighbors1_ptr,
-    deltas_ptr,
-    distances_ptr,
-    counter_ptr,
-    stride_pos_0: tl.constexpr,
-    stride_pos_1: tl.constexpr,
-    stride_batch: tl.constexpr,
-    stride_sorted: tl.constexpr,
-    box_x: tl.constexpr,
-    box_y: tl.constexpr,
-    box_z: tl.constexpr,
-    cutoff_lower2: tl.constexpr,
-    cutoff_upper2: tl.constexpr,
-    use_periodic: tl.constexpr,
-    include_transpose: tl.constexpr,
-    loop: tl.constexpr,
-    max_pairs: tl.constexpr,
-):
-    """Process a single neighbor j for atom i."""
-    # Only consider j < i (or j <= i for loop mode)
-    if loop:
-        valid_j = j <= i_idx
-    else:
-        valid_j = j < i_idx
+    # Cell indices for each atom in the block (vectors of size BLOCK_M)
+    c_i_vec = (px / cell_sx).to(tl.int32)
+    c_j_vec = (py / cell_sy).to(tl.int32)
+    c_k_vec = (pz / cell_sz).to(tl.int32)
 
-    if valid_j:
-        # Check same batch
-        batch_j = tl.load(batch_ptr + j * stride_batch)
-        if batch_j == batch_i:
-            # Load position of atom j
-            pos_jx = tl.load(pos_ptr + j * stride_pos_0 + 0 * stride_pos_1)
-            pos_jy = tl.load(pos_ptr + j * stride_pos_0 + 1 * stride_pos_1)
-            pos_jz = tl.load(pos_ptr + j * stride_pos_0 + 2 * stride_pos_1)
+    # Clamp to valid range
+    c_i_vec = tl.maximum(tl.minimum(c_i_vec, n_cells_x - 1), 0)
+    c_j_vec = tl.maximum(tl.minimum(c_j_vec, n_cells_y - 1), 0)
+    c_k_vec = tl.maximum(tl.minimum(c_k_vec, n_cells_z - 1), 0)
 
-            # Compute distance
-            dx = pos_ix - pos_jx
-            dy = pos_iy - pos_jy
-            dz = pos_iz - pos_jz
+    # Iterate over neighbor cell offsets
+    for i in range(-1, 2):
+        for j in range(-1, 2):
+            for k in range(-1, 2):
 
-            # Apply periodic boundary conditions
-            if use_periodic:
-                dx = dx - _tl_round(dx / box_x) * box_x
-                dy = dy - _tl_round(dy / box_y) * box_y
-                dz = dz - _tl_round(dz / box_z) * box_z
+                # Compute neighbor cell indices for all atoms in block (vectorized)
+                n_idx_x = c_i_vec + i
+                n_idx_y = c_j_vec + j
+                n_idx_z = c_k_vec + k
 
-            dist2 = dx * dx + dy * dy + dz * dz
-            is_self = j == i_idx
+                # --- PBC CHECK (vectorized) ---
+                if use_periodic:
+                    # Wrap around
+                    n_idx_x = (n_idx_x + n_cells_x) % n_cells_x
+                    n_idx_y = (n_idx_y + n_cells_y) % n_cells_y
+                    n_idx_z = (n_idx_z + n_cells_z) % n_cells_z
+                    valid_cell_mask = mask_m  # All cells valid with PBC
+                else:
+                    # Strict Bounds Check (vectorized)
+                    valid_cell_mask = (
+                        (n_idx_x >= 0)
+                        & (n_idx_x < n_cells_x)
+                        & (n_idx_y >= 0)
+                        & (n_idx_y < n_cells_y)
+                        & (n_idx_z >= 0)
+                        & (n_idx_z < n_cells_z)
+                        & mask_m
+                    )
 
-            # Check distance criteria
-            valid_pair = ((dist2 < cutoff_upper2) & (dist2 >= cutoff_lower2)) | (
-                loop & is_self
-            )
-
-            if valid_pair:
-                orj = tl.load(sorted_index_ptr + j * stride_sorted)
-
-                # Canonical ordering: ni > nj
-                ni = tl.maximum(ori, orj)
-                nj = tl.minimum(ori, orj)
-                sign = tl.where(ni == ori, 1.0, -1.0).to(dx.dtype)
-
-                dx_out = dx * sign
-                dy_out = dy * sign
-                dz_out = dz * sign
-                dist = tl.sqrt(dist2)
-
-                # Atomic add to reserve output slot
-                out_idx = tl.atomic_add(counter_ptr, 1)
-                if out_idx < max_pairs:
-                    tl.store(neighbors0_ptr + out_idx, ni)
-                    tl.store(neighbors1_ptr + out_idx, nj)
-                    tl.store(deltas_ptr + out_idx * 3 + 0, dx_out)
-                    tl.store(deltas_ptr + out_idx * 3 + 1, dy_out)
-                    tl.store(deltas_ptr + out_idx * 3 + 2, dz_out)
-                    tl.store(distances_ptr + out_idx, dist)
-
-                # Add transpose pair if needed
-                if include_transpose:
-                    if ni != nj:
-                        out_idx_t = tl.atomic_add(counter_ptr, 1)
-                        if out_idx_t < max_pairs:
-                            tl.store(neighbors0_ptr + out_idx_t, nj)
-                            tl.store(neighbors1_ptr + out_idx_t, ni)
-                            tl.store(deltas_ptr + out_idx_t * 3 + 0, -dx_out)
-                            tl.store(deltas_ptr + out_idx_t * 3 + 1, -dy_out)
-                            tl.store(deltas_ptr + out_idx_t * 3 + 2, -dz_out)
-                            tl.store(distances_ptr + out_idx_t, dist)
-
-
-@triton.jit
-def _traverse_cell_kernel(
-    pos_ptr,
-    batch_ptr,
-    sorted_index_ptr,
-    cell_start_ptr,
-    cell_end_ptr,
-    neighbors0_ptr,
-    neighbors1_ptr,
-    deltas_ptr,
-    distances_ptr,
-    counter_ptr,
-    stride_pos_0: tl.constexpr,
-    stride_pos_1: tl.constexpr,
-    stride_batch: tl.constexpr,
-    stride_sorted: tl.constexpr,
-    n_atoms: tl.constexpr,
-    num_cells: tl.constexpr,
-    cell_x: tl.constexpr,
-    cell_y: tl.constexpr,
-    cell_z: tl.constexpr,
-    box_x: tl.constexpr,
-    box_y: tl.constexpr,
-    box_z: tl.constexpr,
-    cutoff: tl.constexpr,
-    cutoff_lower2: tl.constexpr,
-    cutoff_upper2: tl.constexpr,
-    use_periodic: tl.constexpr,
-    include_transpose: tl.constexpr,
-    loop: tl.constexpr,
-    max_pairs: tl.constexpr,
-):
-    """
-    CUDA-like kernel: one program per atom, scalar operations, dynamic neighbor iteration.
-    Uses tl.while_loop for work-efficient iteration like CUDA.
-    """
-    # One atom per program (like CUDA's one thread per atom)
-    i_idx = tl.program_id(axis=0)
-    if i_idx >= n_atoms:
-        return
-
-    # Load atom i data (scalar values)
-    pos_ix = tl.load(pos_ptr + i_idx * stride_pos_0 + 0 * stride_pos_1)
-    pos_iy = tl.load(pos_ptr + i_idx * stride_pos_0 + 1 * stride_pos_1)
-    pos_iz = tl.load(pos_ptr + i_idx * stride_pos_0 + 2 * stride_pos_1)
-    batch_i = tl.load(batch_ptr + i_idx * stride_batch)
-    ori = tl.load(sorted_index_ptr + i_idx * stride_sorted)
-
-    # Compute cell coordinate for atom i
-    pwx = pos_ix - _tl_round(pos_ix / box_x) * box_x
-    pwy = pos_iy - _tl_round(pos_iy / box_y) * box_y
-    pwz = pos_iz - _tl_round(pos_iz / box_z) * box_z
-    cx = tl.math.floor((pwx + 0.5 * box_x) / cutoff).to(tl.int32)
-    cy = tl.math.floor((pwy + 0.5 * box_y) / cutoff).to(tl.int32)
-    cz = tl.math.floor((pwz + 0.5 * box_z) / cutoff).to(tl.int32)
-    cx = tl.where(cx == cell_x, 0, cx)
-    cy = tl.where(cy == cell_y, 0, cy)
-    cz = tl.where(cz == cell_z, 0, cz)
-
-    # Loop over the 27 neighboring cells (like CUDA)
-    for neigh in range(27):
-        dx_cell = (neigh % 3) - 1
-        dy_cell = ((neigh // 3) % 3) - 1
-        dz_cell = (neigh // 9) - 1
-
-        nx = cx + dx_cell
-        ny = cy + dy_cell
-        nz = cz + dz_cell
-
-        # Periodic wrapping of cell coordinates
-        nx = tl.where(nx < 0, nx + cell_x, nx)
-        ny = tl.where(ny < 0, ny + cell_y, ny)
-        nz = tl.where(nz < 0, nz + cell_z, nz)
-        nx = tl.where(nx >= cell_x, nx - cell_x, nx)
-        ny = tl.where(ny >= cell_y, ny - cell_y, ny)
-        nz = tl.where(nz >= cell_z, nz - cell_z, nz)
-
-        neighbor_cell = nx + cell_x * (ny + cell_y * nz)
-        start = tl.load(cell_start_ptr + neighbor_cell)
-        end = tl.load(cell_end_ptr + neighbor_cell)
-
-        # Skip empty cells
-        if start != -1:
-            # Use while_loop for dynamic iteration (like CUDA's for loop)
-            j = start
-            while j < end:
-                _process_neighbor(
-                    j,
-                    i_idx,
-                    pos_ix,
-                    pos_iy,
-                    pos_iz,
-                    batch_i,
-                    ori,
-                    pos_ptr,
-                    batch_ptr,
-                    sorted_index_ptr,
-                    neighbors0_ptr,
-                    neighbors1_ptr,
-                    deltas_ptr,
-                    distances_ptr,
-                    counter_ptr,
-                    stride_pos_0,
-                    stride_pos_1,
-                    stride_batch,
-                    stride_sorted,
-                    box_x,
-                    box_y,
-                    box_z,
-                    cutoff_lower2,
-                    cutoff_upper2,
-                    use_periodic,
-                    include_transpose,
-                    loop,
-                    max_pairs,
+                # Compute flat cell indices (vectorized, one per query atom)
+                cell_idx_vec = (
+                    n_idx_x * (n_cells_y * n_cells_z) + n_idx_y * n_cells_z + n_idx_z
                 )
-                j += 1
+
+                # Gather cell boundaries for each query atom's neighbor cell
+                start_vec = tl.load(
+                    CellStart + cell_idx_vec, mask=valid_cell_mask, other=-1
+                )
+                end_vec = tl.load(CellEnd + cell_idx_vec, mask=valid_cell_mask, other=0)
+
+                # Find the maximum range we need to scan
+                max_end = tl.max(tl.where(valid_cell_mask, end_vec, 0))
+                min_start = tl.min(
+                    tl.where(valid_cell_mask & (start_vec >= 0), start_vec, n_atoms)
+                )
+
+                # Use fixed iteration count for CUDA graph compatibility
+                # Iterate over all possible neighbor atoms (worst case: all atoms)
+                for tile_idx in range(MAX_TILES):
+                    # Neighbor atom indices (global indices in sorted array)
+                    idx_n = tile_idx * BLOCK_M + tl.arange(0, BLOCK_M)
+                    # Only process if within valid range [min_start, max_end) and within n_atoms
+                    mask_n = (
+                        (idx_n >= min_start) & (idx_n < max_end) & (idx_n < n_atoms)
+                    )
+
+                    # Load Candidate atoms
+                    off_n = idx_n
+                    pos_nx = tl.load(
+                        SortedCoords + off_n * 3 + 0, mask=mask_n, other=0.0
+                    )
+                    pos_ny = tl.load(
+                        SortedCoords + off_n * 3 + 1, mask=mask_n, other=0.0
+                    )
+                    pos_nz = tl.load(
+                        SortedCoords + off_n * 3 + 2, mask=mask_n, other=0.0
+                    )
+                    batch_n = tl.load(SortedBatch + off_n, mask=mask_n, other=-2)
+
+                    # Compute distances: [BLOCK_M query atoms, BLOCK_M candidate atoms]
+                    d_x = pos_mx[:, None] - pos_nx[None, :]
+                    d_y = pos_my[:, None] - pos_ny[None, :]
+                    d_z = pos_mz[:, None] - pos_nz[None, :]
+
+                    # --- PBC Distance Adjustment ---
+                    if use_periodic:
+                        d_x = d_x - box_x * _tl_round(d_x / box_x)
+                        d_y = d_y - box_y * _tl_round(d_y / box_y)
+                        d_z = d_z - box_z * _tl_round(d_z / box_z)
+
+                    dist_sq = d_x * d_x + d_y * d_y + d_z * d_z
+
+                    # --- Interaction Logic ---
+                    # 1. Distance & Batch conditions
+                    cond_dist = (dist_sq <= cutoff_upper_sq) & (
+                        dist_sq >= cutoff_lower_sq
+                    )
+                    cond_batch = batch_m[:, None] == batch_n[None, :]
+
+                    # 2. Check if neighbor is within each query atom's cell range
+                    # idx_n is [BLOCK_M], start_vec is [BLOCK_M], end_vec is [BLOCK_M]
+                    # We need [BLOCK_M, BLOCK_M] comparison
+                    idx_n_bc = idx_n[None, :]  # [1, BLOCK_M]
+                    start_bc = start_vec[:, None]  # [BLOCK_M, 1]
+                    end_bc = end_vec[:, None]  # [BLOCK_M, 1]
+                    valid_cell_bc = valid_cell_mask[:, None]  # [BLOCK_M, 1]
+
+                    # Neighbor must be in the query atom's specific cell range
+                    cond_in_range = (
+                        (idx_n_bc >= start_bc) & (idx_n_bc < end_bc) & valid_cell_bc
+                    )
+
+                    # Load original indices for loop/transpose logic
+                    # The condition must be based on original indices, not sorted indices
+                    orig_m = tl.load(SortedToOrig + idx_m, mask=mask_m, other=-1)
+                    orig_n = tl.load(SortedToOrig + idx_n, mask=mask_n, other=-1)
+
+                    # 3. Index / Loop Logic (using original indices)
+                    orig_m_bc = orig_m[:, None]
+                    orig_n_bc = orig_n[None, :]
+
+                    if include_transpose:
+                        # Full List (both i->j and j->i)
+                        if loop:
+                            # Accept everything (i!=j AND i==j) -> All True
+                            cond_idx = True
+                        else:
+                            # Accept only i != j
+                            cond_idx = orig_m_bc != orig_n_bc
+                    else:
+                        # Half List (lower triangle convention: i >= j)
+                        if loop:
+                            # Accept i >= j (includes diagonal)
+                            cond_idx = orig_m_bc >= orig_n_bc
+                        else:
+                            # Accept i > j (excludes diagonal)
+                            cond_idx = orig_m_bc > orig_n_bc
+
+                    valid_mask = (
+                        cond_dist
+                        & cond_batch
+                        & cond_idx
+                        & cond_in_range
+                        & mask_m[:, None]
+                        & mask_n[None, :]
+                    )
+
+                    # --- Store Block ---
+                    num_found = tl.sum(valid_mask.to(tl.int32))
+                    if num_found > 0:
+                        current_offset = tl.atomic_add(GlobalCounter, num_found)
+                        if current_offset + num_found <= max_pairs:
+                            flat_mask = tl.ravel(valid_mask)
+                            csum = tl.cumsum(flat_mask.to(tl.int32), axis=0)
+                            store_idx = current_offset + csum - 1
+
+                            flat_orig_m = tl.ravel(
+                                tl.broadcast_to(orig_m[:, None], (BLOCK_M, BLOCK_M))
+                            )
+                            flat_orig_n = tl.ravel(
+                                tl.broadcast_to(orig_n[None, :], (BLOCK_M, BLOCK_M))
+                            )
+
+                            tl.store(
+                                OutPairs + 0 * max_pairs + store_idx,
+                                flat_orig_m,
+                                mask=flat_mask,
+                            )
+                            tl.store(
+                                OutPairs + 1 * max_pairs + store_idx,
+                                flat_orig_n,
+                                mask=flat_mask,
+                            )
+                            tl.store(
+                                OutDeltas + store_idx * 3 + 0,
+                                tl.ravel(d_x),
+                                mask=flat_mask,
+                            )
+                            tl.store(
+                                OutDeltas + store_idx * 3 + 1,
+                                tl.ravel(d_y),
+                                mask=flat_mask,
+                            )
+                            tl.store(
+                                OutDeltas + store_idx * 3 + 2,
+                                tl.ravel(d_z),
+                                mask=flat_mask,
+                            )
+                            tl.store(
+                                OutDists + store_idx,
+                                tl.sqrt(tl.ravel(dist_sq)),
+                                mask=flat_mask,
+                            )
+
+
+def find_neighbors(positions, box, cutoff, max_pairs=10_000_000):
+    """
+    positions: [N, 3] tensor
+    box: [3] tensor (Lx, Ly, Lz)
+    cutoff: scalar
+    """
+    N = positions.shape[0]
+    device = positions.device
+
+    # 1. Setup Cell Grid (Host side logic)
+    # Ensure cell size >= cutoff
+    n_cells = (box / cutoff).floor().int()
+    cell_size = box / n_cells
+
+    # 2. Sort Particles (Crucial for performance)
+    # Calculate cell index for every atom
+    cell_idx_x = (positions[:, 0] / cell_size[0]).long().clamp(0, n_cells[0] - 1)
+    cell_idx_y = (positions[:, 1] / cell_size[1]).long().clamp(0, n_cells[1] - 1)
+    cell_idx_z = (positions[:, 2] / cell_size[2]).long().clamp(0, n_cells[2] - 1)
+
+    # Flat cell index
+    flat_cell_indices = (
+        cell_idx_x * n_cells[1] * n_cells[2] + cell_idx_y * n_cells[2] + cell_idx_z
+    )
+
+    # Sort atoms by cell index
+    sorted_cell_indices, sort_idx = torch.sort(flat_cell_indices)
+    sorted_pos = positions[sort_idx].contiguous()
+
+    # 3. Build Cell Pointers (Start/Count)
+    # Using unique_consecutive to find cell boundaries
+    unique_cells, counts = torch.unique_consecutive(
+        sorted_cell_indices, return_counts=True
+    )
+
+    # We need dense arrays for the kernel [Total_Cells]
+    total_cells = n_cells[0] * n_cells[1] * n_cells[2]
+    cell_start = torch.zeros(total_cells, dtype=torch.int32, device=device)
+    cell_count = torch.zeros(total_cells, dtype=torch.int32, device=device)
+
+    # Compute starts (requires a search or scatter, here simplified)
+    # In production, use scatter_add or searchsorted
+    # Simple trick: scatter counts
+    cell_count.index_add_(0, unique_cells.int(), counts.int())
+
+    # Cumulative sum to get starts? No, we need starts in the *sorted* array.
+    # Since we sorted by cell, we can find starts easily.
+    # A fast way involves searchsorted if cells are sparse,
+    # but for water (dense), most cells are filled.
+    # We can compute starts using the counts and a prefix sum,
+    # but strictly speaking, we need the index in 'sorted_pos'.
+
+    # Fast GPU-friendly start index construction:
+    # Find where cell index changes
+    change_mask = torch.cat(
+        [
+            torch.tensor([1], device=device),
+            sorted_cell_indices[1:] != sorted_cell_indices[:-1],
+        ]
+    )
+    change_indices = torch.nonzero(change_mask).squeeze()
+    # This maps unique_cells -> start_index in sorted_pos
+    cell_start.index_copy_(0, unique_cells.int(), change_indices.int())
+
+    # 4. Prepare Outputs
+    out_pairs = torch.empty((2, max_pairs), dtype=torch.int32, device=device)
+    out_deltas = torch.empty((max_pairs, 3), dtype=torch.float32, device=device)
+    out_dists = torch.empty((max_pairs,), dtype=torch.float32, device=device)
+    global_counter = torch.zeros((1,), dtype=torch.int32, device=device)
+
+    # 5. Launch Kernel
+    grid = lambda META: (triton.cdiv(N, META["BLOCK_M"]),)
+    BLOCK_M = 64
+    max_tiles = (N + BLOCK_M - 1) // BLOCK_M
+
+    neighbor_list_kernel[grid](
+        sorted_pos,
+        cell_start,
+        cell_count,
+        out_pairs,
+        out_deltas,
+        out_dists,
+        global_counter,
+        N,
+        max_pairs,
+        cutoff**2,
+        box[0].item(),
+        box[1].item(),
+        box[2].item(),
+        n_cells[0].item(),
+        n_cells[1].item(),
+        n_cells[2].item(),
+        BLOCK_M=BLOCK_M,  # Tuning parameter
+        MAX_TILES=max_tiles,
+    )
+
+    num_pairs = global_counter.item()
+
+    # Note: The output pairs use indices from 'sorted_pos'.
+    # If you need original indices, you must map them back using 'sort_idx'.
+    # remapped_pairs = sort_idx[out_pairs[:, :num_pairs]]
+
+    return (
+        out_pairs[:, :num_pairs],
+        out_deltas[:num_pairs],
+        out_dists[:num_pairs],
+        num_pairs,
+    )
 
 
 class TritonCellNeighborAutograd(TritonNeighborAutograd):
@@ -319,11 +405,12 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
     ):
         if not _HAS_TRITON:
             raise RuntimeError("Triton is not available")
+
         device = positions.device
         dtype = positions.dtype
         n_atoms = positions.size(0)
 
-        # Validate inputs (mirror CUDA constraints)
+        # Validate inputs
         if positions.dim() != 2 or positions.size(1) != 3:
             raise ValueError('Expected "positions" to have shape (N, 3)')
         if batch.dim() != 1 or batch.size(0) != n_atoms:
@@ -331,101 +418,117 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
         if max_num_pairs <= 0:
             raise ValueError('Expected "max_num_pairs" to be positive')
 
-        # Ensure box is well-formed and diagonal (cell list only supports rectangular boxes)
-        box_vectors = _validate_box(box_vectors, float(cutoff_upper), 1)
-        # Keep box on host to avoid H2D during CUDA graph capture; only scalars are used in kernels
-        box_vectors = box_vectors.to(
-            dtype=dtype, device=box_vectors.device
-        ).contiguous()
+        box_vectors = box_vectors.to(dtype=dtype, device=device).contiguous()
         box_diag = box_vectors[0] if box_vectors.dim() == 3 else box_vectors
+        box_x, box_y, box_z = (
+            float(box_diag[0, 0]),
+            float(box_diag[1, 1]),
+            float(box_diag[2, 2]),
+        )
 
-        # Cell grid dimensions (host math to match CUDA getCellDimensions)
         cell_dim_x, cell_dim_y, cell_dim_z = _get_cell_dimensions(
             box_vectors, float(cutoff_upper)
         )
         num_cells = cell_dim_x * cell_dim_y * cell_dim_z
 
-        batch = batch.contiguous()
-        positions = positions.contiguous()
+        # 1. Cell Index Calculation
+        # If Periodic: Wrap positions into [0, Box].
+        # If Non-Periodic: We do NOT wrap positions physically (to preserve absolute coords),
+        # but we shift/map them to cell grid indices.
+        # Standard assumption: Positions are roughly within the box definition.
 
-        # 1. Compute cell index per atom
-        cell_indices = torch.empty((n_atoms,), device=device, dtype=torch.int32)
-        grid_assign = lambda meta: (triton.cdiv(n_atoms, meta["BLOCK"]),)
-        _assign_cell_indices_kernel[grid_assign](
-            positions,
-            cell_indices,
-            positions.stride(0),
-            positions.stride(1),
-            n_atoms,
-            float(box_diag[0, 0]),
-            float(box_diag[1, 1]),
-            float(box_diag[2, 2]),
-            float(cutoff_upper),
-            cell_dim_x,
-            cell_dim_y,
-            cell_dim_z,
-            BLOCK=256,
-        )
+        if use_periodic:
+            inv_box_x = 1.0 / box_x
+            inv_box_y = 1.0 / box_y
+            inv_box_z = 1.0 / box_z
+            px = positions[:, 0] - torch.floor(positions[:, 0] * inv_box_x) * box_x
+            py = positions[:, 1] - torch.floor(positions[:, 1] * inv_box_y) * box_y
+            pz = positions[:, 2] - torch.floor(positions[:, 2] * inv_box_z) * box_z
+        else:
+            # For non-periodic, use raw coords.
+            # We assume box starts at (0,0,0). If atoms are negative, we clamp index to 0.
+            px, py, pz = positions[:, 0], positions[:, 1], positions[:, 2]
 
-        # 2. Sort atoms by cell index
+        cx = (px / cutoff_upper).long().clamp(0, cell_dim_x - 1)
+        cy = (py / cutoff_upper).long().clamp(0, cell_dim_y - 1)
+        cz = (pz / cutoff_upper).long().clamp(0, cell_dim_z - 1)
+
+        cell_indices = cx * (cell_dim_y * cell_dim_z) + cy * cell_dim_z + cz
+
+        # 2. Sort
         sorted_cell_indices, sorted_atom_indices = torch.sort(cell_indices)
-        sorted_atom_indices = sorted_atom_indices.to(torch.int32)
-        sorted_positions = positions.index_select(0, sorted_atom_indices)
-        sorted_batch = batch.index_select(0, sorted_atom_indices)
+        sorted_atom_indices = sorted_atom_indices.int()
 
-        # 3. Build cell start/end offsets
+        sorted_positions = positions.index_select(
+            0, sorted_atom_indices.long()
+        ).contiguous()
+        sorted_batch = batch.index_select(0, sorted_atom_indices.long()).contiguous()
+
+        # 3. Cell Pointers
         cell_start = torch.full((num_cells,), -1, device=device, dtype=torch.int32)
-        cell_end = torch.empty((num_cells,), device=device, dtype=torch.int32)
-        grid_offsets = lambda meta: (triton.cdiv(n_atoms, meta["BLOCK"]),)
-        _fill_cell_offsets_kernel[grid_offsets](
-            sorted_cell_indices,
-            cell_start,
-            cell_end,
-            n_atoms,
-            BLOCK=256,
+        cell_end = torch.zeros((num_cells,), device=device, dtype=torch.int32)
+
+        change_mask = torch.cat(
+            [
+                torch.tensor([True], device=device),
+                sorted_cell_indices[1:] != sorted_cell_indices[:-1],
+            ]
+        )
+        change_indices = torch.nonzero(change_mask, as_tuple=False).squeeze(-1)
+        unique_cells = sorted_cell_indices[change_indices]
+        end_indices = torch.cat(
+            [change_indices[1:], torch.tensor([n_atoms], device=device)]
         )
 
-        # 4. Traverse cell list to generate neighbor pairs
-        neighbors = torch.full((2, max_num_pairs), -1, device=device, dtype=torch.long)
-        deltas = torch.zeros((max_num_pairs, 3), device=device, dtype=dtype)
-        distances = torch.zeros((max_num_pairs,), device=device, dtype=dtype)
+        cell_start.index_copy_(0, unique_cells.long(), change_indices.int())
+        cell_end.index_copy_(0, unique_cells.long(), end_indices.int())
+
+        # 4. Kernel Launch
+        neighbors = torch.empty((2, max_num_pairs), device=device, dtype=torch.long)
+        deltas = torch.empty((max_num_pairs, 3), device=device, dtype=dtype)
+        distances = torch.empty((max_num_pairs,), device=device, dtype=dtype)
         counter = torch.zeros((1,), device=device, dtype=torch.int32)
 
-        # One program per atom (like CUDA's one thread per atom)
-        grid_traverse = (n_atoms,)
-        _traverse_cell_kernel[grid_traverse](
+        BLOCK_M = 64
+        grid = (triton.cdiv(n_atoms, BLOCK_M),)
+
+        # Compute MAX_TILES for fixed iteration count (CUDA graph compatible)
+        max_tiles = (n_atoms + BLOCK_M - 1) // BLOCK_M
+
+        neighbor_list_kernel[grid](
             sorted_positions,
             sorted_batch,
             sorted_atom_indices,
             cell_start,
             cell_end,
-            neighbors[0],
-            neighbors[1],
+            neighbors,
             deltas,
             distances,
             counter,
-            sorted_positions.stride(0),
-            sorted_positions.stride(1),
-            sorted_batch.stride(0),
-            sorted_atom_indices.stride(0),
             n_atoms,
-            num_cells,
-            cell_dim_x,
-            cell_dim_y,
-            cell_dim_z,
-            float(box_diag[0, 0]),
-            float(box_diag[1, 1]),
-            float(box_diag[2, 2]),
-            float(cutoff_upper),
-            float(cutoff_lower * cutoff_lower),
-            float(cutoff_upper * cutoff_upper),
-            use_periodic,
-            include_transpose,
-            loop,
             max_num_pairs,
+            float(cutoff_lower**2),
+            float(cutoff_upper**2),
+            box_x,
+            box_y,
+            box_z,
+            int(cell_dim_x),
+            int(cell_dim_y),
+            int(cell_dim_z),
+            use_periodic=use_periodic,
+            loop=loop,
+            include_transpose=include_transpose,
+            BLOCK_M=BLOCK_M,
+            MAX_TILES=max_tiles,
         )
 
-        num_pairs = counter.to(torch.long)
+        num_found = counter.item()
+
+        # Trim results
+        neighbors = neighbors[:, :num_found]
+        deltas = deltas[:num_found]
+        distances = distances[:num_found]
+
         ctx.save_for_backward(neighbors, deltas, distances)
         ctx.num_atoms = n_atoms
-        return neighbors, deltas, distances, num_pairs
+        return neighbors, deltas, distances, torch.tensor([num_found], device=device)
