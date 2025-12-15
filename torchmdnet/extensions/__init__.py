@@ -9,4 +9,4 @@
 
 import torch
 from pathlib import Path
-from . import torchmdnet_extensions, ops
+from . import ops
