@@ -83,6 +83,108 @@ def _fill_cell_offsets_kernel(
 
 
 @triton.jit
+def _process_neighbor(
+    j,
+    i_idx,
+    pos_ix,
+    pos_iy,
+    pos_iz,
+    batch_i,
+    ori,
+    pos_ptr,
+    batch_ptr,
+    sorted_index_ptr,
+    neighbors0_ptr,
+    neighbors1_ptr,
+    deltas_ptr,
+    distances_ptr,
+    counter_ptr,
+    stride_pos_0: tl.constexpr,
+    stride_pos_1: tl.constexpr,
+    stride_batch: tl.constexpr,
+    stride_sorted: tl.constexpr,
+    box_x: tl.constexpr,
+    box_y: tl.constexpr,
+    box_z: tl.constexpr,
+    cutoff_lower2: tl.constexpr,
+    cutoff_upper2: tl.constexpr,
+    use_periodic: tl.constexpr,
+    include_transpose: tl.constexpr,
+    loop: tl.constexpr,
+    max_pairs: tl.constexpr,
+):
+    """Process a single neighbor j for atom i."""
+    # Only consider j < i (or j <= i for loop mode)
+    if loop:
+        valid_j = j <= i_idx
+    else:
+        valid_j = j < i_idx
+
+    if valid_j:
+        # Check same batch
+        batch_j = tl.load(batch_ptr + j * stride_batch)
+        if batch_j == batch_i:
+            # Load position of atom j
+            pos_jx = tl.load(pos_ptr + j * stride_pos_0 + 0 * stride_pos_1)
+            pos_jy = tl.load(pos_ptr + j * stride_pos_0 + 1 * stride_pos_1)
+            pos_jz = tl.load(pos_ptr + j * stride_pos_0 + 2 * stride_pos_1)
+
+            # Compute distance
+            dx = pos_ix - pos_jx
+            dy = pos_iy - pos_jy
+            dz = pos_iz - pos_jz
+
+            # Apply periodic boundary conditions
+            if use_periodic:
+                dx = dx - _tl_round(dx / box_x) * box_x
+                dy = dy - _tl_round(dy / box_y) * box_y
+                dz = dz - _tl_round(dz / box_z) * box_z
+
+            dist2 = dx * dx + dy * dy + dz * dz
+            is_self = j == i_idx
+
+            # Check distance criteria
+            valid_pair = ((dist2 < cutoff_upper2) & (dist2 >= cutoff_lower2)) | (
+                loop & is_self
+            )
+
+            if valid_pair:
+                orj = tl.load(sorted_index_ptr + j * stride_sorted)
+
+                # Canonical ordering: ni > nj
+                ni = tl.maximum(ori, orj)
+                nj = tl.minimum(ori, orj)
+                sign = tl.where(ni == ori, 1.0, -1.0).to(dx.dtype)
+
+                dx_out = dx * sign
+                dy_out = dy * sign
+                dz_out = dz * sign
+                dist = tl.sqrt(dist2)
+
+                # Atomic add to reserve output slot
+                out_idx = tl.atomic_add(counter_ptr, 1)
+                if out_idx < max_pairs:
+                    tl.store(neighbors0_ptr + out_idx, ni)
+                    tl.store(neighbors1_ptr + out_idx, nj)
+                    tl.store(deltas_ptr + out_idx * 3 + 0, dx_out)
+                    tl.store(deltas_ptr + out_idx * 3 + 1, dy_out)
+                    tl.store(deltas_ptr + out_idx * 3 + 2, dz_out)
+                    tl.store(distances_ptr + out_idx, dist)
+
+                # Add transpose pair if needed
+                if include_transpose:
+                    if ni != nj:
+                        out_idx_t = tl.atomic_add(counter_ptr, 1)
+                        if out_idx_t < max_pairs:
+                            tl.store(neighbors0_ptr + out_idx_t, nj)
+                            tl.store(neighbors1_ptr + out_idx_t, ni)
+                            tl.store(deltas_ptr + out_idx_t * 3 + 0, -dx_out)
+                            tl.store(deltas_ptr + out_idx_t * 3 + 1, -dy_out)
+                            tl.store(deltas_ptr + out_idx_t * 3 + 2, -dz_out)
+                            tl.store(distances_ptr + out_idx_t, dist)
+
+
+@triton.jit
 def _traverse_cell_kernel(
     pos_ptr,
     batch_ptr,
@@ -113,11 +215,10 @@ def _traverse_cell_kernel(
     include_transpose: tl.constexpr,
     loop: tl.constexpr,
     max_pairs: tl.constexpr,
-    MAX_CELL_ITERS: tl.constexpr,
 ):
     """
-    CUDA-like kernel: one program per atom, scalar operations, sequential neighbor iteration.
-    This mimics the CUDA implementation's parallelization strategy.
+    CUDA-like kernel: one program per atom, scalar operations, dynamic neighbor iteration.
+    Uses tl.while_loop for work-efficient iteration like CUDA.
     """
     # One atom per program (like CUDA's one thread per atom)
     i_idx = tl.program_id(axis=0)
@@ -164,89 +265,42 @@ def _traverse_cell_kernel(
         start = tl.load(cell_start_ptr + neighbor_cell)
         end = tl.load(cell_end_ptr + neighbor_cell)
 
-        # Skip empty cells (like CUDA's if (first_particle != -1))
-        if start == -1:
-            continue
-
-        # Iterate over atoms in this cell (like CUDA's for loop)
-        for j_offset in range(MAX_CELL_ITERS):
-            j = start + j_offset
-
-            # Early exit when we've processed all atoms in this cell
-            if j >= end:
-                break
-
-            # Only consider j < i (or j <= i for loop mode)
-            if loop:
-                if j > i_idx:
-                    continue
-            else:
-                if j >= i_idx:
-                    continue
-
-            # Check same batch
-            batch_j = tl.load(batch_ptr + j * stride_batch)
-            if batch_j != batch_i:
-                continue
-
-            # Load position of atom j
-            pos_jx = tl.load(pos_ptr + j * stride_pos_0 + 0 * stride_pos_1)
-            pos_jy = tl.load(pos_ptr + j * stride_pos_0 + 1 * stride_pos_1)
-            pos_jz = tl.load(pos_ptr + j * stride_pos_0 + 2 * stride_pos_1)
-
-            # Compute distance
-            dx = pos_ix - pos_jx
-            dy = pos_iy - pos_jy
-            dz = pos_iz - pos_jz
-
-            # Apply periodic boundary conditions
-            if use_periodic:
-                dx = dx - _tl_round(dx / box_x) * box_x
-                dy = dy - _tl_round(dy / box_y) * box_y
-                dz = dz - _tl_round(dz / box_z) * box_z
-
-            dist2 = dx * dx + dy * dy + dz * dz
-            is_self = j == i_idx
-
-            # Check distance criteria
-            valid = ((dist2 < cutoff_upper2) & (dist2 >= cutoff_lower2)) | (
-                loop & is_self
-            )
-
-            if valid:
-                orj = tl.load(sorted_index_ptr + j * stride_sorted)
-
-                # Canonical ordering: ni > nj
-                ni = tl.maximum(ori, orj)
-                nj = tl.minimum(ori, orj)
-                sign = tl.where(ni == ori, 1.0, -1.0).to(dx.dtype)
-
-                dx_out = dx * sign
-                dy_out = dy * sign
-                dz_out = dz * sign
-                dist = tl.sqrt(dist2)
-
-                # Atomic add to reserve output slot
-                out_idx = tl.atomic_add(counter_ptr, 1)
-                if out_idx < max_pairs:
-                    tl.store(neighbors0_ptr + out_idx, ni)
-                    tl.store(neighbors1_ptr + out_idx, nj)
-                    tl.store(deltas_ptr + out_idx * 3 + 0, dx_out)
-                    tl.store(deltas_ptr + out_idx * 3 + 1, dy_out)
-                    tl.store(deltas_ptr + out_idx * 3 + 2, dz_out)
-                    tl.store(distances_ptr + out_idx, dist)
-
-                # Add transpose pair if needed
-                if include_transpose:
-                    if ni != nj:
-                        out_idx_t = tl.atomic_add(counter_ptr, 1)
-                        if out_idx_t < max_pairs:
-                            tl.store(neighbors0_ptr + out_idx_t, nj)
-                            tl.store(neighbors1_ptr + out_idx_t, ni)
-                            tl.store(deltas_ptr + out_idx_t * 3 + 0, -dx_out)
-                            tl.store(deltas_ptr + out_idx_t * 3 + 1, -dy_out)
-                            tl.store(deltas_ptr + out_idx_t * 3 + 2, -dz_out)
-                            tl.store(distances_ptr + out_idx_t, dist)
+        # Skip empty cells
+        if start != -1:
+            # Use while_loop for dynamic iteration (like CUDA's for loop)
+            j = start
+            while j < end:
+                _process_neighbor(
+                    j,
+                    i_idx,
+                    pos_ix,
+                    pos_iy,
+                    pos_iz,
+                    batch_i,
+                    ori,
+                    pos_ptr,
+                    batch_ptr,
+                    sorted_index_ptr,
+                    neighbors0_ptr,
+                    neighbors1_ptr,
+                    deltas_ptr,
+                    distances_ptr,
+                    counter_ptr,
+                    stride_pos_0,
+                    stride_pos_1,
+                    stride_batch,
+                    stride_sorted,
+                    box_x,
+                    box_y,
+                    box_z,
+                    cutoff_lower2,
+                    cutoff_upper2,
+                    use_periodic,
+                    include_transpose,
+                    loop,
+                    max_pairs,
+                )
+                j += 1
 
 
 class TritonCellNeighborAutograd(TritonNeighborAutograd):
@@ -369,7 +423,6 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
             include_transpose,
             loop,
             max_num_pairs,
-            MAX_CELL_ITERS=512,  # Max atoms per cell; adjust based on density
         )
 
         num_pairs = counter.to(torch.long)
