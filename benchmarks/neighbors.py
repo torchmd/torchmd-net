@@ -214,7 +214,7 @@ if __name__ == "__main__":
         base = results["distance", n_batches]
         row = f"{n_batches:<11}"
         for strategy in strategies:
-            row += f"{results[strategy, n_batches]:<4.2f} x{base / results[strategy, n_batches]:<14.2f} "
+            row += f"{results[strategy, n_batches]:<5.2f} x{base / results[strategy, n_batches]:<13.2f} "
         print(row)
 
     n_particles_list = np.power(2, np.arange(8, 18))
@@ -255,5 +255,5 @@ if __name__ == "__main__":
             #     brute_speedup = 0
             row = f"{n_particles:<12}"
             for strategy in strategies:
-                row += f"{results[strategy, n_particles]:<4.2f} x{base / results[strategy, n_particles]:<14.2f} "
+                row += f"{results[strategy, n_particles]:<5.2f} x{base / results[strategy, n_particles]:<13.2f} "
             print(row)
