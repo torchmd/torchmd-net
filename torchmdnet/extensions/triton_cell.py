@@ -1,3 +1,5 @@
+import math
+
 try:
     import triton
     import triton.language as tl
@@ -16,16 +18,6 @@ from torchmdnet.extensions.triton_neighbors import (
     _validate_box,
     _get_cell_dimensions,
 )
-
-
-import torch
-import triton
-import triton.language as tl
-
-
-import torch
-import triton
-import triton.language as tl
 
 
 @triton.jit
@@ -75,14 +67,16 @@ def neighbor_list_kernel(
     cell_sz = box_z / n_cells_z
 
     # Local coords for cell calculation (vectorized for all atoms in block)
-    px = pos_mx
-    py = pos_my
-    pz = pos_mz
-
+    # Match CUDA implementation: for periodic, wrap to [0, box); for non-periodic, shift by 0.5*box
     if use_periodic:
-        px = px - box_x * tl.math.floor(px / box_x)
-        py = py - box_y * tl.math.floor(py / box_y)
-        pz = pz - box_z * tl.math.floor(pz / box_z)
+        px = pos_mx - box_x * tl.math.floor(pos_mx / box_x)
+        py = pos_my - box_y * tl.math.floor(pos_my / box_y)
+        pz = pos_mz - box_z * tl.math.floor(pos_mz / box_z)
+    else:
+        # For non-periodic, shift by half box (like CUDA impl: (p + 0.5*box) / cutoff)
+        px = pos_mx + 0.5 * box_x
+        py = pos_my + 0.5 * box_y
+        pz = pos_mz + 0.5 * box_z
 
     # Cell indices for each atom in the block (vectors of size BLOCK_M)
     c_i_vec = (px / cell_sx).to(tl.int32)
@@ -418,7 +412,12 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
         if max_num_pairs <= 0:
             raise ValueError('Expected "max_num_pairs" to be positive')
 
-        box_vectors = box_vectors.to(dtype=dtype, device=device).contiguous()
+        # Handle box_vectors - following CUDA cell implementation approach:
+        # The box must be provided and valid. For non-periodic, the box defines the cell grid bounds.
+        # Move to correct device/dtype only if needed (avoid CPU sync during graph capture)
+        if box_vectors.device != device or box_vectors.dtype != dtype:
+            box_vectors = box_vectors.to(dtype=dtype, device=device)
+        box_vectors = box_vectors.contiguous()
         box_diag = box_vectors[0] if box_vectors.dim() == 3 else box_vectors
         box_x, box_y, box_z = (
             float(box_diag[0, 0]),
@@ -426,17 +425,16 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
             float(box_diag[2, 2]),
         )
 
+        # Compute cell dimensions - match CUDA implementation limits
         cell_dim_x, cell_dim_y, cell_dim_z = _get_cell_dimensions(
             box_vectors, float(cutoff_upper)
         )
         num_cells = cell_dim_x * cell_dim_y * cell_dim_z
 
         # 1. Cell Index Calculation
-        # If Periodic: Wrap positions into [0, Box].
-        # If Non-Periodic: We do NOT wrap positions physically (to preserve absolute coords),
-        # but we shift/map them to cell grid indices.
-        # Standard assumption: Positions are roughly within the box definition.
-
+        # For periodic: wrap positions to [0, box) using PBC
+        # For non-periodic: shift positions by half box (matching CUDA cell implementation)
+        # The CUDA implementation uses: (p + 0.5 * box_size) / cutoff for cell index
         if use_periodic:
             inv_box_x = 1.0 / box_x
             inv_box_y = 1.0 / box_y
@@ -445,9 +443,11 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
             py = positions[:, 1] - torch.floor(positions[:, 1] * inv_box_y) * box_y
             pz = positions[:, 2] - torch.floor(positions[:, 2] * inv_box_z) * box_z
         else:
-            # For non-periodic, use raw coords.
-            # We assume box starts at (0,0,0). If atoms are negative, we clamp index to 0.
-            px, py, pz = positions[:, 0], positions[:, 1], positions[:, 2]
+            # For non-periodic, shift positions by half box (like CUDA impl)
+            # This centers the cell grid around the origin
+            px = positions[:, 0] + 0.5 * box_x
+            py = positions[:, 1] + 0.5 * box_y
+            pz = positions[:, 2] + 0.5 * box_z
 
         cx = (px / cutoff_upper).long().clamp(0, cell_dim_x - 1)
         cy = (py / cutoff_upper).long().clamp(0, cell_dim_y - 1)
@@ -464,24 +464,29 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
         ).contiguous()
         sorted_batch = batch.index_select(0, sorted_atom_indices.long()).contiguous()
 
-        # 3. Cell Pointers
-        cell_start = torch.full((num_cells,), -1, device=device, dtype=torch.int32)
+        # 3. Cell Pointers (CUDA graph compatible using scatter_reduce)
+        # Initialize cell_start with n_atoms (will use scatter_reduce 'amin')
+        # Initialize cell_end with 0 (will use scatter_reduce 'amax')
+        cell_start = torch.full((num_cells,), n_atoms, device=device, dtype=torch.int32)
         cell_end = torch.zeros((num_cells,), device=device, dtype=torch.int32)
 
-        change_mask = torch.cat(
-            [
-                torch.tensor([True], device=device),
-                sorted_cell_indices[1:] != sorted_cell_indices[:-1],
-            ]
+        # Compute cell boundaries using scatter_reduce (fixed output size, CUDA graph compatible)
+        atom_indices = torch.arange(n_atoms, device=device, dtype=torch.int32)
+        sorted_cell_indices_long = sorted_cell_indices.long()
+        # cell_start[cell] = min index of atoms in that cell
+        cell_start.scatter_reduce_(
+            0, sorted_cell_indices_long, atom_indices, reduce="amin", include_self=True
         )
-        change_indices = torch.nonzero(change_mask, as_tuple=False).squeeze(-1)
-        unique_cells = sorted_cell_indices[change_indices]
-        end_indices = torch.cat(
-            [change_indices[1:], torch.tensor([n_atoms], device=device)]
+        # cell_end[cell] = max index + 1 of atoms in that cell
+        end_indices = atom_indices + 1
+        cell_end.scatter_reduce_(
+            0, sorted_cell_indices_long, end_indices, reduce="amax", include_self=True
         )
 
-        cell_start.index_copy_(0, unique_cells.long(), change_indices.int())
-        cell_end.index_copy_(0, unique_cells.long(), end_indices.int())
+        # Mark empty cells with -1 for cell_start (cells where cell_end remained 0)
+        # Use in-place operation to avoid tensor creation during CUDA graph capture
+        empty_cell_mask = cell_end == 0
+        cell_start.masked_fill_(empty_cell_mask, -1)
 
         # 4. Kernel Launch
         neighbors = torch.empty((2, max_num_pairs), device=device, dtype=torch.long)
@@ -522,13 +527,9 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
             MAX_TILES=max_tiles,
         )
 
-        num_found = counter.item()
-
-        # Trim results
-        neighbors = neighbors[:, :num_found]
-        deltas = deltas[:num_found]
-        distances = distances[:num_found]
+        # Return counter as tensor to avoid GPU->CPU sync (CUDA graph compatible)
+        num_pairs = counter.to(torch.long)
 
         ctx.save_for_backward(neighbors, deltas, distances)
         ctx.num_atoms = n_atoms
-        return neighbors, deltas, distances, torch.tensor([num_found], device=device)
+        return neighbors, deltas, distances, num_pairs
