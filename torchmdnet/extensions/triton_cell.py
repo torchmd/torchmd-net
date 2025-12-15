@@ -113,27 +113,25 @@ def _traverse_cell_kernel(
     include_transpose: tl.constexpr,
     loop: tl.constexpr,
     max_pairs: tl.constexpr,
-    BLOCK_ATOMS: tl.constexpr,
-    BLOCK_NEI: tl.constexpr,
     MAX_CELL_ITERS: tl.constexpr,
 ):
-    pid = tl.program_id(axis=0)
-    i_idx = pid * BLOCK_ATOMS + tl.arange(0, BLOCK_ATOMS)
-    mask_i = i_idx < n_atoms
+    """
+    CUDA-like kernel: one program per atom, scalar operations, sequential neighbor iteration.
+    This mimics the CUDA implementation's parallelization strategy.
+    """
+    # One atom per program (like CUDA's one thread per atom)
+    i_idx = tl.program_id(axis=0)
+    if i_idx >= n_atoms:
+        return
 
-    pos_ix = tl.load(
-        pos_ptr + i_idx * stride_pos_0 + 0 * stride_pos_1, mask=mask_i, other=0.0
-    )
-    pos_iy = tl.load(
-        pos_ptr + i_idx * stride_pos_0 + 1 * stride_pos_1, mask=mask_i, other=0.0
-    )
-    pos_iz = tl.load(
-        pos_ptr + i_idx * stride_pos_0 + 2 * stride_pos_1, mask=mask_i, other=0.0
-    )
+    # Load atom i data (scalar values)
+    pos_ix = tl.load(pos_ptr + i_idx * stride_pos_0 + 0 * stride_pos_1)
+    pos_iy = tl.load(pos_ptr + i_idx * stride_pos_0 + 1 * stride_pos_1)
+    pos_iz = tl.load(pos_ptr + i_idx * stride_pos_0 + 2 * stride_pos_1)
+    batch_i = tl.load(batch_ptr + i_idx * stride_batch)
+    ori = tl.load(sorted_index_ptr + i_idx * stride_sorted)
 
-    batch_i = tl.load(batch_ptr + i_idx * stride_batch, mask=mask_i, other=0)
-
-    # Cell coordinate for atom i
+    # Compute cell coordinate for atom i
     pwx = pos_ix - _tl_round(pos_ix / box_x) * box_x
     pwy = pos_iy - _tl_round(pos_iy / box_y) * box_y
     pwz = pos_iz - _tl_round(pos_iz / box_z) * box_z
@@ -144,8 +142,7 @@ def _traverse_cell_kernel(
     cy = tl.where(cy == cell_y, 0, cy)
     cz = tl.where(cz == cell_z, 0, cz)
 
-    offs_nei = tl.arange(0, BLOCK_NEI)
-
+    # Loop over the 27 neighboring cells (like CUDA)
     for neigh in range(27):
         dx_cell = (neigh % 3) - 1
         dy_cell = ((neigh // 3) % 3) - 1
@@ -155,6 +152,7 @@ def _traverse_cell_kernel(
         ny = cy + dy_cell
         nz = cz + dz_cell
 
+        # Periodic wrapping of cell coordinates
         nx = tl.where(nx < 0, nx + cell_x, nx)
         ny = tl.where(ny < 0, ny + cell_y, ny)
         nz = tl.where(nz < 0, nz + cell_z, nz)
@@ -163,120 +161,92 @@ def _traverse_cell_kernel(
         nz = tl.where(nz >= cell_z, nz - cell_z, nz)
 
         neighbor_cell = nx + cell_x * (ny + cell_y * nz)
-        start = tl.load(cell_start_ptr + neighbor_cell, mask=mask_i, other=-1)
-        end = tl.load(cell_end_ptr + neighbor_cell, mask=mask_i, other=0)
-        has_atoms = start != -1
-        start = start[:, None]
-        end = end[:, None]
-        has_atoms = has_atoms[:, None]
-        cell_len = tl.maximum(end - start, 0)
-        max_iters = tl.cdiv(cell_len + BLOCK_NEI - 1, BLOCK_NEI)
+        start = tl.load(cell_start_ptr + neighbor_cell)
+        end = tl.load(cell_end_ptr + neighbor_cell)
 
-        for it in range(MAX_CELL_ITERS):
-            active_iter = it < max_iters
-            base = start + it * BLOCK_NEI
-            j_idx = base + offs_nei[None, :]
-            valid_j = mask_i[:, None] & has_atoms & active_iter & (j_idx < end)
+        # Skip empty cells (like CUDA's if (first_particle != -1))
+        if start == -1:
+            continue
+
+        # Iterate over atoms in this cell (like CUDA's for loop)
+        for j_offset in range(MAX_CELL_ITERS):
+            j = start + j_offset
+
+            # Early exit when we've processed all atoms in this cell
+            if j >= end:
+                break
+
+            # Only consider j < i (or j <= i for loop mode)
             if loop:
-                valid_j = valid_j & (
-                    (j_idx < i_idx[:, None]) | (j_idx == i_idx[:, None])
-                )
+                if j > i_idx:
+                    continue
             else:
-                valid_j = valid_j & (j_idx < i_idx[:, None])
+                if j >= i_idx:
+                    continue
 
-            batch_j = tl.load(batch_ptr + j_idx * stride_batch, mask=valid_j, other=0)
-            valid_j = valid_j & (batch_j == batch_i[:, None])
+            # Check same batch
+            batch_j = tl.load(batch_ptr + j * stride_batch)
+            if batch_j != batch_i:
+                continue
 
-            pos_jx = tl.load(
-                pos_ptr + j_idx * stride_pos_0 + 0 * stride_pos_1,
-                mask=valid_j,
-                other=0.0,
-            )
-            pos_jy = tl.load(
-                pos_ptr + j_idx * stride_pos_0 + 1 * stride_pos_1,
-                mask=valid_j,
-                other=0.0,
-            )
-            pos_jz = tl.load(
-                pos_ptr + j_idx * stride_pos_0 + 2 * stride_pos_1,
-                mask=valid_j,
-                other=0.0,
-            )
+            # Load position of atom j
+            pos_jx = tl.load(pos_ptr + j * stride_pos_0 + 0 * stride_pos_1)
+            pos_jy = tl.load(pos_ptr + j * stride_pos_0 + 1 * stride_pos_1)
+            pos_jz = tl.load(pos_ptr + j * stride_pos_0 + 2 * stride_pos_1)
 
-            dx = pos_ix[:, None] - pos_jx
-            dy = pos_iy[:, None] - pos_jy
-            dz = pos_iz[:, None] - pos_jz
+            # Compute distance
+            dx = pos_ix - pos_jx
+            dy = pos_iy - pos_jy
+            dz = pos_iz - pos_jz
 
+            # Apply periodic boundary conditions
             if use_periodic:
                 dx = dx - _tl_round(dx / box_x) * box_x
                 dy = dy - _tl_round(dy / box_y) * box_y
                 dz = dz - _tl_round(dz / box_z) * box_z
 
             dist2 = dx * dx + dy * dy + dz * dz
-            is_self = j_idx == i_idx[:, None]
-            valid_pair = valid_j & (
-                ((dist2 < cutoff_upper2) & (dist2 >= cutoff_lower2)) | (loop & is_self)
+            is_self = j == i_idx
+
+            # Check distance criteria
+            valid = ((dist2 < cutoff_upper2) & (dist2 >= cutoff_lower2)) | (
+                loop & is_self
             )
 
-            ori_i = tl.load(
-                sorted_index_ptr + i_idx * stride_sorted, mask=mask_i, other=0
-            )
-            orj = tl.load(
-                sorted_index_ptr + j_idx * stride_sorted, mask=valid_j, other=0
-            )
-            ori = ori_i[:, None] + tl.zeros((BLOCK_NEI,), dtype=ori_i.dtype)
+            if valid:
+                orj = tl.load(sorted_index_ptr + j * stride_sorted)
 
-            # Elementwise max/min; tl.max would perform a reduction over an axis
-            ni = tl.maximum(ori, orj)
-            nj = tl.minimum(ori, orj)
-            sign = tl.where(ni == ori, 1.0, -1.0).to(dx.dtype)
+                # Canonical ordering: ni > nj
+                ni = tl.maximum(ori, orj)
+                nj = tl.minimum(ori, orj)
+                sign = tl.where(ni == ori, 1.0, -1.0).to(dx.dtype)
 
-            dx_out = dx * sign
-            dy_out = dy * sign
-            dz_out = dz * sign
-            dist = tl.sqrt(dist2)
+                dx_out = dx * sign
+                dy_out = dy * sign
+                dz_out = dz * sign
+                dist = tl.sqrt(dist2)
 
-            # Flatten per-atom neighbor results to 1D for contiguous writes
-            valid_pair_flat = tl.reshape(valid_pair, (BLOCK_ATOMS * BLOCK_NEI,))
-            valid_pair_int = valid_pair_flat.to(tl.int32)
-            total_pairs = tl.sum(valid_pair_int)
-            prefix = tl.cumsum(valid_pair_int, axis=0) - 1
-            base_idx = tl.atomic_add(counter_ptr, total_pairs, mask=total_pairs > 0)
-            out_idx = base_idx + prefix
+                # Atomic add to reserve output slot
+                out_idx = tl.atomic_add(counter_ptr, 1)
+                if out_idx < max_pairs:
+                    tl.store(neighbors0_ptr + out_idx, ni)
+                    tl.store(neighbors1_ptr + out_idx, nj)
+                    tl.store(deltas_ptr + out_idx * 3 + 0, dx_out)
+                    tl.store(deltas_ptr + out_idx * 3 + 1, dy_out)
+                    tl.store(deltas_ptr + out_idx * 3 + 2, dz_out)
+                    tl.store(distances_ptr + out_idx, dist)
 
-            ni_flat = tl.reshape(ni, (BLOCK_ATOMS * BLOCK_NEI,))
-            nj_flat = tl.reshape(nj, (BLOCK_ATOMS * BLOCK_NEI,))
-            dx_flat = tl.reshape(dx_out, (BLOCK_ATOMS * BLOCK_NEI,))
-            dy_flat = tl.reshape(dy_out, (BLOCK_ATOMS * BLOCK_NEI,))
-            dz_flat = tl.reshape(dz_out, (BLOCK_ATOMS * BLOCK_NEI,))
-            dist_flat = tl.reshape(dist, (BLOCK_ATOMS * BLOCK_NEI,))
-
-            mask_store = valid_pair_flat & (out_idx < max_pairs)
-            tl.store(neighbors0_ptr + out_idx, ni_flat, mask=mask_store)
-            tl.store(neighbors1_ptr + out_idx, nj_flat, mask=mask_store)
-            tl.store(deltas_ptr + out_idx * 3 + 0, dx_flat, mask=mask_store)
-            tl.store(deltas_ptr + out_idx * 3 + 1, dy_flat, mask=mask_store)
-            tl.store(deltas_ptr + out_idx * 3 + 2, dz_flat, mask=mask_store)
-            tl.store(distances_ptr + out_idx, dist_flat, mask=mask_store)
-
-            if include_transpose:
-                valid_t = valid_pair & (ni != nj)
-                valid_t_flat = tl.reshape(valid_t, (BLOCK_ATOMS * BLOCK_NEI,))
-                valid_t_int = valid_t_flat.to(tl.int32)
-                total_pairs_t = tl.sum(valid_t_int)
-                prefix_t = tl.cumsum(valid_t_int, axis=0) - 1
-                base_idx_t = tl.atomic_add(
-                    counter_ptr, total_pairs_t, mask=total_pairs_t > 0
-                )
-                out_idx_t = base_idx_t + prefix_t
-
-                mask_store_t = valid_t_flat & (out_idx_t < max_pairs)
-                tl.store(neighbors0_ptr + out_idx_t, nj_flat, mask=mask_store_t)
-                tl.store(neighbors1_ptr + out_idx_t, ni_flat, mask=mask_store_t)
-                tl.store(deltas_ptr + out_idx_t * 3 + 0, -dx_flat, mask=mask_store_t)
-                tl.store(deltas_ptr + out_idx_t * 3 + 1, -dy_flat, mask=mask_store_t)
-                tl.store(deltas_ptr + out_idx_t * 3 + 2, -dz_flat, mask=mask_store_t)
-                tl.store(distances_ptr + out_idx_t, dist_flat, mask=mask_store_t)
+                # Add transpose pair if needed
+                if include_transpose:
+                    if ni != nj:
+                        out_idx_t = tl.atomic_add(counter_ptr, 1)
+                        if out_idx_t < max_pairs:
+                            tl.store(neighbors0_ptr + out_idx_t, nj)
+                            tl.store(neighbors1_ptr + out_idx_t, ni)
+                            tl.store(deltas_ptr + out_idx_t * 3 + 0, -dx_out)
+                            tl.store(deltas_ptr + out_idx_t * 3 + 1, -dy_out)
+                            tl.store(deltas_ptr + out_idx_t * 3 + 2, -dz_out)
+                            tl.store(distances_ptr + out_idx_t, dist)
 
 
 class TritonCellNeighborAutograd(TritonNeighborAutograd):
@@ -367,7 +337,8 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
         distances = torch.zeros((max_num_pairs,), device=device, dtype=dtype)
         counter = torch.zeros((1,), device=device, dtype=torch.int32)
 
-        grid_traverse = lambda meta: (triton.cdiv(n_atoms, meta["BLOCK_ATOMS"]),)
+        # One program per atom (like CUDA's one thread per atom)
+        grid_traverse = (n_atoms,)
         _traverse_cell_kernel[grid_traverse](
             sorted_positions,
             sorted_batch,
@@ -398,9 +369,7 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
             include_transpose,
             loop,
             max_num_pairs,
-            BLOCK_ATOMS=32,
-            BLOCK_NEI=32,
-            MAX_CELL_ITERS=64,
+            MAX_CELL_ITERS=512,  # Max atoms per cell; adjust based on density
         )
 
         num_pairs = counter.to(torch.long)
