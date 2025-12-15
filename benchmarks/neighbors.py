@@ -250,9 +250,9 @@ if __name__ == "__main__":
         for n_particles in n_particles_list:
             base = results["distance", n_particles]
             brute_speedup = base / results["brute", n_particles]
-            if n_particles > 32000:
-                results["brute", n_particles] = 0
-                brute_speedup = 0
+            # if n_particles > 32000:
+            #     results["brute", n_particles] = 0
+            #     brute_speedup = 0
             row = f"{n_particles:<10}"
             for strategy in strategies:
                 row += f"{results[strategy, n_particles]:<4.2f} x{base / results[strategy, n_particles]:<14.2f} "
