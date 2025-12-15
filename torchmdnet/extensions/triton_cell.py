@@ -489,9 +489,10 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
         cell_start.masked_fill_(empty_cell_mask, -1)
 
         # 4. Kernel Launch
-        neighbors = torch.empty((2, max_num_pairs), device=device, dtype=torch.long)
-        deltas = torch.empty((max_num_pairs, 3), device=device, dtype=dtype)
-        distances = torch.empty((max_num_pairs,), device=device, dtype=dtype)
+        # Initialize neighbors to -1 so unused slots are properly marked
+        neighbors = torch.full((2, max_num_pairs), -1, device=device, dtype=torch.long)
+        deltas = torch.zeros((max_num_pairs, 3), device=device, dtype=dtype)
+        distances = torch.zeros((max_num_pairs,), device=device, dtype=dtype)
         counter = torch.zeros((1,), device=device, dtype=torch.int32)
 
         BLOCK_M = 64
