@@ -18,7 +18,8 @@ dependencies = [
   "lightning",
   "tqdm",
   "numpy",
-  "triton",
+  "triton; sys_platform == 'linux'",
+  "triton-windows; sys_platform == 'win32'",
 ]
 
 [project.urls]
