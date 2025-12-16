@@ -1,17 +1,8 @@
 # Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
-
-try:
-    import triton
-    import triton.language as tl
-
-    _HAS_TRITON = True
-except Exception:
-    triton = None
-    tl = None
-    _HAS_TRITON = False
-
+import triton
+import triton.language as tl
 import torch
 from torch import Tensor
 from typing import Tuple
@@ -379,9 +370,6 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
         include_transpose: bool,
         num_cells: int,
     ):
-        if not _HAS_TRITON:
-            raise RuntimeError("Triton is not available")
-
         device = positions.device
         dtype = positions.dtype
         n_atoms = positions.size(0)

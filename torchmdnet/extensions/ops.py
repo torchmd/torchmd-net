@@ -10,9 +10,9 @@
 import torch
 from torch import Tensor
 from typing import Tuple
+import logging
 
-from . import triton_neighbors
-
+logger = logging.getLogger(__name__)
 
 __all__ = ["get_neighbor_pairs_kernel"]
 
@@ -69,30 +69,56 @@ def get_neighbor_pairs_kernel(
     num_pairs : Tensor
         The number of pairs found.
     """
+    try:
+        import triton
+
+        HAS_TRITON = True
+    except ImportError:
+        HAS_TRITON = False
+
     if torch.jit.is_scripting() or not positions.is_cuda:
-        return triton_neighbors.torch_neighbor_pairs(
-            strategy,
+        from torchmdnet.extensions.neighbors import torch_neighbor_bruteforce
+
+        return torch_neighbor_bruteforce(
             positions,
-            batch,
-            box_vectors,
-            use_periodic,
-            cutoff_lower,
-            cutoff_upper,
-            max_num_pairs,
-            loop,
-            include_transpose,
+            batch=batch,
+            box_vectors=box_vectors,
+            use_periodic=use_periodic,
+            cutoff_lower=cutoff_lower,
+            cutoff_upper=cutoff_upper,
+            max_num_pairs=max_num_pairs,
+            loop=loop,
+            include_transpose=include_transpose,
         )
 
-    return triton_neighbors.triton_neighbor_pairs(
+    if not HAS_TRITON:
+        logger.warning(
+            "Triton is not available, using torch version of the neighbor pairs kernel."
+        )
+        return torch_neighbor_bruteforce(
+            positions,
+            batch=batch,
+            box_vectors=box_vectors,
+            use_periodic=use_periodic,
+            cutoff_lower=cutoff_lower,
+            cutoff_upper=cutoff_upper,
+            max_num_pairs=max_num_pairs,
+            loop=loop,
+            include_transpose=include_transpose,
+        )
+
+    from torchmdnet.extensions.triton_neighbors import triton_neighbor_pairs
+
+    return triton_neighbor_pairs(
         strategy,
-        positions,
-        batch,
-        box_vectors,
-        use_periodic,
-        cutoff_lower,
-        cutoff_upper,
-        max_num_pairs,
-        loop,
-        include_transpose,
-        num_cells,
+        positions=positions,
+        batch=batch,
+        box_vectors=box_vectors,
+        use_periodic=use_periodic,
+        cutoff_lower=cutoff_lower,
+        cutoff_upper=cutoff_upper,
+        max_num_pairs=max_num_pairs,
+        loop=loop,
+        include_transpose=include_transpose,
+        num_cells=num_cells,
     )

@@ -1,18 +1,8 @@
 # Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
-
-
-try:
-    import triton
-    import triton.language as tl
-
-    _HAS_TRITON = True
-except Exception:
-    triton = None
-    tl = None
-    _HAS_TRITON = False
-
+import triton
+import triton.language as tl
 from torch import Tensor
 import torch
 from torchmdnet.extensions.triton_neighbors import _tl_round, TritonNeighborAutograd
