@@ -11,6 +11,9 @@ from typing import Optional
 from torch_cluster import radius_graph
 
 
+water_density = 0.0334 * 3  # Atoms/A^3
+
+
 class Distance(nn.Module):
     def __init__(
         self,
