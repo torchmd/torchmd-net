@@ -17,7 +17,18 @@ from torch import Tensor
 from typing import Tuple
 
 from torchmdnet.extensions.triton_neighbors import TritonNeighborAutograd
-from torchmdnet.extensions.triton_cell import _get_cell_dimensions
+
+
+def _get_cell_dimensions(
+    box_x: torch.float32,
+    box_y: torch.float32,
+    box_z: torch.float32,
+    cutoff_upper: torch.float32,
+) -> int:
+    nx = torch.floor(box_x / cutoff_upper).clamp(min=3).long()
+    ny = torch.floor(box_y / cutoff_upper).clamp(min=3).long()
+    nz = torch.floor(box_z / cutoff_upper).clamp(min=3).long()
+    return torch.stack([nx, ny, nz])
 
 
 @triton.jit
