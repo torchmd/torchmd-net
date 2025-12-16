@@ -11,9 +11,11 @@ import torch
 from torch import Tensor
 from typing import Tuple
 import logging
+from torchmdnet.extensions.neighbors import torch_neighbor_bruteforce
 
 try:
     import triton
+    from torchmdnet.extensions.triton_neighbors import triton_neighbor_pairs
 
     HAS_TRITON = True
 except ImportError:
@@ -78,7 +80,6 @@ def get_neighbor_pairs_kernel(
         The number of pairs found.
     """
     if torch.jit.is_scripting() or not positions.is_cuda:
-        from torchmdnet.extensions.neighbors import torch_neighbor_bruteforce
 
         return torch_neighbor_bruteforce(
             positions,
@@ -107,8 +108,6 @@ def get_neighbor_pairs_kernel(
             loop=loop,
             include_transpose=include_transpose,
         )
-
-    from torchmdnet.extensions.triton_neighbors import triton_neighbor_pairs
 
     return triton_neighbor_pairs(
         strategy,
