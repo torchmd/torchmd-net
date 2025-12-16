@@ -34,10 +34,10 @@ def _tl_round(x):
 def cell_neighbor_kernel(
     # Cell data structure (1D sorted approach)
     SortedIndices,  # [n_atoms] - original atom indices, sorted by cell
-    CellStart,  # [num_cells] - start index in SortedIndices for each cell
-    CellEnd,  # [num_cells] - end index (exclusive) in SortedIndices for each cell
-    Positions,  # [n_atoms, 3] - positions (original order)
-    Batch,  # [n_atoms] - batch indices (original order)
+    SortedPositions,  # [n_atoms, 3] - positions sorted by cell (for coalesced access)
+    SortedBatch,  # [n_atoms] - batch indices sorted by cell
+    CellStart,  # [num_cells] - start index in sorted arrays for each cell
+    CellEnd,  # [num_cells] - end index (exclusive) in sorted arrays for each cell
     # Box parameters
     BoxSizes,  # [3] - box dimensions
     CellDims,  # [3] - number of cells in each dimension (int32)
@@ -138,16 +138,24 @@ def cell_neighbor_kernel(
             home_global_idx = home_batch_start + home_offsets
             home_mask = home_global_idx < home_end
 
-            # Load home atom indices from sorted array
+            # Load home atom original indices (for output pair indices)
             home_atoms = tl.load(
                 SortedIndices + home_global_idx, mask=home_mask, other=0
             )
 
-            # Load home atom positions (gather from original positions)
-            home_x = tl.load(Positions + home_atoms * 3 + 0, mask=home_mask, other=0.0)
-            home_y = tl.load(Positions + home_atoms * 3 + 1, mask=home_mask, other=0.0)
-            home_z = tl.load(Positions + home_atoms * 3 + 2, mask=home_mask, other=0.0)
-            home_batch = tl.load(Batch + home_atoms, mask=home_mask, other=-1)
+            # Load home atom positions (sequential access - coalesced!)
+            home_x = tl.load(
+                SortedPositions + home_global_idx * 3 + 0, mask=home_mask, other=0.0
+            )
+            home_y = tl.load(
+                SortedPositions + home_global_idx * 3 + 1, mask=home_mask, other=0.0
+            )
+            home_z = tl.load(
+                SortedPositions + home_global_idx * 3 + 2, mask=home_mask, other=0.0
+            )
+            home_batch = tl.load(
+                SortedBatch + home_global_idx, mask=home_mask, other=-1
+            )
 
             # Batched iteration over neighbor atoms
             neighbor_batch_start = neighbor_start
@@ -157,23 +165,29 @@ def cell_neighbor_kernel(
                 neighbor_global_idx = neighbor_batch_start + neighbor_offsets
                 neighbor_mask = neighbor_global_idx < neighbor_end
 
-                # Load neighbor atom indices from sorted array
+                # Load neighbor atom original indices (for output pair indices)
                 neighbor_atoms = tl.load(
                     SortedIndices + neighbor_global_idx, mask=neighbor_mask, other=0
                 )
 
-                # Load neighbor atom positions
+                # Load neighbor atom positions (sequential access - coalesced!)
                 neighbor_x = tl.load(
-                    Positions + neighbor_atoms * 3 + 0, mask=neighbor_mask, other=0.0
+                    SortedPositions + neighbor_global_idx * 3 + 0,
+                    mask=neighbor_mask,
+                    other=0.0,
                 )
                 neighbor_y = tl.load(
-                    Positions + neighbor_atoms * 3 + 1, mask=neighbor_mask, other=0.0
+                    SortedPositions + neighbor_global_idx * 3 + 1,
+                    mask=neighbor_mask,
+                    other=0.0,
                 )
                 neighbor_z = tl.load(
-                    Positions + neighbor_atoms * 3 + 2, mask=neighbor_mask, other=0.0
+                    SortedPositions + neighbor_global_idx * 3 + 2,
+                    mask=neighbor_mask,
+                    other=0.0,
                 )
                 neighbor_batch_vals = tl.load(
-                    Batch + neighbor_atoms, mask=neighbor_mask, other=-2
+                    SortedBatch + neighbor_global_idx, mask=neighbor_mask, other=-2
                 )
 
                 # Compute pairwise distances: [BATCH_SIZE, BATCH_SIZE]
@@ -272,16 +286,18 @@ def cell_neighbor_kernel(
 
 def build_cell_list(
     positions: Tensor,
+    batch: Tensor,
     box_sizes: Tensor,  # [3] diagonal elements
     use_periodic: bool,
     cell_dims: Tensor,  # [3] number of cells in each dimension
     num_cells: int,  # total number of cells (fixed for CUDA graphs)
-) -> Tuple[Tensor, Tensor, Tensor]:
+) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
     """
     Build the cell list data structure using 1D sorted arrays.
 
     Args:
         positions: [N, 3] atom positions
+        batch: [N] batch indices
         box_sizes: [3] box diagonal elements
         use_periodic: whether to use periodic boundary conditions
         cell_dims: [3] number of cells in each dimension (pre-computed)
@@ -289,8 +305,10 @@ def build_cell_list(
 
     Returns:
         sorted_indices: [n_atoms] - original atom indices, sorted by cell
-        cell_start: [num_cells] - start index in sorted_indices for each cell
-        cell_end: [num_cells] - end index (exclusive) in sorted_indices for each cell
+        sorted_positions: [n_atoms, 3] - positions sorted by cell (for coalesced access)
+        sorted_batch: [n_atoms] - batch indices sorted by cell
+        cell_start: [num_cells] - start index in sorted arrays for each cell
+        cell_end: [num_cells] - end index (exclusive) in sorted arrays for each cell
     """
     device = positions.device
     n_atoms = positions.size(0)
@@ -322,6 +340,10 @@ def build_cell_list(
     sorted_cell_idx, sort_order = torch.sort(cell_idx)
     sorted_indices = sort_order.int()  # Original atom indices, now sorted by cell
 
+    # Create sorted positions and batch for coalesced memory access
+    sorted_positions = positions.index_select(0, sort_order).contiguous()
+    sorted_batch = batch.index_select(0, sort_order).contiguous()
+
     # Count atoms per cell
     cell_counts = torch.zeros(num_cells, dtype=torch.int32, device=device)
     cell_counts.scatter_add_(
@@ -333,7 +355,7 @@ def build_cell_list(
     cell_start = torch.zeros(num_cells, dtype=torch.int32, device=device)
     cell_start[1:] = cell_end[:-1]
 
-    return sorted_indices, cell_start, cell_end
+    return sorted_indices, sorted_positions, sorted_batch, cell_start, cell_end
 
 
 class TritonCellNeighborV2(TritonNeighborAutograd):
@@ -379,9 +401,11 @@ class TritonCellNeighborV2(TritonNeighborAutograd):
             box_sizes[0], box_sizes[1], box_sizes[2], cutoff_upper
         )
 
-        # Build cell list (1D sorted approach)
-        sorted_indices, cell_start, cell_end = build_cell_list(
-            positions, box_sizes, use_periodic, cell_dims, num_cells
+        # Build cell list (1D sorted approach with sorted positions for coalesced access)
+        sorted_indices, sorted_positions, sorted_batch, cell_start, cell_end = (
+            build_cell_list(
+                positions, batch, box_sizes, use_periodic, cell_dims, num_cells
+            )
         )
 
         # Allocate outputs
@@ -398,10 +422,10 @@ class TritonCellNeighborV2(TritonNeighborAutograd):
         grid = (num_cells,)
         cell_neighbor_kernel[grid](
             sorted_indices,
+            sorted_positions,
+            sorted_batch,
             cell_start,
             cell_end,
-            positions,
-            batch,
             box_sizes,
             cell_dims,
             neighbors,
