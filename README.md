@@ -21,19 +21,17 @@ Documentation is available at https://torchmd-net.readthedocs.io
 
 
 ## Installation  
-TorchMD-Net is available as a pip installable wheel as well as in [conda-forge](https://conda-forge.org/)
+TorchMD-Net is available as a pip package as well as in [conda-forge](https://conda-forge.org/)
 
-TorchMD-Net provides builds for CPU-only, CUDA 11 and CUDA 12. CPU versions are only provided as reference,
-as the performance will be extremely limited.
-Depending on which variant you wish to install, you can install it with one of the following commands:
+As TorchMD-Net depends on PyTorch we need to add additional index URLs to the installation command as per [pytorch](https://pytorch.org/get-started/locally/)
 
 ```sh
-# The following will install the CUDA 11.8 version
-pip install torchmd-net-cu11 --extra-index-url https://download.pytorch.org/whl/cu118
-# The following will install the CUDA 12.4 version
-pip install torchmd-net-cu12 --extra-index-url https://download.pytorch.org/whl/cu124
-# The following will install the CPU only version (not recommended)
-pip install torchmd-net-cpu --extra-index-url https://download.pytorch.org/whl/cpu
+# The following will install TorchMD-Net with PyTorch CUDA 11.8 version
+pip install torchmd-net --extra-index-url https://download.pytorch.org/whl/cu118
+# The following will install TorchMD-Net with PyTorch CUDA 12.4 version
+pip install torchmd-net --extra-index-url https://download.pytorch.org/whl/cu124
+# The following will install TorchMD-Net with PyTorch CPU only version (not recommended)
+pip install torchmd-net --extra-index-url https://download.pytorch.org/whl/cpu
 ```
 
 Alternatively it can be installed with conda or mamba with one of the following commands.
@@ -46,7 +44,7 @@ mamba install torchmd-net cuda-version=12.4
 
 ### Install from source  
 
-TorchMD-Net is installed using pip, but you will need to install some dependencies before. Check [this documentation page](https://torchmd-net.readthedocs.io/en/latest/installation.html#install-from-source).  
+TorchMD-Net is installed using pip with `pip install -e .` to create an editable install.  
 
 ## Usage
 Specifying training arguments can either be done via a configuration yaml file or through command line arguments directly. Several examples of architectural and training specifications for some models and datasets can be found in [examples/](https://github.com/torchmd/torchmd-net/tree/main/examples). Note that if a parameter is present both in the yaml file and the command line, the command line version takes precedence.
