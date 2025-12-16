@@ -254,6 +254,7 @@ def triton_neighbor_pairs(
     from torchmdnet.extensions.triton_cell import TritonCellNeighborAutograd
     from torchmdnet.extensions.triton_brute import TritonBruteNeighborAutograd
     from torchmdnet.extensions.triton_shared import TritonSharedNeighborAutograd
+    from torchmdnet.extensions.triton_cell_v2 import TritonCellNeighborV2
 
     if not _HAS_TRITON:
         raise RuntimeError("Triton is not available")
@@ -275,7 +276,7 @@ def triton_neighbor_pairs(
             bool(include_transpose),
         )
     elif strategy == "cell":
-        return TritonCellNeighborAutograd.apply(
+        return TritonCellNeighborV2.apply(
             positions,
             batch,
             box_vectors,
