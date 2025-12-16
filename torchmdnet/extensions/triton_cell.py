@@ -1,11 +1,6 @@
-"""
-Efficient cell list neighbor list implementation for Triton.
-
-Key design:
-- One program per cell (not per atom)
-- Fixed-size padded cell buffers for CUDA graph compatibility
-- O(n) complexity: each cell examines only 27 neighboring cells
-"""
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the MIT License.
+# (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
 try:
     import triton
