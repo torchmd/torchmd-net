@@ -6,77 +6,28 @@ on:
 
 jobs:
   build:
-    name: Build wheels on ${{ matrix.os }}-${{ matrix.accelerator }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, windows-2022, macos-latest]
-        accelerator: [cpu, cu118, cu126] #, cu128]
-        exclude:
-          - os: ubuntu-24.04-arm
-            accelerator: cu118
-          - os: ubuntu-24.04-arm
-            accelerator: cu126
-          # - os: ubuntu-24.04-arm
-          #   accelerator: cu128
-          - os: macos-latest
-            accelerator: cu118
-          - os: macos-latest
-            accelerator: cu126
-          # - os: macos-latest
-          #   accelerator: cu128
+    name: Create source distribution
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Free space of Github Runner (otherwise it will fail by running out of disk)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "/usr/local/.ghcup"
-          sudo rm -rf "/usr/local/julia1.9.2"
-          sudo rm -rf "/usr/local/lib/android"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+      - uses: actions/checkout@v5
 
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
       - name: Install cibuildwheel
-        run: python -m pip install cibuildwheel==3.1.3
+        run: pip install build
 
-      - name: Activate MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          toolset: 14.29
-        if: matrix.os == 'windows-2022'
-
-      - name: Build wheels
-        if: matrix.os != 'windows-2022'
-        shell: bash
-        run: python -m cibuildwheel --output-dir wheelhouse
-        env:
-          ACCELERATOR: ${{ matrix.accelerator }}
-          CPU_TRAIN: ${{ runner.os == 'macOS' && 'true' || 'false' }}
-
-      - name: Build wheels
-        if: matrix.os == 'windows-2022'
-        shell: cmd # Use cmd on Windows to avoid bash environment taking priority over MSVC variables
-        run: python -m cibuildwheel --output-dir wheelhouse
-        env:
-          ACCELERATOR: ${{ matrix.accelerator }}
-          DISTUTILS_USE_SDK: "1" # Windows requires this to use vc for building
-          SKIP_TORCH_COMPILE: "true"
+      - name: Build pypi package
+        run: python -m build --sdist
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.accelerator }}-cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
-          path: ./wheelhouse/*.whl
+          name: source_dist
+          path: dist/*.tar.gz
 
-  publish-to-public-pypi:
+  publish-to-pypi:
     name: >-
       Publish Python 🐍 distribution 📦 to PyPI
     needs:
@@ -84,18 +35,14 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
+      url: https://pypi.org/p/torchmd-net
     permissions:
       id-token: write # IMPORTANT: mandatory for trusted publishing
-    strategy:
-      fail-fast: false
-      matrix:
-        accelerator: [cpu, cu118, cu126] #, hip, cu124, cu126, cu128]
 
     steps:
       - name: Download all the dists
         uses: actions/download-artifact@v4
         with:
-          pattern: "${{ matrix.accelerator }}-cibw-wheels*"
           path: dist/
           merge-multiple: true
 
@@ -103,69 +50,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.TMDNET_PYPI_API_TOKEN }}
-          skip-existing: true
-
-  # publish-to-accelera-pypi:
-  #   name: >-
-  #     Publish Python 🐍 distribution 📦 to Acellera PyPI
-  #   needs:
-  #     - build
-  #   runs-on: ubuntu-latest
-  #   permissions: # Needed for GCP authentication
-  #     contents: "read"
-  #     id-token: "write"
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       accelerator: [cpu, cu118, cu126, cu128]
-
-  #   steps:
-  #     - uses: actions/checkout@v4 # Needed for GCP authentication for some reason
-
-  #     - name: Set up Cloud SDK
-  #       uses: google-github-actions/auth@v2
-  #       with:
-  #         workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-  #         service_account: ${{ secrets.GCP_PYPI_SERVICE_ACCOUNT }}
-
-  #     - name: Download all the dists
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         pattern: "${{ matrix.accelerator }}-cibw-wheels*"
-  #         path: dist/
-  #         merge-multiple: true
-
-  #     - name: Publish distribution 📦 to Acellera PyPI
-  #       run: |
-  #         pip install build twine keyring keyrings.google-artifactregistry-auth
-  #         pip install -U packaging
-  #         twine upload --repository-url https://us-central1-python.pkg.dev/pypi-packages-455608/${{ matrix.accelerator }} dist/* --verbose --skip-existing
-
-  # publish-to-official-pypi:
-  #   name: >-
-  #     Publish Python 🐍 distribution 📦 to PyPI
-  #   needs:
-  #     - build
-  #   runs-on: ubuntu-latest
-  #   environment:
-  #     name: pypi
-  #     url: https://pypi.org/p/torchmd-net
-  #   permissions:
-  #     id-token: write # IMPORTANT: mandatory for trusted publishing
-
-  #   steps:
-  #     - name: Download all the dists
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         pattern: "cu118-cibw-wheels*"
-  #         path: dist/
-  #         merge-multiple: true
-
-  #     - name: Publish distribution 📦 to PyPI
-  #       uses: pypa/gh-action-pypi-publish@release/v1
-  #       with:
-  #         password: ${{ secrets.TMDNET_PYPI_API_TOKEN }}
-  #         skip_existing: true
+          skip_existing: true
 
   github-release:
     name: >-
