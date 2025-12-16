@@ -318,12 +318,13 @@ def build_cell_list(
     )
 
     # Check for overflow
-    max_count = cell_counts.max().item()
-    if max_count > max_atoms_per_cell:
-        raise RuntimeError(
-            f"Cell overflow: {max_count} atoms in one cell, but max_atoms_per_cell={max_atoms_per_cell}. "
-            f"Increase max_atoms_per_cell or use a larger cutoff."
-        )
+    if not torch.cuda.is_current_stream_capturing():
+        max_count = cell_counts.max().item()
+        if max_count > max_atoms_per_cell:
+            raise RuntimeError(
+                f"Cell overflow: {max_count} atoms in one cell, but max_atoms_per_cell={max_atoms_per_cell}. "
+                f"Increase max_atoms_per_cell or use a larger cutoff."
+            )
 
     # Build cell_atoms array using sorting approach
     # Sort atoms by cell index
