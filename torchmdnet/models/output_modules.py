@@ -30,9 +30,14 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
         self.allow_prior_model = allow_prior_model
         self.reduce_op = reduce_op
         self.dim_size = 0
+        self.setup_for_compile = False
 
     def reset_parameters(self):
         pass
+
+    def setup_for_compile_cudagraphs(self, batch):
+        self.dim_size = int(batch.max().item() + 1)
+        self.setup_for_compile = True
 
     @abstractmethod
     def pre_reduce(self, x, v, z, pos, batch):
@@ -42,7 +47,7 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
         if torch.jit.is_scripting():
             # TorchScript doesn't support torch.cuda.is_current_stream_capturing()
             self.dim_size = int(batch.max().item() + 1)
-        else:
+        elif not self.setup_for_compile:
             is_capturing = x.is_cuda and torch.cuda.is_current_stream_capturing()
             if not x.is_cuda or not is_capturing:
                 self.dim_size = int(batch.max().item() + 1)
