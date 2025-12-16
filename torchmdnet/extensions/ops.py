@@ -37,7 +37,7 @@ def get_neighbor_pairs_kernel(
     Parameters
     ----------
     strategy : str
-        Strategy to use for computing the neighbor list. Can be one of :code:`["shared", "brute", "cell"]`.
+        Strategy to use for computing the neighbor list. Can be one of :code:`["brute", "cell"]`.
     positions : Tensor
         A tensor with shape (N, 3) representing the atomic positions.
     batch : Tensor

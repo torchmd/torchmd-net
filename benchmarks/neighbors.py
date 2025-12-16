@@ -183,7 +183,7 @@ def benchmark_neighbors(
 
 
 if __name__ == "__main__":
-    strategies = ["distance", "brute", "cell", "shared"]
+    strategies = ["distance", "brute", "cell"]
     n_particles = 32767
     mean_num_neighbors = min(n_particles, 64)
     density = 0.8

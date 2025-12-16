@@ -152,7 +152,7 @@ class OptimizedDistance(torch.nn.Module):
         If the number of pairs found is larger than this, the pairs are randomly sampled. When check_errors is True, an exception is raised in this case.
         If negative, it is interpreted as (minus) the maximum number of neighbors per atom.
     strategy : str
-        Strategy to use for computing the neighbor list. Can be one of :code:`["shared", "brute", "cell"]`.
+        Strategy to use for computing the neighbor list. Can be one of :code:`["brute", "cell"]`.
 
         1. *Shared*: An O(N^2) algorithm that leverages CUDA shared memory, best for large number of particles.
         2. *Brute*: A brute force O(N^2) algorithm, best for small number of particles.
