@@ -207,6 +207,7 @@ class OptimizedDistance(torch.nn.Module):
         self.include_transpose = include_transpose
         self.resize_to_fit = resize_to_fit
         self.use_periodic = True
+        self.num_cells = 0
         if self.box is None:
             self.use_periodic = False
             self.box = torch.empty((0, 0))
@@ -217,7 +218,18 @@ class OptimizedDistance(torch.nn.Module):
                     [[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]], device="cpu"
                 )
         if self.strategy == "cell":
-            self.box = self.box.cpu()
+            from torchmdnet.extensions.triton_cell import _get_cell_dimensions
+
+            cell_dims = _get_cell_dimensions(
+                self.box[0, 0], self.box[1, 1], self.box[2, 2], cutoff_upper
+            )
+            self.num_cells = int(cell_dims.prod())
+            if self.num_cells > 1024**3:
+                raise RuntimeError(
+                    f"Too many cells: {self.num_cells}. Maximum is 1024^3. "
+                    f"Reduce box size or increase cutoff."
+                )
+
         self.check_errors = check_errors
         self.long_edge_index = long_edge_index
 
@@ -255,9 +267,16 @@ class OptimizedDistance(torch.nn.Module):
         use_periodic = self.use_periodic
         if not use_periodic:
             use_periodic = box is not None
+        using_default_box = box is None
         box = self.box if box is None else box
         assert box is not None, "Box must be provided"
-        box = box.to(pos.dtype)
+        # Move box to correct device/dtype. Cache result if using default box
+        # to avoid CPU->GPU transfer during CUDA graph capture.
+        if box.device != pos.device or box.dtype != pos.dtype:
+            box = box.to(dtype=pos.dtype, device=pos.device)
+            if using_default_box:
+                self.box = box
+
         max_pairs: int = self.max_num_pairs
         if self.max_num_pairs < 0:
             max_pairs = -self.max_num_pairs * pos.shape[0]
@@ -274,6 +293,7 @@ class OptimizedDistance(torch.nn.Module):
             include_transpose=self.include_transpose,
             box_vectors=box,
             use_periodic=use_periodic,
+            num_cells=self.num_cells,
         )
         if self.check_errors:
             assert (

@@ -13,7 +13,6 @@ from torchmdnet.models.utils import (
     MLP,
 )
 from torchmdnet.utils import atomic_masses
-from torchmdnet.extensions.ops import is_current_stream_capturing
 from warnings import warn
 
 __all__ = ["Scalar", "DipoleMoment", "ElectronicSpatialExtent"]
@@ -40,7 +39,7 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
         return
 
     def reduce(self, x, batch):
-        is_capturing = x.is_cuda and is_current_stream_capturing()
+        is_capturing = x.is_cuda and torch.cuda.is_current_stream_capturing()
         if not x.is_cuda or not is_capturing:
             self.dim_size = int(batch.max().item() + 1)
         if is_capturing:

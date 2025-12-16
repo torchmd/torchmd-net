@@ -10,36 +10,11 @@
 import torch
 from torch import Tensor
 from typing import Tuple
-from torch.library import register_fake
 
 from . import triton_neighbors
 
 
-__all__ = ["is_current_stream_capturing", "get_neighbor_pairs_kernel"]
-
-
-def is_current_stream_capturing():
-    """Returns True if the current CUDA stream is capturing.
-
-    Returns False if CUDA is not available or the current stream is not capturing.
-
-    This utility is required because the builtin torch function that does this is not scriptable.
-    """
-    _is_current_stream_capturing = (
-        torch.ops.torchmdnet_extensions.is_current_stream_capturing
-    )
-    return _is_current_stream_capturing()
-
-
-@torch.jit.ignore
-def _stream_is_capturing_runtime() -> bool:
-    try:
-        return torch.cuda.is_current_stream_capturing()
-    except Exception:
-        try:
-            return is_current_stream_capturing()
-        except Exception:
-            return False
+__all__ = ["get_neighbor_pairs_kernel"]
 
 
 def get_neighbor_pairs_kernel(
@@ -53,6 +28,7 @@ def get_neighbor_pairs_kernel(
     max_num_pairs: int,
     loop: bool,
     include_transpose: bool,
+    num_cells: int,
 ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
     """Computes the neighbor pairs for a given set of atomic positions.
     The list is generated as a list of pairs (i,j) without any enforced ordering.
@@ -80,7 +56,8 @@ def get_neighbor_pairs_kernel(
         Whether to include self-interactions.
     include_transpose : bool
         Whether to include the transpose of the neighbor list (pair i,j and pair j,i).
-
+    num_cells : int
+        The number of cells in the grid if using the cell strategy.
     Returns
     -------
     neighbors : Tensor
@@ -117,4 +94,5 @@ def get_neighbor_pairs_kernel(
         max_num_pairs,
         loop,
         include_transpose,
+        num_cells,
     )

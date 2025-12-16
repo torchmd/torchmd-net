@@ -44,23 +44,6 @@ def _validate_box(box_vectors: Tensor, cutoff_upper: float, n_batch: int) -> Ten
     return box_vectors
 
 
-def _get_cell_dimensions(
-    box_vectors: Tensor, cutoff_upper: float
-) -> Tuple[int, int, int]:
-    """Return (nx, ny, nz) cell counts following the CUDA cell list logic."""
-    # box_vectors is either (3, 3) or (1, 3, 3) and already validated as diagonal
-    if box_vectors.dim() == 3:
-        box_diag = box_vectors[0]
-    else:
-        box_diag = box_vectors
-    nx = int(max(math.floor(float(box_diag[0, 0]) / cutoff_upper), 3))
-    ny = int(max(math.floor(float(box_diag[1, 1]) / cutoff_upper), 3))
-    nz = int(max(math.floor(float(box_diag[2, 2]) / cutoff_upper), 3))
-    if nx > 1024 or ny > 1024 or nz > 1024:
-        raise RuntimeError("Too many cells in one dimension. Maximum is 1024")
-    return nx, ny, nz
-
-
 def _apply_pbc_torch(deltas: Tensor, box_for_pairs: Tensor) -> Tensor:
     # box_for_pairs: (num_pairs, 3, 3)
     scale3 = _round_nearest(deltas[:, 2] / box_for_pairs[:, 2, 2])
@@ -266,6 +249,7 @@ def triton_neighbor_pairs(
     max_num_pairs: int,
     loop: bool,
     include_transpose: bool,
+    num_cells: int,
 ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
     from torchmdnet.extensions.triton_cell import TritonCellNeighborAutograd
     from torchmdnet.extensions.triton_brute import TritonBruteNeighborAutograd
@@ -296,11 +280,12 @@ def triton_neighbor_pairs(
             batch,
             box_vectors,
             use_periodic,
-            float(cutoff_lower),
-            float(cutoff_upper),
+            cutoff_lower,
+            cutoff_upper,
             int(max_num_pairs),
             bool(loop),
             bool(include_transpose),
+            num_cells,
         )
     elif strategy == "shared":
         return TritonSharedNeighborAutograd.apply(
