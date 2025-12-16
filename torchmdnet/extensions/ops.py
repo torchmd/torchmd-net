@@ -12,6 +12,14 @@ from torch import Tensor
 from typing import Tuple
 import logging
 
+try:
+    import triton
+
+    HAS_TRITON = True
+except ImportError:
+    HAS_TRITON = False
+
+
 logger = logging.getLogger(__name__)
 
 __all__ = ["get_neighbor_pairs_kernel"]
@@ -69,13 +77,6 @@ def get_neighbor_pairs_kernel(
     num_pairs : Tensor
         The number of pairs found.
     """
-    try:
-        import triton
-
-        HAS_TRITON = True
-    except ImportError:
-        HAS_TRITON = False
-
     if torch.jit.is_scripting() or not positions.is_cuda:
         from torchmdnet.extensions.neighbors import torch_neighbor_bruteforce
 
