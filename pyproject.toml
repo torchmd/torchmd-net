@@ -42,18 +42,14 @@ requires = ["setuptools>=78", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [dependency-groups]
-dev = [
-    "flake8>=7.3.0",
-    "ipython>=8.18.1",
-    "pytest>=8.4.2",
-]
+dev = ["flake8>=7.3.0", "ipython>=8.18.1", "pytest>=8.4.2"]
 
 [tool.uv.sources]
 torch = [
-  { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+  { index = "pytorch-cu126", marker = "(sys_platform == 'linux' or sys_platform == 'win32') and platform_machine != 'aarch64' and platform_machine != 'arm64'" },
 ]
 torchvision = [
-  { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+  { index = "pytorch-cu126", marker = "(sys_platform == 'linux' or sys_platform == 'win32') and platform_machine != 'aarch64' and platform_machine != 'arm64'" },
 ]
 
 [[tool.uv.index]]
