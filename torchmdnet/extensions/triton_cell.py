@@ -403,10 +403,10 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
         )
 
         # Allocate outputs
-        neighbors = torch.full((2, max_num_pairs), -1, device=device, dtype=torch.long)
+        neighbors = torch.full((2, max_num_pairs), -1, device=device, dtype=torch.int32)
         deltas = torch.zeros((max_num_pairs, 3), device=device, dtype=dtype)
         distances = torch.zeros((max_num_pairs,), device=device, dtype=dtype)
-        counter = torch.zeros((1,), device=device, dtype=torch.int32)
+        num_pairs = torch.zeros((1,), device=device, dtype=torch.int32)
 
         # Launch kernel: one program per cell
         # BATCH_SIZE: process atoms in batches for vectorized compute
@@ -425,7 +425,7 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
             neighbors,
             deltas,
             distances,
-            counter,
+            num_pairs,
             max_num_pairs,
             cutoff_lower**2,
             cutoff_upper**2,
@@ -434,7 +434,6 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
             include_transpose=include_transpose,
             BATCH_SIZE=BATCH_SIZE,
         )
-        num_pairs = counter.to(torch.long)
 
         ctx.save_for_backward(neighbors, deltas, distances)
         ctx.num_atoms = n_atoms

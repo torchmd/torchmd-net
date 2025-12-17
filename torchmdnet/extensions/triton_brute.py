@@ -215,10 +215,10 @@ class TritonBruteNeighborAutograd(TritonNeighborAutograd):
             # Use stride 0 to broadcast single box to all batches (avoids CPU sync)
             box_stride_0 = 0 if box_vectors.size(0) == 1 else box_vectors.stride(0)
 
-        neighbors = torch.full((2, max_num_pairs), -1, device=device, dtype=torch.long)
+        neighbors = torch.full((2, max_num_pairs), -1, device=device, dtype=torch.int32)
         deltas = torch.zeros((max_num_pairs, 3), device=device, dtype=dtype)
         distances = torch.zeros((max_num_pairs,), device=device, dtype=dtype)
-        counter = torch.zeros((1,), device=device, dtype=torch.int32)
+        num_pairs = torch.zeros((1,), device=device, dtype=torch.int32)
 
         # Compute triangular pair count: n*(n-1)/2 without self-loops, n*(n+1)/2 with
         if loop:
@@ -237,7 +237,7 @@ class TritonBruteNeighborAutograd(TritonNeighborAutograd):
             neighbors[1],
             deltas,
             distances,
-            counter,
+            num_pairs,
             positions.stride(0),
             positions.stride(1),
             batch.stride(0),
@@ -254,8 +254,6 @@ class TritonBruteNeighborAutograd(TritonNeighborAutograd):
             cutoff_upper,
             BLOCK=256,
         )
-
-        num_pairs = counter.to(torch.long)
 
         ctx.save_for_backward(neighbors, deltas, distances)
         ctx.num_atoms = n_atoms
