@@ -46,7 +46,9 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
     def reduce(self, x, batch):
         if torch.jit.is_scripting():
             # TorchScript doesn't support torch.cuda.is_current_stream_capturing()
-            self.dim_size = int(batch.max().item() + 1)
+            # For CUDA graphs with TorchScript (e.g., OpenMM-Torch), setup_for_compile must be True
+            if not self.setup_for_compile:
+                self.dim_size = int(batch.max().item() + 1)
         elif not self.setup_for_compile:
             is_capturing = x.is_cuda and torch.cuda.is_current_stream_capturing()
             if not x.is_cuda or not is_capturing:
