@@ -17,7 +17,7 @@ model_file_path = hf_hub_download(
 
 # We create the ASE calculator by supplying the path to the model and specifying the device and dtype
 calc  = TMDNETCalculator(model_file_path, device='cuda')
-atoms = read('caffiene.pdb')
+atoms = read('caffeine.pdb')
 print(atoms)
 
 atoms.calc = calc
