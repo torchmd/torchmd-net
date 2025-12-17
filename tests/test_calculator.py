@@ -144,7 +144,5 @@ def test_ase_calculator(device):
     # Now we can do the same but enabling torch.compile for increased speed
     calc = TMDNETCalculator(checkpoint, device=device, compile=True)
     atoms.calc = calc
-    # Single point calcuation to trigger compile
-    atoms.get_potential_energy()
     # Run more dynamics
     dyn.run(steps=nsteps)
