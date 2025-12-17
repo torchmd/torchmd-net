@@ -81,9 +81,6 @@ calc  = TMDNETCalculator(model_file_path, device='cuda', compile=True)
 
 atoms.calc = calc
 
-# Single point calcuation to trigger compile
-atoms.get_potential_energy()
-
 # Run more dynamics
 t1 = time.perf_counter()
 dyn.run(steps=nsteps)
