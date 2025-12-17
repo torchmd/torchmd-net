@@ -90,6 +90,44 @@ def test_torchscript_output_modification():
 
 @mark.parametrize("model_name", models.__all_models__)
 @mark.parametrize("device", ["cpu", "cuda"])
+def test_torchscript_then_compile(model_name, device):
+    """Test that a TorchScripted model can be torch.compiled afterwards.
+
+    This is important for scenarios like OpenMM-Torch where a model is
+    saved as TorchScript and later someone tries to torch.compile it.
+    """
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+
+    # Create and TorchScript the model
+    z, pos, batch = create_example_batch()
+    z = z.to(device)
+    pos = pos.to(device).requires_grad_(True)
+    batch = batch.to(device)
+
+    scripted_model = torch.jit.script(
+        create_model(load_example_args(model_name, remove_prior=True, derivative=True))
+    ).to(device=device)
+
+    # Get baseline output from scripted model
+    y_scripted, neg_dy_scripted = scripted_model(z, pos, batch=batch)
+
+    # Now try to torch.compile the scripted model
+    try:
+        compiled_model = torch.compile(scripted_model, backend="inductor")
+        y_compiled, neg_dy_compiled = compiled_model(z, pos, batch=batch)
+
+        # Verify outputs match
+        torch.testing.assert_close(y_scripted, y_compiled, atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(
+            neg_dy_scripted, neg_dy_compiled, atol=1e-5, rtol=1e-5
+        )
+    except Exception as e:
+        pytest.fail(f"torch.compile failed on TorchScripted {model_name} model: {e}")
+
+
+@mark.parametrize("model_name", models.__all_models__)
+@mark.parametrize("device", ["cpu", "cuda"])
 def test_torchscript_dynamic_shapes(model_name, device):
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA not available")

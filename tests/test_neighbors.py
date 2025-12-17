@@ -692,8 +692,6 @@ def test_torch_compile(device, dtype, loop, include_transpose):
 
     if sys.version_info >= (3, 12):
         pytest.skip("Not available in this version")
-    if torch.__version__ < "2.0.0":
-        pytest.skip("Not available in this version")
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA not available")
     np.random.seed(123456)
