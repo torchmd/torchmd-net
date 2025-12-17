@@ -11,9 +11,6 @@ from typing import Optional
 from torch_cluster import radius_graph
 
 
-water_density = 0.0334 * 3  # Atoms/A^3
-
-
 class Distance(nn.Module):
     def __init__(
         self,
@@ -123,8 +120,6 @@ def benchmark_neighbors(
                 n_atoms_per_batch[i] -= 1
                 difference += 1
     lbox = np.cbrt(num_particles / density)
-    lbox = max(lbox, 2 * cutoff + 0.01)
-    assert lbox > 2 * cutoff, "Box size must be greater than 2*cutoff"
     batch = torch.repeat_interleave(
         torch.arange(n_batches, dtype=torch.int64), n_atoms_per_batch
     ).to(device)
