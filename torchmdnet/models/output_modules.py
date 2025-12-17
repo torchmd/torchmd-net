@@ -35,7 +35,14 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
         return
 
     def reduce(self, x, batch):
-        if torch.jit.is_scripting():
+        # torch.compile doesn't support .item() calls, so we skip dim_size updates during compilation
+        # The model should be warmed up before compilation to set the correct dim_size
+        if torch.compiler.is_compiling():
+            # During compilation, rely on pre-set dim_size
+            # For static_shapes, dim_size should be set during warmup
+            # For dynamic shapes, torch.compile may not work well anyway
+            pass
+        elif torch.jit.is_scripting():
             # TorchScript doesn't support torch.cuda.is_current_stream_capturing()
             # For CPU, always update dim_size (no CUDA graphs on CPU)
             # For CUDA with static_shapes, only update once (first call sets dim_size for CUDA graph capture)
