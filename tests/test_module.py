@@ -43,6 +43,10 @@ def test_train(model_name, use_atomref, precision, tmpdir):
         # OSX MPS backend runs out of memory on Github Actions
         torch.set_default_device("cpu")
         accelerator = "cpu"
+    elif precision == 64 and torch.backends.mps.is_available():
+        # MPS backend doesn't support float64
+        torch.set_default_device("cpu")
+        accelerator = "cpu"
 
     args = load_example_args(
         model_name,
@@ -93,6 +97,10 @@ def test_dummy_train(model_name, use_atomref, precision, tmpdir):
     accelerator = "auto"
     if os.getenv("CPU_TRAIN", "false") == "true":
         # OSX MPS backend runs out of memory on Github Actions
+        torch.set_default_device("cpu")
+        accelerator = "cpu"
+    elif precision == 64 and torch.backends.mps.is_available():
+        # MPS backend doesn't support float64
         torch.set_default_device("cpu")
         accelerator = "cpu"
 
