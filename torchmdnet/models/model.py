@@ -127,6 +127,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         activation=args["activation"],
         reduce_op=args["reduce_op"],
         dtype=dtype,
+        static_shapes=args.get("static_shapes", False),
         num_hidden_layers=args.get("output_mlp_num_layers", 0),
     )
 

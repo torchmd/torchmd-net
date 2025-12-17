@@ -230,12 +230,9 @@ def test_torchscript_cuda_graph_compatible(model_name):
     # Create the model
     base_model = create_model(args)
     # Setup for CUDA graphs before TorchScripting
-    # This sets up dim_size and setup_for_compile flag
     z_cuda = z.to("cuda")
     pos_cuda = pos.to("cuda").requires_grad_(True)
     batch_cuda = batch.to("cuda")
-    base_model.representation_model.setup_for_compile_cudagraphs(batch_cuda)
-    base_model.output_model.setup_for_compile_cudagraphs(batch_cuda)
 
     # Now TorchScript the model (like OpenMM-Torch does)
     model = torch.jit.script(base_model).to(device="cuda")

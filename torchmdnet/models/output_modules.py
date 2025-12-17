@@ -6,12 +6,7 @@ from abc import abstractmethod, ABCMeta
 from typing import Optional
 import torch
 from torch import nn
-from torchmdnet.models.utils import (
-    act_class_mapping,
-    GatedEquivariantBlock,
-    scatter,
-    MLP,
-)
+from torchmdnet.models.utils import GatedEquivariantBlock, scatter, MLP
 from torchmdnet.utils import atomic_masses
 from warnings import warn
 
@@ -25,19 +20,15 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
     As an example, have a look at the :py:mod:`torchmdnet.output_modules.Scalar` output model.
     """
 
-    def __init__(self, allow_prior_model, reduce_op):
+    def __init__(self, allow_prior_model, reduce_op, static_shapes=False):
         super(OutputModel, self).__init__()
         self.allow_prior_model = allow_prior_model
         self.reduce_op = reduce_op
+        self.static_shapes = static_shapes
         self.dim_size = 0
-        self.setup_for_compile = False
 
     def reset_parameters(self):
         pass
-
-    def setup_for_compile_cudagraphs(self, batch):
-        self.dim_size = int(batch.max().item() + 1)
-        self.setup_for_compile = True
 
     @abstractmethod
     def pre_reduce(self, x, v, z, pos, batch):
@@ -46,10 +37,12 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
     def reduce(self, x, batch):
         if torch.jit.is_scripting():
             # TorchScript doesn't support torch.cuda.is_current_stream_capturing()
-            # For CUDA graphs with TorchScript (e.g., OpenMM-Torch), setup_for_compile must be True
-            if not self.setup_for_compile:
+            # For CPU, always update dim_size (no CUDA graphs on CPU)
+            # For CUDA with static_shapes, only update once (first call sets dim_size for CUDA graph capture)
+            # For CUDA without static_shapes, always update (dynamic batch sizes)
+            if not x.is_cuda or not self.static_shapes or self.dim_size == 0:
                 self.dim_size = int(batch.max().item() + 1)
-        elif not self.setup_for_compile:
+        else:
             is_capturing = x.is_cuda and torch.cuda.is_current_stream_capturing()
             if not x.is_cuda or not is_capturing:
                 self.dim_size = int(batch.max().item() + 1)
@@ -76,10 +69,13 @@ class Scalar(OutputModel):
         allow_prior_model=True,
         reduce_op="sum",
         dtype=torch.float,
+        static_shapes=False,
         **kwargs,
     ):
         super(Scalar, self).__init__(
-            allow_prior_model=allow_prior_model, reduce_op=reduce_op
+            allow_prior_model=allow_prior_model,
+            reduce_op=reduce_op,
+            static_shapes=static_shapes,
         )
         self.output_network = MLP(
             in_channels=hidden_channels,
@@ -106,10 +102,13 @@ class EquivariantScalar(OutputModel):
         allow_prior_model=True,
         reduce_op="sum",
         dtype=torch.float,
+        static_shapes=False,
         **kwargs,
     ):
         super(EquivariantScalar, self).__init__(
-            allow_prior_model=allow_prior_model, reduce_op=reduce_op
+            allow_prior_model=allow_prior_model,
+            reduce_op=reduce_op,
+            static_shapes=static_shapes,
         )
         if kwargs.get("num_layers", 0) > 0:
             warn("num_layers is not used in EquivariantScalar")
@@ -148,6 +147,7 @@ class DipoleMoment(Scalar):
         activation="silu",
         reduce_op="sum",
         dtype=torch.float,
+        static_shapes=False,
         **kwargs,
     ):
         super(DipoleMoment, self).__init__(
@@ -156,6 +156,7 @@ class DipoleMoment(Scalar):
             allow_prior_model=False,
             reduce_op=reduce_op,
             dtype=dtype,
+            static_shapes=static_shapes,
             **kwargs,
         )
         atomic_mass = torch.from_numpy(atomic_masses).to(dtype)
@@ -181,6 +182,7 @@ class EquivariantDipoleMoment(EquivariantScalar):
         activation="silu",
         reduce_op="sum",
         dtype=torch.float,
+        static_shapes=False,
         **kwargs,
     ):
         super(EquivariantDipoleMoment, self).__init__(
@@ -189,6 +191,7 @@ class EquivariantDipoleMoment(EquivariantScalar):
             allow_prior_model=False,
             reduce_op=reduce_op,
             dtype=dtype,
+            static_shapes=static_shapes,
             **kwargs,
         )
         atomic_mass = torch.from_numpy(atomic_masses).to(dtype)
@@ -215,10 +218,11 @@ class ElectronicSpatialExtent(OutputModel):
         activation="silu",
         reduce_op="sum",
         dtype=torch.float,
+        static_shapes=False,
         **kwargs,
     ):
         super(ElectronicSpatialExtent, self).__init__(
-            allow_prior_model=False, reduce_op=reduce_op
+            allow_prior_model=False, reduce_op=reduce_op, static_shapes=static_shapes
         )
         self.output_network = MLP(
             in_channels=hidden_channels,
@@ -258,6 +262,7 @@ class EquivariantVectorOutput(EquivariantScalar):
         activation="silu",
         reduce_op="sum",
         dtype=torch.float,
+        static_shapes=False,
         **kwargs,
     ):
         super(EquivariantVectorOutput, self).__init__(
@@ -266,6 +271,7 @@ class EquivariantVectorOutput(EquivariantScalar):
             allow_prior_model=False,
             reduce_op="sum",
             dtype=dtype,
+            static_shapes=static_shapes,
             **kwargs,
         )
 
