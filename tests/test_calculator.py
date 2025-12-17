@@ -85,6 +85,9 @@ def test_compare_forward_multiple():
 
 @pytest.mark.parametrize("device", ["cpu", "cuda"])
 def test_ase_calculator(device):
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+
     from torchmdnet.calculators import TMDNETCalculator
     from ase.io import read
     from ase import units
