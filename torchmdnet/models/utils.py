@@ -687,6 +687,9 @@ def scatter(
     reduce: str = "sum",
 ) -> Tensor:
     """Has the signature of torch_scatter.scatter, but uses torch.scatter_reduce instead."""
+    if dim_size is None:
+        dim_size = index.max().item() + 1
+
     operation_dict = {
         "add": "sum",
         "sum": "sum",
@@ -702,12 +705,9 @@ def scatter(
 
     # Compute dim_size if not provided
     if dim_size is None:
-        if index.numel() == 0:
-            dim_size = 0
-        else:
-            # Compute dim_size from index
-            dim_size_tensor = index.max() + 1
-            dim_size = int(dim_size_tensor)
+        dim_size = 0
+        if index.numel() != 0:
+            dim_size = int(index.max() + 1)
 
     size[dim] = dim_size
     out = torch.zeros(size, dtype=src.dtype, device=src.device)

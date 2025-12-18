@@ -38,9 +38,7 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
         # torch.compile and torch.export don't support .item() calls during tracing
         # The model should be warmed up before compilation to set the correct dim_size
         if torch.compiler.is_compiling():
-            # During compilation/export, let scatter compute dim_size dynamically
-            # Pass None so scatter uses batch.max() internally which torch.export can trace
-            return scatter(x, batch, dim=0, dim_size=None, reduce=self.reduce_op)
+            pass
         elif torch.jit.is_scripting():
             # TorchScript doesn't support torch.cuda.is_current_stream_capturing()
             # For CPU, always update dim_size (no CUDA graphs on CPU)
