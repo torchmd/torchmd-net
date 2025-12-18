@@ -238,68 +238,7 @@ class TritonBruteNeighborAutograd(TritonNeighborAutograd):
         loop: bool,
         include_transpose: bool,
     ):
-        # During torch.export compilation, use the export-compatible version
-        # which can be traced but still provides gradients through autograd
-        if torch.compiler.is_compiling():
-            neighbors, deltas, distances, num_pairs = triton_neighbor_bruteforce_export(
-                positions,
-                batch,
-                box_vectors,
-                use_periodic,
-                cutoff_lower,
-                cutoff_upper,
-                max_num_pairs,
-                loop,
-                include_transpose,
-            )
-        else:
-            neighbors, deltas, distances, num_pairs = triton_neighbor_bruteforce(
-                positions,
-                batch,
-                box_vectors,
-                use_periodic,
-                cutoff_lower,
-                cutoff_upper,
-                max_num_pairs,
-                loop,
-                include_transpose,
-            )
-
-        ctx.save_for_backward(neighbors, deltas, distances)
-        ctx.num_atoms = positions.size(0)
-        return neighbors, deltas, distances, num_pairs
-
-
-class TritonBruteNeighborExport(torch.autograd.Function):
-    """Export-compatible Triton neighbor autograd function.
-
-    This is a simplified version that can be traced by torch.export
-    while still providing gradients.
-    """
-
-    @staticmethod
-    def forward(
-        ctx,
-        positions,
-        batch,
-        box_vectors,
-        use_periodic,
-        cutoff_lower,
-        cutoff_upper,
-        max_num_pairs,
-        loop,
-        include_transpose,
-    ):
-        # Save inputs for backward
-        ctx.save_for_backward(positions, batch, box_vectors)
-        ctx.use_periodic = use_periodic
-        ctx.cutoff_lower = cutoff_lower
-        ctx.cutoff_upper = cutoff_upper
-        ctx.max_num_pairs = max_num_pairs
-        ctx.loop = loop
-        ctx.include_transpose = include_transpose
-
-        return triton_neighbor_bruteforce(
+        neighbors, deltas, distances, num_pairs = triton_neighbor_bruteforce(
             positions,
             batch,
             box_vectors,
@@ -311,51 +250,6 @@ class TritonBruteNeighborExport(torch.autograd.Function):
             include_transpose,
         )
 
-    @staticmethod
-    def backward(ctx, grad_neighbors, grad_deltas, grad_distances, grad_num_pairs):
-        # Simplified backward - just pass through gradients to positions
-        # This is not physically correct but allows gradients to flow for testing
-        positions, batch, box_vectors = ctx.saved_tensors
-
-        # Create a simple gradient that allows the computation to proceed
-        grad_positions = torch.zeros_like(positions)
-        if grad_deltas is not None:
-            # Very simplified: just accumulate gradients from deltas
-            # This won't be physically accurate but allows torch.export to work
-            grad_positions.scatter_add_(
-                0,
-                grad_neighbors[0].clamp(0, positions.size(0) - 1),
-                grad_deltas.sum(dim=1),
-            )
-
-        return (grad_positions, None, None, None, None, None, None, None, None)
-
-
-def triton_neighbor_bruteforce_export(
-    positions: Tensor,
-    batch: Tensor,
-    box_vectors: Tensor,
-    use_periodic: bool,
-    cutoff_lower: float,
-    cutoff_upper: float,
-    max_num_pairs: int,
-    loop: bool,
-    include_transpose: bool,
-):
-    """Export-compatible version of triton_neighbor_bruteforce.
-
-    This function can be traced by torch.export and used in exported models.
-    It returns the same results as triton_neighbor_bruteforce with a simplified
-    autograd implementation that allows gradients to flow.
-    """
-    return TritonBruteNeighborExport.apply(
-        positions,
-        batch,
-        box_vectors,
-        use_periodic,
-        cutoff_lower,
-        cutoff_upper,
-        max_num_pairs,
-        loop,
-        include_transpose,
-    )
+        ctx.save_for_backward(neighbors, deltas, distances)
+        ctx.num_atoms = positions.size(0)
+        return neighbors, deltas, distances, num_pairs
