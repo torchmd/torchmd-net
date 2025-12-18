@@ -18,20 +18,15 @@ def _neighbor_brute_kernel(
     deltas_ptr,
     distances_ptr,
     counter_ptr,
-    stride_pos_0: tl.constexpr,
-    stride_pos_1: tl.constexpr,
-    stride_batch: tl.constexpr,
-    stride_box_b: tl.constexpr,
-    stride_box_r: tl.constexpr,
-    stride_box_c: tl.constexpr,
-    n_atoms: tl.constexpr,
-    num_all_pairs: tl.constexpr,
+    box_batch_stride,
+    n_atoms,
+    num_all_pairs,
     use_periodic: tl.constexpr,
     include_transpose: tl.constexpr,
     loop: tl.constexpr,
-    max_pairs: tl.constexpr,
-    cutoff_lower: tl.constexpr,
-    cutoff_upper: tl.constexpr,
+    max_pairs,
+    cutoff_lower,
+    cutoff_upper,
     BLOCK: tl.constexpr,
 ):
     """Brute-force neighbor list kernel using triangular indexing and atomic compaction.
@@ -75,54 +70,30 @@ def _neighbor_brute_kernel(
         # For non-loop case, also require j < i (no self-loops)
         valid = valid & (j < i)
 
-    batch_i = tl.load(batch_ptr + i * stride_batch, mask=valid, other=0)
-    batch_j = tl.load(batch_ptr + j * stride_batch, mask=valid, other=0)
+    batch_i = tl.load(batch_ptr + i, mask=valid, other=0)
+    batch_j = tl.load(batch_ptr + j, mask=valid, other=0)
     valid = valid & (batch_i == batch_j)
 
-    pos_ix = tl.load(
-        pos_ptr + i * stride_pos_0 + 0 * stride_pos_1, mask=valid, other=0.0
-    )
-    pos_iy = tl.load(
-        pos_ptr + i * stride_pos_0 + 1 * stride_pos_1, mask=valid, other=0.0
-    )
-    pos_iz = tl.load(
-        pos_ptr + i * stride_pos_0 + 2 * stride_pos_1, mask=valid, other=0.0
-    )
-    pos_jx = tl.load(
-        pos_ptr + j * stride_pos_0 + 0 * stride_pos_1, mask=valid, other=0.0
-    )
-    pos_jy = tl.load(
-        pos_ptr + j * stride_pos_0 + 1 * stride_pos_1, mask=valid, other=0.0
-    )
-    pos_jz = tl.load(
-        pos_ptr + j * stride_pos_0 + 2 * stride_pos_1, mask=valid, other=0.0
-    )
+    pos_ix = tl.load(pos_ptr + i * 3 + 0, mask=valid, other=0.0)
+    pos_iy = tl.load(pos_ptr + i * 3 + 1, mask=valid, other=0.0)
+    pos_iz = tl.load(pos_ptr + i * 3 + 2, mask=valid, other=0.0)
+    pos_jx = tl.load(pos_ptr + j * 3 + 0, mask=valid, other=0.0)
+    pos_jy = tl.load(pos_ptr + j * 3 + 1, mask=valid, other=0.0)
+    pos_jz = tl.load(pos_ptr + j * 3 + 2, mask=valid, other=0.0)
 
     dx = pos_ix - pos_jx
     dy = pos_iy - pos_jy
     dz = pos_iz - pos_jz
 
     if use_periodic:
-        box_base = box_ptr + batch_i * stride_box_b
+        box_base = box_ptr + batch_i * box_batch_stride
 
-        b20 = tl.load(
-            box_base + 2 * stride_box_r + 0 * stride_box_c, mask=valid, other=0.0
-        )
-        b21 = tl.load(
-            box_base + 2 * stride_box_r + 1 * stride_box_c, mask=valid, other=0.0
-        )
-        b22 = tl.load(
-            box_base + 2 * stride_box_r + 2 * stride_box_c, mask=valid, other=1.0
-        )
-        b10 = tl.load(
-            box_base + 1 * stride_box_r + 0 * stride_box_c, mask=valid, other=0.0
-        )
-        b11 = tl.load(
-            box_base + 1 * stride_box_r + 1 * stride_box_c, mask=valid, other=1.0
-        )
-        b00 = tl.load(
-            box_base + 0 * stride_box_r + 0 * stride_box_c, mask=valid, other=1.0
-        )
+        b20 = tl.load(box_base + 2 * 3 + 0, mask=valid, other=0.0)
+        b21 = tl.load(box_base + 2 * 3 + 1, mask=valid, other=0.0)
+        b22 = tl.load(box_base + 2 * 3 + 2, mask=valid, other=1.0)
+        b10 = tl.load(box_base + 1 * 3 + 0, mask=valid, other=0.0)
+        b11 = tl.load(box_base + 1 * 3 + 1, mask=valid, other=1.0)
+        b00 = tl.load(box_base + 0 * 3 + 0, mask=valid, other=1.0)
 
         scale3 = _tl_round(dz / b22)
         dx = dx - scale3 * b20
@@ -213,7 +184,7 @@ class TritonBruteNeighborAutograd(TritonNeighborAutograd):
             box_vectors = box_vectors.to(device=device, dtype=dtype)
             box_vectors = box_vectors.contiguous()
             # Use stride 0 to broadcast single box to all batches (avoids CPU sync)
-            box_stride_0 = 0 if box_vectors.size(0) == 1 else box_vectors.stride(0)
+            box_batch_stride = 0 if box_vectors.size(0) == 1 else 9
 
         neighbors = torch.full((2, max_num_pairs), -1, device=device, dtype=torch.int32)
         deltas = torch.zeros((max_num_pairs, 3), device=device, dtype=dtype)
@@ -238,12 +209,7 @@ class TritonBruteNeighborAutograd(TritonNeighborAutograd):
             deltas,
             distances,
             num_pairs,
-            positions.stride(0),
-            positions.stride(1),
-            batch.stride(0),
-            box_stride_0 if use_periodic else 0,
-            box_vectors.stride(1) if use_periodic else 0,
-            box_vectors.stride(2) if use_periodic else 0,
+            box_batch_stride if use_periodic else 0,
             n_atoms,
             num_all_pairs,
             use_periodic,
