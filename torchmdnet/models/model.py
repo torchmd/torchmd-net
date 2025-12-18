@@ -252,6 +252,13 @@ def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
     for p in patterns:
         state_dict = {re.sub(p[0], p[1], k): v for k, v in state_dict.items()}
 
+    # Backward compatibility: box was changed from class attribute to registered buffer
+    # Old checkpoints don't have the box buffer, so add it with default value
+    if "representation_model.distance.box" not in state_dict:
+        state_dict["representation_model.distance.box"] = torch.zeros(
+            (3, 3), device="cpu"
+        )
+
     model.load_state_dict(state_dict)
     return model.to(device)
 
