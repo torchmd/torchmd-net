@@ -201,22 +201,30 @@ class OptimizedDistance(torch.nn.Module):
         self.cutoff_lower = cutoff_lower
         self.max_num_pairs = max_num_pairs
         self.strategy = strategy
-        self.box: Optional[Tensor] = box
         self.loop = loop
         self.return_vecs = return_vecs
         self.include_transpose = include_transpose
         self.resize_to_fit = resize_to_fit
         self.use_periodic = True
         self.num_cells = 0
-        if self.box is None:
+
+        # Use register_buffer for box to make it export-compatible and handle device movement
+        if box is None:
             self.use_periodic = False
-            self.box = torch.empty((0, 0))
-            if self.strategy == "cell":
+            if strategy == "cell":
                 # Default the box to 3 times the cutoff, really inefficient for the cell list
                 lbox = cutoff_upper * 3.0
-                self.box = torch.tensor(
+                box = torch.tensor(
                     [[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]], device="cpu"
                 )
+            else:
+                # Use a placeholder box instead of empty (0,0) to avoid shape issues in torch.export
+                # This won't be used when use_periodic=False, but prevents export tracing issues
+                box = torch.zeros((3, 3), device="cpu")
+
+        # Register box as a buffer so it moves with the module and is export-compatible
+        self.register_buffer("box", box, persistent=True)
+
         if self.strategy == "cell":
             from torchmdnet.extensions.triton_cell import _get_cell_dimensions
 
@@ -267,15 +275,17 @@ class OptimizedDistance(torch.nn.Module):
         use_periodic = self.use_periodic
         if not use_periodic:
             use_periodic = box is not None
-        using_default_box = box is None
-        box = self.box if box is None else box
+
+        # Use the registered buffer box if no box is provided
+        # The buffer is automatically moved to the correct device with the module
+        if box is None:
+            box = self.box
+
         assert box is not None, "Box must be provided"
-        # Move box to correct device/dtype. Cache result if using default box
-        # to avoid CPU->GPU transfer during CUDA graph capture.
-        if box.device != pos.device or box.dtype != pos.dtype:
-            box = box.to(dtype=pos.dtype, device=pos.device)
-            if using_default_box:
-                self.box = box
+
+        # Ensure box has correct dtype (device is already correct if using self.box)
+        if box.dtype != pos.dtype:
+            box = box.to(dtype=pos.dtype)
 
         max_pairs: int = self.max_num_pairs
         if self.max_num_pairs < 0:
@@ -677,8 +687,6 @@ def scatter(
     reduce: str = "sum",
 ) -> Tensor:
     """Has the signature of torch_scatter.scatter, but uses torch.scatter_reduce instead."""
-    if dim_size is None:
-        dim_size = index.max().item() + 1
     operation_dict = {
         "add": "sum",
         "sum": "sum",
@@ -691,12 +699,21 @@ def scatter(
     # take into account the dimensionality of src
     index = _broadcast(index, src, dim)
     size = list(src.size())
-    if dim_size is not None:
-        size[dim] = dim_size
-    elif index.numel() == 0:
-        size[dim] = 0
-    else:
-        size[dim] = int(index.max()) + 1
+
+    # Compute dim_size if not provided
+    if dim_size is None:
+        if index.numel() == 0:
+            dim_size = 0
+        else:
+            # Compute dim_size from index
+            # For torch.export compatibility, use torch._constrain_as_size to mark this as a valid size
+            dim_size_tensor = index.max() + 1
+            if torch.compiler.is_compiling():
+                # Tell torch.export this is a valid size dimension
+                torch._constrain_as_size(dim_size_tensor, min=0, max=10000)
+            dim_size = int(dim_size_tensor)
+
+    size[dim] = dim_size
     out = torch.zeros(size, dtype=src.dtype, device=src.device)
     res = out.scatter_reduce(dim, index, src, reduce_op)
     return res

@@ -130,6 +130,7 @@ def test_neighbors(
         return_vecs=True,
         include_transpose=include_transpose,
     )
+    nl.to(device)
     batch.to(device)
     neighbors, distances, distance_vecs = nl(pos, batch)
     neighbors = neighbors.cpu().detach().numpy()
@@ -225,6 +226,7 @@ def test_neighbor_grads(
         resize_to_fit=True,
         box=box,
     )
+    nl.to(device)
     neighbors, distances, deltas = nl(positions)
     # Check neighbor pairs are correct
     ref_neighbors_sort, _, _ = sort_neighbors(
@@ -300,6 +302,7 @@ def test_neighbor_autograds(
         resize_to_fit=True,
         box=box,
     )
+    nl.to(device)
     positions = 0.25 * lbox * torch.rand(num_atoms, 3, device=device, dtype=dtype)
     positions.requires_grad_(True)
     batch = torch.zeros((num_atoms,), dtype=torch.long, device=device)
@@ -359,6 +362,7 @@ def test_large_size(strategy, n_batches):
         include_transpose=True,
         resize_to_fit=True,
     )
+    nl.to(device)
     neighbors, distances, distance_vecs = nl(pos, batch)
     neighbors = neighbors.cpu().detach().numpy()
     distance_vecs = distance_vecs.cpu().detach().numpy()
@@ -424,6 +428,7 @@ def test_jit_script_compatible(
         return_vecs=True,
         include_transpose=include_transpose,
     )
+    nl.to(device)
     batch.to(device)
 
     nl = torch.jit.script(nl)
@@ -494,6 +499,7 @@ def test_cuda_graph_compatible_forward(
         check_errors=False,
         resize_to_fit=False,
     )
+    nl.to(device)
     batch.to(device)
 
     graph = torch.cuda.CUDAGraph()
@@ -580,6 +586,7 @@ def test_cuda_graph_compatible_backward(
             check_errors=False,
             resize_to_fit=False,
         )
+        nl.to(device)
         batch.to(device)
 
         graph = torch.cuda.CUDAGraph()
@@ -644,6 +651,7 @@ def test_per_batch_box(device, strategy, n_batches, use_forward):
         return_vecs=True,
         include_transpose=include_transpose,
     )
+    nl.to(device)
     batch.to(device)
     neighbors, distances, distance_vecs = nl(
         pos, batch, box=box if use_forward else None
