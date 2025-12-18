@@ -6,8 +6,8 @@ import triton.language as tl
 import torch
 from torch import Tensor
 from typing import Tuple
-
 from torchmdnet.extensions.triton_neighbors import TritonNeighborAutograd
+from torch.library import triton_op, wrap_triton
 
 
 def _get_cell_dimensions(
@@ -355,6 +355,84 @@ def build_cell_list(
     return sorted_indices, sorted_positions, sorted_batch, cell_start, cell_end
 
 
+@triton_op("torchmdnet::triton_neighbor_cell", mutates_args={})
+def triton_neighbor_cell(
+    positions: Tensor,
+    batch: Tensor,
+    box_vectors: Tensor,
+    use_periodic: bool,
+    cutoff_lower: float,
+    cutoff_upper: float,
+    max_num_pairs: int,
+    loop: bool,
+    include_transpose: bool,
+    num_cells: int,
+) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+    device = positions.device
+    dtype = positions.dtype
+    n_atoms = positions.size(0)
+
+    # Validate inputs
+    if positions.dim() != 2 or positions.size(1) != 3:
+        raise ValueError('Expected "positions" to have shape (N, 3)')
+    if batch.dim() != 1 or batch.size(0) != n_atoms:
+        raise ValueError('Expected "batch" to have shape (N,)')
+
+    # Extract box diagonal
+    box_vectors = box_vectors.contiguous()
+    if box_vectors.dim() == 3:
+        box_diag = box_vectors[0]
+    else:
+        box_diag = box_vectors
+    box_sizes = torch.stack(
+        [box_diag[0, 0], box_diag[1, 1], box_diag[2, 2]]
+    ).contiguous()
+
+    # Compute cell dimensions using shared utility (stays on GPU)
+    cell_dims = _get_cell_dimensions(
+        box_sizes[0], box_sizes[1], box_sizes[2], cutoff_upper
+    )
+
+    # Build cell list (1D sorted approach with sorted positions for coalesced access)
+    sorted_indices, sorted_positions, sorted_batch, cell_start, cell_end = (
+        build_cell_list(positions, batch, box_sizes, use_periodic, cell_dims, num_cells)
+    )
+
+    # Allocate outputs
+    neighbors = torch.full((2, max_num_pairs), -1, device=device, dtype=torch.int32)
+    deltas = torch.zeros((max_num_pairs, 3), device=device, dtype=dtype)
+    distances = torch.zeros((max_num_pairs,), device=device, dtype=dtype)
+    num_pairs = torch.zeros((1,), device=device, dtype=torch.int32)
+
+    # Launch kernel: one program per cell
+    # BATCH_SIZE: process atoms in batches for vectorized compute
+    # 32 is a good balance: 32×32=1024 elements fits in registers, minimal waste on partial batches
+    BATCH_SIZE = 32
+
+    grid = (num_cells,)
+    wrap_triton(cell_neighbor_kernel)[grid](
+        sorted_indices,
+        sorted_positions,
+        sorted_batch,
+        cell_start,
+        cell_end,
+        box_sizes,
+        cell_dims,
+        neighbors,
+        deltas,
+        distances,
+        num_pairs,
+        max_num_pairs,
+        cutoff_lower**2,
+        cutoff_upper**2,
+        use_periodic=use_periodic,
+        loop=loop,
+        include_transpose=include_transpose,
+        BATCH_SIZE=BATCH_SIZE,
+    )
+    return neighbors, deltas, distances, num_pairs
+
+
 class TritonCellNeighborAutograd(TritonNeighborAutograd):
     @staticmethod
     def forward(
@@ -370,73 +448,21 @@ class TritonCellNeighborAutograd(TritonNeighborAutograd):
         include_transpose: bool,
         num_cells: int,
     ):
-        device = positions.device
-        dtype = positions.dtype
-        n_atoms = positions.size(0)
-
-        # Validate inputs
-        if positions.dim() != 2 or positions.size(1) != 3:
-            raise ValueError('Expected "positions" to have shape (N, 3)')
-        if batch.dim() != 1 or batch.size(0) != n_atoms:
-            raise ValueError('Expected "batch" to have shape (N,)')
-
-        # Extract box diagonal
-        box_vectors = box_vectors.contiguous()
-        if box_vectors.dim() == 3:
-            box_diag = box_vectors[0]
-        else:
-            box_diag = box_vectors
-        box_sizes = torch.stack(
-            [box_diag[0, 0], box_diag[1, 1], box_diag[2, 2]]
-        ).contiguous()
-
-        # Compute cell dimensions using shared utility (stays on GPU)
-        cell_dims = _get_cell_dimensions(
-            box_sizes[0], box_sizes[1], box_sizes[2], cutoff_upper
-        )
-
-        # Build cell list (1D sorted approach with sorted positions for coalesced access)
-        sorted_indices, sorted_positions, sorted_batch, cell_start, cell_end = (
-            build_cell_list(
-                positions, batch, box_sizes, use_periodic, cell_dims, num_cells
-            )
-        )
-
-        # Allocate outputs
-        neighbors = torch.full((2, max_num_pairs), -1, device=device, dtype=torch.int32)
-        deltas = torch.zeros((max_num_pairs, 3), device=device, dtype=dtype)
-        distances = torch.zeros((max_num_pairs,), device=device, dtype=dtype)
-        num_pairs = torch.zeros((1,), device=device, dtype=torch.int32)
-
-        # Launch kernel: one program per cell
-        # BATCH_SIZE: process atoms in batches for vectorized compute
-        # 32 is a good balance: 32×32=1024 elements fits in registers, minimal waste on partial batches
-        BATCH_SIZE = 32
-
-        grid = (num_cells,)
-        cell_neighbor_kernel[grid](
-            sorted_indices,
-            sorted_positions,
-            sorted_batch,
-            cell_start,
-            cell_end,
-            box_sizes,
-            cell_dims,
-            neighbors,
-            deltas,
-            distances,
-            num_pairs,
+        neighbors, deltas, distances, num_pairs = triton_neighbor_cell(
+            positions,
+            batch,
+            box_vectors,
+            use_periodic,
+            cutoff_lower,
+            cutoff_upper,
             max_num_pairs,
-            cutoff_lower**2,
-            cutoff_upper**2,
-            use_periodic=use_periodic,
-            loop=loop,
-            include_transpose=include_transpose,
-            BATCH_SIZE=BATCH_SIZE,
+            loop,
+            include_transpose,
+            num_cells,
         )
 
         ctx.save_for_backward(neighbors, deltas, distances)
-        ctx.num_atoms = n_atoms
+        ctx.num_atoms = positions.size(0)
         return neighbors, deltas, distances, num_pairs
 
     @staticmethod
