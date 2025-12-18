@@ -706,11 +706,7 @@ def scatter(
             dim_size = 0
         else:
             # Compute dim_size from index
-            # For torch.export compatibility, use torch._constrain_as_size to mark this as a valid size
             dim_size_tensor = index.max() + 1
-            if torch.compiler.is_compiling():
-                # Tell torch.export this is a valid size dimension
-                torch._constrain_as_size(dim_size_tensor, min=0, max=10000)
             dim_size = int(dim_size_tensor)
 
     size[dim] = dim_size
