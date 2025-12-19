@@ -197,7 +197,7 @@ def triton_neighbor_bruteforce(
     else:
         num_all_pairs = n_atoms * (n_atoms - 1) // 2
 
-    # Grid covers only triangular pairs (not n²)
+    # Grid covers only triangular pairs (not n*n)
     grid = lambda meta: (triton.cdiv(num_all_pairs, meta["BLOCK"]),)
 
     wrap_triton(_neighbor_brute_kernel)[grid](

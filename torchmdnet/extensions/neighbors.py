@@ -53,7 +53,7 @@ def torch_neighbor_bruteforce(
             raise ValueError('Expected "box_vectors" to have shape (n_batch, 3, 3)')
         box_vectors = box_vectors.to(device=device, dtype=dtype)
 
-    # Generate indices for all n² pairs
+    # Generate indices for all n*n pairs
     arange_n = torch.arange(n_atoms, device=device)
     i_idx = arange_n.view(-1, 1).expand(n_atoms, n_atoms)  # (n, n)
     j_idx = arange_n.view(1, -1).expand(n_atoms, n_atoms)  # (n, n)
@@ -110,7 +110,7 @@ def torch_neighbor_bruteforce(
         & ((distances_grid >= cutoff_lower) | is_self_loop)
     )
 
-    # Flatten everything: (n²)
+    # Flatten everything: (n*n)
     i_flat = i_idx.reshape(-1)
     j_flat = j_idx.reshape(-1)
     deltas_flat = deltas_grid.reshape(-1, 3)

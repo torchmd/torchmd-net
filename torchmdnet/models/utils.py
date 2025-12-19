@@ -689,7 +689,6 @@ def scatter(
     """Has the signature of torch_scatter.scatter, but uses torch.scatter_reduce instead."""
     if dim_size is None:
         dim_size = index.max().item() + 1
-
     operation_dict = {
         "add": "sum",
         "sum": "sum",
@@ -702,14 +701,12 @@ def scatter(
     # take into account the dimensionality of src
     index = _broadcast(index, src, dim)
     size = list(src.size())
-
-    # Compute dim_size if not provided
-    if dim_size is None:
-        dim_size = 0
-        if index.numel() != 0:
-            dim_size = int(index.max() + 1)
-
-    size[dim] = dim_size
+    if dim_size is not None:
+        size[dim] = dim_size
+    elif index.numel() == 0:
+        size[dim] = 0
+    else:
+        size[dim] = int(index.max()) + 1
     out = torch.zeros(size, dtype=src.dtype, device=src.device)
     res = out.scatter_reduce(dim, index, src, reduce_op)
     return res

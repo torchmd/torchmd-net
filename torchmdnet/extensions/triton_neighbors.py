@@ -9,30 +9,6 @@ import triton
 import triton.language as tl
 
 
-def _validate_box(box_vectors: Tensor, cutoff_upper: float, n_batch: int) -> Tensor:
-    if box_vectors.dim() == 2:
-        box_vectors = box_vectors.unsqueeze(0).expand(n_batch, 3, 3)
-    if box_vectors.dim() != 3 or box_vectors.shape[1:] != (3, 3):
-        raise ValueError('Expected "box_vectors" to have shape (n_batch, 3, 3)')
-    if box_vectors.size(0) != n_batch:
-        raise ValueError('Expected "box_vectors" first dimension to match batch size')
-    v = box_vectors[0]
-    c = float(cutoff_upper)
-    if not (
-        v[0, 1] == 0
-        and v[0, 2] == 0
-        and v[1, 2] == 0
-        and v[0, 0] >= 2 * c
-        and v[1, 1] >= 2 * c
-        and v[2, 2] >= 2 * c
-        and v[0, 0] >= 2 * v[1, 0]
-        and v[0, 0] >= 2 * v[2, 0]
-        and v[1, 1] >= 2 * v[2, 1]
-    ):
-        raise ValueError("Invalid box vectors")
-    return box_vectors
-
-
 @triton.jit
 def _tl_round(x):
     return tl.where(x >= 0, tl.math.floor(x + 0.5), tl.math.ceil(x - 0.5))
