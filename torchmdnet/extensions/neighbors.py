@@ -30,9 +30,10 @@ def torch_neighbor_bruteforce(
     loop: bool,
     include_transpose: bool,
 ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
-    """Brute-force neighbor list using pure PyTorch.
+    """Optimized brute-force neighbor list using pure PyTorch.
 
     This implementation avoids nonzero() to be torch.compile compatible.
+    Uses triangular indexing to reduce memory usage and computation from O(n^2) to O(n^2/2).
     It uses argsort with infinity for invalid pairs to achieve fixed output shapes.
     """
     if positions.dim() != 2 or positions.size(1) != 3:
@@ -53,86 +54,120 @@ def torch_neighbor_bruteforce(
             raise ValueError('Expected "box_vectors" to have shape (n_batch, 3, 3)')
         box_vectors = box_vectors.to(device=device, dtype=dtype)
 
-    # Generate indices for all n*n pairs
-    arange_n = torch.arange(n_atoms, device=device)
-    i_idx = arange_n.view(-1, 1).expand(n_atoms, n_atoms)  # (n, n)
-    j_idx = arange_n.view(1, -1).expand(n_atoms, n_atoms)  # (n, n)
+    # Handle different indexing schemes based on loop and include_transpose
+    if include_transpose:
+        if loop:
+            # include_transpose=True, loop=True: triangular pairs (i >= j) + transposes (j,i) for i != j + self-loops
+            # Generate base triangular pairs i >= j
+            base_i, base_j = torch.tril_indices(n_atoms, n_atoms, device=device)
+            # Add transposes for i != j
+            is_not_self = base_i != base_j
+            transpose_i = base_j[is_not_self]
+            transpose_j = base_i[is_not_self]
+            # Combine: base pairs + transpose pairs
+            i_indices = torch.cat([base_i, transpose_i])
+            j_indices = torch.cat([base_j, transpose_j])
+            num_pairs = i_indices.size(0)
+        else:
+            # include_transpose=True, loop=False: triangular pairs (i > j) + transposes (j,i)
+            # Generate base triangular pairs i > j
+            base_i, base_j = torch.triu_indices(
+                n_atoms, n_atoms, offset=1, device=device
+            )
+            # Add transposes
+            transpose_i = base_j
+            transpose_j = base_i
+            # Combine: base pairs + transpose pairs
+            i_indices = torch.cat([base_i, transpose_i])
+            j_indices = torch.cat([base_j, transpose_j])
+            num_pairs = i_indices.size(0)
+    else:
+        # include_transpose=False: use triangular indexing only
+        if loop:
+            # loop=True: i >= j (lower triangle including diagonal)
+            num_pairs = n_atoms * (n_atoms + 1) // 2
+            i_indices, j_indices = torch.tril_indices(n_atoms, n_atoms, device=device)
+        else:
+            # loop=False: i > j (lower triangle excluding diagonal)
+            num_pairs = n_atoms * (n_atoms - 1) // 2
+            # torch.tril_indices with offset=-1 gives i > j
+            i_indices, j_indices = torch.tril_indices(
+                n_atoms, n_atoms, offset=-1, device=device
+            )
 
-    # Compute deltas for ALL pairs: (n, n, 3)
-    pos_i = positions.unsqueeze(1)  # (n, 1, 3)
-    pos_j = positions.unsqueeze(0)  # (1, n, 3)
-    deltas_grid = pos_i - pos_j  # (n, n, 3)
+    # Compute deltas for pairs
+    deltas = positions[i_indices] - positions[j_indices]
 
     # Apply PBC if needed
     if use_periodic:
-        # Get batch indices for all pairs
-        batch_i = batch.view(-1, 1).expand(n_atoms, n_atoms)  # (n, n)
+        batch_i = batch[i_indices]
         if box_vectors.size(0) == 1:
-            # Single box for all - broadcast
-            box_for_grid = box_vectors.expand(n_atoms, n_atoms, 3, 3)  # (n, n, 3, 3)
+            # Single box for all - use the same box
+            box_for_pairs = box_vectors.expand(num_pairs, 3, 3)
         else:
             # Per-batch boxes - index by batch of atom i
-            box_for_grid = box_vectors[batch_i]  # (n, n, 3, 3)
-        # Apply PBC: deltas_grid is (n, n, 3), box_for_grid is (n, n, 3, 3)
-        deltas_flat_pbc = deltas_grid.reshape(-1, 3)
-        box_flat_pbc = box_for_grid.reshape(-1, 3, 3)
-        deltas_flat_pbc = _apply_pbc_torch(deltas_flat_pbc, box_flat_pbc)
-        deltas_grid = deltas_flat_pbc.reshape(n_atoms, n_atoms, 3)
+            box_for_pairs = box_vectors[batch_i]
+        # Apply PBC to pairs
+        deltas = _apply_pbc_torch(deltas, box_for_pairs)
 
-    # Compute distances for all pairs: (n, n)
-    dist_sq = (deltas_grid * deltas_grid).sum(dim=-1)
+    # Compute distances for pairs
+    dist_sq = (deltas * deltas).sum(dim=-1)
     zero_mask = dist_sq == 0
-    distances_grid = torch.where(
+    distances = torch.where(
         zero_mask,
         torch.zeros_like(dist_sq),
         torch.sqrt(dist_sq.clamp(min=1e-32)),
     )
 
-    # Build validity mask (n, n)
-    if include_transpose:
-        valid_mask = torch.ones((n_atoms, n_atoms), device=device, dtype=torch.bool)
-        if not loop:
-            valid_mask = valid_mask & (i_idx != j_idx)
-    else:
-        valid_mask = (i_idx > j_idx) if not loop else (i_idx >= j_idx)
+    # Build validity mask for pairs
+    valid_mask = torch.ones(num_pairs, device=device, dtype=torch.bool)
 
     # Apply batch constraint
     if batch.numel() > 0:
-        same_batch = batch.view(-1, 1) == batch.view(1, -1)
+        same_batch = batch[i_indices] == batch[j_indices]
         valid_mask = valid_mask & same_batch
 
     # Apply cutoff constraints
     # Self-loops (i == j) are exempt from cutoff_lower since they have distance 0
-    is_self_loop = i_idx == j_idx
+    is_self_loop = i_indices == j_indices
     valid_mask = (
         valid_mask
-        & (distances_grid < cutoff_upper)
-        & ((distances_grid >= cutoff_lower) | is_self_loop)
+        & (distances < cutoff_upper)
+        & ((distances >= cutoff_lower) | is_self_loop)
     )
-
-    # Flatten everything: (n*n)
-    i_flat = i_idx.reshape(-1)
-    j_flat = j_idx.reshape(-1)
-    deltas_flat = deltas_grid.reshape(-1, 3)
-    distances_flat = distances_grid.reshape(-1)
-    valid_flat = valid_mask.reshape(-1)
 
     # Sort key: valid pairs by distance, invalid pairs get infinity (sorted last)
     sort_key = torch.where(
-        valid_flat,
-        distances_flat,
-        torch.full_like(distances_flat, float("inf")),
+        valid_mask,
+        distances,
+        torch.full_like(distances, float("inf")),
     )
 
     # Sort and take top max_num_pairs (fixed output shape)
-    order = torch.argsort(sort_key)[:max_num_pairs]
+    # For include_transpose + loop case, we may have more pairs than expected
+    num_candidates = min(sort_key.size(0), max_num_pairs)
+    order = torch.argsort(sort_key)[:num_candidates]
 
     # Gather results using the sorted indices
-    i_out = i_flat.index_select(0, order)
-    j_out = j_flat.index_select(0, order)
-    deltas_out = deltas_flat.index_select(0, order)
-    distances_out = distances_flat.index_select(0, order)
-    valid_out = valid_flat.index_select(0, order)
+    i_out = i_indices.index_select(0, order)
+    j_out = j_indices.index_select(0, order)
+    deltas_out = deltas.index_select(0, order)
+    distances_out = distances.index_select(0, order)
+    valid_out = valid_mask.index_select(0, order)
+
+    # Pad to max_num_pairs if needed
+    if num_candidates < max_num_pairs:
+        pad_size = max_num_pairs - num_candidates
+        pad_indices = torch.full((pad_size,), -1, device=device, dtype=torch.long)
+        pad_deltas = torch.zeros((pad_size, 3), device=device, dtype=dtype)
+        pad_distances = torch.zeros((pad_size,), device=device, dtype=dtype)
+        pad_valid = torch.zeros((pad_size,), device=device, dtype=torch.bool)
+
+        i_out = torch.cat([i_out, pad_indices])
+        j_out = torch.cat([j_out, pad_indices])
+        deltas_out = torch.cat([deltas_out, pad_deltas])
+        distances_out = torch.cat([distances_out, pad_distances])
+        valid_out = torch.cat([valid_out, pad_valid])
 
     # Replace invalid entries with -1 (neighbors) and 0 (deltas/distances)
     # Ensure gradients flow through valid entries
@@ -148,6 +183,6 @@ def torch_neighbor_bruteforce(
     deltas_out = torch.where(valid_out.unsqueeze(1), deltas_out, zero_deltas)
     distances_out = torch.where(valid_out, distances_out, zero_distances)
 
-    # Count ALL valid pairs (before slicing) to detect overflow
-    num_pairs_tensor = valid_flat.sum().view(1).to(torch.long)
+    # Count valid pairs (before slicing) to detect overflow
+    num_pairs_tensor = valid_mask.sum().view(1).to(torch.long)
     return neighbors_out, deltas_out, distances_out, num_pairs_tensor
