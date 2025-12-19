@@ -399,7 +399,7 @@ def triton_neighbor_cell(
     )
 
     # Allocate outputs
-    neighbors = torch.full((2, max_num_pairs), -1, device=device, dtype=torch.int32)
+    neighbors = torch.full((2, max_num_pairs), -1, device=device, dtype=torch.long)
     deltas = torch.zeros((max_num_pairs, 3), device=device, dtype=dtype)
     distances = torch.zeros((max_num_pairs,), device=device, dtype=dtype)
     num_pairs = torch.zeros((1,), device=device, dtype=torch.int32)

@@ -186,7 +186,7 @@ def triton_neighbor_bruteforce(
         # Use stride 0 to broadcast single box to all batches (avoids CPU sync)
         box_batch_stride = 0 if box_vectors.size(0) == 1 else 9
 
-    neighbors = torch.full((2, max_num_pairs), -1, device=device, dtype=torch.int32)
+    neighbors = torch.full((2, max_num_pairs), -1, device=device, dtype=torch.long)
     deltas = torch.zeros((max_num_pairs, 3), device=device, dtype=dtype)
     distances = torch.zeros((max_num_pairs,), device=device, dtype=dtype)
     num_pairs = torch.zeros((1,), device=device, dtype=torch.int32)
