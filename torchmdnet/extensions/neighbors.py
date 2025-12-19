@@ -54,48 +54,34 @@ def torch_neighbor_bruteforce(
             raise ValueError('Expected "box_vectors" to have shape (n_batch, 3, 3)')
         box_vectors = box_vectors.to(device=device, dtype=dtype)
 
-    # Handle different indexing schemes based on loop and include_transpose
+    # Generate base pairs
+    if loop:
+        # loop=True: i >= j (lower triangle including diagonal)
+        tril_indices = torch.tril_indices(n_atoms, n_atoms, device=device)
+        i_indices = tril_indices[0]
+        j_indices = tril_indices[1]
+    else:
+        # loop=False: i > j (lower triangle excluding diagonal)
+        tril_indices = torch.tril_indices(n_atoms, n_atoms, offset=-1, device=device)
+        i_indices = tril_indices[0]
+        j_indices = tril_indices[1]
+
+    # If include_transpose, add the flipped pairs (j,i)
     if include_transpose:
         if loop:
-            # include_transpose=True, loop=True: triangular pairs (i >= j) + transposes (j,i) for i != j + self-loops
-            # Generate base triangular pairs i >= j
-            base_i, base_j = torch.tril_indices(n_atoms, n_atoms, device=device)
-            # Add transposes for i != j
-            is_not_self = base_i != base_j
-            transpose_i = base_j[is_not_self]
-            transpose_j = base_i[is_not_self]
-            # Combine: base pairs + transpose pairs
-            i_indices = torch.cat([base_i, transpose_i])
-            j_indices = torch.cat([base_j, transpose_j])
-            num_pairs = i_indices.size(0)
+            # For loop=True, base pairs are i >= j, so add i < j transposes
+            triu_indices = torch.triu_indices(n_atoms, n_atoms, offset=1, device=device)
+            i_transpose = triu_indices[0]
+            j_transpose = triu_indices[1]
         else:
-            # include_transpose=True, loop=False: triangular pairs (i > j) + transposes (j,i)
-            # Generate base triangular pairs i > j
-            base_i, base_j = torch.triu_indices(
-                n_atoms, n_atoms, offset=1, device=device
-            )
-            # Add transposes
-            transpose_i = base_j
-            transpose_j = base_i
-            # Combine: base pairs + transpose pairs
-            i_indices = torch.cat([base_i, transpose_i])
-            j_indices = torch.cat([base_j, transpose_j])
-            num_pairs = i_indices.size(0)
-    else:
-        # include_transpose=False: use triangular indexing only
-        if loop:
-            # loop=True: i >= j (lower triangle including diagonal)
-            num_pairs = n_atoms * (n_atoms + 1) // 2
-            i_indices, j_indices = torch.tril_indices(n_atoms, n_atoms, device=device)
-        else:
-            # loop=False: i > j (lower triangle excluding diagonal)
-            num_pairs = n_atoms * (n_atoms - 1) // 2
-            # torch.tril_indices with offset=-1 gives i > j
-            i_indices, j_indices = torch.tril_indices(
-                n_atoms, n_atoms, offset=-1, device=device
-            )
+            # For loop=False, base pairs are i > j, so add all transposes (j,i)
+            i_transpose = j_indices
+            j_transpose = i_indices
+        # Combine base and transpose pairs
+        i_indices = torch.cat([i_indices, i_transpose])
+        j_indices = torch.cat([j_indices, j_transpose])
 
-    # Compute deltas for pairs
+    # Compute deltas for all pairs
     deltas = positions[i_indices] - positions[j_indices]
 
     # Apply PBC if needed
@@ -103,14 +89,14 @@ def torch_neighbor_bruteforce(
         batch_i = batch[i_indices]
         if box_vectors.size(0) == 1:
             # Single box for all - use the same box
-            box_for_pairs = box_vectors.expand(num_pairs, 3, 3)
+            box_for_pairs = box_vectors.expand(len(deltas), 3, 3)
         else:
             # Per-batch boxes - index by batch of atom i
             box_for_pairs = box_vectors[batch_i]
         # Apply PBC to pairs
         deltas = _apply_pbc_torch(deltas, box_for_pairs)
 
-    # Compute distances for pairs
+    # Compute distances for all pairs
     dist_sq = (deltas * deltas).sum(dim=-1)
     zero_mask = dist_sq == 0
     distances = torch.where(
@@ -119,8 +105,8 @@ def torch_neighbor_bruteforce(
         torch.sqrt(dist_sq.clamp(min=1e-32)),
     )
 
-    # Build validity mask for pairs
-    valid_mask = torch.ones(num_pairs, device=device, dtype=torch.bool)
+    # Build validity mask for all pairs
+    valid_mask = torch.ones(len(distances), device=device, dtype=torch.bool)
 
     # Apply batch constraint
     if batch.numel() > 0:
