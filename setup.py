@@ -9,10 +9,28 @@ import os
 import platform
 
 
-if os.environ.get("ACCELERATOR", None) is not None:
-    use_cuda = os.environ.get("ACCELERATOR", "").startswith("cu")
+accel = os.environ.get("ACCELERATOR", "")
+use_rocm = False
+if accel:
+    if accel.startswith("cu"):
+        use_cuda = True
+    elif accel.startswith(("rocm", "hip")):
+        use_cuda = True
+        use_rocm = True
+    elif accel.startswith("cpu"):
+        use_cuda = False
+    else:
+        use_cuda = torch.cuda._is_compiled()
+        use_rocm = torch.version.hip is not None
 else:
     use_cuda = torch.cuda._is_compiled()
+    use_rocm = torch.version.hip is not None
+
+if os.getenv("USE_ROCM") == "1":
+    use_rocm = True
+    use_cuda = True
+if os.getenv("USE_CUDA") == "0" and not use_rocm:
+    use_cuda = False
 
 
 def _replace_name(name):
@@ -37,7 +55,7 @@ def set_torch_cuda_arch_list():
     """Set the CUDA arch list according to the architectures the current torch installation was compiled for.
     This function is a no-op if the environment variable TORCH_CUDA_ARCH_LIST is already set or if torch was not compiled with CUDA support.
     """
-    if use_cuda and not os.environ.get("TORCH_CUDA_ARCH_LIST"):
+    if use_cuda and not use_rocm and not os.environ.get("TORCH_CUDA_ARCH_LIST"):
         arch_flags = torch._C._cuda_getArchFlags()
         sm_versions = [x[3:] for x in arch_flags.split() if x.startswith("sm_")]
         formatted_versions = ";".join([f"{y[:-1]}.{y[-1]}" for y in sm_versions])
@@ -49,7 +67,10 @@ set_torch_cuda_arch_list()
 
 extension_root = os.path.join("torchmdnet", "extensions")
 neighbor_sources = ["neighbors_cpu.cpp"]
-if use_cuda:
+# Check for both CUDA and ROCm
+if use_rocm:
+    neighbor_sources.append("neighbors_hip.hip")
+elif use_cuda:
     neighbor_sources.append("neighbors_cuda.cu")
 neighbor_sources = [
     os.path.join(extension_root, "neighbors", source) for source in neighbor_sources
@@ -73,9 +94,10 @@ if os.getenv("ACCELERATOR", "").startswith("cu"):
     extra_deps = [f"nvidia-cuda-runtime-cu{cuda_ver}"]
 
 ExtensionType = CppExtension if not use_cuda else CUDAExtension
+extension_cpp = "torchmdnet_extensions_hip.cpp" if use_rocm else "torchmdnet_extensions.cpp"
 extensions = ExtensionType(
     name="torchmdnet.extensions.torchmdnet_extensions",
-    sources=[os.path.join(extension_root, "torchmdnet_extensions.cpp")]
+    sources=[os.path.join(extension_root, extension_cpp)]
     + neighbor_sources,
     define_macros=[("WITH_CUDA", 1)] if use_cuda else [],
     runtime_library_dirs=runtime_library_dirs,
