@@ -1,4 +1,4 @@
-# This script shows how to load the AceFF-1.0 checkpoint
+# This script shows how to load an AceFF checkpoint
 # and use it for force and energy predictions for a single molecule or a batch
 import torch
 
