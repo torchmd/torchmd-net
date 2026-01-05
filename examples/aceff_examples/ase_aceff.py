@@ -17,7 +17,7 @@ model_file_path = hf_hub_download(
 
 # We create the ASE calculator by supplying the path to the model and specifying the device and dtype
 calc  = TMDNETCalculator(model_file_path, device='cuda')
-atoms = read('caffiene.pdb')
+atoms = read('caffeine.pdb')
 print(atoms)
 
 atoms.calc = calc
@@ -80,9 +80,6 @@ print(f"Completed MD in {t2 - t1:.1f} s ({(t2 - t1)*1000 / nsteps:.3f} ms/step)"
 calc  = TMDNETCalculator(model_file_path, device='cuda', compile=True)
 
 atoms.calc = calc
-
-# Single point calcuation to trigger compile
-atoms.get_potential_energy()
 
 # Run more dynamics
 t1 = time.perf_counter()

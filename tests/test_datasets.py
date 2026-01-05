@@ -84,19 +84,17 @@ def test_custom(energy, forces, num_files, preload, tmpdir):
     # Assert shapes of whole dataset:
     for i in range(len(data)):
         n_atoms_i = n_atoms_per_sample[i]
-        assert np.array(data[i].z).shape == (
+        assert data[i].z.shape == (
             n_atoms_i,
         ), "Dataset has incorrect atom numbers shape"
-        assert np.array(data[i].pos).shape == (
+        assert data[i].pos.shape == (
             n_atoms_i,
             3,
         ), "Dataset has incorrect coords shape"
         if energy:
-            assert np.array(data[i].y).shape == (
-                1,
-            ), "Dataset has incorrect energy shape"
+            assert data[i].y.shape == (1,), "Dataset has incorrect energy shape"
         if forces:
-            assert np.array(data[i].neg_dy).shape == (
+            assert data[i].neg_dy.shape == (
                 n_atoms_i,
                 3,
             ), "Dataset has incorrect forces shape"
@@ -190,19 +188,17 @@ def test_hdf5(preload, energy, forces, num_files, tmpdir):
     # Assert shapes of whole dataset:
     for i in range(len(data)):
         n_atoms_i = n_atoms_per_sample[i]
-        assert np.array(data[i].z).shape == (
+        assert data[i].z.shape == (
             n_atoms_i,
         ), "Dataset has incorrect atom numbers shape"
-        assert np.array(data[i].pos).shape == (
+        assert data[i].pos.shape == (
             n_atoms_i,
             3,
         ), "Dataset has incorrect coords shape"
         if energy:
-            assert np.array(data[i].y).shape == (
-                1,
-            ), "Dataset has incorrect energy shape"
+            assert data[i].y.shape == (1,), "Dataset has incorrect energy shape"
         if forces:
-            assert np.array(data[i].neg_dy).shape == (
+            assert data[i].neg_dy.shape == (
                 n_atoms_i,
                 3,
             ), "Dataset has incorrect forces shape"

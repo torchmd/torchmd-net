@@ -73,7 +73,7 @@ def compute_ref_neighbors(pos, batch, loop, include_transpose, cutoff, box_vecto
 
 @pytest.mark.parametrize(
     ("device", "strategy"),
-    [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")],
+    [("cpu", "brute"), ("cuda", "brute"), ("cuda", "cell")],
 )
 @pytest.mark.parametrize("n_batches", [1, 2, 3, 4, 128])
 @pytest.mark.parametrize("cutoff", [0.1, 1.0, 3.0, 4.9])
@@ -130,6 +130,7 @@ def test_neighbors(
         return_vecs=True,
         include_transpose=include_transpose,
     )
+    nl.to(device)
     batch.to(device)
     neighbors, distances, distance_vecs = nl(pos, batch)
     neighbors = neighbors.cpu().detach().numpy()
@@ -149,7 +150,7 @@ def test_neighbors(
 
 @pytest.mark.parametrize(
     ("device", "strategy"),
-    [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")],
+    [("cpu", "brute"), ("cuda", "brute"), ("cuda", "cell")],
 )
 @pytest.mark.parametrize("loop", [True, False])
 @pytest.mark.parametrize("include_transpose", [True, False])
@@ -225,6 +226,7 @@ def test_neighbor_grads(
         resize_to_fit=True,
         box=box,
     )
+    nl.to(device)
     neighbors, distances, deltas = nl(positions)
     # Check neighbor pairs are correct
     ref_neighbors_sort, _, _ = sort_neighbors(
@@ -261,7 +263,7 @@ def test_neighbor_grads(
 
 @pytest.mark.parametrize(
     ("device", "strategy"),
-    [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")],
+    [("cpu", "brute"), ("cuda", "brute"), ("cuda", "cell")],
 )
 @pytest.mark.parametrize("loop", [True, False])
 @pytest.mark.parametrize("include_transpose", [True, False])
@@ -300,6 +302,7 @@ def test_neighbor_autograds(
         resize_to_fit=True,
         box=box,
     )
+    nl.to(device)
     positions = 0.25 * lbox * torch.rand(num_atoms, 3, device=device, dtype=dtype)
     positions.requires_grad_(True)
     batch = torch.zeros((num_atoms,), dtype=torch.long, device=device)
@@ -314,7 +317,7 @@ def test_neighbor_autograds(
     )
 
 
-@pytest.mark.parametrize("strategy", ["brute", "cell", "shared"])
+@pytest.mark.parametrize("strategy", ["brute", "cell"])
 @pytest.mark.parametrize("n_batches", [1, 2, 3, 4])
 def test_large_size(strategy, n_batches):
     device = "cuda"
@@ -359,6 +362,7 @@ def test_large_size(strategy, n_batches):
         include_transpose=True,
         resize_to_fit=True,
     )
+    nl.to(device)
     neighbors, distances, distance_vecs = nl(pos, batch)
     neighbors = neighbors.cpu().detach().numpy()
     distance_vecs = distance_vecs.cpu().detach().numpy()
@@ -373,7 +377,7 @@ def test_large_size(strategy, n_batches):
 
 @pytest.mark.parametrize(
     ("device", "strategy"),
-    [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared"), ("cuda", "cell")],
+    [("cpu", "brute"), ("cuda", "brute"), ("cuda", "cell")],
 )
 @pytest.mark.parametrize("n_batches", [1, 128])
 @pytest.mark.parametrize("cutoff", [1.0])
@@ -424,6 +428,7 @@ def test_jit_script_compatible(
         return_vecs=True,
         include_transpose=include_transpose,
     )
+    nl.to(device)
     batch.to(device)
 
     nl = torch.jit.script(nl)
@@ -444,7 +449,7 @@ def test_jit_script_compatible(
 
 
 @pytest.mark.parametrize("device", ["cuda"])
-@pytest.mark.parametrize("strategy", ["brute", "shared", "cell"])
+@pytest.mark.parametrize("strategy", ["brute", "cell"])
 @pytest.mark.parametrize("n_batches", [1, 128])
 @pytest.mark.parametrize("cutoff", [1.0])
 @pytest.mark.parametrize("loop", [True, False])
@@ -494,6 +499,7 @@ def test_cuda_graph_compatible_forward(
         check_errors=False,
         resize_to_fit=False,
     )
+    nl.to(device)
     batch.to(device)
 
     graph = torch.cuda.CUDAGraph()
@@ -527,7 +533,7 @@ def test_cuda_graph_compatible_forward(
 
 
 @pytest.mark.parametrize("device", ["cuda"])
-@pytest.mark.parametrize("strategy", ["brute", "shared", "cell"])
+@pytest.mark.parametrize("strategy", ["brute", "cell"])
 @pytest.mark.parametrize("n_batches", [1, 128])
 @pytest.mark.parametrize("cutoff", [1.0])
 @pytest.mark.parametrize("loop", [True, False])
@@ -580,6 +586,7 @@ def test_cuda_graph_compatible_backward(
             check_errors=False,
             resize_to_fit=False,
         )
+        nl.to(device)
         batch.to(device)
 
         graph = torch.cuda.CUDAGraph()
@@ -600,9 +607,7 @@ def test_cuda_graph_compatible_backward(
         torch.cuda.synchronize()
 
 
-@pytest.mark.parametrize(
-    ("device", "strategy"), [("cpu", "brute"), ("cuda", "brute"), ("cuda", "shared")]
-)
+@pytest.mark.parametrize(("device", "strategy"), [("cpu", "brute"), ("cuda", "brute")])
 @pytest.mark.parametrize("n_batches", [1, 128])
 @pytest.mark.parametrize("use_forward", [True, False])
 def test_per_batch_box(device, strategy, n_batches, use_forward):
@@ -646,6 +651,7 @@ def test_per_batch_box(device, strategy, n_batches, use_forward):
         return_vecs=True,
         include_transpose=include_transpose,
     )
+    nl.to(device)
     batch.to(device)
     neighbors, distances, distance_vecs = nl(
         pos, batch, box=box if use_forward else None
@@ -693,8 +699,6 @@ def test_torch_compile(device, dtype, loop, include_transpose):
         pytest.skip("Skipping torch compile test")
 
     if sys.version_info >= (3, 12):
-        pytest.skip("Not available in this version")
-    if torch.__version__ < "2.0.0":
         pytest.skip("Not available in this version")
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA not available")

@@ -114,6 +114,40 @@ def test_torchscript_dynamic_shapes(model_name, device):
         )[0]
 
 
+@mark.parametrize("model_name", models.__all_models__)
+@mark.parametrize("device", ["cpu", "cuda"])
+def test_torchscript_then_compile(model_name, device):
+    """Test that a TorchScripted model can be torch.compiled afterwards"""
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+
+    # Create and TorchScript the model
+    z, pos, batch = create_example_batch()
+    z = z.to(device)
+    pos = pos.to(device).requires_grad_(True)
+    batch = batch.to(device)
+
+    scripted_model = torch.jit.script(
+        create_model(load_example_args(model_name, remove_prior=True, derivative=True))
+    ).to(device=device)
+
+    # Get baseline output from scripted model
+    y_scripted, neg_dy_scripted = scripted_model(z, pos, batch=batch)
+
+    # Now try to torch.compile the scripted model
+    try:
+        compiled_model = torch.compile(scripted_model, backend="inductor")
+        y_compiled, neg_dy_compiled = compiled_model(z, pos, batch=batch)
+
+        # Verify outputs match
+        torch.testing.assert_close(y_scripted, y_compiled, atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(
+            neg_dy_scripted, neg_dy_compiled, atol=1e-5, rtol=1e-5
+        )
+    except Exception as e:
+        pytest.fail(f"torch.compile failed on TorchScripted {model_name} model: {e}")
+
+
 # Currently only tensornet is CUDA graph compatible
 @mark.parametrize("model_name", ["tensornet"])
 def test_cuda_graph_compatible(model_name):
@@ -154,6 +188,65 @@ def test_cuda_graph_compatible(model_name):
     y2, neg_dy2 = model(z, pos, batch=batch)
     with torch.cuda.graph(g):
         y, neg_dy = model(z, pos, batch=batch)
+    y.fill_(0.0)
+    neg_dy.fill_(0.0)
+    g.replay()
+    assert torch.allclose(y, y2)
+    assert torch.allclose(neg_dy, neg_dy2, atol=1e-5, rtol=1e-5)
+
+
+@mark.parametrize("model_name", ["tensornet"])
+def test_torchscript_cuda_graph_compatible(model_name):
+    """Test that a TorchScripted model is compatible with CUDA graphs.
+
+    This is important when models are saved as TorchScript
+    and then CUDA graphs are used for performance.
+    """
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    z, pos, batch = create_example_batch()
+    args = {
+        "model": model_name,
+        "embedding_dimension": 128,
+        "num_layers": 2,
+        "num_rbf": 32,
+        "rbf_type": "expnorm",
+        "trainable_rbf": False,
+        "activation": "silu",
+        "cutoff_lower": 0.0,
+        "cutoff_upper": 5.0,
+        "max_z": 100,
+        "max_num_neighbors": 128,
+        "equivariance_invariance_group": "O(3)",
+        "prior_model": None,
+        "atom_filter": -1,
+        "derivative": True,
+        "check_errors": False,
+        "static_shapes": True,
+        "output_model": "Scalar",
+        "reduce_op": "sum",
+        "precision": 32,
+    }
+    # Create the model
+    base_model = create_model(args)
+    # Setup for CUDA graphs before TorchScripting
+    z_cuda = z.to("cuda")
+    pos_cuda = pos.to("cuda").requires_grad_(True)
+    batch_cuda = batch.to("cuda")
+
+    # Now TorchScript the model (like OpenMM-Torch does)
+    model = torch.jit.script(base_model).to(device="cuda")
+    model.eval()
+
+    # Warm up the model
+    with torch.cuda.stream(torch.cuda.Stream()):
+        for _ in range(0, 15):
+            y, neg_dy = model(z_cuda, pos_cuda, batch=batch_cuda)
+    # Capture the model in a CUDA graph
+    g = torch.cuda.CUDAGraph()
+    y2, neg_dy2 = model(z_cuda, pos_cuda, batch=batch_cuda)
+    with torch.cuda.graph(g):
+        y, neg_dy = model(z_cuda, pos_cuda, batch=batch_cuda)
     y.fill_(0.0)
     neg_dy.fill_(0.0)
     g.replay()

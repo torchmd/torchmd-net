@@ -81,3 +81,76 @@ def test_compare_forward_multiple():
 
     assert_close(e_calc, e_pred)
     assert_close(f_calc, f_pred.view(-1, len(z1), 3), rtol=3e-4, atol=1e-5)
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_ase_calculator(device):
+    import platform
+
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    # Skip on Windows CI for now because we don't have cl.exe installed for torch.compile
+    if platform.system() == "Windows":
+        pytest.skip("Skipping test on Windows")
+
+    from torchmdnet.calculators import TMDNETCalculator
+    from ase.io import read
+    from ase import units
+    from ase.md.langevin import Langevin
+    import os
+    import numpy as np
+
+    ref_forces = np.array(
+        [
+            [-7.76999056e-01, -6.89736724e-01, -9.31625906e-03],
+            [2.16895628e00, 5.29322922e-01, 9.77647374e-04],
+            [-6.50327325e-01, 1.11337602e00, 2.27598846e-03],
+            [1.19350255e00, -1.23314810e00, -7.83117674e-03],
+            [5.11314452e-01, -3.33878160e-01, -5.03035402e-03],
+            [-7.18148768e-01, 7.37230778e-02, 3.08941817e-03],
+            [-1.25317931e-01, -5.19263268e-01, 2.00758013e-03],
+            [-3.05806249e-01, -4.49415118e-01, -8.53991229e-03],
+            [5.10734320e-03, 2.49908626e-01, 2.04431713e-02],
+            [-3.65967184e-01, -1.57078415e-01, -1.55984145e-03],
+            [-6.44133329e-01, 1.16345167e00, 4.54566162e-03],
+            [2.05828249e-02, -2.64510632e-01, -1.38899162e-02],
+            [1.73451304e-02, 3.65104795e-01, 1.13833081e-02],
+            [-8.57830405e-01, -2.25283504e-01, -2.49589253e-02],
+            [-1.56955227e-01, 1.19012646e-01, -1.87584094e-03],
+            [-1.50042176e-02, 1.75106078e-02, 2.51995742e-01],
+            [3.01239967e-01, 3.67318511e-01, 4.64916229e-06],
+            [-9.57870483e-03, 1.21697336e-02, -2.39765823e-01],
+            [-2.48186022e-01, 2.74000764e-02, -1.08634552e-03],
+            [1.26295090e-01, 1.04473650e-01, 2.81187654e-01],
+            [1.28753006e-01, 1.03064716e-01, -2.88918495e-01],
+            [2.80321002e-01, -5.11180341e-01, -1.12308562e-03],
+            [5.06305993e-02, 6.65888190e-02, -2.11322665e-01],
+            [7.02065229e-02, 7.10679889e-02, 2.37307906e-01],
+        ]
+    )
+
+    curr_dir = os.path.dirname(__file__)
+
+    checkpoint = join(curr_dir, "example_tensornet.ckpt")
+    calc = TMDNETCalculator(checkpoint, device=device)
+
+    atoms = read(join(curr_dir, "caffeine.pdb"))
+    atoms.calc = calc
+    # The total molecular charge must be set
+    atoms.info["charge"] = 0
+    assert np.allclose(atoms.get_potential_energy(), -113.6652, atol=1e-4)
+    assert np.allclose(atoms.get_forces(), ref_forces, atol=1e-4)
+
+    # Molecular dynamics
+    temperature_K: float = 300
+    timestep: float = 1.0 * units.fs
+    friction: float = 0.01 / units.fs
+    nsteps: int = 10
+    dyn = Langevin(atoms, timestep, temperature_K=temperature_K, friction=friction)
+    dyn.run(steps=nsteps)
+
+    # Now we can do the same but enabling torch.compile for increased speed
+    calc = TMDNETCalculator(checkpoint, device=device, compile=True)
+    atoms.calc = calc
+    # Run more dynamics
+    dyn.run(steps=nsteps)

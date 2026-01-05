@@ -10,23 +10,21 @@
 import torch
 from torch import Tensor
 from typing import Tuple
-from torch.library import register_fake
+import logging
+from torchmdnet.extensions.neighbors import torch_neighbor_bruteforce
+
+try:
+    import triton
+    from torchmdnet.extensions.triton_neighbors import triton_neighbor_pairs
+
+    HAS_TRITON = True
+except ImportError:
+    HAS_TRITON = False
 
 
-__all__ = ["is_current_stream_capturing", "get_neighbor_pairs_kernel"]
+logger = logging.getLogger(__name__)
 
-
-def is_current_stream_capturing():
-    """Returns True if the current CUDA stream is capturing.
-
-    Returns False if CUDA is not available or the current stream is not capturing.
-
-    This utility is required because the builtin torch function that does this is not scriptable.
-    """
-    _is_current_stream_capturing = (
-        torch.ops.torchmdnet_extensions.is_current_stream_capturing
-    )
-    return _is_current_stream_capturing()
+__all__ = ["get_neighbor_pairs_kernel"]
 
 
 def get_neighbor_pairs_kernel(
@@ -40,6 +38,7 @@ def get_neighbor_pairs_kernel(
     max_num_pairs: int,
     loop: bool,
     include_transpose: bool,
+    num_cells: int,
 ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
     """Computes the neighbor pairs for a given set of atomic positions.
     The list is generated as a list of pairs (i,j) without any enforced ordering.
@@ -48,7 +47,7 @@ def get_neighbor_pairs_kernel(
     Parameters
     ----------
     strategy : str
-        Strategy to use for computing the neighbor list. Can be one of :code:`["shared", "brute", "cell"]`.
+        Strategy to use for computing the neighbor list. Can be one of :code:`["brute", "cell"]`.
     positions : Tensor
         A tensor with shape (N, 3) representing the atomic positions.
     batch : Tensor
@@ -67,7 +66,8 @@ def get_neighbor_pairs_kernel(
         Whether to include self-interactions.
     include_transpose : bool
         Whether to include the transpose of the neighbor list (pair i,j and pair j,i).
-
+    num_cells : int
+        The number of cells in the grid if using the cell strategy.
     Returns
     -------
     neighbors : Tensor
@@ -79,53 +79,46 @@ def get_neighbor_pairs_kernel(
     num_pairs : Tensor
         The number of pairs found.
     """
-    return torch.ops.torchmdnet_extensions.get_neighbor_pairs(
+    if torch.jit.is_scripting() or not positions.is_cuda:
+
+        return torch_neighbor_bruteforce(
+            positions,
+            batch=batch,
+            box_vectors=box_vectors,
+            use_periodic=use_periodic,
+            cutoff_lower=cutoff_lower,
+            cutoff_upper=cutoff_upper,
+            max_num_pairs=max_num_pairs,
+            loop=loop,
+            include_transpose=include_transpose,
+        )
+
+    if not HAS_TRITON:
+        logger.warning(
+            "Triton is not available, using torch version of the neighbor pairs kernel."
+        )
+        return torch_neighbor_bruteforce(
+            positions,
+            batch=batch,
+            box_vectors=box_vectors,
+            use_periodic=use_periodic,
+            cutoff_lower=cutoff_lower,
+            cutoff_upper=cutoff_upper,
+            max_num_pairs=max_num_pairs,
+            loop=loop,
+            include_transpose=include_transpose,
+        )
+
+    return triton_neighbor_pairs(
         strategy,
-        positions,
-        batch,
-        box_vectors,
-        use_periodic,
-        cutoff_lower,
-        cutoff_upper,
-        max_num_pairs,
-        loop,
-        include_transpose,
+        positions=positions,
+        batch=batch,
+        box_vectors=box_vectors,
+        use_periodic=use_periodic,
+        cutoff_lower=cutoff_lower,
+        cutoff_upper=cutoff_upper,
+        max_num_pairs=max_num_pairs,
+        loop=loop,
+        include_transpose=include_transpose,
+        num_cells=num_cells,
     )
-
-
-# Registers a FakeTensor kernel (aka "meta kernel", "abstract impl")
-# that describes what the properties of the output Tensor are given
-# the properties of the input Tensor. The FakeTensor kernel is necessary
-# for the op to work performantly with torch.compile.
-@torch.library.register_fake("torchmdnet_extensions::get_neighbor_pairs_bkwd")
-def _(
-    grad_edge_vec: Tensor,
-    grad_edge_weight: Tensor,
-    edge_index: Tensor,
-    edge_vec: Tensor,
-    edge_weight: Tensor,
-    num_atoms: int,
-):
-    return torch.zeros((num_atoms, 3), dtype=edge_vec.dtype, device=edge_vec.device)
-
-
-@torch.library.register_fake("torchmdnet_extensions::get_neighbor_pairs_fwd")
-def _(
-    strategy: str,
-    positions: Tensor,
-    batch: Tensor,
-    box_vectors: Tensor,
-    use_periodic: bool,
-    cutoff_lower: float,
-    cutoff_upper: float,
-    max_num_pairs: int,
-    loop: bool,
-    include_transpose: bool,
-) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
-    """Returns empty vectors with the correct shape for the output of get_neighbor_pairs_kernel."""
-    size = max_num_pairs
-    edge_index = torch.empty((2, size), dtype=torch.int32, device=positions.device)
-    edge_distance = torch.empty((size,), dtype=positions.dtype, device=positions.device)
-    edge_vec = torch.empty((size, 3), dtype=positions.dtype, device=positions.device)
-    num_pairs = torch.empty((1,), dtype=torch.int32, device=positions.device)
-    return edge_index, edge_vec, edge_distance, num_pairs

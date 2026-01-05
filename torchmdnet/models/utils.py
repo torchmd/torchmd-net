@@ -152,7 +152,7 @@ class OptimizedDistance(torch.nn.Module):
         If the number of pairs found is larger than this, the pairs are randomly sampled. When check_errors is True, an exception is raised in this case.
         If negative, it is interpreted as (minus) the maximum number of neighbors per atom.
     strategy : str
-        Strategy to use for computing the neighbor list. Can be one of :code:`["shared", "brute", "cell"]`.
+        Strategy to use for computing the neighbor list. Can be one of :code:`["brute", "cell"]`.
 
         1. *Shared*: An O(N^2) algorithm that leverages CUDA shared memory, best for large number of particles.
         2. *Brute*: A brute force O(N^2) algorithm, best for small number of particles.
@@ -201,33 +201,45 @@ class OptimizedDistance(torch.nn.Module):
         self.cutoff_lower = cutoff_lower
         self.max_num_pairs = max_num_pairs
         self.strategy = strategy
-        self.box: Optional[Tensor] = box
         self.loop = loop
         self.return_vecs = return_vecs
         self.include_transpose = include_transpose
         self.resize_to_fit = resize_to_fit
         self.use_periodic = True
-        if self.box is None:
+        self.num_cells = 0
+
+        # Use register_buffer for box to make it export-compatible and handle device movement
+        if box is None:
             self.use_periodic = False
-            self.box = torch.empty((0, 0))
-            if self.strategy == "cell":
+            if strategy == "cell":
                 # Default the box to 3 times the cutoff, really inefficient for the cell list
                 lbox = cutoff_upper * 3.0
-                self.box = torch.tensor(
+                box = torch.tensor(
                     [[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]], device="cpu"
                 )
+            else:
+                # Use a placeholder box instead of empty (0,0) to avoid shape issues in torch.export
+                # This won't be used when use_periodic=False, but prevents export tracing issues
+                box = torch.zeros((3, 3), device="cpu")
+
+        # Register box as a buffer so it moves with the module and is export-compatible
+        self.register_buffer("box", box, persistent=True)
+
         if self.strategy == "cell":
-            self.box = self.box.cpu()
+            from torchmdnet.extensions.triton_cell import _get_cell_dimensions
+
+            cell_dims = _get_cell_dimensions(
+                self.box[0, 0], self.box[1, 1], self.box[2, 2], cutoff_upper
+            )
+            self.num_cells = int(cell_dims.prod())
+            if self.num_cells > 1024**3:
+                raise RuntimeError(
+                    f"Too many cells: {self.num_cells}. Maximum is 1024^3. "
+                    f"Reduce box size or increase cutoff."
+                )
+
         self.check_errors = check_errors
         self.long_edge_index = long_edge_index
-
-    def setup_for_compile_cudagraphs(self):
-        # box needs to be a buffer to it moves to correct device, otherwise we can end
-        # up with torch.compile failing to use cuda graphs with "skipping cudagraphs due to skipping cudagraphs due to cpu device (primals_3)."
-        # we cant just make it a buffer in the constructor above because then old state dicts will fail to load
-        _box = self.box
-        del self.box
-        self.register_buffer('box', _box)
 
     def forward(
         self, pos: Tensor, batch: Optional[Tensor] = None, box: Optional[Tensor] = None
@@ -263,9 +275,18 @@ class OptimizedDistance(torch.nn.Module):
         use_periodic = self.use_periodic
         if not use_periodic:
             use_periodic = box is not None
-        box = self.box if box is None else box
+
+        # Use the registered buffer box if no box is provided
+        # The buffer is automatically moved to the correct device with the module
+        if box is None:
+            box = self.box
+
         assert box is not None, "Box must be provided"
-        box = box.to(pos.dtype)
+
+        # Ensure box has correct dtype (device is already correct if using self.box)
+        if box.dtype != pos.dtype:
+            box = box.to(dtype=pos.dtype)
+
         max_pairs: int = self.max_num_pairs
         if self.max_num_pairs < 0:
             max_pairs = -self.max_num_pairs * pos.shape[0]
@@ -282,6 +303,7 @@ class OptimizedDistance(torch.nn.Module):
             include_transpose=self.include_transpose,
             box_vectors=box,
             use_periodic=use_periodic,
+            num_cells=self.num_cells,
         )
         if self.check_errors:
             assert (

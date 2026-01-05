@@ -268,10 +268,12 @@ class TMDNETCalculator(ase_calc.Calculator):
             else:
                 print("atomic numbers changed, re-compiling...")
 
-            
-            self.model.representation_model.setup_for_compile_cudagraphs(batch)
-            self.model.output_model.setup_for_compile_cudagraphs(batch)
+            # Warmup pass to set dim_size before compilation
+            # This is needed because torch.compile doesn't support .item() calls
             self.model.to(self.device)
+            with torch.no_grad():
+                _ = self.model(numbers, positions, batch=batch, q=total_charge)
+
             self.compiled_model = torch.compile(self.model, backend='inductor', dynamic=False, fullgraph=True, mode='reduce-overhead')
             self.compiled = True
 

@@ -178,17 +178,16 @@ def benchmark_neighbors(
 
 
 if __name__ == "__main__":
+    strategies = ["distance", "brute", "cell"]
     n_particles = 32767
     mean_num_neighbors = min(n_particles, 64)
     density = 0.8
     print(
-        "Benchmarking neighbor list generation for {} particles with {} neighbors on average".format(
-            n_particles, mean_num_neighbors
-        )
+        f"Benchmarking neighbor list generation for {n_particles} particles with {mean_num_neighbors} neighbors on average"
     )
     results = {}
     batch_sizes = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-    for strategy in ["shared", "brute", "cell", "distance"]:
+    for strategy in strategies:
         for n_batches in batch_sizes:
             time = benchmark_neighbors(
                 device="cuda",
@@ -200,33 +199,22 @@ if __name__ == "__main__":
             )
             # Store results in a dictionary
             results[strategy, n_batches] = time
+
     print("Summary")
     print("-------")
-    print(
-        "{:<10} {:<21} {:<21} {:<18} {:<10}".format(
-            "Batch size", "Shared(ms)", "Brute(ms)", "Cell(ms)", "Distance(ms)"
-        )
-    )
-    print(
-        "{:<10} {:<21} {:<21} {:<18} {:<10}".format(
-            "----------", "---------", "---------", "---------", "---------"
-        )
-    )
+    headers = "Batch size "
+    for strategy in strategies:
+        headers += f"{strategy.capitalize()+'(ms)':<21}"
+    print(headers)
+    print("-" * len(headers))
     # Print a column per strategy, show speedup over Distance in parenthesis
     for n_batches in batch_sizes:
         base = results["distance", n_batches]
-        print(
-            "{:<10} {:<4.2f} x{:<14.2f} {:<4.2f} x{:<14.2f}  {:<4.2f} x{:<14.2f} {:<10.2f}".format(
-                n_batches,
-                results["shared", n_batches],
-                base / results["shared", n_batches],
-                results["brute", n_batches],
-                base / results["brute", n_batches],
-                results["cell", n_batches],
-                base / results["cell", n_batches],
-                results["distance", n_batches],
-            )
-        )
+        row = f"{n_batches:<11}"
+        for strategy in strategies:
+            row += f"{results[strategy, n_batches]:<5.2f} x{base / results[strategy, n_batches]:<13.2f} "
+        print(row)
+
     n_particles_list = np.power(2, np.arange(8, 18))
 
     for n_batches in [1, 2, 32, 64]:
@@ -236,7 +224,7 @@ if __name__ == "__main__":
             )
         )
         results = {}
-        for strategy in ["shared", "brute", "cell", "distance"]:
+        for strategy in strategies:
             for n_particles in n_particles_list:
                 mean_num_neighbors = min(n_particles, 64)
                 time = benchmark_neighbors(
@@ -251,32 +239,19 @@ if __name__ == "__main__":
                 results[strategy, n_particles] = time
         print("Summary")
         print("-------")
-        print(
-            "{:<10} {:<21} {:<21} {:<18} {:<10}".format(
-                "N Particles", "Shared(ms)", "Brute(ms)", "Cell(ms)", "Distance(ms)"
-            )
-        )
-        print(
-            "{:<10} {:<21} {:<21} {:<18} {:<10}".format(
-                "----------", "---------", "---------", "---------", "---------"
-            )
-        )
+        headers = "N Particles "
+        for strategy in strategies:
+            headers += f"{strategy.capitalize()+'(ms)':<21}"
+        print(headers)
+        print("-" * len(headers))
         # Print a column per strategy, show speedup over Distance in parenthesis
         for n_particles in n_particles_list:
             base = results["distance", n_particles]
             brute_speedup = base / results["brute", n_particles]
-            if n_particles > 32000:
-                results["brute", n_particles] = 0
-                brute_speedup = 0
-            print(
-                "{:<10} {:<4.2f} x{:<14.2f} {:<4.2f} x{:<14.2f}  {:<4.2f} x{:<14.2f} {:<10.2f}".format(
-                    n_particles,
-                    results["shared", n_particles],
-                    base / results["shared", n_particles],
-                    results["brute", n_particles],
-                    brute_speedup,
-                    results["cell", n_particles],
-                    base / results["cell", n_particles],
-                    results["distance", n_particles],
-                )
-            )
+            # if n_particles > 32000:
+            #     results["brute", n_particles] = 0
+            #     brute_speedup = 0
+            row = f"{n_particles:<12}"
+            for strategy in strategies:
+                row += f"{results[strategy, n_particles]:<5.2f} x{base / results[strategy, n_particles]:<13.2f} "
+            print(row)
