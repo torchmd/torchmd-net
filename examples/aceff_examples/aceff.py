@@ -7,8 +7,8 @@ import torch
 from huggingface_hub import hf_hub_download
 
 model_file_path = hf_hub_download(
-    repo_id="Acellera/AceFF-1.0",
-    filename="aceff_v1.0.ckpt"
+    repo_id="Acellera/AceFF-2.0",
+    filename="aceff_v2.0.ckpt"
 )
 
 print("Downloaded to:", model_file_path)

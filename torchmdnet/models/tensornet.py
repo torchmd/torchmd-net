@@ -17,43 +17,62 @@ __all__ = ["TensorNet"]
 
 def vector_to_skewtensor(vector):
     """Creates a skew-symmetric tensor from a vector."""
-    batch_size = vector.size(0)
-    zero = torch.zeros(batch_size, device=vector.device, dtype=vector.dtype)
+    B, F, _ = vector.shape
+    zero = torch.zeros((B, F), device=vector.device, dtype=vector.dtype)
     tensor = torch.stack(
         (
             zero,
-            -vector[:, 2],
-            vector[:, 1],
-            vector[:, 2],
+            -vector[..., 2],
+            vector[..., 1],
+            vector[..., 2],
             zero,
-            -vector[:, 0],
-            -vector[:, 1],
-            vector[:, 0],
+            -vector[..., 0],
+            -vector[..., 1],
+            vector[..., 0],
             zero,
         ),
-        dim=1,
+        dim=-1,
     )
-    tensor = tensor.view(-1, 3, 3)
-    return tensor.squeeze(0)
+    tensor = tensor.view(B, F, 3, 3)
+    return tensor
 
 
-def vector_to_symtensor(vector):
-    """Creates a symmetric traceless tensor from the outer product of a vector with itself."""
-    tensor = torch.matmul(vector.unsqueeze(-1), vector.unsqueeze(-2))
-    I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)[
-        ..., None, None
-    ] * torch.eye(3, 3, device=tensor.device, dtype=tensor.dtype)
-    S = 0.5 * (tensor + tensor.transpose(-2, -1)) - I
+def skewtensor_to_vector(tensor):
+    """Converts 3x3 skewtensor A to a vector"""
+    tensor = tensor.flatten(-2, -1)
+    vector = 0.5 * torch.stack(
+        (
+            tensor[..., 7] - tensor[..., 5],
+            tensor[..., 2] - tensor[..., 6],
+            tensor[..., 3] - tensor[..., 1],
+        ),
+        dim=-1,
+    )
+    return vector
+
+
+def I_to_tensor(I):
+    """Converts scalar to 3x3 I tensor"""
+    return (
+        I[..., None, None]
+        * torch.eye(3, 3, device=I.device, dtype=I.dtype)[None, None, ...]
+    )
+
+
+def outer_to_symtensor(tensor):
+    """Creates a symmetric traceless tensor from the outer product tensor"""
+    S = 0.5 * (tensor + tensor.transpose(-2, -1))
+    I = (tensor.diagonal(dim1=-1, dim2=-2)).mean(-1)
+    S = S - I_to_tensor(I)
     return S
 
 
 def decompose_tensor(tensor):
     """Full tensor decomposition into irreducible components."""
-    I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)[
-        ..., None, None
-    ] * torch.eye(3, 3, device=tensor.device, dtype=tensor.dtype)
     A = 0.5 * (tensor - tensor.transpose(-2, -1))
-    S = 0.5 * (tensor + tensor.transpose(-2, -1)) - I
+    S = tensor - A
+    I = (tensor.diagonal(dim1=-1, dim2=-2)).mean(-1)
+    S = S - I_to_tensor(I)
     return I, A, S
 
 
@@ -260,7 +279,7 @@ class TensorNet(nn.Module):
         for layer in self.layers:
             X = layer(X, edge_index, edge_weight, edge_attr, q)
         I, A, S = decompose_tensor(X)
-        x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
+        x = torch.cat((3 * I**2, tensor_norm(A), tensor_norm(S)), dim=-1)
         x = self.out_norm(x)
         x = self.act(self.linear((x)))
         # # Remove the extra atom
@@ -330,28 +349,26 @@ class TensorEmbedding(nn.Module):
             Z.index_select(0, edge_index.t().reshape(-1)).view(
                 -1, self.hidden_channels * 2
             )
-        )[..., None, None]
+        )
         return Zij
 
     def _get_tensor_messages(
         self, Zij: Tensor, edge_weight: Tensor, edge_vec_norm: Tensor, edge_attr: Tensor
     ) -> Tuple[Tensor, Tensor, Tensor]:
-        C = self.cutoff(edge_weight).reshape(-1, 1, 1, 1) * Zij
-        eye = torch.eye(3, 3, device=edge_vec_norm.device, dtype=edge_vec_norm.dtype)[
-            None, None, ...
-        ]
-        Iij = self.distance_proj1(edge_attr)[..., None, None] * C * eye
-        Aij = (
-            self.distance_proj2(edge_attr)[..., None, None]
-            * C
-            * vector_to_skewtensor(edge_vec_norm)[..., None, :, :]
-        )
+        C = self.cutoff(edge_weight).unsqueeze(-1) * Zij  # [edge, F]
+        Iij = self.distance_proj1(edge_attr) * C  # [edge, F]
+        vec_Aij = (
+            self.distance_proj2(edge_attr)[..., None]
+            * C[..., None]
+            * edge_vec_norm[..., None, :]
+        )  # [edge, F, 3]
+        outer = torch.matmul(edge_vec_norm.unsqueeze(-1), edge_vec_norm.unsqueeze(-2))
         Sij = (
             self.distance_proj3(edge_attr)[..., None, None]
-            * C
-            * vector_to_symtensor(edge_vec_norm)[..., None, :, :]
-        )
-        return Iij, Aij, Sij
+            * C[..., None, None]
+            * outer[..., None, :, :]
+        )  # [edge, F, 3, 3]
+        return Iij, vec_Aij, Sij
 
     def forward(
         self,
@@ -365,20 +382,28 @@ class TensorEmbedding(nn.Module):
         Iij, Aij, Sij = self._get_tensor_messages(
             Zij, edge_weight, edge_vec_norm, edge_attr
         )
-        source = torch.zeros(
+        source_scalar = torch.zeros(
+            z.shape[0], self.hidden_channels, device=z.device, dtype=Iij.dtype
+        )
+        source_vector = torch.zeros(
+            z.shape[0], self.hidden_channels, 3, device=z.device, dtype=Iij.dtype
+        )
+        source_tensor = torch.zeros(
             z.shape[0], self.hidden_channels, 3, 3, device=z.device, dtype=Iij.dtype
         )
-        I = source.index_add(dim=0, index=edge_index[0], source=Iij)
-        A = source.index_add(dim=0, index=edge_index[0], source=Aij)
-        S = source.index_add(dim=0, index=edge_index[0], source=Sij)
-        norm = self.init_norm(tensor_norm(I + A + S))
+        I = source_scalar.index_add(dim=0, index=edge_index[0], source=Iij)
+        A_vec = source_vector.index_add(dim=0, index=edge_index[0], source=Aij)
+        S = source_tensor.index_add(dim=0, index=edge_index[0], source=Sij)
+
+        A = vector_to_skewtensor(A_vec)
+        S = outer_to_symtensor(S)
+        X = A + S + I_to_tensor(I)
+
+        norm = self.init_norm(tensor_norm(X))
         for linear_scalar in self.linears_scalar:
             norm = self.act(linear_scalar(norm))
         norm = norm.reshape(-1, self.hidden_channels, 3)
-        I = (
-            self.linears_tensor[0](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-            * norm[..., 0, None, None]
-        )
+        I = self.linears_tensor[0](I) * norm[..., 0]
         A = (
             self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
             * norm[..., 1, None, None]
@@ -387,14 +412,33 @@ class TensorEmbedding(nn.Module):
             self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
             * norm[..., 2, None, None]
         )
-        X = I + A + S
+        X = A + S + I_to_tensor(I)
         return X
+
+
+def scalar_message_passing(
+    edge_index: Tensor, factor: Tensor, tensor: Tensor, natoms: int
+) -> Tensor:
+    msg = factor * tensor.index_select(0, edge_index[1])
+    shape = (natoms, tensor.shape[1])
+    tensor_m = torch.zeros(*shape, device=tensor.device, dtype=tensor.dtype)
+    tensor_m = tensor_m.index_add(0, edge_index[0], msg)
+    return tensor_m
+
+
+def vector_message_passing(
+    edge_index: Tensor, factor: Tensor, tensor: Tensor, natoms: int
+) -> Tensor:
+    msg = factor * tensor.index_select(0, edge_index[1])
+    shape = (natoms, tensor.shape[1], tensor.shape[2])
+    tensor_m = torch.zeros(*shape, device=tensor.device, dtype=tensor.dtype)
+    tensor_m = tensor_m.index_add(0, edge_index[0], msg)
+    return tensor_m
 
 
 def tensor_message_passing(
     edge_index: Tensor, factor: Tensor, tensor: Tensor, natoms: int
 ) -> Tensor:
-    """Message passing for tensors."""
     msg = factor * tensor.index_select(0, edge_index[1])
     shape = (natoms, tensor.shape[1], tensor.shape[2], tensor.shape[3])
     tensor_m = torch.zeros(*shape, device=tensor.device, dtype=tensor.dtype)
@@ -464,20 +508,20 @@ class Interaction(nn.Module):
         )
         X = X / (tensor_norm(X) + 1)[..., None, None]
         I, A, S = decompose_tensor(X)
-        I = self.linears_tensor[0](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        I = self.linears_tensor[0](I)
         A = self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        Y = I + A + S
-        Im = tensor_message_passing(
-            edge_index, edge_attr[..., 0, None, None], I, X.shape[0]
-        )
-        Am = tensor_message_passing(
-            edge_index, edge_attr[..., 1, None, None], A, X.shape[0]
+        Y = A + S + I_to_tensor(I)
+
+        Im = scalar_message_passing(edge_index, edge_attr[..., 0], I, X.shape[0])
+        Am_vec = vector_message_passing(
+            edge_index, edge_attr[..., 1, None], skewtensor_to_vector(A), X.shape[0]
         )
         Sm = tensor_message_passing(
             edge_index, edge_attr[..., 2, None, None], S, X.shape[0]
         )
-        msg = Im + Am + Sm
+        msg = vector_to_skewtensor(Am_vec) + Sm + I_to_tensor(Im)
+
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(msg, Y)
             B = torch.matmul(Y, msg)
@@ -485,11 +529,13 @@ class Interaction(nn.Module):
         if self.equivariance_invariance_group == "SO(3)":
             B = torch.matmul(Y, msg)
             I, A, S = decompose_tensor(2 * B)
-        normp1 = (tensor_norm(I + A + S) + 1)[..., None, None]
-        I, A, S = I / normp1, A / normp1, S / normp1
-        I = self.linears_tensor[3](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+
+        _X = A + S + I_to_tensor(I)
+        normp1 = tensor_norm(_X) + 1
+        I, A, S = I / normp1, A / normp1[..., None, None], S / normp1[..., None, None]
+        I = self.linears_tensor[3](I)
         A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        dX = I + A + S
+        dX = A + S + I_to_tensor(I)
         X = X + dX + (1 + 0.1 * q[..., None, None, None]) * torch.matrix_power(dX, 2)
         return X
