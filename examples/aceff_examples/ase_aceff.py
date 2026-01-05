@@ -10,8 +10,8 @@ from torchmdnet.calculators import TMDNETCalculator
 from huggingface_hub import hf_hub_download
 
 model_file_path = hf_hub_download(
-    repo_id="Acellera/AceFF-1.0",
-    filename="aceff_v1.0.ckpt"
+    repo_id="Acellera/AceFF-2.0",
+    filename="aceff_v2.0.ckpt"
 )
 
 
@@ -37,7 +37,7 @@ print(forces)
 from ase.optimize import LBFGS
 
 # displace the atoms to a high energy
-atoms.rattle(0.5)
+atoms.rattle(0.1)
 print("Initial energy:", atoms.get_potential_energy())
 
 dyn = LBFGS(atoms)

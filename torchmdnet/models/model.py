@@ -106,6 +106,19 @@ def create_model(args, prior_model=None, mean=None, std=None):
             static_shapes=args["static_shapes"],
             **shared_args,
         )
+
+    elif args["model"] == "tensornet2":
+        from torchmdnet.models.tensornet2 import TensorNet2
+
+        # Setting is_equivariant to False to enforce the use of Scalar output module instead of EquivariantScalar
+        is_equivariant = False
+        representation_model = TensorNet2(
+            equivariance_invariance_group=args["equivariance_invariance_group"],
+            static_shapes=args["static_shapes"],
+            q_dim=args.get("q_dim", 0),
+            output_charges=True if "Coul" in args["output_model"] else False,
+            **shared_args,
+        )
     else:
         raise ValueError(f'Unknown architecture: {args["model"]}')
 
@@ -129,6 +142,9 @@ def create_model(args, prior_model=None, mean=None, std=None):
         dtype=dtype,
         static_shapes=args.get("static_shapes", False),
         num_hidden_layers=args.get("output_mlp_num_layers", 0),
+        num_layers=args["num_layers"] if args["output_model"] == "ScalarPlusWeightedCoulomb" else 0, # https://github.com/torchmd/torchmd-net/issues/343
+        q_dim=args.get("q_dim",0),
+        q_weights=args.get("q_weights", [])
     )
 
     # combine representation and output network
@@ -220,6 +236,11 @@ def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
         if not key in args:
             warnings.warn(f"Unknown hyperparameter: {key}={value}")
         args[key] = value
+
+    # TensorNet2 checkpoint model naming: in development a different name was used 
+    # and the released aceff-2.0.ckpt uses it
+    if args["model"] == "tensornetv2_alt" or args["model"] == "tensornet-nqe":
+        args["model"] = "tensornet2"
 
     model = create_model(args)
     if delta_learning and "remove_ref_energy" in kwargs:
