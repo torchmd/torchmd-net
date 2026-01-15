@@ -180,7 +180,6 @@ class External:
         )
 
 
-
 import ase.calculators.calculator as ase_calc
 
 class TMDNETCalculator(ase_calc.Calculator):
@@ -208,8 +207,7 @@ class TMDNETCalculator(ase_calc.Calculator):
     def __init__(
         self,  model_file, device = 'cpu', dtype=torch.float32, compile=False, **kwargs,
     ):
-        
-        
+
         ase_calc.Calculator.__init__(self)
         self.device=device
         self.model = load_model(
@@ -235,7 +233,18 @@ class TMDNETCalculator(ase_calc.Calculator):
 
         self.evals = 0
 
+    def check_state(self, atoms, tol: float = 1e-15) -> list:
+        # need to check if the charge which is stored in info has changed,
+        # by default ASE will not detect this change so we need to override
+        # the check_state method
 
+        # call the parent check_state method
+        state = super().check_state(atoms, tol=tol)
+
+        # check if anything in info has changed (e.g. the charge)
+        if (not state) and (self.atoms.info != atoms.info):
+            state.append("info")
+        return state
 
     def calculate(
         self,
@@ -244,10 +253,8 @@ class TMDNETCalculator(ase_calc.Calculator):
         system_changes = ase_calc.all_changes,
     ):
 
-
         if not properties:
             properties = ["energy"]
-
 
         ase_calc.Calculator.calculate(self, atoms, properties, system_changes)
 
@@ -276,7 +283,6 @@ class TMDNETCalculator(ase_calc.Calculator):
 
             self.compiled_model = torch.compile(self.model, backend='inductor', dynamic=False, fullgraph=True, mode='reduce-overhead')
             self.compiled = True
-
 
         if self.compiled:
             energy, _ = self.compiled_model(

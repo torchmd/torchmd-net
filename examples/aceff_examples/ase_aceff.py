@@ -6,7 +6,7 @@ import ase
 from ase.io import read
 from torchmdnet.calculators import TMDNETCalculator
 
-# The AceFF-1.0 model is available from HuggingFace under apache2.0 license
+# The AceFFs models are available from HuggingFace under an Apache2.0 license
 from huggingface_hub import hf_hub_download
 
 model_file_path = hf_hub_download(

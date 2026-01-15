@@ -141,7 +141,14 @@ def test_ase_calculator(device):
     assert np.allclose(atoms.get_potential_energy(), -113.6652, atol=1e-4)
     assert np.allclose(atoms.get_forces(), ref_forces, atol=1e-4)
 
+    # if we change the charge, the energy and forces should change
+    atoms.info["charge"] = 100
+    assert not np.allclose(atoms.get_potential_energy(), -113.6652, atol=1e-4)
+    assert not np.allclose(atoms.get_forces(), ref_forces, atol=1e-4)
+
     # Molecular dynamics
+    atoms.info["charge"] = 0
+
     temperature_K: float = 300
     timestep: float = 1.0 * units.fs
     friction: float = 0.01 / units.fs
