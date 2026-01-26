@@ -87,19 +87,20 @@ def get_neighbor_pairs_kernel(
     num_pairs : Tensor
         The number of pairs found.
     """
-    if USE_MEMORY_EFFICIENT:
-        return torch_neighbor_bruteforce_memory_efficient(
-            strategy,
-            positions,
-            batch=batch,
-            in_box_vectors=box_vectors,
-            use_periodic=use_periodic,
-            cutoff_lower=cutoff_lower,
-            cutoff_upper=cutoff_upper,
-            max_num_pairs=max_num_pairs,
-            loop=loop,
-            include_transpose=include_transpose,
-        )
+    if not torch.jit.is_scripting():
+        if USE_MEMORY_EFFICIENT:
+            return torch_neighbor_bruteforce_memory_efficient(
+                strategy,
+                positions,
+                batch=batch,
+                in_box_vectors=box_vectors,
+                use_periodic=use_periodic,
+                cutoff_lower=cutoff_lower,
+                cutoff_upper=cutoff_upper,
+                max_num_pairs=max_num_pairs,
+                loop=loop,
+                include_transpose=include_transpose,
+            )
 
     if torch.jit.is_scripting() or not positions.is_cuda:
 
