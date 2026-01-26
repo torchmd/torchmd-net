@@ -7,11 +7,15 @@
 # The extensions will be available under torch.ops.torchmdnet_extensions, but you can add wrappers here to make them more convenient to use.
 # Place here too any meta registrations for your extensions if required.
 
+import os
 import torch
 from torch import Tensor
 from typing import Tuple
 import logging
 from torchmdnet.extensions.neighbors import torch_neighbor_bruteforce
+from torchmdnet.extensions.neighbors_cpu_mem import (
+    torch_neighbor_bruteforce_memory_efficient,
+)
 
 try:
     import triton
@@ -20,6 +24,10 @@ try:
     HAS_TRITON = True
 except ImportError:
     HAS_TRITON = False
+
+
+# Use memory-efficient implementation in CI to reduce memory usage during tests
+USE_MEMORY_EFFICIENT = os.environ.get("TMDNET_MEM_EFFICIENT_CPU_NEIGHBORS") == "1"
 
 
 logger = logging.getLogger(__name__)
@@ -79,6 +87,20 @@ def get_neighbor_pairs_kernel(
     num_pairs : Tensor
         The number of pairs found.
     """
+    if USE_MEMORY_EFFICIENT:
+        return torch_neighbor_bruteforce_memory_efficient(
+            strategy,
+            positions,
+            batch=batch,
+            in_box_vectors=box_vectors,
+            use_periodic=use_periodic,
+            cutoff_lower=cutoff_lower,
+            cutoff_upper=cutoff_upper,
+            max_num_pairs=max_num_pairs,
+            loop=loop,
+            include_transpose=include_transpose,
+        )
+
     if torch.jit.is_scripting() or not positions.is_cuda:
 
         return torch_neighbor_bruteforce(
