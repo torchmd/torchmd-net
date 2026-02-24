@@ -24,7 +24,6 @@ from torchmdnet.models.tensornet import (
     tensor_message_passing,
 )
 
-
 __all__ = ["TensorNet2"]
 
 

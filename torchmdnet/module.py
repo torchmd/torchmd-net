@@ -225,7 +225,7 @@ class LNNP(LightningModule):
         # Update the loss using an exponential moving average when applicable
         # Args:
         #   stage: stage of the training (train, val, test)
-        #   type: type of loss (y, neg_dy)
+        # type: type of loss (y, neg_dy)
         #   loss_name: name of the loss function
         #   loss: loss value
         alpha = getattr(self.hparams, f"ema_alpha_{type}")
