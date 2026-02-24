@@ -37,7 +37,8 @@ jobs:
           uv run flake8 ./torchmdnet --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
       - name: Run tests
-        # For example, using `pytest`
+        env:
+          PYTORCH_ENABLE_MPS_FALLBACK: ${{ startsWith(matrix.os, 'macos') && '1' || '' }}
         run: uv run pytest tests
 
       - name: Test torchmd-train utility
