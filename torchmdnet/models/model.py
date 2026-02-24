@@ -447,6 +447,7 @@ class TorchMD_Net(nn.Module):
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
         extra_args: Optional[Dict[str, Tensor]] = None,
+        num_systems: Optional[int] = None,
     ) -> Tuple[Tensor, Tensor]:
         """
         Compute the output of the model.
@@ -479,6 +480,11 @@ class TorchMD_Net(nn.Module):
             q (Tensor, optional): Atomic charges in the molecule. Shape: (N,).
             s (Tensor, optional): Atomic spins in the molecule. Shape: (N,).
             extra_args (Dict[str, Tensor], optional): Extra arguments to pass to the prior model.
+            num_systems (int, optional): Number of systems in the batch. If provided,
+                this is used directly as the output size of the scatter/reduce operation,
+                avoiding the data-dependent ``batch.max().item() + 1`` call. This is
+                required for ``torch.export`` with dynamic atom counts (no warm-up needed).
+                Defaults to None, which falls back to inferring the count from ``batch``.
 
         Returns:
             Tuple[Tensor, Optional[Tensor]]: The output of the model and the derivative of the output with respect to the positions if derivative is True, None otherwise.
@@ -505,7 +511,7 @@ class TorchMD_Net(nn.Module):
                 x = prior.pre_reduce(x, z, pos, batch, extra_args)
 
         # aggregate atoms
-        x = self.output_model.reduce(x, batch)
+        x = self.output_model.reduce(x, batch, num_systems=num_systems)
 
         # shift by data mean
         if self.mean is not None:

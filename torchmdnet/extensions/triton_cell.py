@@ -6,7 +6,11 @@ import triton.language as tl
 import torch
 from torch import Tensor
 from typing import Tuple
-from torchmdnet.extensions.triton_neighbors import TritonNeighborAutograd
+from torchmdnet.extensions.triton_neighbors import (
+    TritonNeighborAutograd,
+    neighbor_grad_positions,
+    neighbor_op_setup_context,
+)
 from torch.library import triton_op, wrap_triton
 
 
@@ -431,6 +435,19 @@ def triton_neighbor_cell(
         BATCH_SIZE=BATCH_SIZE,
     )
     return neighbors, deltas, distances, num_pairs
+
+
+def _cell_backward(ctx, grad_neighbors, grad_deltas, grad_distances, grad_num_pairs):
+    grad_positions = neighbor_grad_positions(ctx, grad_deltas, grad_distances)
+    # Same as brute backward + extra None for num_cells input
+    return grad_positions, None, None, None, None, None, None, None, None, None
+
+
+torch.library.register_autograd(
+    "torchmdnet::triton_neighbor_cell",
+    _cell_backward,
+    setup_context=neighbor_op_setup_context,
+)
 
 
 class TritonCellNeighborAutograd(TritonNeighborAutograd):

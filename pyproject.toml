@@ -21,6 +21,7 @@ dependencies = [
   "triton; sys_platform == 'linux' and platform_machine != 'aarch64'",
   "triton-windows; sys_platform == 'win32'",
   "ase",
+  "setuptools>=82.0.0",
 ]
 
 [project.urls]
