@@ -5,7 +5,12 @@ import triton
 import triton.language as tl
 from torch import Tensor
 import torch
-from torchmdnet.extensions.triton_neighbors import _tl_round, TritonNeighborAutograd
+from torchmdnet.extensions.triton_neighbors import (
+    _tl_round,
+    TritonNeighborAutograd,
+    neighbor_grad_positions,
+    neighbor_op_setup_context,
+)
 from torch.library import triton_op, wrap_triton
 from typing import Tuple
 
@@ -222,6 +227,20 @@ def triton_neighbor_bruteforce(
     )
 
     return neighbors, deltas, distances, num_pairs
+
+
+def _bruteforce_backward(
+    ctx, grad_neighbors, grad_deltas, grad_distances, grad_num_pairs
+):
+    grad_positions = neighbor_grad_positions(ctx, grad_deltas, grad_distances)
+    return grad_positions, None, None, None, None, None, None, None, None
+
+
+torch.library.register_autograd(
+    "torchmdnet::triton_neighbor_bruteforce",
+    _bruteforce_backward,
+    setup_context=neighbor_op_setup_context,
+)
 
 
 class TritonBruteNeighborAutograd(TritonNeighborAutograd):

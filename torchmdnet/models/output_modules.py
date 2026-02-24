@@ -34,7 +34,12 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
     def pre_reduce(self, x, v, z, pos, batch):
         return
 
-    def reduce(self, x, batch):
+    def reduce(self, x, batch, num_systems: Optional[int] = None):
+        # If num_systems is explicitly provided, use it directly.
+        # This avoids the .item() call that is incompatible with torch.export tracing,
+        # and allows dynamic atom counts without a warm-up step.
+        if num_systems is not None:
+            return scatter(x, batch, dim=0, dim_size=num_systems, reduce=self.reduce_op)
         # torch.compile and torch.export don't support .item() calls during tracing
         # The model should be warmed up before compilation to set the correct dim_size
         if torch.compiler.is_compiling():

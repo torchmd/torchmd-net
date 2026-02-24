@@ -282,7 +282,7 @@ class OptimizedDistance(torch.nn.Module):
         if box.dtype != pos.dtype:
             box = box.to(dtype=pos.dtype)
 
-        max_pairs: int = self.max_num_pairs
+        max_pairs = self.max_num_pairs
         if self.max_num_pairs < 0:
             max_pairs = -self.max_num_pairs * pos.shape[0]
         if batch is None:
@@ -291,7 +291,7 @@ class OptimizedDistance(torch.nn.Module):
             strategy=self.strategy,
             positions=pos,
             batch=batch,
-            max_num_pairs=int(max_pairs),
+            max_num_pairs=max_pairs,
             cutoff_lower=self.cutoff_lower,
             cutoff_upper=self.cutoff_upper,
             loop=self.loop,
