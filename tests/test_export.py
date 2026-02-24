@@ -128,6 +128,73 @@ def test_torch_export_dynamic_shapes(model_name):
 
 
 @mark.parametrize("model_name", ["tensornet"])
+def test_torch_export_save_load(model_name, tmp_path):
+    """Test that an exported model with dynamic shapes can be saved and loaded.
+
+    Uses torch.export.save/load to serialize the ExportedProgram to disk,
+    then verifies the loaded program produces correct outputs for different atom counts.
+    """
+    if not hasattr(torch, "export"):
+        pytest.skip("torch.export not available in this PyTorch version")
+    if not torch.cuda.is_available():
+        pytest.skip(
+            "CUDA required for torch.export with dynamic shapes (Triton neighbor list)"
+        )
+
+    device = "cuda"
+
+    # Create model
+    args = load_example_args(model_name, remove_prior=True, derivative=False)
+    args["static_shapes"] = True
+    model = create_model(args).to(device=device)
+    model.eval()
+
+    # Export with dynamic shapes
+    z, pos, batch = create_example_batch(n_atoms=6, multiple_batches=False)
+    z, pos, batch = z.to(device), pos.to(device), batch.to(device)
+
+    from torch.export import Dim
+
+    num_atoms_dim = Dim("num_atoms")
+    dynamic_shapes = {
+        "z": {0: num_atoms_dim},
+        "pos": {0: num_atoms_dim},
+        "batch": {0: num_atoms_dim},
+        "num_systems": None,
+    }
+
+    exported_program = torch.export.export(
+        model,
+        args=(z, pos),
+        kwargs={"batch": batch, "num_systems": 1},
+        dynamic_shapes=dynamic_shapes,
+        strict=False,
+    )
+
+    # Save and load
+    save_path = tmp_path / "exported_model.pt2"
+    torch.export.save(exported_program, save_path)
+    loaded_program = torch.export.load(save_path)
+
+    # Test with different atom counts
+    for n_atoms in [3, 6, 12]:
+        z_test, pos_test, batch_test = create_example_batch(
+            n_atoms=n_atoms, multiple_batches=False
+        )
+        z_test = z_test.to(device)
+        pos_test = pos_test.to(device)
+        batch_test = batch_test.to(device)
+
+        with torch.no_grad():
+            y_ref = model(z_test, pos_test, batch=batch_test, num_systems=1)
+            y_loaded = loaded_program.module()(
+                z_test, pos_test, batch=batch_test, num_systems=1
+            )
+
+        torch.testing.assert_close(y_ref, y_loaded, atol=1e-5, rtol=1e-5)
+
+
+@mark.parametrize("model_name", ["tensornet"])
 @mark.parametrize("device", ["cpu", "cuda"])
 def test_torch_export_then_compile(model_name, device):
     """Test that an exported model can be torch.compiled afterwards for additional optimization."""
