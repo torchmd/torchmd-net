@@ -237,84 +237,73 @@ def test_torch_export_then_compile(model_name, device):
 
 
 @mark.parametrize("model_name", ["tensornet"])
-@mark.parametrize("device", ["cpu", "cuda"])
-def test_torch_export_gradients_outside_forward(model_name, device):
-    """Test computing gradients outside the forward pass.
+def test_torch_export_gradients(model_name):
+    """Test computing gradients (forces) through an exported model.
 
-    NOTE: This test demonstrates gradients with NON-exported models.
-    Currently, torch.export cannot properly trace through Triton kernels
-    with gradient computation due to the complexity of autograd operations.
-
-    For exported models with Triton kernels, gradients are not currently supported.
-    The workaround is to use derivative=False models and compute gradients
-    outside the forward pass using the NON-exported model.
-
-    This is a fundamental limitation of torch.export with complex autograd functions.
+    Exports a derivative=False model with dynamic shapes, then computes
+    forces as -dE/dpos using torch.autograd.grad on the exported model's output.
+    Verifies that the exported model's gradients match the original model.
     """
-    if device == "cuda" and not torch.cuda.is_available():
-        pytest.skip("CUDA not available")
+    if not hasattr(torch, "export"):
+        pytest.skip("torch.export not available in this PyTorch version")
+    if not torch.cuda.is_available():
+        pytest.skip(
+            "CUDA required for torch.export with dynamic shapes (Triton neighbor list)"
+        )
 
-    # Create example data
-    z, pos, batch = create_example_batch()
-    z = z.to(device)
-    pos = pos.to(device)
-    batch = batch.to(device)
+    device = "cuda"
 
-    # Create model WITHOUT derivatives (export-compatible configuration)
-    args = load_example_args(
-        model_name,
-        remove_prior=True,
-        derivative=False,  # Key: no derivatives in forward
-    )
+    # Create model
+    args = load_example_args(model_name, remove_prior=True, derivative=False)
     args["static_shapes"] = True
     model = create_model(args).to(device=device)
     model.eval()
 
-    # Test gradients with NON-exported model (this works)
-    pos_with_grad = pos.clone().detach().requires_grad_(True)
+    # Export with dynamic shapes
+    z, pos, batch = create_example_batch(n_atoms=6, multiple_batches=False)
+    z, pos, batch = z.to(device), pos.to(device), batch.to(device)
 
-    # Forward pass
-    output = model(z, pos_with_grad, batch=batch)
-    y = output[0] if isinstance(output, tuple) else output
+    from torch.export import Dim
 
-    # Compute gradients manually using torch.autograd.grad
-    neg_dy = -torch.autograd.grad(
-        outputs=y,
-        inputs=pos_with_grad,
-        grad_outputs=torch.ones_like(y),
-        create_graph=False,
-        retain_graph=False,
-    )[0]
+    num_atoms_dim = Dim("num_atoms")
+    dynamic_shapes = {
+        "z": {0: num_atoms_dim},
+        "pos": {0: num_atoms_dim},
+        "batch": {0: num_atoms_dim},
+        "num_systems": None,
+    }
 
-    # Verify we got valid outputs
-    assert y.shape == (batch.max().item() + 1, 1), "Energy shape mismatch"
-    assert neg_dy.shape == pos_with_grad.shape, "Force shape should match positions"
-    assert not torch.isnan(y).any(), "Energy contains NaN"
-    assert not torch.isnan(neg_dy).any(), "Forces contain NaN"
-
-    # Test with backward() as alternative approach
-    pos_with_grad2 = pos.clone().detach().requires_grad_(True)
-    output2 = model(z, pos_with_grad2, batch=batch)
-    y2 = output2[0] if isinstance(output2, tuple) else output2
-
-    y2.sum().backward()
-    neg_dy2 = -pos_with_grad2.grad
-
-    # Both approaches should give the same result
-    torch.testing.assert_close(y, y2, atol=1e-5, rtol=1e-5)
-    torch.testing.assert_close(neg_dy, neg_dy2, atol=1e-5, rtol=1e-5)
-
-    # Note: We don't compare with derivative=True models because they use
-    # different computation paths (physical gradients through neighbor lists vs
-    # mathematical gradients through the final layers)
-
-    print(f"\n✓ Successfully computed gradients outside forward pass")
-    print(f"  Energy shape: {y.shape}")
-    print(f"  Force shape: {neg_dy.shape}")
-    print(f"  torch.autograd.grad() and .backward() produce consistent results")
-    print(f"  Matches model with derivative=True")
-    print(
-        f"\n  NOTE: torch.export with Triton kernels + gradients is not currently supported"
+    exported_program = torch.export.export(
+        model,
+        args=(z, pos),
+        kwargs={"batch": batch, "num_systems": 1},
+        dynamic_shapes=dynamic_shapes,
+        strict=False,
     )
-    print(f"        due to torch.export's limitations with complex autograd functions.")
-    print(f"        Use non-exported models for gradient computation.")
+
+    # Test gradients with different atom counts
+    for n_atoms in [3, 6, 12]:
+        z_test, pos_test, batch_test = create_example_batch(
+            n_atoms=n_atoms, multiple_batches=False
+        )
+        z_test = z_test.to(device)
+        pos_test = pos_test.to(device)
+        batch_test = batch_test.to(device)
+
+        # Gradients through exported model
+        pos_grad = pos_test.clone().detach().requires_grad_(True)
+        y_exported = exported_program.module()(
+            z_test, pos_grad, batch=batch_test, num_systems=1
+        )
+        energy_exported = y_exported[0] if isinstance(y_exported, tuple) else y_exported
+        forces_exported = -torch.autograd.grad(energy_exported.sum(), pos_grad)[0]
+
+        # Gradients through original model
+        pos_grad_ref = pos_test.clone().detach().requires_grad_(True)
+        y_ref = model(z_test, pos_grad_ref, batch=batch_test, num_systems=1)
+        energy_ref = y_ref[0] if isinstance(y_ref, tuple) else y_ref
+        forces_ref = -torch.autograd.grad(energy_ref.sum(), pos_grad_ref)[0]
+
+        # Verify match
+        torch.testing.assert_close(energy_exported, energy_ref, atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(forces_exported, forces_ref, atol=1e-5, rtol=1e-5)
