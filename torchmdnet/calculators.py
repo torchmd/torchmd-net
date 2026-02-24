@@ -63,11 +63,8 @@ class External:
         if isinstance(netfile, str):
             extra_args = kwargs
             if use_cuda_graph:
-                warnings.warn(
-                    "CUDA graphs are enabled, setting static_shapes=True and check_errors=False"
-                )
+                warnings.warn("CUDA graphs are enabled, setting static_shapes=True")
                 extra_args["static_shapes"] = True
-                extra_args["check_errors"] = False
             self.model = load_model(
                 netfile,
                 device=device,
@@ -182,6 +179,7 @@ class External:
 
 import ase.calculators.calculator as ase_calc
 
+
 class TMDNETCalculator(ase_calc.Calculator):
     """This is an adapter to use TorchMD-Net models as an ASE Calculator.
 
@@ -199,24 +197,25 @@ class TMDNETCalculator(ase_calc.Calculator):
         Extra arguments to pass to the model when loading it.
     """
 
-    implemented_properties = [
-        "energy",
-        "forces"
-    ]
+    implemented_properties = ["energy", "forces"]
 
     def __init__(
-        self,  model_file, device = 'cpu', dtype=torch.float32, compile=False, **kwargs,
+        self,
+        model_file,
+        device="cpu",
+        dtype=torch.float32,
+        compile=False,
+        **kwargs,
     ):
 
         ase_calc.Calculator.__init__(self)
-        self.device=device
+        self.device = device
         self.model = load_model(
             model_file,
             derivative=False,
-            remove_ref_energy = kwargs.get('remove_ref_energy', True),
-            max_num_neighbors = kwargs.get('max_num_neighbors', 64),
-            static_shapes = True if compile else False,
-            check_errors = False if compile else True,
+            remove_ref_energy=kwargs.get("remove_ref_energy", True),
+            max_num_neighbors=kwargs.get("max_num_neighbors", 64),
+            static_shapes=True if compile else False,
             **kwargs,
         )
         for parameter in self.model.parameters():
@@ -225,11 +224,11 @@ class TMDNETCalculator(ase_calc.Calculator):
         self.model.to(device=self.device, dtype=dtype)
 
         if compile:
-            self.compile=True
+            self.compile = True
         else:
-            self.compile=False
-        
-        self.compiled=False
+            self.compile = False
+
+        self.compiled = False
 
         self.evals = 0
 
@@ -248,9 +247,9 @@ class TMDNETCalculator(ase_calc.Calculator):
 
     def calculate(
         self,
-        atoms = None,
-        properties = None,
-        system_changes = ase_calc.all_changes,
+        atoms=None,
+        properties=None,
+        system_changes=ase_calc.all_changes,
     ):
 
         if not properties:
@@ -261,13 +260,17 @@ class TMDNETCalculator(ase_calc.Calculator):
         numbers = atoms.numbers
 
         positions = atoms.positions
-        total_charge = atoms.info['charge']
+        total_charge = atoms.info["charge"]
         batch = [0 for _ in range(len(numbers))]
 
         batch = torch.tensor(batch, device=self.device, dtype=torch.long)
         numbers = torch.tensor(numbers, device=self.device, dtype=torch.long)
-        positions = torch.tensor(positions, device=self.device, dtype=torch.float32, requires_grad=True)
-        total_charge = torch.tensor([total_charge], device=self.device, dtype=torch.float32)
+        positions = torch.tensor(
+            positions, device=self.device, dtype=torch.float32, requires_grad=True
+        )
+        total_charge = torch.tensor(
+            [total_charge], device=self.device, dtype=torch.float32
+        )
 
         if self.compile and "numbers" in system_changes:
             if self.evals == 0:
@@ -281,7 +284,13 @@ class TMDNETCalculator(ase_calc.Calculator):
             with torch.no_grad():
                 _ = self.model(numbers, positions, batch=batch, q=total_charge)
 
-            self.compiled_model = torch.compile(self.model, backend='inductor', dynamic=False, fullgraph=True, mode='reduce-overhead')
+            self.compiled_model = torch.compile(
+                self.model,
+                backend="inductor",
+                dynamic=False,
+                fullgraph=True,
+                mode="reduce-overhead",
+            )
             self.compiled = True
 
         if self.compiled:
@@ -289,13 +298,11 @@ class TMDNETCalculator(ase_calc.Calculator):
                 numbers, positions, batch=batch, q=total_charge
             )
         else:
-            energy, _ = self.model(
-                numbers, positions, batch=batch, q=total_charge
-            )
+            energy, _ = self.model(numbers, positions, batch=batch, q=total_charge)
 
         energy.backward()
         forces = -positions.grad
 
         self.results["energy"] = energy.detach().cpu().item()
         self.results["forces"] = forces.detach().cpu().numpy()
-        self.evals +=1 
+        self.evals += 1

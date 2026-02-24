@@ -35,8 +35,6 @@ def create_model(args, prior_model=None, mean=None, std=None):
     dtype = dtype_mapping[args["precision"]]
     if "box_vecs" not in args:
         args["box_vecs"] = None
-    if "check_errors" not in args:
-        args["check_errors"] = True
     if "static_shapes" not in args:
         args["static_shapes"] = False
     if "vector_cutoff" not in args:
@@ -52,7 +50,6 @@ def create_model(args, prior_model=None, mean=None, std=None):
         cutoff_lower=float(args["cutoff_lower"]),
         cutoff_upper=float(args["cutoff_upper"]),
         max_z=args["max_z"],
-        check_errors=bool(args["check_errors"]),
         max_num_neighbors=args["max_num_neighbors"],
         box_vecs=(
             torch.tensor(args["box_vecs"], dtype=dtype)
@@ -142,9 +139,13 @@ def create_model(args, prior_model=None, mean=None, std=None):
         dtype=dtype,
         static_shapes=args.get("static_shapes", False),
         num_hidden_layers=args.get("output_mlp_num_layers", 0),
-        num_layers=args["num_layers"] if args["output_model"] == "ScalarPlusWeightedCoulomb" else 0, # https://github.com/torchmd/torchmd-net/issues/343
-        q_dim=args.get("q_dim",0),
-        q_weights=args.get("q_weights", [])
+        num_layers=(
+            args["num_layers"]
+            if args["output_model"] == "ScalarPlusWeightedCoulomb"
+            else 0
+        ),  # https://github.com/torchmd/torchmd-net/issues/343
+        q_dim=args.get("q_dim", 0),
+        q_weights=args.get("q_weights", []),
     )
 
     # combine representation and output network
@@ -237,7 +238,7 @@ def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
             warnings.warn(f"Unknown hyperparameter: {key}={value}")
         args[key] = value
 
-    # TensorNet2 checkpoint model naming: in development a different name was used 
+    # TensorNet2 checkpoint model naming: in development a different name was used
     # and the released aceff-2.0.ckpt uses it
     if args["model"] == "tensornetv2_alt" or args["model"] == "tensornet-nqe":
         args["model"] = "tensornet2"

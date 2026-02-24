@@ -50,9 +50,8 @@ def test_compare_forward(box, use_cuda_graphs):
         checkpoint, z.unsqueeze(0), use_cuda_graph=use_cuda_graphs, device=device
     )
     calc.model = model
-    # Path the model
+    # Patch the model
     model = deepcopy(model)
-    model.representation_model.distance.check_errors = not use_cuda_graphs
     model.representation_model.static_shapes = use_cuda_graphs
     model.representation_model.distance.resize_to_fit = not use_cuda_graphs
     calc_graph.model = model

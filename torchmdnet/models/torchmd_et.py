@@ -78,8 +78,6 @@ class TorchMD_ET(nn.Module):
             (default: :obj:`None`)
         vector_cutoff (bool, optional): Whether to apply the cutoff to the vector features. This prevents the energy from being discontinuous at the cutoff, but may hinder training.
             (default: :obj:`False`)
-        check_errors (bool, optional): Whether to check for errors in the distance module.
-            (default: :obj:`True`)
 
     """
 
@@ -99,7 +97,6 @@ class TorchMD_ET(nn.Module):
         cutoff_upper=5.0,
         max_z=100,
         max_num_neighbors=32,
-        check_errors=True,
         box_vecs=None,
         vector_cutoff=False,
         dtype=torch.float32,
@@ -147,7 +144,6 @@ class TorchMD_ET(nn.Module):
             loop=True,
             box=box_vecs,
             long_edge_index=True,
-            check_errors=check_errors,
         )
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf

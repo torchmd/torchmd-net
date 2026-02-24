@@ -496,7 +496,6 @@ def test_cuda_graph_compatible_forward(
         box=box,
         return_vecs=True,
         include_transpose=include_transpose,
-        check_errors=False,
         resize_to_fit=False,
     )
     nl.to(device)
@@ -583,7 +582,6 @@ def test_cuda_graph_compatible_backward(
             box=box,
             return_vecs=True,
             include_transpose=include_transpose,
-            check_errors=False,
             resize_to_fit=False,
         )
         nl.to(device)
@@ -712,7 +710,6 @@ def test_torch_compile(device, dtype, loop, include_transpose):
         max_num_pairs=-example_pos.shape[0],
         include_transpose=include_transpose,
         resize_to_fit=False,
-        check_errors=False,
     ).to(device)
     # Warm up
     for _ in range(50):

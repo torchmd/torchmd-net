@@ -135,7 +135,6 @@ def benchmark_neighbors(
             box=box,
             loop=False,
             include_transpose=True,
-            check_errors=False,
             resize_to_fit=False,
         )
     else:

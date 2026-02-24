@@ -133,9 +133,7 @@ class TensorNet(nn.Module):
             If this is omitted, periodic boundary conditions are not applied.
             (default: :obj:`None`)
         static_shapes (bool, optional): Whether to enforce static shapes.
-            Makes the model CUDA-graph compatible if check_errors is set to False.
-            (default: :obj:`True`)
-        check_errors (bool, optional): Whether to check for errors in the distance module.
+            Makes the model CUDA-graph compatible.
             (default: :obj:`True`)
     """
 
@@ -153,7 +151,6 @@ class TensorNet(nn.Module):
         max_z=128,
         equivariance_invariance_group="O(3)",
         static_shapes=True,
-        check_errors=True,
         dtype=torch.float32,
         box_vecs=None,
     ):
@@ -222,7 +219,6 @@ class TensorNet(nn.Module):
             max_num_pairs=-max_num_neighbors,
             return_vecs=True,
             loop=True,
-            check_errors=check_errors,
             resize_to_fit=not self.static_shapes,
             box=box_vecs,
             long_edge_index=True,

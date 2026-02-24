@@ -121,7 +121,7 @@ class OptimizedDistance(torch.nn.Module):
     """Compute the neighbor list for a given cutoff.
 
     This operation can be placed inside a CUDA graph in some cases.
-    In particular, resize_to_fit and check_errors must be False.
+    In particular, resize_to_fit must be False.
 
     Note that this module returns neighbors such that :math:`r_{ij} \\ge \\text{cutoff_lower}\\quad\\text{and}\\quad r_{ij} < \\text{cutoff_upper}`.
 
@@ -149,7 +149,7 @@ class OptimizedDistance(torch.nn.Module):
         Upper cutoff for the neighbor list.
     max_num_pairs : int
         Maximum number of pairs to store, if the number of pairs found is less than this, the list is padded with (-1,-1) pairs up to max_num_pairs unless resize_to_fit is True, in which case the list is resized to the actual number of pairs found.
-        If the number of pairs found is larger than this, the pairs are randomly sampled. When check_errors is True, an exception is raised in this case.
+        If the number of pairs found is larger than this, an asynchronous device-side error is raised.
         If negative, it is interpreted as (minus) the maximum number of neighbors per atom.
     strategy : str
         Strategy to use for computing the neighbor list. Can be one of :code:`["brute", "cell"]`.
@@ -171,9 +171,6 @@ class OptimizedDistance(torch.nn.Module):
         Whether to resize the neighbor list to the actual number of pairs found. When False, the list is padded with (-1,-1) pairs up to max_num_pairs
         Default: True
         If this is True the operation is not CUDA graph compatible.
-    check_errors : bool, optional
-        Whether to check for too many pairs. If this is True the operation is not CUDA graph compatible.
-        Default: True
     return_vecs : bool, optional
         Whether to return the distance vectors.
         Default: False
@@ -192,7 +189,6 @@ class OptimizedDistance(torch.nn.Module):
         strategy="brute",
         include_transpose=True,
         resize_to_fit=True,
-        check_errors=True,
         box=None,
         long_edge_index=True,
     ):
@@ -238,7 +234,6 @@ class OptimizedDistance(torch.nn.Module):
                     f"Reduce box size or increase cutoff."
                 )
 
-        self.check_errors = check_errors
         self.long_edge_index = long_edge_index
 
     def forward(
@@ -305,10 +300,10 @@ class OptimizedDistance(torch.nn.Module):
             use_periodic=use_periodic,
             num_cells=self.num_cells,
         )
-        if self.check_errors:
-            assert (
-                num_pairs[0] <= max_pairs
-            ), f"Found num_pairs({num_pairs[0]}) > max_num_pairs({max_pairs})"
+        torch._assert_async(
+            (num_pairs[0] <= max_pairs),
+            "Found num_pairs > max_num_pairs, please increase max_num_pairs",
+        )
 
         # Remove (-1,-1)  pairs
         if self.resize_to_fit:

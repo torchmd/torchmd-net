@@ -76,7 +76,7 @@ def test_neighbor_count_error():
     pos = torch.rand(100, 3)
     batch = torch.zeros(pos.size(0), dtype=torch.long)
 
-    with raises(AssertionError):
+    with raises(RuntimeError):
         dist(pos, batch)
 
     # example data where the second molecule should produce an error
@@ -84,7 +84,7 @@ def test_neighbor_count_error():
     pos = torch.rand(100, 3)
     batch = torch.tensor([0] * 20 + [1] * 80, dtype=torch.long)
 
-    with raises(AssertionError):
+    with raises(RuntimeError):
         dist(pos, batch)
 
 
