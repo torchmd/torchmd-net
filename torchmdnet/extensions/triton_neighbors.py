@@ -87,7 +87,7 @@ def triton_neighbor_pairs(
             use_periodic,
             float(cutoff_lower),
             float(cutoff_upper),
-            int(max_num_pairs),
+            max_num_pairs,
             bool(loop),
             bool(include_transpose),
         )
@@ -99,7 +99,7 @@ def triton_neighbor_pairs(
             use_periodic,
             cutoff_lower,
             cutoff_upper,
-            int(max_num_pairs),
+            max_num_pairs,
             bool(loop),
             bool(include_transpose),
             num_cells,
