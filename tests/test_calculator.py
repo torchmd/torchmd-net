@@ -160,3 +160,149 @@ def test_ase_calculator(device):
     atoms.calc = calc
     # Run more dynamics
     dyn.run(steps=nsteps)
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_aceff2_coulomb_cutoff(device):
+    """Test AceFF-2 on caffeine (no PBC) with TMDNETCalculator.
+
+    1. Compute energy with no coulomb_cutoff (all-to-all N^2 Coulomb).
+    2. Compute energy with very large cutoff
+    3. Compute energy with decreasing large coulomb_cutoffs (200 → 20 Å).
+       Caffeine is ~10 Å across, so all pairs are within cutoff in every case.
+       The Reaction Field correction is small at large cutoffs, so energies
+       should be close to the no-cutoff reference.
+    """
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError:
+        pytest.skip("huggingface_hub not available")
+
+    try:
+        model_file_path = hf_hub_download(
+            repo_id="Acellera/AceFF-2.0", filename="aceff_v2.0.ckpt"
+        )
+    except Exception:
+        pytest.skip("Could not download AceFF-2.0 model from HuggingFace")
+
+    from torchmdnet.calculators import TMDNETCalculator
+    from ase.io import read
+    import numpy as np
+    import os
+
+    curr_dir = os.path.dirname(__file__)
+    caffeine_pdb = os.path.join(curr_dir, "caffeine.pdb")
+
+    # --- reference: no coulomb_cutoff, all-to-all Coulomb, no PBC ---
+    atoms_ref = read(caffeine_pdb)
+    atoms_ref.info["charge"] = 0
+    calc_ref = TMDNETCalculator(model_file_path, device=device)
+    atoms_ref.calc = calc_ref
+    energy_no_cutoff = atoms_ref.get_potential_energy()
+
+    # in the limit of infinite cutoff the reaction field calculation should give the same energy
+    calc_inf = TMDNETCalculator(
+        model_file_path, device=device, coulomb_cutoff=1e6, coulomb_max_num_neighbors=20
+    )
+    atoms_inf = read(caffeine_pdb)
+    atoms_inf.info["charge"] = 0
+    atoms_inf.calc = calc_inf
+    energy_inf = atoms_inf.get_potential_energy()
+    np.testing.assert_allclose(
+        energy_inf,
+        energy_no_cutoff,
+        rtol=1e-5,
+        atol=1e-5,
+    )
+
+    # try changing the cutoff
+    for cutoff in [2000.0, 200.0, 100.0, 50.0, 20.0]:
+        atoms_c = read(caffeine_pdb)
+        atoms_c.info["charge"] = 0
+        calc_c = TMDNETCalculator(
+            model_file_path,
+            device=device,
+            coulomb_cutoff=cutoff,
+            coulomb_max_num_neighbors=64,
+        )
+        atoms_c.calc = calc_c
+        energy_cutoff = atoms_c.get_potential_energy()
+        # energy should increase as cutoff decreases as we are adding the reaction field energy
+        assert energy_cutoff > energy_no_cutoff
+
+        # the difference should be small
+        assert (energy_cutoff - energy_no_cutoff) / energy_no_cutoff < 0.01
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_aceff2_pbc_vs_no_pbc(device):
+    """Test AceFF-2 on explicit-solvent alanine-dipeptide with TMDNETCalculator.
+
+    The PDB has a CRYST1 record (cell ~32.8 x 32.9 x 31.9 Å, 2269 atoms).
+
+    1. Evaluate with PBC disabled – atoms see only intra-box neighbours.
+    2. Evaluate with PBC enabled  – atoms see periodic images via the box.
+
+    The two energies must differ, which proves that PBC is actually applied
+    rather than silently ignored.
+    """
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError:
+        pytest.skip("huggingface_hub not available")
+
+    try:
+        model_file_path = hf_hub_download(
+            repo_id="Acellera/AceFF-2.0", filename="aceff_v2.0.ckpt"
+        )
+    except Exception:
+        pytest.skip("Could not download AceFF-2.0 model from HuggingFace")
+
+    from torchmdnet.calculators import TMDNETCalculator
+    from ase.io import read
+    import numpy as np
+    import os
+
+    pdb_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        "examples",
+        "aceff_examples",
+        "alanine-dipeptide-explicit.pdb",
+    )
+    coulomb_cutoff = 10.0
+
+    # --- no PBC: disable the periodic box read from CRYST1 ---
+    atoms_nopbc = read(pdb_path)
+    atoms_nopbc.info["charge"] = 0
+    atoms_nopbc.pbc = False
+    calc_nopbc = TMDNETCalculator(
+        model_file_path, device=device, coulomb_cutoff=coulomb_cutoff
+    )
+    atoms_nopbc.calc = calc_nopbc
+    energy_nopbc = atoms_nopbc.get_potential_energy()
+    print(f"No PBC: {energy_nopbc}")
+
+    # --- with PBC: keep the cell and PBC flags from the CRYST1 record ---
+    atoms_pbc = read(pdb_path)
+    atoms_pbc.info["charge"] = 0
+    assert atoms_pbc.pbc.all(), "Expected full PBC from CRYST1 record"
+    calc_pbc = TMDNETCalculator(
+        model_file_path, device=device, coulomb_cutoff=coulomb_cutoff
+    )
+    atoms_pbc.calc = calc_pbc
+    energy_pbc = atoms_pbc.get_potential_energy()
+    print(f"PBC: {energy_pbc}")
+
+    # PBC adds periodic-image contributions to both the NN and Coulomb terms,
+    # so the energies must be meaningfully different.
+    assert not np.isclose(energy_pbc, energy_nopbc, rtol=1e-3), (
+        f"PBC energy ({energy_pbc:.4f}) is too close to no-PBC energy ({energy_nopbc:.4f}); "
+        "PBC may not be applied"
+    )
+
+
+if __name__ == "__main__":
+    test_aceff2_coulomb_cutoff("cpu")
+    test_aceff2_coulomb_cutoff("cuda")
+    test_aceff2_pbc_vs_no_pbc("cpu")
+    test_aceff2_pbc_vs_no_pbc("cuda")
