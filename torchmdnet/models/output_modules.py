@@ -6,9 +6,15 @@ from abc import abstractmethod, ABCMeta
 from typing import Optional
 import torch
 from torch import nn
-from torchmdnet.models.utils import GatedEquivariantBlock, scatter, MLP
+from torchmdnet.models.utils import (
+    GatedEquivariantBlock,
+    scatter,
+    MLP,
+    OptimizedDistance,
+)
 from torchmdnet.utils import atomic_masses
 from warnings import warn
+import numpy as np
 
 __all__ = ["Scalar", "DipoleMoment", "ElectronicSpatialExtent"]
 
@@ -31,7 +37,7 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def pre_reduce(self, x, v, z, pos, batch):
+    def pre_reduce(self, x, v, z, pos, batch, box: Optional[torch.Tensor] = None):
         return
 
     def reduce(self, x, batch):
@@ -94,7 +100,15 @@ class Scalar(OutputModel):
     def reset_parameters(self):
         self.output_network.reset_parameters()
 
-    def pre_reduce(self, x, v: Optional[torch.Tensor], z, pos, batch):
+    def pre_reduce(
+        self,
+        x,
+        v: Optional[torch.Tensor],
+        z,
+        pos,
+        batch,
+        box: Optional[torch.Tensor] = None,
+    ):
         return self.output_network(x)
 
 
@@ -137,7 +151,7 @@ class EquivariantScalar(OutputModel):
         for layer in self.output_network:
             layer.reset_parameters()
 
-    def pre_reduce(self, x, v, z, pos, batch):
+    def pre_reduce(self, x, v, z, pos, batch, box: Optional[torch.Tensor] = None):
         for layer in self.output_network:
             x, v = layer(x, v)
         # include v in output to make sure all parameters have a gradient
@@ -166,7 +180,15 @@ class DipoleMoment(Scalar):
         atomic_mass = torch.from_numpy(atomic_masses).to(dtype)
         self.register_buffer("atomic_mass", atomic_mass)
 
-    def pre_reduce(self, x, v: Optional[torch.Tensor], z, pos, batch):
+    def pre_reduce(
+        self,
+        x,
+        v: Optional[torch.Tensor],
+        z,
+        pos,
+        batch,
+        box: Optional[torch.Tensor] = None,
+    ):
         x = self.output_network(x)
 
         # Get center of mass.
@@ -201,7 +223,7 @@ class EquivariantDipoleMoment(EquivariantScalar):
         atomic_mass = torch.from_numpy(atomic_masses).to(dtype)
         self.register_buffer("atomic_mass", atomic_mass)
 
-    def pre_reduce(self, x, v, z, pos, batch):
+    def pre_reduce(self, x, v, z, pos, batch, box: Optional[torch.Tensor] = None):
         for layer in self.output_network:
             x, v = layer(x, v)
 
@@ -244,7 +266,15 @@ class ElectronicSpatialExtent(OutputModel):
     def reset_parameters(self):
         self.output_network.reset_parameters()
 
-    def pre_reduce(self, x, v: Optional[torch.Tensor], z, pos, batch):
+    def pre_reduce(
+        self,
+        x,
+        v: Optional[torch.Tensor],
+        z,
+        pos,
+        batch,
+        box: Optional[torch.Tensor] = None,
+    ):
         x = self.output_network(x)
 
         # Get center of mass.
@@ -279,7 +309,7 @@ class EquivariantVectorOutput(EquivariantScalar):
             **kwargs,
         )
 
-    def pre_reduce(self, x, v, z, pos, batch):
+    def pre_reduce(self, x, v, z, pos, batch, box: Optional[torch.Tensor] = None):
         for layer in self.output_network:
             x, v = layer(x, v)
         return v.squeeze()
@@ -325,8 +355,10 @@ class ScalarPlusWeightedCoulomb(OutputModel):
         reduce_op="sum",
         dtype=torch.float,
         static_shapes=False,
+        cutoff: float | None = None,
         **kwargs,
     ):
+        self.static_shapes = static_shapes
         super(ScalarPlusWeightedCoulomb, self).__init__(
             allow_prior_model=allow_prior_model,
             reduce_op=reduce_op,
@@ -345,6 +377,7 @@ class ScalarPlusWeightedCoulomb(OutputModel):
         self.q_dim = kwargs["q_dim"]
         self.num_interaction_layers = kwargs["num_layers"]
         self.layer_weights = kwargs["q_weights"]
+        self.cutoff = kwargs["coulomb_cutoff"]
 
         assert len(self.layer_weights) == self.num_interaction_layers + 1
 
@@ -362,6 +395,41 @@ class ScalarPlusWeightedCoulomb(OutputModel):
         _Bohr = 0.5291772105638411
         self._factor = _half_Hartree * _Bohr
 
+        if self.cutoff is None:
+            # no cutoff we do N^2 all-to-all, e.g. small mol in vacuum
+            self.mode = "all_to_all"
+            self.distance = None
+
+        else:
+            # we use a cutoff and Reaction Field method
+            # this will work with PBC if the box is larger than 2 * cutoff
+            self.mode = "cutoff"
+
+            if (
+                "coulomb_max_num_neighbors" in kwargs
+                and kwargs["coulomb_max_num_neighbors"] is not None
+            ):
+                max_num_neighbors = kwargs["coulomb_max_num_neighbors"]
+            else:
+                # if not provided we need to set max_num_pairs sensibly
+                # we assume uniform water like density
+                _density = 0.1  # atoms per cubic Angstrom
+                _volume = 4 / 3 * np.pi * self.cutoff**3
+                max_num_neighbors = int(_density * _volume)
+
+            self.distance = OptimizedDistance(
+                cutoff_lower=0.0,
+                cutoff_upper=self.cutoff,
+                max_num_pairs=-max_num_neighbors,
+                return_vecs=False,
+                resize_to_fit=not self.static_shapes,
+                include_transpose=False,
+                loop=False,
+                strategy=kwargs.get("coulomb_neighbor_strategy", "brute"),
+            )
+            self.epsilon_solvent = kwargs.get("coulomb_epsilon_solvent", 78.3)
+
+        # for torchscript
         self.edge_index = torch.empty(2, 0)
 
         self.reset_parameters()
@@ -369,7 +437,20 @@ class ScalarPlusWeightedCoulomb(OutputModel):
     def reset_parameters(self):
         self.output_network.reset_parameters()
 
-    def pre_reduce(self, x, v: Optional[torch.Tensor], z, pos, batch):
+    def pre_reduce(
+        self,
+        x,
+        v: Optional[torch.Tensor],
+        z,
+        pos,
+        batch,
+        box: Optional[torch.Tensor] = None,
+    ):
+
+        if box is not None:
+            if self.mode == "all_to_all":
+                raise ValueError("PBC is not supported with coulomb_cutoff = None")
+
         # we assume the charges have been added at the end of x!
         charges = x[:, self.hidden_channels :]
 
@@ -379,61 +460,138 @@ class ScalarPlusWeightedCoulomb(OutputModel):
         x = x[:, : self.hidden_channels]
         x = self.output_network(x)  # energy per atom from main MLPs
 
-        # torch.compile and torch.export don't support .item() calls during tracing
-        # The model should be warmed up before compilation to set the correct dim_size
-        if torch.compiler.is_compiling():
-            assert self.edge_index.shape[1] > 0
+        if self.mode == "all_to_all":
+            # N^2 code path
 
-        elif torch.jit.is_scripting():
-            # TorchScript doesn't support torch.cuda.is_current_stream_capturing()
-            # For CPU, always update dim_size (no CUDA graphs on CPU)
-            # For CUDA with static_shapes, only update once (first call sets dim_size for CUDA graph capture)
-            # For CUDA without static_shapes, always update (dynamic batch sizes)
-            if not x.is_cuda or not self.static_shapes or self.edge_index.shape[1] == 0:
-                self.edge_index = _triu_indices(x, batch)
-        else:
-            is_capturing = x.is_cuda and torch.cuda.is_current_stream_capturing()
-            if not x.is_cuda or not is_capturing:
-                self.edge_index = _triu_indices(x, batch)
+            # we have to some some warmup to lock in the batch size if we want to script or compile with fullgraph=True
 
-            if is_capturing:
-                assert (
-                    self.edge_index is not None
-                ), "Warming up is needed before capturing the model into a CUDA graph"
-                warn(
-                    "CUDA graph capture will lock the batch to the current number of samples ({}). Changing this will result in a crash".format(
-                        self.dim_size
+            # torch.compile and torch.export don't support .item() calls during tracing
+            # The model should be warmed up before compilation to set the correct dim_size
+            if torch.compiler.is_compiling():
+                assert self.edge_index.shape[1] > 0
+
+            elif torch.jit.is_scripting():
+                # TorchScript doesn't support torch.cuda.is_current_stream_capturing()
+                # For CPU, always update dim_size (no CUDA graphs on CPU)
+                # For CUDA with static_shapes, only update once (first call sets dim_size for CUDA graph capture)
+                # For CUDA without static_shapes, always update (dynamic batch sizes)
+                if (
+                    not x.is_cuda
+                    or not self.static_shapes
+                    or self.edge_index.shape[1] == 0
+                ):
+                    self.edge_index = _triu_indices(x, batch)
+            else:
+                is_capturing = x.is_cuda and torch.cuda.is_current_stream_capturing()
+                if not x.is_cuda or not is_capturing:
+                    self.edge_index = _triu_indices(x, batch)
+
+                if is_capturing:
+                    assert (
+                        self.edge_index is not None
+                    ), "Warming up is needed before capturing the model into a CUDA graph"
+                    warn(
+                        "CUDA graph capture will lock the batch to the current number of samples ({}). Changing this will result in a crash".format(
+                            self.dim_size
+                        )
                     )
+
+            q_i = charges[self.edge_index[0]]
+            q_j = charges[self.edge_index[1]]
+
+            d_ij = torch.linalg.norm(
+                pos[self.edge_index[0]] - pos[self.edge_index[1]], dim=-1
+            )
+
+            # charge product
+            q_ij = q_i * q_j
+
+            # short range damping, hyperparameter is from aimnet2
+            fc = 1.0 - _exp_cutoff(d_ij, 4.6)
+
+            # per edge Coulomb energy with short range damping
+            e_ij = fc.unsqueeze(-1) * q_ij / d_ij.unsqueeze(-1)
+
+            # scale with Coulomb constant in eV and Angstrom unit system!
+            e_ij = self._factor * e_ij
+
+            # now do the weighted mean over features
+            e_ij = torch.sum(e_ij * self.qweights.unsqueeze(0), dim=-1) / torch.sum(
+                self.qweights
+            )
+
+            # sum into nodes
+            e_i = torch.zeros(x.shape[0], device=x.device, dtype=x.dtype)
+            e_i = e_i.index_add(0, self.edge_index[0], e_ij)
+            e_i = e_i.index_add(0, self.edge_index[1], e_ij)
+
+        else:
+            # cutoff code path
+            edge_index, edge_weight, _ = self.distance(pos, batch, box=box)
+
+            if self.static_shapes:
+                # we need a dummy atom
+                charges = torch.cat(
+                    [
+                        charges,
+                        torch.zeros(
+                            1,
+                            charges.shape[1],
+                            device=charges.device,
+                            dtype=charges.dtype,
+                        ),
+                    ],
+                    dim=0,
                 )
 
-        q_i = charges[self.edge_index[0]]
-        q_j = charges[self.edge_index[1]]
+            q_i = charges[edge_index[0]]
+            q_j = charges[edge_index[1]]
 
-        d_ij = torch.linalg.norm(
-            pos[self.edge_index[0]] - pos[self.edge_index[1]], dim=-1
-        )
+            d_ij = edge_weight
 
-        # charge product
-        q_ij = q_i * q_j
+            # charge product
+            q_ij = q_i * q_j
 
-        # short range damping, hyperparameter is from aimnet2
-        fc = 1.0 - _exp_cutoff(d_ij, 4.6)
+            # short range damping, hyperparameter is from aimnet2
+            fc = 1.0 - _exp_cutoff(d_ij, 4.6)
 
-        # per edge Coulomb energy with short range damping
-        e_ij = fc.unsqueeze(-1) * q_ij / d_ij.unsqueeze(-1)
+            # reaction field implementation
+            # uses the OpenMM version
+            k_rf = (
+                (1.0 / self.cutoff**3)
+                * (self.epsilon_solvent - 1.0)
+                / (2.0 * self.epsilon_solvent + 1.0)
+            )
+            c_rf = (
+                (1.0 / self.cutoff)
+                * (3.0 * self.epsilon_solvent)
+                / (2.0 * self.epsilon_solvent + 1.0)
+            )
+            e_ij = (
+                fc.unsqueeze(-1)
+                * q_ij
+                * (1.0 / d_ij + k_rf * d_ij**2 - c_rf).unsqueeze(-1)
+            )
 
-        # scale with Coulomb constant in eV and Angstrom unit system!
-        e_ij = self._factor * e_ij
+            # scale with Coulomb constant in eV and Angstrom unit system!
+            e_ij = self._factor * e_ij
 
-        # now do the weighted mean over features
-        e_ij = torch.sum(e_ij * self.qweights.unsqueeze(0), dim=-1) / torch.sum(
-            self.qweights
-        )
+            # now do the weighted mean over features
+            e_ij = torch.sum(e_ij * self.qweights.unsqueeze(0), dim=-1) / torch.sum(
+                self.qweights
+            )
 
-        # sum into nodes
-        e_i = torch.zeros(x.shape[0], device=x.device, dtype=x.dtype)
-        e_i = e_i.index_add(0, self.edge_index[0], e_ij)
-        e_i = e_i.index_add(0, self.edge_index[1], e_ij)
+            # sum into nodes
+            e_i = torch.zeros(
+                x.shape[0] + 1 if self.static_shapes else x.shape[0],
+                device=x.device,
+                dtype=x.dtype,
+            )
+            e_i = e_i.index_add(0, edge_index[0], e_ij)
+            e_i = e_i.index_add(0, edge_index[1], e_ij)
+
+            if self.static_shapes:
+                e_i = e_i[:-1]
 
         # add to normal per atom output with correct shape
         x = x + e_i.unsqueeze(-1)

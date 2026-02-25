@@ -146,6 +146,9 @@ def create_model(args, prior_model=None, mean=None, std=None):
         ),  # https://github.com/torchmd/torchmd-net/issues/343
         q_dim=args.get("q_dim", 0),
         q_weights=args.get("q_weights", []),
+        coulomb_cutoff=args.get("coulomb_cutoff", None),
+        coulomb_max_num_neighbors=args.get("coulomb_max_num_neighbors", None),
+        coulomb_neighbor_strategy=args.get("coulomb_neighbor_strategy", "brute"),
     )
 
     # combine representation and output network
@@ -280,6 +283,14 @@ def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
         state_dict["representation_model.distance.box"] = torch.zeros(
             (3, 3), device="cpu"
         )
+
+    # same for this one:
+    if (
+        "coulomb_cutoff" in args
+        and args["coulomb_cutoff"] is not None
+        and "output_model.distance.box" not in state_dict
+    ):
+        state_dict["output_model.distance.box"] = torch.zeros((3, 3), device="cpu")
 
     model.load_state_dict(state_dict)
     return model.to(device)
@@ -493,7 +504,7 @@ class TorchMD_Net(nn.Module):
             z, pos, batch, box=box, q=q, s=s
         )
         # apply the output network
-        x = self.output_model.pre_reduce(x, v, z, pos, batch)
+        x = self.output_model.pre_reduce(x, v, z, pos, batch, box=box)
 
         # scale by data standard deviation
         if self.std is not None:
