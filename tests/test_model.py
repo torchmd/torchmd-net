@@ -38,6 +38,7 @@ def test_forward(model_name, use_batch, explicit_q_s, precision):
 @mark.parametrize("precision", [32, 64])
 def test_forward_output_modules(model_name, output_model, precision):
     z, pos, batch = create_example_batch()
+    pos = pos.to(dtype=dtype_mapping[precision])
     args = load_example_args(
         model_name, remove_prior=True, output_model=output_model, precision=precision
     )

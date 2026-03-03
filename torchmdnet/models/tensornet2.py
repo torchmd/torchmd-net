@@ -55,6 +55,9 @@ class ChargePredict(nn.Module):
         self.static_shapes = static_shapes
         self.dim_size = 0
 
+        # for torchsript
+        self.opt = OPT
+
     def reset_parameters(self):
         self.q_norm.reset_parameters()
         self.q_mlp.reset_parameters()
@@ -99,7 +102,7 @@ class ChargePredict(nn.Module):
     def qeq(self, old_charges, f, batch, Q) -> Tensor:
 
         # if we are using static shapes we can skip the last dummy atom
-        if self.static_shapes and not OPT:
+        if self.static_shapes and not self.opt:
             f = f[:-1]
             old_charges = old_charges[:-1]
             Q = Q[:-1]  # Q is already per atom
@@ -120,7 +123,9 @@ class ChargePredict(nn.Module):
         _f = f_u / F_u
         new_charges = old_charges + _f * dQ
 
-        if self.static_shapes and not OPT:  # add back the dummy atom so shapes match
+        if (
+            self.static_shapes and not self.opt
+        ):  # add back the dummy atom so shapes match
             new_charges = torch.cat(
                 (
                     new_charges,
@@ -136,7 +141,7 @@ class ChargePredict(nn.Module):
 
     def forward(self, X, batch, Q):
         I, A, S = decompose_tensor(X)
-        if not OPT:
+        if not self.opt:
             _x = torch.cat((I, tensor_norm(A), tensor_norm(S)), dim=-1)
         else:
             # for this MLP we directly use the value of I not the norm.
@@ -319,6 +324,10 @@ class TensorNet2(nn.Module):
             box=box_vecs,
             long_edge_index=True,
         )
+
+        # for torchscript
+        self.opt = OPT
+
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -345,19 +354,19 @@ class TensorNet2(nn.Module):
 
         Q = q  # total molecule charge
 
-        if OPT:
+        if self.opt:
             # perpare graph indices for message passing
             row_data, row_indices, row_indptr, col_data, col_indices, col_indptr = (
                 graph_transform(edge_index.int(), z.shape[0])
             )
         else:
             row_data, row_indices, row_indptr, col_data, col_indices, col_indptr = (
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
+                torch.empty(0, dtype=torch.long),
+                torch.empty(0, dtype=torch.long),
+                torch.empty(0, dtype=torch.long),
+                torch.empty(0, dtype=torch.long),
+                torch.empty(0, dtype=torch.long),
+                torch.empty(0, dtype=torch.long),
             )
 
         # This assert convinces TorchScript that edge_vec is a Tensor and not an Optional[Tensor]
@@ -374,7 +383,7 @@ class TensorNet2(nn.Module):
             mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
             zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
 
-            if not OPT:
+            if not self.opt:
                 Q = torch.cat(
                     (Q, torch.zeros(1, device=Q.device, dtype=Q.dtype)), dim=0
                 )
@@ -427,7 +436,7 @@ class TensorNet2(nn.Module):
         # we will have (l+1 * qdim) charges for each node
         charges = torch.cat(charge_list, dim=-1)
 
-        if not OPT:
+        if not self.opt:
             I, A, S = decompose_tensor(X)
             x = torch.cat((3 * I**2, tensor_norm(A), tensor_norm(S)), dim=-1)
             x = self.out_norm(x)
@@ -498,6 +507,7 @@ class Interaction(nn.Module):
             )
         self.act = act_class_mapping[activation]()
         self.equivariance_invariance_group = equivariance_invariance_group
+        self.opt = OPT
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -521,7 +531,7 @@ class Interaction(nn.Module):
 
         # add the partial charges as edge features and then do a normal tensornet update
 
-        if OPT:  # TODO: and static shapes
+        if self.opt:  # TODO: and static shapes
             # add a dummy atom to the charges so we can do index select correctly with static shapes
             _charges = torch.cat(
                 (
@@ -556,7 +566,7 @@ class Interaction(nn.Module):
         S = self.linears_tensor[2](S)
         Y = compose_tensor(I, A, S)
 
-        if not OPT:
+        if not self.opt:
             edge_index = graph_info["edge_index"]
 
             Im, Am, Sm = tensornet_interaction_message_passing(
@@ -596,7 +606,7 @@ class Interaction(nn.Module):
 
         normp1 = tensor_norm(C) + 1
 
-        if not OPT:
+        if not self.opt:
             I, A, S = (
                 I / normp1,
                 A / normp1[..., None, None, :],

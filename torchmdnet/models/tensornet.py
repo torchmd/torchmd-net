@@ -289,6 +289,9 @@ class TensorNet(nn.Module):
             long_edge_index=True,
         )
 
+        # for torchscript
+        self.opt = OPT
+
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -297,7 +300,6 @@ class TensorNet(nn.Module):
             layer.reset_parameters()
         self.linear.reset_parameters()
         self.out_norm.reset_parameters()
-
 
     def setup_for_inference(self, z, batch):
         self.tensor_embedding.setup_for_inference(z, batch)
@@ -315,19 +317,19 @@ class TensorNet(nn.Module):
         # Obtain graph, with distances and relative position vectors
         edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
 
-        if OPT:
+        if self.opt:
             # perpare graph indices for message passing
             row_data, row_indices, row_indptr, col_data, col_indices, col_indptr = (
                 graph_transform(edge_index.int(), z.shape[0])
             )
         else:
             row_data, row_indices, row_indptr, col_data, col_indices, col_indptr = (
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
+                torch.empty(0, dtype=torch.long),
+                torch.empty(0, dtype=torch.long),
+                torch.empty(0, dtype=torch.long),
+                torch.empty(0, dtype=torch.long),
+                torch.empty(0, dtype=torch.long),
+                torch.empty(0, dtype=torch.long),
             )
 
         # This assert convinces TorchScript that edge_vec is a Tensor and not an Optional[Tensor]
@@ -345,7 +347,7 @@ class TensorNet(nn.Module):
             mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
             zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
 
-            if not OPT:
+            if not self.opt:
                 q = torch.cat(
                     (q, torch.zeros(1, device=q.device, dtype=q.dtype)), dim=0
                 )
@@ -363,17 +365,15 @@ class TensorNet(nn.Module):
         # I avoid dividing by zero by setting the weight of self edges and self loops to 1
         edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
 
-        graph_info = {"edge_index": edge_index}
-        graph_info.update(
-            {
-                "row_data": row_data,
-                "row_indices": row_indices,
-                "row_indptr": row_indptr,
-                "col_data": col_data,
-                "col_indices": col_indices,
-                "col_indptr": col_indptr,
-            }
-        )
+        graph_info = {
+            "edge_index": edge_index,
+            "row_data": row_data,
+            "row_indices": row_indices,
+            "row_indptr": row_indptr,
+            "col_data": col_data,
+            "col_indices": col_indices,
+            "col_indptr": col_indptr,
+        }
 
         X = self.tensor_embedding(
             zp, graph_info, edge_weight, edge_vec, edge_attr
@@ -381,7 +381,7 @@ class TensorNet(nn.Module):
         for layer in self.layers:
             X = layer(X, graph_info, edge_weight, edge_attr, q)  # [N, 3, 3, F]
 
-        if not OPT:
+        if not self.opt:
             I, A, S = decompose_tensor(X)
             x = torch.cat((3 * I**2, tensor_norm(A), tensor_norm(S)), dim=-1)
             x = self.out_norm(x)
@@ -486,6 +486,11 @@ class TensorEmbedding(nn.Module):
             nn.Linear(2 * hidden_channels, 3 * hidden_channels, bias=True, dtype=dtype)
         )
         self.init_norm = nn.LayerNorm(hidden_channels, dtype=dtype)
+
+        # for torchscript compatibility
+        self.Zij_map = torch.empty(0, 0, 0)
+        self.opt = OPT
+
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -499,7 +504,6 @@ class TensorEmbedding(nn.Module):
         for linear in self.linears_scalar:
             linear.reset_parameters()
         self.init_norm.reset_parameters()
-        self.Zij_map = None # for torchscript compatibility
         self.inference_mode = False
 
     def setup_for_inference(self, z, batch):
@@ -522,7 +526,11 @@ class TensorEmbedding(nn.Module):
     def _get_atomic_number_message(self, z: Tensor, edge_index: Tensor) -> Tensor:
 
         if self.inference_mode:
-            Zij = self.Zij_map[z[edge_index[0]], z[edge_index[1]]]
+            if torch.jit.is_scripting():
+                # torchscript does not like the buffer
+                Zij = torch.as_tensor(self.Zij_map)[z[edge_index[0]], z[edge_index[1]]]
+            else:
+                Zij = self.Zij_map[z[edge_index[0]], z[edge_index[1]]]
         else:
             Z = self.emb(z)
             Zij = self.emb2(
@@ -558,7 +566,7 @@ class TensorEmbedding(nn.Module):
             [dp1, dp2, dp3], dim=1
         )  # [num_edges, 3, hidden_channels]
 
-        if not OPT:
+        if not self.opt:
             I, A, S = tensornet_embedding_message_passing(
                 edge_vec_norm, edge_attr_processed, edge_index, z.shape[0]
             )  # [num_atoms, hidden_channels], [num_atoms, 3, 3, hidden_channels], [num_atoms, 3, 3, hidden_channels]
@@ -584,7 +592,7 @@ class TensorEmbedding(nn.Module):
 
         norm = norm.reshape(-1, 3, self.hidden_channels)
 
-        if not OPT:
+        if not self.opt:
             I = (
                 self.linears_tensor[0](I) * norm[:, 0, :]
             )  # [num_atoms, hidden_channels]
@@ -612,7 +620,7 @@ class TensorEmbedding(nn.Module):
 
 
 def tensornet_interaction_message_passing(
-    I, A, S, edge_attr_processed, edge_index, natoms
+    I, A, S, edge_attr_processed, edge_index, natoms: int
 ):
 
     # written to mirror the optimized fn_tensornet_interaction_message_passing
@@ -709,6 +717,7 @@ class Interaction(nn.Module):
             )
         self.act = activation()
         self.equivariance_invariance_group = equivariance_invariance_group
+        self.opt = OPT
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -745,7 +754,7 @@ class Interaction(nn.Module):
         S = self.linears_tensor[2](S)
         Y = compose_tensor(I, A, S)  # [num_atoms, 3, 3, hidden_channels]
 
-        if not OPT:
+        if not self.opt:
             edge_index = graph_info["edge_index"]
 
             Im, Am, Sm = tensornet_interaction_message_passing(
@@ -785,7 +794,7 @@ class Interaction(nn.Module):
 
         normp1 = tensor_norm(C) + 1
 
-        if not OPT:
+        if not self.opt:
             I, A, S = (
                 I / normp1,
                 A / normp1[..., None, None, :],
