@@ -25,6 +25,10 @@ def load_example_args(model_name, remove_prior=False, config_file=None, **kwargs
             config_file = join(
                 dirname(dirname(__file__)), "examples", "TensorNet-QM9.yaml"
             )
+        elif model_name == "tensornet2":
+            config_file = join(
+                dirname(dirname(__file__)), "examples", "TensorNet2-QM9.yaml"
+            )
         else:
             config_file = join(dirname(dirname(__file__)), "examples", "ET-QM9.yaml")
     with open(config_file, "r") as f:
@@ -64,22 +68,24 @@ def benchmark_pdb(pdb_file, **kwargs):
     molecule = None
     torch.cuda.nvtx.range_push("Initialization")
     args = load_example_args(
-        "tensornet",
-        config_file="../examples/TensorNet-rMD17.yaml",
+        kwargs["model"],
         remove_prior=True,
         output_model="Scalar",
         derivative=False,
         max_z=int(atomic_numbers.max() + 1),
-        max_num_neighbors=32,
+        max_num_neighbors=64,
         **kwargs,
     )
     model = create_model(args)
     z = atomic_numbers
     pos = positions
     batch = torch.zeros_like(z).to("cuda")
+    model.representation_model.setup_for_inference(
+        z.cpu(), batch.cpu()
+    )  # setup for inference
     model = model.to("cuda")
-    torch.cuda.nvtx.range_pop()
-    torch.cuda.nvtx.range_push("Warmup")
+    # torch.cuda.nvtx.range_pop()
+    # torch.cuda.nvtx.range_push("Warmup")
     for i in range(3):
         pred, _ = model(z, pos, batch)
         pred.sum().backward()
@@ -88,38 +94,27 @@ def benchmark_pdb(pdb_file, **kwargs):
     for i in range(10):
         pred, _ = model(z, pos, batch)
         pred.sum().backward()
-    torch.cuda.nvtx.range_pop()
-    torch.cuda.nvtx.range_push("Benchmark")
-    nbench = 100
-    times = np.zeros(nbench)
-    stream = torch.cuda.Stream()
-    torch.cuda.synchronize()
-    with GpuTimer() as timer:
-        with torch.cuda.stream(stream):
-            for i in range(nbench):
-                # torch.cuda.synchronize()
-                # with GpuTimer() as timer2:
-                # torch.cuda.nvtx.range_push("Step")
-                pred, _ = model(z, pos, batch)
-                # torch.cuda.nvtx.range_push("derivative")
-                pred.sum().backward()
-                # torch.cuda.nvtx.range_pop()
-                # torch.cuda.nvtx.range_pop()
-                # torch.cuda.synchronize()
-                # times[i] = timer2.interval
-        torch.cuda.synchronize()
     # torch.cuda.nvtx.range_pop()
-    return len(atomic_numbers), timer.interval / nbench
+    # torch.cuda.nvtx.range_push("Benchmark")
+    nbench = 100
+    torch.cuda.synchronize()
+    t1 = time.perf_counter()
+    for i in range(nbench):
+        pred, _ = model(z, pos, batch)
+        pred.sum().backward()
+    torch.cuda.synchronize()
+    t2 = time.perf_counter()
+    return len(atomic_numbers), (t2 - t1) * 1000 / nbench
 
 
 from tabulate import tabulate
 
 # List of cases to benchmark, arbitrary parameters can be overriden here
 cases = {
-    "0L": {"num_layers": 0, "embedding_dimension": 128},
-    "1L": {"num_layers": 1, "embedding_dimension": 128},
-    "2L": {"num_layers": 2, "embedding_dimension": 128},
-    "2L emb 64": {"num_layers": 2, "embedding_dimension": 64},
+    "0L": {"model": "tensornet", "num_layers": 0, "embedding_dimension": 128},
+    "1L": {"model": "tensornet", "num_layers": 1, "embedding_dimension": 128},
+    "2L": {"model": "tensornet", "num_layers": 2, "embedding_dimension": 128},
+    "2L emb 64": {"model": "tensornet", "num_layers": 2, "embedding_dimension": 64},
 }
 
 
@@ -133,8 +128,6 @@ def benchmark_all():
         print("Found %s, with %d atoms" % (pdb_file, natoms))
     for pdb_file in os.listdir("systems"):
         if not pdb_file.endswith(".pdb"):
-            continue
-        if pdb_file == "stmv.pdb":  # Does not fit in a 4090
             continue
         times = {}
         num_atoms = 0

@@ -289,8 +289,86 @@ def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
         "coulomb_cutoff" in args
         and args["coulomb_cutoff"] is not None
         and "output_model.distance.box" not in state_dict
+        and hasattr(model.output_model, "distance")
     ):
         state_dict["output_model.distance.box"] = torch.zeros((3, 3), device="cpu")
+
+    # Backward compatibility: Tensor ordering was changed from [N,F,3,3] to [N,3,3,F]
+    # in TensorNet TensorEmbedding we need to change the order of the final linears_scalar
+    # from [F*3] to [3*F], and likewise for TensorNet interaction layers.
+    # Note TensorNet2 interaction layers do not need to be changed.
+    #
+    # Auto-detection: 'check_errors' was removed from TensorNet/TensorNet2 in commit
+    # 66344907448bf104e6ca1aea558347bdccbe284c ("always check for errors").  Checkpoints
+    # saved before that commit always carry 'check_errors' in their hyper_parameters, making
+    # its presence a reliable proxy for the old [N,F,3,3] tensor layout.
+    # 'compatibility_load' kwarg overrides the auto-detection in either direction.
+    _is_old_format = "check_errors" in ckpt.get("hyper_parameters", {})
+    compatability_load = kwargs.get("compatibility_load", _is_old_format)
+    if compatability_load:
+
+        if _is_old_format and "compatibility_load" not in kwargs:
+            warnings.warn(
+                "Old-format checkpoint detected ('check_errors' found in hyper_parameters). "
+                "Automatically applying compatibility_load to remap linear-layer weights. "
+                "Pass compatibility_load=False to suppress this."
+            )
+        else:
+            print(
+                "Applying compatibility_load: reshaping linear layers for older tensornet/tensornet2 model."
+            )
+
+        def remix_linear(weights, bias):
+            a, b = weights.shape
+            weights = weights.view(a // 3, 3, b)
+
+            weights = weights.transpose(0, 1)  # New shape: (3, 128, 256)
+
+            weights = weights.reshape(a, b)
+
+            bias = bias.view(a // 3, 3).transpose(0, 1).reshape(a)
+
+            return weights, bias
+
+        if args["model"] == "tensornet" or args["model"] == "tensornet2":
+
+            # remix the linear in tensor_embedding
+
+            weights = state_dict[
+                "representation_model.tensor_embedding.linears_scalar.1.weight"
+            ]
+            bias = state_dict[
+                "representation_model.tensor_embedding.linears_scalar.1.bias"
+            ]
+
+            weights, bias = remix_linear(weights, bias)
+
+            state_dict[
+                "representation_model.tensor_embedding.linears_scalar.1.weight"
+            ] = weights
+            state_dict[
+                "representation_model.tensor_embedding.linears_scalar.1.bias"
+            ] = bias
+
+            if args["model"] == "tensornet":
+
+                # remix the linears in tensornet interaction layers
+                for l in range(args["num_layers"]):
+                    weights = state_dict[
+                        f"representation_model.layers.{l}.linears_scalar.2.weight"
+                    ]
+                    bias = state_dict[
+                        f"representation_model.layers.{l}.linears_scalar.2.bias"
+                    ]
+
+                    weights, bias = remix_linear(weights, bias)
+
+                    state_dict[
+                        f"representation_model.layers.{l}.linears_scalar.2.weight"
+                    ] = weights
+                    state_dict[
+                        f"representation_model.layers.{l}.linears_scalar.2.bias"
+                    ] = bias
 
     model.load_state_dict(state_dict)
     return model.to(device)

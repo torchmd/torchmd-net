@@ -15,7 +15,7 @@ model_file_path = hf_hub_download(
 
 
 # We create the ASE calculator by supplying the path to the model and specifying the device and dtype
-calc = TMDNETCalculator(model_file_path, device="cuda")
+calc = TMDNETCalculator(model_file_path, device="cuda", max_num_neighbors=24)
 atoms = read("caffeine.pdb")
 print(atoms)
 
@@ -77,6 +77,7 @@ calc = TMDNETCalculator(model_file_path, device="cuda", compile=True)
 atoms.calc = calc
 
 # Run more dynamics
+dyn.run(steps=10)  # warmup before timing
 t1 = time.perf_counter()
 dyn.run(steps=nsteps)
 t2 = time.perf_counter()

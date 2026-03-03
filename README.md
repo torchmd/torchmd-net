@@ -65,7 +65,43 @@ Run `torchmd-train --help` to see all available options and their descriptions.
 
 ### AceFF
 Trained [AceFF models](https://huggingface.co/collections/Acellera/aceff-machine-learning-potentials) can be loaded and used for inference.
-please see [here](https://github.com/torchmd/torchmd-net/tree/main/examples/aceff_examples) 
+Please see [here](https://github.com/torchmd/torchmd-net/tree/main/examples/aceff_examples) for example scripts.
+
+#### Loading AceFF models with `load_model`
+
+```python
+from huggingface_hub import hf_hub_download
+from torchmdnet.models.model import load_model
+
+model_file_path = hf_hub_download(repo_id="Acellera/AceFF-1.1", filename="aceff_v1.1.ckpt")
+model = load_model(model_file_path, derivative=True)
+```
+
+#### Loading AceFF models with the ASE calculator
+
+```python
+from huggingface_hub import hf_hub_download
+from torchmdnet.calculators import TMDNETCalculator
+
+model_file_path = hf_hub_download(repo_id="Acellera/AceFF-1.1", filename="aceff_v1.1.ckpt")
+calc = TMDNETCalculator(model_file_path, device="cuda")
+```
+
+#### `compatibility_load` flag
+
+TensorNet and TensorNet2 checkpoints trained with older versions of the code used a different
+internal tensor layout (`[N, F, 3, 3]` instead of the current `[N, 3, 3, F]`).  When loading
+such a checkpoint, the affected weight matrices must be remapped before the state dict can be
+applied.
+
+**This is handled automatically.** Old-format checkpoints always contain a `check_errors`
+key in their saved hyper-parameters (a parameter that was removed in newer code); `load_model`
+detects this and applies the remapping transparently, emitting a `UserWarning` to let you know.
+All currently released AceFF checkpoints (1.0, 1.1, 2.0) are old-format and are handled this way.
+
+If you need to override the automatic detection you can pass `compatibility_load=True` (force
+remap) or `compatibility_load=False` (suppress remap) explicitly to either `load_model` or
+`TMDNETCalculator`.
 
 
 To load your own trained models see [here](https://github.com/torchmd/torchmd-net/tree/main/examples#loading-checkpoints) for instructions on how to load pretrained models.

@@ -15,70 +15,135 @@ from torchmdnet.models.utils import (
 __all__ = ["TensorNet"]
 
 
+def _decompose_tensor(tensor):
+    """Full tensor decomposition into irreducible components.
+
+    shapes are [N, 3, 3, F]
+    """
+    A = 0.5 * (tensor - tensor.transpose(1, 2))
+    S = tensor - A
+    I = (tensor.diagonal(dim1=1, dim2=2)).mean(-1)
+    S = S - I_to_tensor(I)
+    return I, A, S
+
+
+def _compose_tensor(I, A, S):
+    """Compose tensor from irreducible components.
+
+    input shapes:
+    I: [batch_size, hidden_channels]
+    A: [batch_size, 3, 3, hidden_channels]
+    S: [batch_size, 3, 3, hidden_channels]
+    output shape:
+    [batch_size, 3, 3, hidden_channels]"""
+    return I_to_tensor(I) + A + S
+
+
+def _tensor_matmul_o3(Y, msg):
+    A = torch.matmul(msg.permute(0, 3, 1, 2), Y.permute(0, 3, 1, 2)).permute(0, 2, 3, 1)
+    B = torch.matmul(Y.permute(0, 3, 1, 2), msg.permute(0, 3, 1, 2)).permute(0, 2, 3, 1)
+    return A + B
+
+
+def _tensor_matmul_so3(Y, msg):
+    return torch.matmul(Y.permute(0, 3, 1, 2), msg.permute(0, 3, 1, 2)).permute(
+        0, 2, 3, 1
+    )
+
+
+try:
+    from torchmdnet.extensions.warp_ops import (
+        graph_transform,
+        fn_radial_message_passing as fn_tensornet_embedding_message_passing,
+        fn_message_passing as fn_tensornet_interaction_message_passing,
+        fn_compose_tensor as compose_tensor,
+        fn_decompose_tensor as decompose_tensor,
+        fn_tensor_matmul_o3_3x3 as tensor_matmul_o3,
+        fn_tensor_matmul_so3_3x3 as tensor_matmul_so3,
+        fn_tensor_norm3,
+    )
+
+    OPT = True
+except ImportError:
+    import warnings
+
+    warnings.warn(
+        "Could not import warp_ops (warp-lang not installed?). "
+        "Falling back to pure-Python TensorNet ops. "
+        "Install warp-lang for better performance: pip install warp-lang",
+        ImportWarning,
+        stacklevel=2,
+    )
+    OPT = False
+    compose_tensor = _compose_tensor
+    decompose_tensor = _decompose_tensor
+    tensor_matmul_o3 = _tensor_matmul_o3
+    tensor_matmul_so3 = _tensor_matmul_so3
+
+
 def vector_to_skewtensor(vector):
     """Creates a skew-symmetric tensor from a vector."""
-    B, F, _ = vector.shape
+    B, _, F = vector.shape
     zero = torch.zeros((B, F), device=vector.device, dtype=vector.dtype)
     tensor = torch.stack(
         (
             zero,
-            -vector[..., 2],
-            vector[..., 1],
-            vector[..., 2],
+            -vector[..., 2, :],
+            vector[..., 1, :],
+            vector[..., 2, :],
             zero,
-            -vector[..., 0],
-            -vector[..., 1],
-            vector[..., 0],
+            -vector[..., 0, :],
+            -vector[..., 1, :],
+            vector[..., 0, :],
             zero,
         ),
-        dim=-1,
+        dim=1,
     )
-    tensor = tensor.view(B, F, 3, 3)
+    tensor = tensor.view(B, 3, 3, F)
     return tensor
 
 
 def skewtensor_to_vector(tensor):
-    """Converts 3x3 skewtensor A to a vector"""
-    tensor = tensor.flatten(-2, -1)
+    """Converts 3x3 skewtensor A to a vector
+
+    input shape must be [N, 3, 3, F]
+    output shape is [N, 3, F]
+    """
+
+    tensor = tensor.flatten(1, 2)
     vector = 0.5 * torch.stack(
         (
-            tensor[..., 7] - tensor[..., 5],
-            tensor[..., 2] - tensor[..., 6],
-            tensor[..., 3] - tensor[..., 1],
+            tensor[:, 7, :] - tensor[:, 5, :],
+            tensor[:, 2, :] - tensor[:, 6, :],
+            tensor[:, 3, :] - tensor[:, 1, :],
         ),
-        dim=-1,
+        dim=1,
     )
     return vector
 
 
 def I_to_tensor(I):
-    """Converts scalar to 3x3 I tensor"""
+    """Converts scalar to 3x3 I tensor with shape [N, 3, 3, F]"""
     return (
-        I[..., None, None]
-        * torch.eye(3, 3, device=I.device, dtype=I.dtype)[None, None, ...]
+        I[:, None, None, :]
+        * torch.eye(3, 3, device=I.device, dtype=I.dtype)[None, ..., None]
     )
 
 
 def outer_to_symtensor(tensor):
-    """Creates a symmetric traceless tensor from the outer product tensor"""
-    S = 0.5 * (tensor + tensor.transpose(-2, -1))
-    I = (tensor.diagonal(dim1=-1, dim2=-2)).mean(-1)
+    """Creates a symmetric traceless tensor from the outer product tensor
+
+    shapes are [N, 3, 3, F]
+    """
+    S = 0.5 * (tensor + tensor.transpose(1, 2))
+    I = (tensor.diagonal(dim1=1, dim2=2)).mean(-1)
     S = S - I_to_tensor(I)
     return S
 
 
-def decompose_tensor(tensor):
-    """Full tensor decomposition into irreducible components."""
-    A = 0.5 * (tensor - tensor.transpose(-2, -1))
-    S = tensor - A
-    I = (tensor.diagonal(dim1=-1, dim2=-2)).mean(-1)
-    S = S - I_to_tensor(I)
-    return I, A, S
-
-
 def tensor_norm(tensor):
     """Computes Frobenius norm."""
-    return (tensor**2).sum((-2, -1))
+    return (tensor**2).sum((1, 2))
 
 
 class TensorNet(nn.Module):
@@ -233,6 +298,11 @@ class TensorNet(nn.Module):
         self.linear.reset_parameters()
         self.out_norm.reset_parameters()
 
+
+    def setup_for_inference(self, z, batch):
+        self.tensor_embedding.setup_for_inference(z, batch)
+        self.inference_mode = True
+
     def forward(
         self,
         z: Tensor,
@@ -244,6 +314,22 @@ class TensorNet(nn.Module):
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
         # Obtain graph, with distances and relative position vectors
         edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
+
+        if OPT:
+            # perpare graph indices for message passing
+            row_data, row_indices, row_indptr, col_data, col_indices, col_indptr = (
+                graph_transform(edge_index.int(), z.shape[0])
+            )
+        else:
+            row_data, row_indices, row_indptr, col_data, col_indices, col_indptr = (
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+
         # This assert convinces TorchScript that edge_vec is a Tensor and not an Optional[Tensor]
         assert (
             edge_vec is not None
@@ -258,7 +344,11 @@ class TensorNet(nn.Module):
         if self.static_shapes:
             mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
             zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
-            q = torch.cat((q, torch.zeros(1, device=q.device, dtype=q.dtype)), dim=0)
+
+            if not OPT:
+                q = torch.cat(
+                    (q, torch.zeros(1, device=q.device, dtype=q.dtype)), dim=0
+                )
             # I trick the model into thinking that the masked edges pertain to the extra atom
             # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
             edge_index = edge_index.masked_fill(mask, z.shape[0])
@@ -266,22 +356,93 @@ class TensorNet(nn.Module):
             edge_vec = edge_vec.masked_fill(
                 mask[0].unsqueeze(-1).expand_as(edge_vec), 0
             )
+
         edge_attr = self.distance_expansion(edge_weight)
         mask = edge_index[0] == edge_index[1]
         # Normalizing edge vectors by their length can result in NaNs, breaking Autograd.
         # I avoid dividing by zero by setting the weight of self edges and self loops to 1
         edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
-        X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr)
+
+        graph_info = {"edge_index": edge_index}
+        graph_info.update(
+            {
+                "row_data": row_data,
+                "row_indices": row_indices,
+                "row_indptr": row_indptr,
+                "col_data": col_data,
+                "col_indices": col_indices,
+                "col_indptr": col_indptr,
+            }
+        )
+
+        X = self.tensor_embedding(
+            zp, graph_info, edge_weight, edge_vec, edge_attr
+        )  # [N, 3, 3, F]
         for layer in self.layers:
-            X = layer(X, edge_index, edge_weight, edge_attr, q)
-        I, A, S = decompose_tensor(X)
-        x = torch.cat((3 * I**2, tensor_norm(A), tensor_norm(S)), dim=-1)
-        x = self.out_norm(x)
-        x = self.act(self.linear((x)))
-        # # Remove the extra atom
-        if self.static_shapes:
-            x = x[:-1]
+            X = layer(X, graph_info, edge_weight, edge_attr, q)  # [N, 3, 3, F]
+
+        if not OPT:
+            I, A, S = decompose_tensor(X)
+            x = torch.cat((3 * I**2, tensor_norm(A), tensor_norm(S)), dim=-1)
+            x = self.out_norm(x)
+            x = self.act(self.linear((x)))
+
+            # Remove the extra atom
+            if self.static_shapes:
+                x = x[:-1]
+
+        else:
+
+            x = fn_tensor_norm3(X)
+            x = self.out_norm(x)
+            x = self.act(self.linear((x)))
+
+            # with the OPT code and static shapes there is no dummy atom in the outputs
+
         return x, None, z, pos, batch
+
+
+def tensornet_embedding_message_passing(
+    edge_vec_norm, edge_attr_processed, edge_index, num_atoms: int
+):
+    # written to mirror the optmized fn_tensornet_embedding_message_passing
+
+    E, _, F = edge_attr_processed.shape
+
+    Iij = edge_attr_processed[:, 0, :]  # [num_edges, hidden_channels]
+    Aij = edge_attr_processed[:, 1, None, :] * edge_vec_norm.unsqueeze(
+        -1
+    )  # [num_edges, 3, hidden_channels]
+    _outer = torch.matmul(
+        edge_vec_norm.unsqueeze(2), edge_vec_norm.unsqueeze(-2)
+    )  # [num_edges, 3, 3]
+    Sij = edge_attr_processed[:, 2, None, None, :] * _outer.unsqueeze(
+        -1
+    )  # [num_edges, 3, 3, hidden_channels]
+
+    source_scalar = torch.zeros(
+        num_atoms, F, device=edge_attr_processed.device, dtype=Iij.dtype
+    )
+    source_vector = torch.zeros(
+        num_atoms, 3, F, device=edge_attr_processed.device, dtype=Iij.dtype
+    )
+    source_tensor = torch.zeros(
+        num_atoms, 3, 3, F, device=edge_attr_processed.device, dtype=Iij.dtype
+    )
+    I = source_scalar.index_add(
+        dim=0, index=edge_index[0], source=Iij
+    )  # [num_atoms, hidden_channels]
+    A_vec = source_vector.index_add(
+        dim=0, index=edge_index[0], source=Aij
+    )  # [num_atoms, 3, hidden_channels]
+    S = source_tensor.index_add(
+        dim=0, index=edge_index[0], source=Sij
+    )  # [num_atoms, 3, 3, hidden_channels]
+
+    A = vector_to_skewtensor(A_vec)  # [num_atoms, 3, 3, hidden_channels]
+    S = outer_to_symtensor(S)  # [num_atoms, 3, 3, hidden_channels]
+
+    return I, A, S
 
 
 class TensorEmbedding(nn.Module):
@@ -338,84 +499,148 @@ class TensorEmbedding(nn.Module):
         for linear in self.linears_scalar:
             linear.reset_parameters()
         self.init_norm.reset_parameters()
+        self.Zij_map = None # for torchscript compatibility
+        self.inference_mode = False
+
+    def setup_for_inference(self, z, batch):
+
+        # we can precompute the edge-wise atomic embeddings
+        with torch.no_grad():
+            max_z = z.max().item()
+            _zij_map = torch.zeros((max_z + 1, max_z + 1, self.hidden_channels))
+
+            for zi in torch.unique(z):
+                Zi = self.emb(zi)
+                for zj in torch.unique(z):
+                    Zj = self.emb(zj)
+                    _zij_map[zi, zj] = self.emb2(torch.cat([Zi, Zj], dim=-1))
+
+        del self.Zij_map
+        self.register_buffer("Zij_map", _zij_map)
+        self.inference_mode = True
 
     def _get_atomic_number_message(self, z: Tensor, edge_index: Tensor) -> Tensor:
-        Z = self.emb(z)
-        Zij = self.emb2(
-            Z.index_select(0, edge_index.t().reshape(-1)).view(
-                -1, self.hidden_channels * 2
-            )
-        )
-        return Zij
 
-    def _get_tensor_messages(
-        self, Zij: Tensor, edge_weight: Tensor, edge_vec_norm: Tensor, edge_attr: Tensor
-    ) -> Tuple[Tensor, Tensor, Tensor]:
-        C = self.cutoff(edge_weight).unsqueeze(-1) * Zij  # [edge, F]
-        Iij = self.distance_proj1(edge_attr) * C  # [edge, F]
-        vec_Aij = (
-            self.distance_proj2(edge_attr)[..., None]
-            * C[..., None]
-            * edge_vec_norm[..., None, :]
-        )  # [edge, F, 3]
-        outer = torch.matmul(edge_vec_norm.unsqueeze(-1), edge_vec_norm.unsqueeze(-2))
-        Sij = (
-            self.distance_proj3(edge_attr)[..., None, None]
-            * C[..., None, None]
-            * outer[..., None, :, :]
-        )  # [edge, F, 3, 3]
-        return Iij, vec_Aij, Sij
+        if self.inference_mode:
+            Zij = self.Zij_map[z[edge_index[0]], z[edge_index[1]]]
+        else:
+            Z = self.emb(z)
+            Zij = self.emb2(
+                Z.index_select(0, edge_index.t().reshape(-1)).view(
+                    -1, self.hidden_channels * 2
+                )
+            )
+        return Zij
 
     def forward(
         self,
         z: Tensor,
-        edge_index: Tensor,
+        graph_info: dict[str, Tensor],
         edge_weight: Tensor,
         edge_vec_norm: Tensor,
         edge_attr: Tensor,
     ) -> Tensor:
-        Zij = self._get_atomic_number_message(z, edge_index)
-        Iij, Aij, Sij = self._get_tensor_messages(
-            Zij, edge_weight, edge_vec_norm, edge_attr
-        )
-        source_scalar = torch.zeros(
-            z.shape[0], self.hidden_channels, device=z.device, dtype=Iij.dtype
-        )
-        source_vector = torch.zeros(
-            z.shape[0], self.hidden_channels, 3, device=z.device, dtype=Iij.dtype
-        )
-        source_tensor = torch.zeros(
-            z.shape[0], self.hidden_channels, 3, 3, device=z.device, dtype=Iij.dtype
-        )
-        I = source_scalar.index_add(dim=0, index=edge_index[0], source=Iij)
-        A_vec = source_vector.index_add(dim=0, index=edge_index[0], source=Aij)
-        S = source_tensor.index_add(dim=0, index=edge_index[0], source=Sij)
 
-        A = vector_to_skewtensor(A_vec)
-        S = outer_to_symtensor(S)
-        X = A + S + I_to_tensor(I)
+        edge_index = graph_info["edge_index"]
+
+        Zij = self._get_atomic_number_message(
+            z, edge_index
+        )  # [num_edges, hidden_channels]
+
+        dp1 = self.distance_proj1(edge_attr)  # [num_edges, hidden_channels]
+        dp2 = self.distance_proj2(edge_attr)  # [num_edges, hidden_channels]
+        dp3 = self.distance_proj3(edge_attr)  # [num_edges, hidden_channels]
+        CZij = (
+            self.cutoff(edge_weight).unsqueeze(-1) * Zij
+        )  # [num_edges, hidden_channels]
+
+        edge_attr_processed = CZij.unsqueeze(1) * torch.stack(
+            [dp1, dp2, dp3], dim=1
+        )  # [num_edges, 3, hidden_channels]
+
+        if not OPT:
+            I, A, S = tensornet_embedding_message_passing(
+                edge_vec_norm, edge_attr_processed, edge_index, z.shape[0]
+            )  # [num_atoms, hidden_channels], [num_atoms, 3, 3, hidden_channels], [num_atoms, 3, 3, hidden_channels]
+
+        else:
+            row_indptr, row_indices, row_data = (
+                graph_info["row_indptr"],
+                graph_info["row_indices"],
+                graph_info["row_data"],
+            )
+            I, A, S = fn_tensornet_embedding_message_passing(
+                edge_vec_norm,
+                edge_attr_processed,
+                row_data,
+                row_indptr,
+            )  # [num_atoms, 1, hidden_channels], [num_atoms, 3, hidden_channels], [num_atoms, 5, hidden_channels]
+
+        X = compose_tensor(I, A, S)  # [num_atoms, 3, 3, hidden_channels]
 
         norm = self.init_norm(tensor_norm(X))
         for linear_scalar in self.linears_scalar:
             norm = self.act(linear_scalar(norm))
-        norm = norm.reshape(-1, self.hidden_channels, 3)
-        I = self.linears_tensor[0](I) * norm[..., 0]
-        A = (
-            self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-            * norm[..., 1, None, None]
-        )
-        S = (
-            self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-            * norm[..., 2, None, None]
-        )
-        X = A + S + I_to_tensor(I)
+
+        norm = norm.reshape(-1, 3, self.hidden_channels)
+
+        if not OPT:
+            I = (
+                self.linears_tensor[0](I) * norm[:, 0, :]
+            )  # [num_atoms, hidden_channels]
+            A = (
+                self.linears_tensor[1](A) * norm[:, 1, None, None, :]
+            )  # [num_atoms, 3, 3, hidden_channels]
+            S = (
+                self.linears_tensor[2](S) * norm[:, 2, None, None, :]
+            )  # [num_atoms, 3, 3, hidden_channels]
+
+        else:
+            I = (
+                self.linears_tensor[0](I) * norm[:, 0, None, :]
+            )  # [num_atoms, 1, hidden_channels]
+            A = (
+                self.linears_tensor[1](A) * norm[:, 1, None, :]
+            )  # [num_atoms, 3, hidden_channels]
+            S = (
+                self.linears_tensor[2](S) * norm[:, 2, None, :]
+            )  # [num_atoms, 5, hidden_channels]
+
+        X = compose_tensor(I, A, S)  # [num_atoms, 3, 3, hidden_channels]
+
         return X
+
+
+def tensornet_interaction_message_passing(
+    I, A, S, edge_attr_processed, edge_index, natoms
+):
+
+    # written to mirror the optimized fn_tensornet_interaction_message_passing
+
+    A_vec = skewtensor_to_vector(A)  # [num_atoms, 3, hidden_channels]
+
+    factor_scalar = edge_attr_processed[..., 0, :]
+    factor_vector = edge_attr_processed[..., 1, None, :]
+    factor_tensor = edge_attr_processed[..., 2, None, None, :]
+
+    I = scalar_message_passing(
+        edge_index, factor_scalar, I, natoms
+    )  # [num_atoms, hidden_channels]
+    A_vec = vector_message_passing(
+        edge_index, factor_vector, A_vec, natoms
+    )  # [num_atoms, 3, hidden_channels]
+    S = tensor_message_passing(
+        edge_index, factor_tensor, S, natoms
+    )  # [num_atoms, 3, 3, hidden_channels]
+
+    A = vector_to_skewtensor(A_vec)  # [num_atoms, 3, 3, hidden_channels]
+    return I, A, S
 
 
 def scalar_message_passing(
     edge_index: Tensor, factor: Tensor, tensor: Tensor, natoms: int
 ) -> Tensor:
-    msg = factor * tensor.index_select(0, edge_index[1])
+    msg = factor * tensor.index_select(0, edge_index[1])  # [num_edges, hidden_channels]
     shape = (natoms, tensor.shape[1])
     tensor_m = torch.zeros(*shape, device=tensor.device, dtype=tensor.dtype)
     tensor_m = tensor_m.index_add(0, edge_index[0], msg)
@@ -425,7 +650,9 @@ def scalar_message_passing(
 def vector_message_passing(
     edge_index: Tensor, factor: Tensor, tensor: Tensor, natoms: int
 ) -> Tensor:
-    msg = factor * tensor.index_select(0, edge_index[1])
+    msg = factor * tensor.index_select(
+        0, edge_index[1]
+    )  # [num_edges, 3, hidden_channels]
     shape = (natoms, tensor.shape[1], tensor.shape[2])
     tensor_m = torch.zeros(*shape, device=tensor.device, dtype=tensor.dtype)
     tensor_m = tensor_m.index_add(0, edge_index[0], msg)
@@ -435,7 +662,9 @@ def vector_message_passing(
 def tensor_message_passing(
     edge_index: Tensor, factor: Tensor, tensor: Tensor, natoms: int
 ) -> Tensor:
-    msg = factor * tensor.index_select(0, edge_index[1])
+    msg = factor * tensor.index_select(
+        0, edge_index[1]
+    )  # [num_edges, 3, 3, hidden_channels]
     shape = (natoms, tensor.shape[1], tensor.shape[2], tensor.shape[3])
     tensor_m = torch.zeros(*shape, device=tensor.device, dtype=tensor.dtype)
     tensor_m = tensor_m.index_add(0, edge_index[0], msg)
@@ -491,47 +720,86 @@ class Interaction(nn.Module):
     def forward(
         self,
         X: Tensor,
-        edge_index: Tensor,
+        graph_info: dict[str, Tensor],
         edge_weight: Tensor,
         edge_attr: Tensor,
         q: Tensor,
     ) -> Tensor:
+
         C = self.cutoff(edge_weight)
         for linear_scalar in self.linears_scalar:
             edge_attr = self.act(linear_scalar(edge_attr))
         edge_attr = (edge_attr * C.view(-1, 1)).reshape(
-            edge_attr.shape[0], self.hidden_channels, 3
+            edge_attr.shape[0], 3, self.hidden_channels
         )
-        X = X / (tensor_norm(X) + 1)[..., None, None]
-        I, A, S = decompose_tensor(X)
-        I = self.linears_tensor[0](I)
-        A = self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        S = self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        Y = A + S + I_to_tensor(I)
 
-        Im = scalar_message_passing(edge_index, edge_attr[..., 0], I, X.shape[0])
-        Am_vec = vector_message_passing(
-            edge_index, edge_attr[..., 1, None], skewtensor_to_vector(A), X.shape[0]
-        )
-        Sm = tensor_message_passing(
-            edge_index, edge_attr[..., 2, None, None], S, X.shape[0]
-        )
-        msg = vector_to_skewtensor(Am_vec) + Sm + I_to_tensor(Im)
+        X = X / (tensor_norm(X) + 1)[:, None, None, :]
+
+        I, A, S = decompose_tensor(
+            X
+        )  # ([num_atoms, hidden_channels], [num_atoms, 3, 3, hidden_channels], [num_atoms, 3, 3, hidden_channels])
+        # or ([num_atoms, 1, hidden_channels], [num_atoms, 3, hidden_channels], [num_atoms, 5, hidden_channels])
+
+        I = self.linears_tensor[0](I)
+        A = self.linears_tensor[1](A)
+        S = self.linears_tensor[2](S)
+        Y = compose_tensor(I, A, S)  # [num_atoms, 3, 3, hidden_channels]
+
+        if not OPT:
+            edge_index = graph_info["edge_index"]
+
+            Im, Am, Sm = tensornet_interaction_message_passing(
+                I, A, S, edge_attr, edge_index, X.shape[0]
+            )  # ([num_atoms, hidden_channels], [num_atoms, 3, 3, hidden_channels], [num_atoms, 3, 3, hidden_channels])
+
+        else:
+
+            row_data = graph_info["row_data"]
+            row_indices = graph_info["row_indices"]
+            row_indptr = graph_info["row_indptr"]
+            col_data = graph_info["col_data"]
+            col_indices = graph_info["col_indices"]
+            col_indptr = graph_info["col_indptr"]
+
+            Im, Am, Sm = fn_tensornet_interaction_message_passing(
+                I,
+                A,
+                S,
+                edge_attr,
+                col_data,
+                col_indices,
+                col_indptr,
+                row_data,
+                row_indices,
+                row_indptr,
+            )  # ([num_atoms, 1, hidden_channels], [num_atoms, 3, hidden_channels], [num_atoms, 5, hidden_channels])
+
+        msg = compose_tensor(Im, Am, Sm)  # [num_atoms, 3, 3, hidden_channels]
 
         if self.equivariance_invariance_group == "O(3)":
-            A = torch.matmul(msg, Y)
-            B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor((1 + 0.1 * q[..., None, None, None]) * (A + B))
+            C = (1 + 0.1 * q[..., None, None, None]) * tensor_matmul_o3(Y, msg)
+            I, A, S = decompose_tensor(C)
         if self.equivariance_invariance_group == "SO(3)":
-            B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor(2 * B)
+            C = 2 * tensor_matmul_so3(Y, msg)
+            I, A, S = decompose_tensor(C)
 
-        _X = A + S + I_to_tensor(I)
-        normp1 = tensor_norm(_X) + 1
-        I, A, S = I / normp1, A / normp1[..., None, None], S / normp1[..., None, None]
+        normp1 = tensor_norm(C) + 1
+
+        if not OPT:
+            I, A, S = (
+                I / normp1,
+                A / normp1[..., None, None, :],
+                S / normp1[..., None, None, :],
+            )
+        else:
+            I = I / normp1.unsqueeze(1)
+            A = A / normp1.unsqueeze(1)
+            S = S / normp1.unsqueeze(1)
+
         I = self.linears_tensor[3](I)
-        A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        dX = A + S + I_to_tensor(I)
-        X = X + dX + (1 + 0.1 * q[..., None, None, None]) * torch.matrix_power(dX, 2)
+        A = self.linears_tensor[4](A)
+        S = self.linears_tensor[5](S)
+        dX = compose_tensor(I, A, S)
+        X = X + dX + (1 + 0.1 * q[..., None, None, None]) * tensor_matmul_so3(dX, dX)
+
         return X

@@ -12,17 +12,36 @@ from torchmdnet.models.utils import (
 from warnings import warn
 
 
+import torchmdnet.models.tensornet as _tn
 from torchmdnet.models.tensornet import (
-    vector_to_skewtensor,
-    skewtensor_to_vector,
-    decompose_tensor,
-    I_to_tensor,
+    _decompose_tensor,
+    _compose_tensor,
+    _tensor_matmul_o3,
+    _tensor_matmul_so3,
     tensor_norm,
     TensorEmbedding,
-    scalar_message_passing,
-    vector_message_passing,
-    tensor_message_passing,
+    tensornet_interaction_message_passing,
 )
+
+# OPT and the warp function bindings are shared with tensornet to ensure consistency.
+# tensornet.py performs the try/except detection; we import its results here.
+OPT = _tn.OPT
+if OPT:
+    from torchmdnet.extensions.warp_ops import (
+        graph_transform,
+        fn_message_passing as fn_tensornet_interaction_message_passing,
+        fn_compose_tensor as compose_tensor,
+        fn_decompose_tensor as decompose_tensor,
+        fn_tensor_matmul_o3_3x3 as tensor_matmul_o3,
+        fn_tensor_matmul_so3_3x3 as tensor_matmul_so3,
+        fn_tensor_norm3,
+    )
+else:
+    compose_tensor = _compose_tensor
+    decompose_tensor = _decompose_tensor
+    tensor_matmul_o3 = _tensor_matmul_o3
+    tensor_matmul_so3 = _tensor_matmul_so3
+
 
 __all__ = ["TensorNet2"]
 
@@ -80,7 +99,7 @@ class ChargePredict(nn.Module):
     def qeq(self, old_charges, f, batch, Q) -> Tensor:
 
         # if we are using static shapes we can skip the last dummy atom
-        if self.static_shapes:
+        if self.static_shapes and not OPT:
             f = f[:-1]
             old_charges = old_charges[:-1]
             Q = Q[:-1]  # Q is already per atom
@@ -101,7 +120,7 @@ class ChargePredict(nn.Module):
         _f = f_u / F_u
         new_charges = old_charges + _f * dQ
 
-        if self.static_shapes:  # add back the dummy atom so shapes match
+        if self.static_shapes and not OPT:  # add back the dummy atom so shapes match
             new_charges = torch.cat(
                 (
                     new_charges,
@@ -117,9 +136,15 @@ class ChargePredict(nn.Module):
 
     def forward(self, X, batch, Q):
         I, A, S = decompose_tensor(X)
-        _charges_f = self.q_mlp(
-            self.q_norm(torch.cat((I, tensor_norm(A), tensor_norm(S)), dim=-1))
-        )
+        if not OPT:
+            _x = torch.cat((I, tensor_norm(A), tensor_norm(S)), dim=-1)
+        else:
+            # for this MLP we directly use the value of I not the norm.
+            _AS = compose_tensor(torch.zeros_like(I), A, S)
+            _AS_norm = fn_tensor_norm3(_AS)[:, I.shape[-1] :]
+            _x = torch.cat((I.squeeze(1), _AS_norm), dim=-1)
+
+        _charges_f = self.q_mlp(self.q_norm(_x))
         charges, _f = _charges_f[:, : self.q_dim], _charges_f[:, self.q_dim :]
         charges = self.qeq(charges, _f, batch, Q)
 
@@ -315,11 +340,25 @@ class TensorNet2(nn.Module):
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Tensor, Tensor, Tensor]:
+        # Obtain graph, with distances and relative position vectors
+        edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
 
         Q = q  # total molecule charge
 
-        # Obtain graph, with distances and relative position vectors
-        edge_index, edge_weight, edge_vec = self.distance(pos, batch, box)
+        if OPT:
+            # perpare graph indices for message passing
+            row_data, row_indices, row_indptr, col_data, col_indices, col_indptr = (
+                graph_transform(edge_index.int(), z.shape[0])
+            )
+        else:
+            row_data, row_indices, row_indptr, col_data, col_indices, col_indptr = (
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
 
         # This assert convinces TorchScript that edge_vec is a Tensor and not an Optional[Tensor]
         assert (
@@ -334,7 +373,11 @@ class TensorNet2(nn.Module):
         if self.static_shapes:
             mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
             zp = torch.cat((z, torch.zeros(1, device=z.device, dtype=z.dtype)), dim=0)
-            Q = torch.cat((Q, torch.zeros(1, device=Q.device, dtype=Q.dtype)), dim=0)
+
+            if not OPT:
+                Q = torch.cat(
+                    (Q, torch.zeros(1, device=Q.device, dtype=Q.dtype)), dim=0
+                )
             # I trick the model into thinking that the masked edges pertain to the extra atom
             # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
             edge_index = edge_index.masked_fill(mask, z.shape[0])
@@ -347,7 +390,20 @@ class TensorNet2(nn.Module):
         # Normalizing edge vectors by their length can result in NaNs, breaking Autograd.
         # I avoid dividing by zero by setting the weight of self edges and self loops to 1
         edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
-        X = self.tensor_embedding(zp, edge_index, edge_weight, edge_vec, edge_attr)
+
+        graph_info = {"edge_index": edge_index}
+        graph_info.update(
+            {
+                "row_data": row_data,
+                "row_indices": row_indices,
+                "row_indptr": row_indptr,
+                "col_data": col_data,
+                "col_indices": col_indices,
+                "col_indptr": col_indptr,
+            }
+        )
+
+        X = self.tensor_embedding(zp, graph_info, edge_weight, edge_vec, edge_attr)
 
         # from the initial embedding we compute some partial charges
         charges_0 = self.charge_predict_0(X, batch, Q)
@@ -361,7 +417,7 @@ class TensorNet2(nn.Module):
             zip(self.layers, self.charge_predicts)
         ):
             # updated node tensor feratures
-            X = layer(X, old_charges, edge_index, edge_weight, edge_attr)
+            X = layer(X, old_charges, graph_info, edge_weight, edge_attr)
 
             # predict new charges
             new_charges = charge_predictor(X, batch, Q)
@@ -371,18 +427,29 @@ class TensorNet2(nn.Module):
         # we will have (l+1 * qdim) charges for each node
         charges = torch.cat(charge_list, dim=-1)
 
-        I, A, S = decompose_tensor(X)
-        x = torch.cat((3 * I**2, tensor_norm(A), tensor_norm(S)), dim=-1)
-        x = self.out_norm(x)
-        x = self.act(self.linear((x)))
+        if not OPT:
+            I, A, S = decompose_tensor(X)
+            x = torch.cat((3 * I**2, tensor_norm(A), tensor_norm(S)), dim=-1)
+            x = self.out_norm(x)
+            x = self.act(self.linear((x)))
 
-        # append charges for coulomb in output module
-        if self.output_charges:
-            x = torch.cat([x, charges], dim=-1)
+            # append charges for coulomb in output module
+            if self.output_charges:
+                x = torch.cat([x, charges], dim=-1)
 
-        # Remove the extra atom
-        if self.static_shapes:
-            x = x[:-1]
+            # Remove the extra atom
+            if self.static_shapes:
+                x = x[:-1]
+
+        else:
+            x = fn_tensor_norm3(X)
+            x = self.out_norm(x)
+            x = self.act(self.linear((x)))
+
+            # append charges for coulomb in output module
+            if self.output_charges:
+                x = torch.cat([x, charges], dim=-1)
+
         return x, None, z, pos, batch
 
 
@@ -443,16 +510,35 @@ class Interaction(nn.Module):
         self,
         X: Tensor,
         charges: Tensor,
-        edge_index: Tensor,
+        graph_info: dict[str, Tensor],
         edge_weight: Tensor,
         edge_attr: Tensor,
     ) -> Tensor:
 
         C = self.cutoff(edge_weight)
 
+        edge_index = graph_info["edge_index"]
+
         # add the partial charges as edge features and then do a normal tensornet update
-        charge_edges_i = charges.index_select(0, edge_index[0])
-        charge_edges_j = charges.index_select(0, edge_index[1])
+
+        if OPT:  # TODO: and static shapes
+            # add a dummy atom to the charges so we can do index select correctly with static shapes
+            _charges = torch.cat(
+                (
+                    charges,
+                    torch.zeros(
+                        1, charges.shape[1], device=charges.device, dtype=charges.dtype
+                    ),
+                ),
+                dim=0,
+            )
+
+            charge_edges_i = _charges.index_select(0, edge_index[0])
+            charge_edges_j = _charges.index_select(0, edge_index[1])
+        else:
+            charge_edges_i = charges.index_select(0, edge_index[0])
+            charge_edges_j = charges.index_select(0, edge_index[1])
+
         x_edge_attr = torch.cat([edge_attr, charge_edges_i, charge_edges_j], dim=-1)
 
         for linear_scalar in self.linears_scalar:
@@ -461,41 +547,70 @@ class Interaction(nn.Module):
             x_edge_attr.shape[0], 3, self.hidden_channels
         )
 
-        X = X / (tensor_norm(X) + 1)[..., None, None]
-        I, A, S = decompose_tensor(X)
-        I = self.linears_tensor[0](I)  # scalar
-        A = self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)  # tensor
-        S = self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)  # tensor
-        Y = A + S + I_to_tensor(I)
+        X = X / (tensor_norm(X) + 1)[:, None, None, :]
 
-        Im = scalar_message_passing(
-            edge_index, x_edge_attr[..., 0, :], I, X.shape[0]
-        )  # scalar
-        Am_vec = vector_message_passing(
-            edge_index,
-            x_edge_attr[..., 1, :, None],
-            skewtensor_to_vector(A),  # tensor -> vector
-            X.shape[0],
-        )  # vector
-        Sm = tensor_message_passing(
-            edge_index, x_edge_attr[..., 2, :, None, None], S, X.shape[0]
-        )  # tensor
-        msg = vector_to_skewtensor(Am_vec) + Sm + I_to_tensor(Im)
+        I, A, S = decompose_tensor(X)
+
+        I = self.linears_tensor[0](I)
+        A = self.linears_tensor[1](A)
+        S = self.linears_tensor[2](S)
+        Y = compose_tensor(I, A, S)
+
+        if not OPT:
+            edge_index = graph_info["edge_index"]
+
+            Im, Am, Sm = tensornet_interaction_message_passing(
+                I, A, S, x_edge_attr, edge_index, X.shape[0]
+            )
+
+        else:
+
+            row_data = graph_info["row_data"]
+            row_indices = graph_info["row_indices"]
+            row_indptr = graph_info["row_indptr"]
+            col_data = graph_info["col_data"]
+            col_indices = graph_info["col_indices"]
+            col_indptr = graph_info["col_indptr"]
+
+            Im, Am, Sm = fn_tensornet_interaction_message_passing(
+                I,
+                A,
+                S,
+                x_edge_attr,
+                row_data,
+                row_indices,
+                row_indptr,
+                col_data,
+                col_indices,
+                col_indptr,
+            )
+
+        msg = compose_tensor(Im, Am, Sm)
 
         if self.equivariance_invariance_group == "O(3)":
-            A = torch.matmul(msg, Y)
-            B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor((A + B))
+            C = tensor_matmul_o3(Y, msg)
+            I, A, S = decompose_tensor(C)
         if self.equivariance_invariance_group == "SO(3)":
-            B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor(2 * B)
+            C = 2 * tensor_matmul_so3(Y, msg)
+            I, A, S = decompose_tensor(C)
 
-        _X = A + S + I_to_tensor(I)
-        normp1 = tensor_norm(_X) + 1
-        I, A, S = I / normp1, A / normp1[..., None, None], S / normp1[..., None, None]
+        normp1 = tensor_norm(C) + 1
+
+        if not OPT:
+            I, A, S = (
+                I / normp1,
+                A / normp1[..., None, None, :],
+                S / normp1[..., None, None, :],
+            )
+        else:
+            I = I / normp1.unsqueeze(1)
+            A = A / normp1.unsqueeze(1)
+            S = S / normp1.unsqueeze(1)
+
         I = self.linears_tensor[3](I)
-        A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        dX = A + S + I_to_tensor(I)
-        X = X + dX + torch.matrix_power(dX, 2)
+        A = self.linears_tensor[4](A)
+        S = self.linears_tensor[5](S)
+        dX = compose_tensor(I, A, S)
+        X = X + dX + tensor_matmul_so3(dX, dX)
+
         return X
