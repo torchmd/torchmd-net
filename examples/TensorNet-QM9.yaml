@@ -36,7 +36,7 @@ ngpus: -1
 num_epochs: 3000
 num_layers: 3
 num_nodes: 1
-num_rbf: 64
+num_rbf: 32
 num_workers: 6
 output_model: Scalar
 precision: 32
@@ -57,3 +57,5 @@ weight_decay: 0.0
 box_vecs: null
 charge: false
 spin: false
+static_shapes: false
+check_errors: true

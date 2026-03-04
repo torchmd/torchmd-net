@@ -210,12 +210,17 @@ class TMDNETCalculator(ase_calc.Calculator):
 
         ase_calc.Calculator.__init__(self)
         self.device = device
+        self.remove_ref_energy = kwargs.pop("remove_ref_energy", True)
+        self.max_num_neighbors = kwargs.pop("max_num_neighbors", 64)
+        self.static_shapes = True if compile else False
+        self.model_file = model_file
+        self.model_kwargs = kwargs
         self.model = load_model(
-            model_file,
+            self.model_file,
             derivative=False,
-            remove_ref_energy=kwargs.get("remove_ref_energy", True),
-            max_num_neighbors=kwargs.get("max_num_neighbors", 64),
-            static_shapes=True if compile else False,
+            remove_ref_energy=self.remove_ref_energy,
+            max_num_neighbors=self.max_num_neighbors,
+            static_shapes=self.static_shapes,
             **kwargs,
         )
         for parameter in self.model.parameters():
@@ -262,6 +267,11 @@ class TMDNETCalculator(ase_calc.Calculator):
         positions = atoms.positions
         total_charge = atoms.info["charge"]
         batch = [0 for _ in range(len(numbers))]
+        if atoms.pbc.any():
+            cell = atoms.cell.array
+            box = torch.tensor(cell, device=self.device, dtype=torch.float32)
+        else:
+            box = None
 
         batch = torch.tensor(batch, device=self.device, dtype=torch.long)
         numbers = torch.tensor(numbers, device=self.device, dtype=torch.long)
@@ -282,7 +292,7 @@ class TMDNETCalculator(ase_calc.Calculator):
             # This is needed because torch.compile doesn't support .item() calls
             self.model.to(self.device)
             with torch.no_grad():
-                _ = self.model(numbers, positions, batch=batch, q=total_charge)
+                _ = self.model(numbers, positions, batch=batch, q=total_charge, box=box)
 
             self.compiled_model = torch.compile(
                 self.model,
@@ -295,10 +305,12 @@ class TMDNETCalculator(ase_calc.Calculator):
 
         if self.compiled:
             energy, _ = self.compiled_model(
-                numbers, positions, batch=batch, q=total_charge
+                numbers, positions, batch=batch, q=total_charge, box=box
             )
         else:
-            energy, _ = self.model(numbers, positions, batch=batch, q=total_charge)
+            energy, _ = self.model(
+                numbers, positions, batch=batch, q=total_charge, box=box
+            )
 
         energy.backward()
         forces = -positions.grad

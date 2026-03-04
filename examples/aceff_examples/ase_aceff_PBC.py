@@ -13,10 +13,16 @@ model_file_path = hf_hub_download(
     repo_id="Acellera/AceFF-2.0", filename="aceff_v2.0.ckpt"
 )
 
-
 # We create the ASE calculator by supplying the path to the model and specifying the device and dtype
-calc = TMDNETCalculator(model_file_path, device="cuda", max_num_neighbors=24)
-atoms = read("caffeine.pdb")
+# we provided a cutoff for the coulomb term so we can use PBCs
+calc = TMDNETCalculator(
+    model_file_path,
+    device="cuda",
+    coulomb_cutoff=10.0,
+)
+atoms = read("alanine-dipeptide-explicit.pdb")
+
+
 print(atoms)
 
 atoms.calc = calc
@@ -30,20 +36,6 @@ forces = atoms.get_forces()
 print(forces)
 
 
-# We can use all the normal ASE methods
-
-# Energy minimization
-from ase.optimize import LBFGS
-
-# displace the atoms to a high energy
-atoms.rattle(0.1)
-print("Initial energy:", atoms.get_potential_energy())
-
-dyn = LBFGS(atoms)
-dyn.run()
-print("Minimized energy:", atoms.get_potential_energy())
-
-
 # Molecular dynamics
 from ase import units
 from ase.md.langevin import Langevin
@@ -52,11 +44,11 @@ from ase.md import MDLogger
 
 # setup MD
 temperature_K: float = 300
-timestep: float = 1.0 * units.fs
+timestep: float = 0.5 * units.fs
 friction: float = 0.01 / units.fs
-traj_interval: int = 1000
-log_interval: int = 100
-nsteps: int = 1000
+traj_interval: int = 10
+log_interval: int = 10
+nsteps: int = 100
 
 dyn = Langevin(atoms, timestep, temperature_K=temperature_K, friction=friction)
 dyn.attach(lambda: ase.io.write("traj.xyz", atoms, append=True), interval=traj_interval)
@@ -67,19 +59,3 @@ dyn.attach(MDLogger(dyn, atoms, sys.stdout), interval=log_interval)
 t1 = time.perf_counter()
 dyn.run(steps=nsteps)
 t2 = time.perf_counter()
-
-print(f"Completed MD in {t2 - t1:.1f} s ({(t2 - t1)*1000 / nsteps:.3f} ms/step)")
-
-
-# Now we can do the same but enabling torch.compile for increased speed
-calc = TMDNETCalculator(model_file_path, device="cuda", compile=True)
-
-atoms.calc = calc
-
-# Run more dynamics
-dyn.run(steps=10)  # warmup before timing
-t1 = time.perf_counter()
-dyn.run(steps=nsteps)
-t2 = time.perf_counter()
-
-print(f"Completed MD in {t2 - t1:.1f} s ({(t2 - t1)*1000 / nsteps:.3f} ms/step)")
