@@ -15,8 +15,13 @@ model_file_path = hf_hub_download(
 
 # We create the ASE calculator by supplying the path to the model and specifying the device and dtype
 # we provided a cutoff for the coulomb term so we can use PBCs
-calc = TMDNETCalculator(model_file_path, device="cuda", coulomb_cutoff=10.0)
+calc = TMDNETCalculator(
+    model_file_path,
+    device="cuda",
+    coulomb_cutoff=10.0,
+)
 atoms = read("alanine-dipeptide-explicit.pdb")
+
 
 print(atoms)
 
@@ -39,7 +44,7 @@ from ase.md import MDLogger
 
 # setup MD
 temperature_K: float = 300
-timestep: float = 1.0 * units.fs
+timestep: float = 0.5 * units.fs
 friction: float = 0.01 / units.fs
 traj_interval: int = 10
 log_interval: int = 10
@@ -54,5 +59,3 @@ dyn.attach(MDLogger(dyn, atoms, sys.stdout), interval=log_interval)
 t1 = time.perf_counter()
 dyn.run(steps=nsteps)
 t2 = time.perf_counter()
-
-print(f"Completed MD in {t2 - t1:.1f} s ({(t2 - t1)*1000 / nsteps:.3f} ms/step)")
