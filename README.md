@@ -13,10 +13,14 @@ Documentation is available at https://torchmd-net.readthedocs.io
 
 ## Available architectures
 
+- [TensorNet](https://arxiv.org/abs/2306.06482)
+- [TensorNet2](https://arxiv.org/abs/2601.00581)
+
+### Deprecated 
+
 - [Equivariant Transformer (ET)](https://arxiv.org/abs/2202.02541)
 - [Transformer (T)](https://arxiv.org/abs/2202.02541)
 - [Graph Neural Network (GN)](https://arxiv.org/abs/2212.07492)
-- [TensorNet](https://arxiv.org/abs/2306.06482)
 
 
 
