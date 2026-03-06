@@ -535,6 +535,11 @@ class ScalarPlusWeightedCoulomb(OutputModel):
             edge_index, edge_weight, _ = self.distance(pos, batch, box=box)
 
             if self.static_shapes:
+                # -1 in edge index need to be mapped to an extra dummy atom
+                mask = (edge_index[0] < 0).unsqueeze(0).expand_as(edge_index)
+                edge_index = edge_index.masked_fill(mask, z.shape[0])
+                edge_weight = edge_weight.masked_fill(mask[0], 0)
+
                 # we need a dummy atom
                 charges = torch.cat(
                     [
