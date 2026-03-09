@@ -20,8 +20,7 @@ def _neighbor_brute_kernel(
     pos_ptr,
     batch_ptr,
     box_ptr,
-    neighbors0_ptr,
-    neighbors1_ptr,
+    neighbors_ptr,
     deltas_ptr,
     distances_ptr,
     counter_ptr,
@@ -138,8 +137,9 @@ def _neighbor_brute_kernel(
 
     write_idx = start_idx + local_idx
     mask_store = valid & (write_idx < max_pairs)
-    tl.store(neighbors0_ptr + write_idx, i, mask=mask_store)
-    tl.store(neighbors1_ptr + write_idx, j, mask=mask_store)
+    neighbors_1_offset = max_pairs
+    tl.store(neighbors_ptr + write_idx, i, mask=mask_store)
+    tl.store(neighbors_ptr + neighbors_1_offset + write_idx, j, mask=mask_store)
     tl.store(deltas_ptr + write_idx * 3 + 0, dx, mask=mask_store)
     tl.store(deltas_ptr + write_idx * 3 + 1, dy, mask=mask_store)
     tl.store(deltas_ptr + write_idx * 3 + 2, dz, mask=mask_store)
@@ -155,8 +155,10 @@ def _neighbor_brute_kernel(
 
         write_idx_t = start_idx + total_pairs + local_idx_t
         mask_store_t = valid_transpose & (write_idx_t < max_pairs)
-        tl.store(neighbors0_ptr + write_idx_t, j, mask=mask_store_t)
-        tl.store(neighbors1_ptr + write_idx_t, i, mask=mask_store_t)
+
+        neighbors_1_offset = max_pairs
+        tl.store(neighbors_ptr + write_idx_t, j, mask=mask_store_t)
+        tl.store(neighbors_ptr + neighbors_1_offset + write_idx_t, i, mask=mask_store_t)
         tl.store(deltas_ptr + write_idx_t * 3 + 0, -dx, mask=mask_store_t)
         tl.store(deltas_ptr + write_idx_t * 3 + 1, -dy, mask=mask_store_t)
         tl.store(deltas_ptr + write_idx_t * 3 + 2, -dz, mask=mask_store_t)
@@ -209,8 +211,7 @@ def triton_neighbor_bruteforce(
         positions,
         batch,
         box_vectors if use_periodic else positions,  # dummy pointer if not periodic
-        neighbors[0],
-        neighbors[1],
+        neighbors,
         deltas,
         distances,
         num_pairs,
