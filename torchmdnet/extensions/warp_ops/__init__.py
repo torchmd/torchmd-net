@@ -36,6 +36,7 @@ from .decompose_tensor import fn_decompose_tensor
 from .equivariant_o3_matmul import fn_tensor_matmul_o3_3x3
 from .equivariant_so3_matmul import fn_tensor_matmul_so3_3x3
 from .graph_transform import graph_transform
+from .neighbors import warp_neighbor_pairs
 from .tensor_norm3 import fn_tensor_norm3
 from .tensornet_mp import fn_message_passing
 from .tensornet_radial_mp import fn_radial_message_passing
@@ -47,9 +48,9 @@ __all__ = [
     "fn_decompose_tensor",
     "fn_message_passing",
     "fn_radial_message_passing",
-    "fn_radial_message_passing",
     "fn_tensor_matmul_o3_3x3",
     "fn_tensor_matmul_so3_3x3",
     "fn_tensor_norm3",
     "graph_transform",
+    "warp_neighbor_pairs",
 ]

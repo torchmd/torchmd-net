@@ -18,6 +18,13 @@ from torchmdnet.extensions.neighbors_cpu_mem import (
 )
 
 try:
+    from torchmdnet.extensions.warp_ops.neighbors import warp_neighbor_pairs
+
+    HAS_WARP = True
+except ImportError:
+    HAS_WARP = False
+
+try:
     import triton
     from torchmdnet.extensions.triton_neighbors import triton_neighbor_pairs
 
@@ -29,6 +36,9 @@ except ImportError:
 # Use memory-efficient implementation in CI to reduce memory usage during tests
 USE_MEMORY_EFFICIENT = os.environ.get("TMDNET_MEM_EFFICIENT_CPU_NEIGHBORS") == "1"
 
+# Override the GPU neighbor backend: "warp", "triton", or "torch".
+# When unset the default priority is warp > triton > torch.
+NEIGHBOR_BACKEND = os.environ.get("TMDNET_NEIGHBOR_BACKEND", "").lower()
 
 logger = logging.getLogger(__name__)
 
@@ -116,24 +126,8 @@ def get_neighbor_pairs_kernel(
             include_transpose=include_transpose,
         )
 
-    if not HAS_TRITON:
-        logger.warning(
-            "Triton is not available, using torch version of the neighbor pairs kernel."
-        )
-        return torch_neighbor_bruteforce(
-            positions,
-            batch=batch,
-            box_vectors=box_vectors,
-            use_periodic=use_periodic,
-            cutoff_lower=cutoff_lower,
-            cutoff_upper=cutoff_upper,
-            max_num_pairs=max_num_pairs,
-            loop=loop,
-            include_transpose=include_transpose,
-        )
-
-    return triton_neighbor_pairs(
-        strategy,
+    _warp_args = dict(
+        strategy=strategy,
         positions=positions,
         batch=batch,
         box_vectors=box_vectors,
@@ -145,3 +139,43 @@ def get_neighbor_pairs_kernel(
         include_transpose=include_transpose,
         num_cells=num_cells,
     )
+    _torch_args = dict(
+        positions=positions,
+        batch=batch,
+        box_vectors=box_vectors,
+        use_periodic=use_periodic,
+        cutoff_lower=cutoff_lower,
+        cutoff_upper=cutoff_upper,
+        max_num_pairs=max_num_pairs,
+        loop=loop,
+        include_transpose=include_transpose,
+    )
+
+    if NEIGHBOR_BACKEND == "warp":
+        if not HAS_WARP:
+            raise RuntimeError(
+                "TMDNET_NEIGHBOR_BACKEND='warp' but warp-lang is not installed"
+            )
+        return warp_neighbor_pairs(**_warp_args)
+
+    if NEIGHBOR_BACKEND == "triton":
+        if not HAS_TRITON:
+            raise RuntimeError(
+                "TMDNET_NEIGHBOR_BACKEND='triton' but triton is not installed"
+            )
+        return triton_neighbor_pairs(**_warp_args)
+
+    if NEIGHBOR_BACKEND == "torch":
+        return torch_neighbor_bruteforce(**_torch_args)
+
+    # Default priority: warp > triton > torch
+    if HAS_WARP:
+        return warp_neighbor_pairs(**_warp_args)
+
+    if HAS_TRITON:
+        return triton_neighbor_pairs(**_warp_args)
+
+    logger.warning(
+        "Neither Warp nor Triton is available, using torch version of the neighbor pairs kernel."
+    )
+    return torch_neighbor_bruteforce(**_torch_args)

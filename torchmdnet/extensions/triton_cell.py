@@ -11,19 +11,11 @@ from torchmdnet.extensions.triton_neighbors import (
     neighbor_grad_positions,
     neighbor_op_setup_context,
 )
+from torchmdnet.extensions.neighbor_utils import (
+    get_cell_dimensions as _get_cell_dimensions,
+    build_cell_list,
+)
 from torch.library import triton_op, wrap_triton
-
-
-def _get_cell_dimensions(
-    box_x: torch.float32,
-    box_y: torch.float32,
-    box_z: torch.float32,
-    cutoff_upper: torch.float32,
-) -> int:
-    nx = torch.floor(box_x / cutoff_upper).clamp(min=3).long()
-    ny = torch.floor(box_y / cutoff_upper).clamp(min=3).long()
-    nz = torch.floor(box_z / cutoff_upper).clamp(min=3).long()
-    return torch.stack([nx, ny, nz])
 
 
 @triton.jit
@@ -283,80 +275,6 @@ def cell_neighbor_kernel(
 
                 neighbor_batch_start += BATCH_SIZE
             home_batch_start += BATCH_SIZE
-
-
-def build_cell_list(
-    positions: Tensor,
-    batch: Tensor,
-    box_sizes: Tensor,  # [3] diagonal elements
-    use_periodic: bool,
-    cell_dims: Tensor,  # [3] number of cells in each dimension
-    num_cells: int,  # total number of cells (fixed for CUDA graphs)
-) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-    """
-    Build the cell list data structure using 1D sorted arrays.
-
-    Args:
-        positions: [N, 3] atom positions
-        batch: [N] batch indices
-        box_sizes: [3] box diagonal elements
-        use_periodic: whether to use periodic boundary conditions
-        cell_dims: [3] number of cells in each dimension (pre-computed)
-        num_cells: total number of cells (pre-computed, fixed for CUDA graphs)
-
-    Returns:
-        sorted_indices: [n_atoms] - original atom indices, sorted by cell
-        sorted_positions: [n_atoms, 3] - positions sorted by cell (for coalesced access)
-        sorted_batch: [n_atoms] - batch indices sorted by cell
-        cell_start: [num_cells] - start index in sorted arrays for each cell
-        cell_end: [num_cells] - end index (exclusive) in sorted arrays for each cell
-    """
-    device = positions.device
-    n_atoms = positions.size(0)
-
-    # Compute cell index for each atom
-    if use_periodic:
-        # Wrap to [0, box)
-        inv_box = 1.0 / box_sizes
-        wrapped = positions - torch.floor(positions * inv_box) * box_sizes
-    else:
-        # Shift by half box (like CUDA implementation)
-        wrapped = positions + 0.5 * box_sizes
-
-    # Cell coordinates
-    cell_size = box_sizes / cell_dims.float()
-    cell_coords = (wrapped / cell_size).long()
-    cell_coords = torch.clamp(
-        cell_coords, min=torch.zeros(3, device=device), max=cell_dims - 1
-    )
-
-    # Flat cell index
-    cell_idx = (
-        cell_coords[:, 0] * (cell_dims[1] * cell_dims[2])
-        + cell_coords[:, 1] * cell_dims[2]
-        + cell_coords[:, 2]
-    ).long()
-
-    # Sort atoms by cell index
-    sorted_cell_idx, sort_order = torch.sort(cell_idx)
-    sorted_indices = sort_order.int()  # Original atom indices, now sorted by cell
-
-    # Create sorted positions and batch for coalesced memory access
-    sorted_positions = positions.index_select(0, sort_order).contiguous()
-    sorted_batch = batch.index_select(0, sort_order).contiguous()
-
-    # Count atoms per cell
-    cell_counts = torch.zeros(num_cells, dtype=torch.int32, device=device)
-    cell_counts.scatter_add_(
-        0, cell_idx, torch.ones(n_atoms, dtype=torch.int32, device=device)
-    )
-
-    # Compute cell_start and cell_end using cumsum
-    cell_end = torch.cumsum(cell_counts, dim=0).int()
-    cell_start = torch.zeros(num_cells, dtype=torch.int32, device=device)
-    cell_start[1:] = cell_end[:-1]
-
-    return sorted_indices, sorted_positions, sorted_batch, cell_start, cell_end
 
 
 @triton_op("torchmdnet::triton_neighbor_cell", mutates_args={})
