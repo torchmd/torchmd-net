@@ -36,6 +36,8 @@ from .decompose_tensor import generate_decompose_tensor
 from .equivariant_o3_matmul import generate_tensor_matmul_o3_3x3
 from .equivariant_so3_matmul import generate_tensor_matmul_so3_3x3
 from .graph_transform import convert_to_sparse, count_row_col
+from .neighbors_brute import generate_neighbors_brute
+from .neighbors_cell import generate_neighbors_cell
 from .tensor_norm3 import generate_tensor_norm3
 from .tensornet_mp import generate_message_passing
 from .tensornet_radial_mp import generate_radial_message_passing
@@ -46,16 +48,13 @@ wp.init()
 
 __all__ = [
     "add_module",
-    "add_module",
     "convert_to_sparse",
-    "convert_to_sparse",
-    "count_row_col",
     "count_row_col",
     "generate_compose_tensor",
     "generate_decompose_tensor",
     "generate_message_passing",
-    "generate_message_passing",
-    "generate_radial_message_passing",
+    "generate_neighbors_brute",
+    "generate_neighbors_cell",
     "generate_radial_message_passing",
     "generate_tensor_matmul_o3_3x3",
     "generate_tensor_matmul_so3_3x3",

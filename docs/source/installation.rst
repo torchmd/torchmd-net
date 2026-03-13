@@ -24,9 +24,6 @@ We recommend using `Miniforge <https://github.com/conda-forge/miniforge/>`_ inst
    CUDA=12.6 mamba install torchmd-net cuda-version=${CUDA} -c conda-forge
 
 Again here CUDA can be replaced with any version supported by the current pytorch version.
-When installing with conda it will not automatically install Triton which is used for speeding out
-neighbor calculations as it only exist on conda for Linux. If you are running on Linux and want the full
-performance of torchmd-net also run `mamba install triton -c conda-forge`
 
 
 Install from source

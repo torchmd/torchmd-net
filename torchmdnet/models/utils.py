@@ -222,9 +222,9 @@ class OptimizedDistance(torch.nn.Module):
         self.register_buffer("box", box, persistent=True)
 
         if self.strategy == "cell":
-            from torchmdnet.extensions.triton_cell import _get_cell_dimensions
+            from torchmdnet.extensions.neighbor_utils import get_cell_dimensions
 
-            cell_dims = _get_cell_dimensions(
+            cell_dims = get_cell_dimensions(
                 self.box[0, 0], self.box[1, 1], self.box[2, 2], cutoff_upper
             )
             self.num_cells = int(cell_dims.prod())
