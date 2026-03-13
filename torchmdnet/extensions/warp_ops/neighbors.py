@@ -173,7 +173,8 @@ def _brute_setup_context(ctx, inputs, output):
     ctx.num_atoms = positions.size(0)
 
 
-def _brute_backward(ctx, grad_neighbors, grad_deltas, grad_distances, grad_num_pairs):
+def _brute_backward(ctx, grads):
+    _, grad_deltas, grad_distances, _ = grads
     grad_positions = neighbor_grad_positions(ctx, grad_deltas, grad_distances)
     return grad_positions, None, None, None, None, None, None, None, None
 
@@ -314,7 +315,8 @@ def _cell_setup_context(ctx, inputs, output):
     ctx.num_atoms = positions.size(0)
 
 
-def _cell_backward(ctx, grad_neighbors, grad_deltas, grad_distances, grad_num_pairs):
+def _cell_backward(ctx, grads):
+    _, grad_deltas, grad_distances, _ = grads
     grad_positions = neighbor_grad_positions(ctx, grad_deltas, grad_distances)
     return grad_positions, None, None, None, None, None, None, None, None, None
 
