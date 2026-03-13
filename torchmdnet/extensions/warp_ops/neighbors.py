@@ -31,7 +31,7 @@ from torchmdnet.extensions.warp_kernels import get_module, get_stream
 @torch.library.custom_op(
     "torchmdnet::warp_neighbor_brute_fwd",
     mutates_args=(),
-    device_types=["cuda"],
+    device_types=["cuda", "cpu"],
 )
 def warp_neighbor_brute_fwd(
     positions: Tensor,
@@ -194,7 +194,7 @@ torch.library.register_autograd(
 @torch.library.custom_op(
     "torchmdnet::warp_neighbor_cell_fwd",
     mutates_args=(),
-    device_types=["cuda"],
+    device_types=["cuda", "cpu"],
 )
 def warp_neighbor_cell_fwd(
     positions: Tensor,
@@ -421,8 +421,6 @@ def warp_neighbor_pairs(
     num_cells: int,
 ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
     """Dispatch to the appropriate Warp neighbor list kernel."""
-    if positions.device.type != "cuda":
-        raise RuntimeError("Warp neighbor list requires CUDA tensors")
     if positions.dtype not in (torch.float32, torch.float64):
         raise RuntimeError("Unsupported dtype for Warp neighbor list")
 
