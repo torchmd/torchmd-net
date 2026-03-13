@@ -87,31 +87,61 @@ def warp_neighbor_brute_fwd(
     distances_wp = wp.from_torch(distances.detach(), return_ctype=True)
     counter_wp = wp.from_torch(num_pairs.detach(), return_ctype=True)
 
-    kernel = get_module("neighbors_brute_fwd", [str(dtype)])
-    wp.launch(
-        kernel,
-        dim=(num_all_pairs,),
-        stream=stream,
-        device=wp_device,
-        inputs=(
-            pos_wp,
-            batch_wp,
-            box_wp,
-            neighbors_wp,
-            deltas_wp,
-            distances_wp,
-            counter_wp,
-            n_atoms,
-            num_all_pairs,
-            max_num_pairs,
-            box_batch_stride,
-            1 if use_periodic else 0,
-            1 if include_transpose else 0,
-            1 if loop else 0,
-            cutoff_lower**2,
-            cutoff_upper**2,
-        ),
-    )
+    if num_all_pairs <= 2**31 - 1:
+        kernel = get_module("neighbors_brute_fwd", [str(dtype)])
+        wp.launch(
+            kernel,
+            dim=(num_all_pairs,),
+            stream=stream,
+            device=wp_device,
+            inputs=(
+                pos_wp,
+                batch_wp,
+                box_wp,
+                neighbors_wp,
+                deltas_wp,
+                distances_wp,
+                counter_wp,
+                n_atoms,
+                num_all_pairs,
+                max_num_pairs,
+                box_batch_stride,
+                1 if use_periodic else 0,
+                1 if include_transpose else 0,
+                1 if loop else 0,
+                cutoff_lower**2,
+                cutoff_upper**2,
+            ),
+        )
+    else:
+        _GRID_DIM_Y = 32768
+        grid_y = min(num_all_pairs, _GRID_DIM_Y)
+        grid_x = (num_all_pairs + grid_y - 1) // grid_y
+        kernel = get_module("neighbors_brute_fwd_i64", [str(dtype)])
+        wp.launch(
+            kernel,
+            dim=(grid_x, grid_y),
+            stream=stream,
+            device=wp_device,
+            inputs=(
+                pos_wp,
+                batch_wp,
+                box_wp,
+                neighbors_wp,
+                deltas_wp,
+                distances_wp,
+                counter_wp,
+                n_atoms,
+                max_num_pairs,
+                box_batch_stride,
+                1 if use_periodic else 0,
+                1 if include_transpose else 0,
+                1 if loop else 0,
+                cutoff_lower**2,
+                cutoff_upper**2,
+                grid_y,
+            ),
+        )
 
     return [neighbors, deltas, distances, num_pairs]
 
