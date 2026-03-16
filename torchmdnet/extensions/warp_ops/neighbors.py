@@ -7,6 +7,7 @@ and autograd support via the shared PyTorch backward in neighbor_utils.
 
 from __future__ import annotations
 
+import os
 from typing import Tuple
 
 import torch
@@ -21,6 +22,10 @@ from torchmdnet.extensions.neighbor_utils import (
     neighbor_op_setup_context,
 )
 from torchmdnet.extensions.warp_kernels import get_module, get_stream
+
+# Atom-count threshold for the "auto" strategy: use brute below this,
+# cell at or above.  Override with ``TORCHMDNET_NL_THRESHOLD``.
+NL_THRESHOLD: int = int(os.environ.get("TORCHMDNET_NL_THRESHOLD", "9000"))
 
 
 # ---------------------------------------------------------------------------
@@ -420,9 +425,17 @@ def warp_neighbor_pairs(
     include_transpose: bool,
     num_cells: int,
 ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
-    """Dispatch to the appropriate Warp neighbor list kernel."""
+    """Dispatch to the appropriate Warp neighbor list kernel.
+
+    When *strategy* is ``"auto"``, the function chooses between brute-force and
+    cell-list based on the total number of atoms vs. :data:`NL_THRESHOLD`
+    (overridable via the ``TORCHMDNET_NL_THRESHOLD`` environment variable).
+    """
     if positions.dtype not in (torch.float32, torch.float64):
         raise RuntimeError("Unsupported dtype for Warp neighbor list")
+
+    if strategy == "auto":
+        strategy = "cell" if positions.shape[0] >= NL_THRESHOLD else "brute"
 
     if strategy == "brute":
         return WarpBruteNeighborAutograd.apply(
