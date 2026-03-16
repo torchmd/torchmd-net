@@ -6,7 +6,7 @@ import torch
 from torch import Tensor
 from typing import Tuple
 
-from torchmdnet.extensions.warp_ops.neighbors import NL_THRESHOLD, warp_neighbor_pairs
+from torchmdnet.extensions.warp_ops.neighbors import warp_neighbor_pairs
 
 __all__ = ["get_neighbor_pairs_kernel"]
 
@@ -31,11 +31,7 @@ def get_neighbor_pairs_kernel(
     Parameters
     ----------
     strategy : str
-        Strategy to use for computing the neighbor list.
-        Can be one of :code:`["brute", "cell", "auto"]`.
-        ``"auto"`` switches from brute to cell when the total number of atoms
-        reaches ``TORCHMDNET_NL_THRESHOLD`` (default 9000, overridable via
-        environment variable).
+        Strategy to use for computing the neighbor list. Can be one of :code:`["brute", "cell"]`.
     positions : Tensor
         A tensor with shape (N, 3) representing the atomic positions.
     batch : Tensor
@@ -68,10 +64,7 @@ def get_neighbor_pairs_kernel(
         The number of pairs found.
     """
     if torch.jit.is_scripting():
-        _strategy = strategy
-        if _strategy == "auto":
-            _strategy = "cell" if positions.shape[0] >= NL_THRESHOLD else "brute"
-        if _strategy == "brute":
+        if strategy == "brute":
             result = torch.ops.torchmdnet.warp_neighbor_brute_fwd(
                 positions,
                 batch,

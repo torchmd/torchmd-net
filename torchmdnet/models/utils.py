@@ -152,13 +152,10 @@ class OptimizedDistance(torch.nn.Module):
         If the number of pairs found is larger than this, an asynchronous device-side error is raised.
         If negative, it is interpreted as (minus) the maximum number of neighbors per atom.
     strategy : str
-        Strategy to use for computing the neighbor list. Can be one of :code:`["brute", "cell", "auto"]`.
+        Strategy to use for computing the neighbor list. Can be one of :code:`["brute", "cell"]`.
 
         1. *Brute*: A brute force O(N^2) algorithm, best for small number of particles.
         2. *Cell*:  A cell list algorithm, best for large number of particles, low cutoffs and low batch size.
-        3. *Auto*:  Dynamically picks brute or cell at each forward call based on
-           the total number of atoms.  The threshold defaults to 9000 and can be
-           overridden with the ``TORCHMDNET_NL_THRESHOLD`` environment variable.
     box : torch.Tensor, optional
         The vectors defining the periodic box.  This must have shape `(3, 3)` or `(max(batch)+1, 3, 3)` if a ox per sample is desired.
         where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
@@ -188,7 +185,7 @@ class OptimizedDistance(torch.nn.Module):
         max_num_pairs=-32,
         return_vecs=False,
         loop=False,
-        strategy="auto",
+        strategy="brute",
         include_transpose=True,
         resize_to_fit=True,
         box=None,
@@ -206,11 +203,9 @@ class OptimizedDistance(torch.nn.Module):
         self.use_periodic = True
         self.num_cells = 0
 
-        _needs_cells = strategy in ("cell", "auto")
-
         if box is None:
             self.use_periodic = False
-            if _needs_cells:
+            if strategy == "cell":
                 lbox = cutoff_upper * 3.0
                 box = torch.tensor(
                     [[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]], device="cpu"
@@ -220,7 +215,7 @@ class OptimizedDistance(torch.nn.Module):
 
         self.register_buffer("box", box, persistent=True)
 
-        if _needs_cells:
+        if self.strategy == "cell":
             from torchmdnet.extensions.neighbor_utils import get_cell_dimensions
 
             cell_dims = get_cell_dimensions(
