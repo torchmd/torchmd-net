@@ -21,6 +21,9 @@ from torchmdnet.extensions.neighbor_utils import (
     neighbor_op_setup_context,
 )
 from torchmdnet.extensions.warp_kernels import get_module, get_stream
+from torchmdnet.extensions.warp_kernels.neighbors_brute import (
+    get_brute_specialized_kernel,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +91,9 @@ def warp_neighbor_brute_fwd(
     counter_wp = wp.from_torch(num_pairs.detach(), return_ctype=True)
 
     if num_all_pairs <= 2**31 - 1:
-        kernel = get_module("neighbors_brute_fwd", [str(dtype)])
+        kernel = get_brute_specialized_kernel(
+            str(dtype), use_periodic, include_transpose, loop
+        )
         wp.launch(
             kernel,
             dim=(num_all_pairs,),
@@ -106,9 +111,6 @@ def warp_neighbor_brute_fwd(
                 num_all_pairs,
                 max_num_pairs,
                 box_batch_stride,
-                1 if use_periodic else 0,
-                1 if include_transpose else 0,
-                1 if loop else 0,
                 cutoff_lower**2,
                 cutoff_upper**2,
             ),
