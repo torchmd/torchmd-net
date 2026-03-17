@@ -669,6 +669,42 @@ def test_per_batch_box(device, strategy, n_batches, use_forward):
     assert np.allclose(distance_vecs, ref_distance_vecs)
 
 
+def test_brute_int64_overflow():
+    """Verify brute-force correctness when num_all_pairs exceeds int32 max.
+
+    With 65537 atoms, num_all_pairs = 65537*65536/2 = 2,147,516,416 which
+    overflows int32. Only atoms 0 and 1 are within cutoff of each other.
+    """
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    device = "cuda"
+    n_atoms = 65537
+    cutoff = 1.0
+
+    pos = torch.arange(n_atoms, device=device, dtype=torch.float32).unsqueeze(1) * 10.0
+    pos = pos.expand(-1, 3).contiguous()
+    pos[1] = pos[0]
+
+    batch = torch.zeros(n_atoms, device=device, dtype=torch.long)
+    nl = OptimizedDistance(
+        cutoff_lower=0.0,
+        cutoff_upper=cutoff,
+        max_num_pairs=128,
+        strategy="brute",
+        return_vecs=True,
+        include_transpose=True,
+        loop=False,
+        resize_to_fit=True,
+    )
+    nl.to(device)
+    neighbors, distances, distance_vecs = nl(pos, batch)
+
+    neighbors = neighbors.cpu().numpy()
+    assert neighbors.shape[1] == 2
+    pairs = {(int(neighbors[0, k]), int(neighbors[1, k])) for k in range(2)}
+    assert pairs == {(0, 1), (1, 0)}
+
+
 @pytest.mark.parametrize("device", ["cpu", "cuda"])
 @pytest.mark.parametrize("dtype", [torch.float64])
 @pytest.mark.parametrize("loop", [True, False])

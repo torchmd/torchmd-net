@@ -2,35 +2,11 @@
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
-# Place here any short extensions to torch that you want to use in your code.
-# The extensions present in extensions.cpp will be automatically compiled in setup.py and loaded here.
-# The extensions will be available under torch.ops.torchmdnet_extensions, but you can add wrappers here to make them more convenient to use.
-# Place here too any meta registrations for your extensions if required.
-
-import os
 import torch
 from torch import Tensor
 from typing import Tuple
-import logging
-from torchmdnet.extensions.neighbors import torch_neighbor_bruteforce
-from torchmdnet.extensions.neighbors_cpu_mem import (
-    torch_neighbor_bruteforce_memory_efficient,
-)
 
-try:
-    import triton
-    from torchmdnet.extensions.triton_neighbors import triton_neighbor_pairs
-
-    HAS_TRITON = True
-except ImportError:
-    HAS_TRITON = False
-
-
-# Use memory-efficient implementation in CI to reduce memory usage during tests
-USE_MEMORY_EFFICIENT = os.environ.get("TMDNET_MEM_EFFICIENT_CPU_NEIGHBORS") == "1"
-
-
-logger = logging.getLogger(__name__)
+from torchmdnet.extensions.warp_ops.neighbors import warp_neighbor_pairs
 
 __all__ = ["get_neighbor_pairs_kernel"]
 
@@ -87,53 +63,36 @@ def get_neighbor_pairs_kernel(
     num_pairs : Tensor
         The number of pairs found.
     """
-    if not torch.jit.is_scripting():
-        if USE_MEMORY_EFFICIENT:
-            return torch_neighbor_bruteforce_memory_efficient(
-                strategy,
+    if torch.jit.is_scripting():
+        if strategy == "brute":
+            result = torch.ops.torchmdnet.warp_neighbor_brute_fwd(
                 positions,
-                batch=batch,
-                in_box_vectors=box_vectors,
-                use_periodic=use_periodic,
-                cutoff_lower=cutoff_lower,
-                cutoff_upper=cutoff_upper,
-                max_num_pairs=max_num_pairs,
-                loop=loop,
-                include_transpose=include_transpose,
+                batch,
+                box_vectors,
+                use_periodic,
+                cutoff_lower,
+                cutoff_upper,
+                max_num_pairs,
+                loop,
+                include_transpose,
             )
+        else:
+            result = torch.ops.torchmdnet.warp_neighbor_cell_fwd(
+                positions,
+                batch,
+                box_vectors,
+                use_periodic,
+                cutoff_lower,
+                cutoff_upper,
+                max_num_pairs,
+                loop,
+                include_transpose,
+                num_cells,
+            )
+        return result[0], result[1], result[2], result[3]
 
-    if torch.jit.is_scripting() or not positions.is_cuda:
-
-        return torch_neighbor_bruteforce(
-            positions,
-            batch=batch,
-            box_vectors=box_vectors,
-            use_periodic=use_periodic,
-            cutoff_lower=cutoff_lower,
-            cutoff_upper=cutoff_upper,
-            max_num_pairs=max_num_pairs,
-            loop=loop,
-            include_transpose=include_transpose,
-        )
-
-    if not HAS_TRITON:
-        logger.warning(
-            "Triton is not available, using torch version of the neighbor pairs kernel."
-        )
-        return torch_neighbor_bruteforce(
-            positions,
-            batch=batch,
-            box_vectors=box_vectors,
-            use_periodic=use_periodic,
-            cutoff_lower=cutoff_lower,
-            cutoff_upper=cutoff_upper,
-            max_num_pairs=max_num_pairs,
-            loop=loop,
-            include_transpose=include_transpose,
-        )
-
-    return triton_neighbor_pairs(
-        strategy,
+    return warp_neighbor_pairs(
+        strategy=strategy,
         positions=positions,
         batch=batch,
         box_vectors=box_vectors,

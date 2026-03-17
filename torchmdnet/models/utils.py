@@ -154,9 +154,8 @@ class OptimizedDistance(torch.nn.Module):
     strategy : str
         Strategy to use for computing the neighbor list. Can be one of :code:`["brute", "cell"]`.
 
-        1. *Shared*: An O(N^2) algorithm that leverages CUDA shared memory, best for large number of particles.
-        2. *Brute*: A brute force O(N^2) algorithm, best for small number of particles.
-        3. *Cell*:  A cell list algorithm, best for large number of particles, low cutoffs and low batch size.
+        1. *Brute*: A brute force O(N^2) algorithm, best for small number of particles.
+        2. *Cell*:  A cell list algorithm, best for large number of particles, low cutoffs and low batch size.
     box : torch.Tensor, optional
         The vectors defining the periodic box.  This must have shape `(3, 3)` or `(max(batch)+1, 3, 3)` if a ox per sample is desired.
         where `box_vectors[0] = a`, `box_vectors[1] = b`, and `box_vectors[2] = c`.
@@ -204,27 +203,22 @@ class OptimizedDistance(torch.nn.Module):
         self.use_periodic = True
         self.num_cells = 0
 
-        # Use register_buffer for box to make it export-compatible and handle device movement
         if box is None:
             self.use_periodic = False
             if strategy == "cell":
-                # Default the box to 3 times the cutoff, really inefficient for the cell list
                 lbox = cutoff_upper * 3.0
                 box = torch.tensor(
                     [[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]], device="cpu"
                 )
             else:
-                # Use a placeholder box instead of empty (0,0) to avoid shape issues in torch.export
-                # This won't be used when use_periodic=False, but prevents export tracing issues
                 box = torch.zeros((3, 3), device="cpu")
 
-        # Register box as a buffer so it moves with the module and is export-compatible
         self.register_buffer("box", box, persistent=True)
 
         if self.strategy == "cell":
-            from torchmdnet.extensions.triton_cell import _get_cell_dimensions
+            from torchmdnet.extensions.neighbor_utils import get_cell_dimensions
 
-            cell_dims = _get_cell_dimensions(
+            cell_dims = get_cell_dimensions(
                 self.box[0, 0], self.box[1, 1], self.box[2, 2], cutoff_upper
             )
             self.num_cells = int(cell_dims.prod())

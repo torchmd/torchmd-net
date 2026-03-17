@@ -63,18 +63,16 @@ def test_torch_export(model_name, device):
 def test_torch_export_dynamic_shapes(model_name):
     """Test torch.export with dynamic shapes across different atom counts.
 
-    This test requires CUDA with Triton for the neighbor list computation.
-    The Triton kernels are registered as custom ops via @triton_op, making them
-    compatible with torch.export's symbolic tracing (no tril_indices needed).
+    This test requires CUDA for the neighbor list computation.
+    The GPU kernels are registered as custom ops, making them compatible with
+    torch.export's symbolic tracing (no tril_indices needed).
     static_shapes=True avoids resize_to_fit boolean masking (data-dependent shapes).
     num_systems=1 avoids the data-dependent batch.max().item() call.
     """
     if not hasattr(torch, "export"):
         pytest.skip("torch.export not available in this PyTorch version")
     if not torch.cuda.is_available():
-        pytest.skip(
-            "CUDA required for torch.export with dynamic shapes (Triton neighbor list)"
-        )
+        pytest.skip("CUDA required for torch.export with dynamic shapes")
 
     device = "cuda"
 
@@ -138,7 +136,7 @@ def test_torch_export_save_load(model_name, tmp_path):
         pytest.skip("torch.export not available in this PyTorch version")
     if not torch.cuda.is_available():
         pytest.skip(
-            "CUDA required for torch.export with dynamic shapes (Triton neighbor list)"
+            "CUDA required for torch.export with dynamic shapes"
         )
 
     device = "cuda"
@@ -248,7 +246,7 @@ def test_torch_export_gradients(model_name):
         pytest.skip("torch.export not available in this PyTorch version")
     if not torch.cuda.is_available():
         pytest.skip(
-            "CUDA required for torch.export with dynamic shapes (Triton neighbor list)"
+            "CUDA required for torch.export with dynamic shapes"
         )
 
     device = "cuda"
