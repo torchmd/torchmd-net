@@ -689,16 +689,29 @@ def scatter(
     reduce_op = operation_dict[reduce]
     # take into account the dimensionality of src
     index = _broadcast(index, src, dim)
-    size = list(src.size())
-    if dim_size is not None:
-        size[dim] = dim_size
-    elif index.numel() == 0:
-        size[dim] = 0
+    # Workaround for a PyTorch inductor bug: https://github.com/pytorch/pytorch/issues/178871
+    # Fix: pad N to the next power of 2 so XBLOCK == N and no out-of-bounds
+    # threads exist (XBLOCK is always a power of 2).  Padded (zero) atoms scatter
+    # into an extra discard bucket at index dim_size, which is stripped from the
+    # result before returning.
+    N = src.shape[dim]
+    next_pow2 = 1 << (N - 1).bit_length()  # smallest power of 2 >= N
+    pad = next_pow2 - N
+    if pad:
+        pad_shape = list(src.shape)
+        pad_shape[dim] = pad
+        src = torch.cat([src, src.new_zeros(pad_shape)], dim=dim)
+        idx_pad_shape = list(index.shape)
+        idx_pad_shape[dim] = pad
+        index = torch.cat([index, index.new_full(idx_pad_shape, dim_size)], dim=dim)
+        out_dim_size = dim_size + 1
     else:
-        size[dim] = int(index.max()) + 1
+        out_dim_size = dim_size
+    size = list(src.size())
+    size[dim] = out_dim_size
     out = torch.zeros(size, dtype=src.dtype, device=src.device)
     res = out.scatter_reduce(dim, index, src, reduce_op)
-    return res
+    return res.narrow(dim, 0, dim_size) if pad else res
 
 
 rbf_class_mapping = {"gauss": GaussianSmearing, "expnorm": ExpNormalSmearing}
