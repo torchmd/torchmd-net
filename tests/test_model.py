@@ -135,18 +135,27 @@ def test_torchscript_then_compile(model_name, device):
     # Get baseline output from scripted model
     y_scripted, neg_dy_scripted = scripted_model(z, pos, batch=batch)
 
-    # Now try to torch.compile the scripted model
+    # Now try to torch.compile the scripted model.
+    # PyTorch >= 2.13 deliberately refuses to compile TorchScripted/frozen
+    # models: torch.compile is the successor to torch.jit.script rather than a
+    # wrapper around it, so it raises an error stating the composition is not
+    # supported. Treat that documented refusal as an expected skip. On older
+    # PyTorch where the composition still works, verify the compiled outputs
+    # match the scripted ones.
     try:
         compiled_model = torch.compile(scripted_model, backend="inductor")
         y_compiled, neg_dy_compiled = compiled_model(z, pos, batch=batch)
-
-        # Verify outputs match
-        torch.testing.assert_close(y_scripted, y_compiled, atol=1e-5, rtol=1e-5)
-        torch.testing.assert_close(
-            neg_dy_scripted, neg_dy_compiled, atol=1e-5, rtol=1e-5
-        )
     except Exception as e:
+        if "does not support compiling torch.jit" in str(e):
+            pytest.skip(
+                f"torch.compile does not support compiling TorchScripted models "
+                f"in torch {torch.__version__}: {e}"
+            )
         pytest.fail(f"torch.compile failed on TorchScripted {model_name} model: {e}")
+
+    # Verify outputs match
+    torch.testing.assert_close(y_scripted, y_compiled, atol=1e-5, rtol=1e-5)
+    torch.testing.assert_close(neg_dy_scripted, neg_dy_compiled, atol=1e-5, rtol=1e-5)
 
 
 # Currently only tensornet is CUDA graph compatible
