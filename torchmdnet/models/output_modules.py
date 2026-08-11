@@ -4,6 +4,7 @@
 
 from abc import abstractmethod, ABCMeta
 from typing import Optional
+import math
 import torch
 from torch import nn
 from torchmdnet.models.utils import (
@@ -607,3 +608,194 @@ class ScalarPlusWeightedCoulomb(OutputModel):
         x = x + e_i.unsqueeze(-1)
 
         return x
+
+
+# --- RESP electrostatic-embedding output head ---
+class RepulsionZBL(nn.Module):
+
+    def __init__(
+        self,
+        k: float = 0.8853,  # LAMMPS uses 0.46850 (internally uses angstrom)
+        eff_exponent: float = 0.23,
+        # cutoff: float = math.inf,
+        # cutoff_fn: CutoffArg = "smooth",
+    ):
+        super().__init__()
+
+        self.ANGSTROM_TO_BOHR = 1.8897261258369282
+
+        # ZBL screening parameters; implementation copied from torch-ani.
+        screen_coeffs = [0.18175, 0.50986, 0.28022, 0.02817]
+        screen_exponents = [3.19980, 0.94229, 0.40290, 0.20162]
+
+        if not math.isclose(sum(screen_coeffs), 1.0):
+            raise ValueError("Screen coeffs must sum to 1")
+
+        # Params and buffers
+        self.register_buffer(
+            "_coeffs", torch.tensor(screen_coeffs).view(1, -1), persistent=False
+        )
+        self.register_buffer(
+            "_exponents", torch.tensor(screen_exponents).view(1, -1), persistent=False
+        )
+        self._k = k
+        self._kz = eff_exponent
+        self.rc = 5.0
+
+    def pair_energies(self, za, zb, dists):
+        # All internal calcs use atomic units, so convert to Bohr
+        dists = dists * self.ANGSTROM_TO_BOHR
+        eff_coulomb_term = za * zb / dists
+        reduced_dists = dists * (za**self._kz + zb**self._kz) / self._k
+        screen_factor = self.screen_fn(reduced_dists)
+        cutoff_factor = self.cutoff_fn(dists, self.rc)
+        return eff_coulomb_term * cutoff_factor * screen_factor
+
+    def cutoff_fn(self, distances, rc: float):
+        # cosine cutoff
+        cutoffs = 0.5 * (torch.cos(distances * math.pi / rc) + 1.0)
+        # remove contributions beyond the cutoff radius
+        cutoffs = cutoffs * (distances < rc)
+        return cutoffs
+
+    def screen_fn(self, dists):  # Output shape is same as input
+        return (self._coeffs * torch.exp(-self._exponents * dists.view(-1, 1))).sum(-1)
+
+    def forward(self, za, zb, dists):
+        return self.pair_energies(za, zb, dists)
+
+
+class ScalarPlusCoulombZBL(OutputModel):
+    """normal scalar output plus a coulomb interaction using predicted charges
+
+    It assumes the input features are shape [N, hidden_channels + q_channels]
+    where q_channels are the predicted partial charges (can be 1 or length N)
+    a mean is taken over the energies from each charge channel
+
+    Implementation modifed from aimnetcentral
+    """
+
+    def __init__(
+        self,
+        hidden_channels,
+        activation="silu",
+        allow_prior_model=True,
+        reduce_op="sum",
+        dtype=torch.float,
+        static_shapes=False,
+        **kwargs,
+    ):
+        super(ScalarPlusCoulombZBL, self).__init__(
+            allow_prior_model=allow_prior_model,
+            reduce_op=reduce_op,
+            static_shapes=static_shapes,
+        )
+        self.hidden_channels = hidden_channels
+        self.output_network = MLP(
+            in_channels=hidden_channels,
+            out_channels=1,
+            hidden_channels=hidden_channels // 2,
+            activation=activation,
+            num_hidden_layers=kwargs.get("num_hidden_layers", 0),
+            dtype=dtype,
+        )
+
+        self.q_dim = kwargs["q_dim"]
+        self.num_interaction_layers = kwargs["num_layers"]
+
+        _Hartree = 27.211386024367243
+        _half_Hartree = 0.5 * _Hartree
+        _Bohr = 0.5291772105638411
+        self._factor = _half_Hartree * _Bohr
+
+        self.edge_index = torch.empty(2, 0)
+
+        self.zbl = RepulsionZBL()
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.output_network.reset_parameters()
+
+    def pre_reduce(self, x, v: Optional[torch.Tensor], z, pos, batch, box: Optional[torch.Tensor] = None):
+        charges = x[:, self.hidden_channels :]
+
+        if charges.shape[1] > self.q_dim:
+            _charges = charges[:, -self.q_dim :]
+        else:
+            _charges = charges
+
+        assert _charges.shape[1] == self.q_dim
+
+        x = x[:, : self.hidden_channels]
+
+        # torch.compile and torch.export don't support .item() calls during tracing
+        # The model should be warmed up before compilation to set the correct dim_size
+        if torch.compiler.is_compiling():
+            assert self.edge_index.shape[1] > 0
+
+        elif torch.jit.is_scripting():
+            # TorchScript doesn't support torch.cuda.is_current_stream_capturing()
+            # For CPU, always update dim_size (no CUDA graphs on CPU)
+            # For CUDA with static_shapes, only update once (first call sets dim_size for CUDA graph capture)
+            # For CUDA without static_shapes, always update (dynamic batch sizes)
+            if not x.is_cuda or not self.static_shapes or self.edge_index.shape[1] == 0:
+                self.edge_index = _triu_indices(x, batch)
+        else:
+            is_capturing = x.is_cuda and torch.cuda.is_current_stream_capturing()
+            if not x.is_cuda or not is_capturing:
+                self.edge_index = _triu_indices(x, batch)
+
+            if is_capturing:
+                assert (
+                    self.edge_index is not None
+                ), "Warming up is needed before capturing the model into a CUDA graph"
+                warn(
+                    "CUDA graph capture will lock the batch to the current number of samples ({}). Changing this will result in a crash".format(
+                        self.dim_size
+                    )
+                )
+
+        q_i = charges[self.edge_index[0]]
+        q_j = charges[self.edge_index[1]]
+
+        d_ij = torch.linalg.norm(
+            pos[self.edge_index[0]] - pos[self.edge_index[1]], dim=-1
+        )
+
+        # charge product
+        q_ij = q_i * q_j
+
+        # short range damping, hyperparameter is from aimnet2
+        fc = 1.0 - _exp_cutoff(d_ij, 4.6)
+
+        # per edge Coulomb energy with short range damping
+        e_c_ij = fc.unsqueeze(-1) * q_ij / d_ij.unsqueeze(-1)
+
+        # scale with Coulomb constant in eV and Angstrom unit system!
+        e_c_ij = (self._factor * e_c_ij).squeeze(-1)
+
+        # now do the ZBL repulsion
+        zi = z[self.edge_index[0]]
+        zj = z[self.edge_index[1]]
+
+        e_zbl_ij = 0.5 * self.zbl(
+            zi, zj, d_ij
+        )  # 0.5 because we will sum into both i and j
+
+        # sum into nodes
+        e_zbl_i = torch.zeros(x.shape[0], device=x.device, dtype=x.dtype)
+        e_zbl_i = e_zbl_i.index_add(0, self.edge_index[0], e_zbl_ij)
+        e_zbl_i = e_zbl_i.index_add(0, self.edge_index[1], e_zbl_ij)
+
+        e_c_i = torch.zeros(x.shape[0], device=x.device, dtype=x.dtype)
+        e_c_i = e_c_i.index_add(0, self.edge_index[0], e_c_ij)
+        e_c_i = e_c_i.index_add(0, self.edge_index[1], e_c_ij)
+
+        x = self.output_network(x)
+
+        # we add the zbl repulsion to the final output
+        x = x + e_zbl_i.unsqueeze(-1) + e_c_i.unsqueeze(-1)
+
+        # return all charges for loss function, and model output
+        return x, charges

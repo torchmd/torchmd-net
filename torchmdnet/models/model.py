@@ -116,6 +116,21 @@ def create_model(args, prior_model=None, mean=None, std=None):
             output_charges=True if "Coul" in args["output_model"] else False,
             **shared_args,
         )
+
+    elif args["model"] == "tensornet2_resp":
+        # RESP variant kept as a separate architecture so tensornet2 is untouched;
+        # predicts per-atom RESP partial charges.
+        from torchmdnet.models.tensornet2_resp import TensorNet2
+
+        is_equivariant = False
+        representation_model = TensorNet2(
+            equivariance_invariance_group=args["equivariance_invariance_group"],
+            static_shapes=args["static_shapes"],
+            q_dim=args.get("q_dim", 0),
+            mp_dim=args.get("mp_dim", args["embedding_dimension"]),
+            output_charges=True if "Coul" in args["output_model"] else False,
+            **shared_args,
+        )
     else:
         raise ValueError(f'Unknown architecture: {args["model"]}')
 
@@ -141,7 +156,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         num_hidden_layers=args.get("output_mlp_num_layers", 0),
         num_layers=(
             args["num_layers"]
-            if args["output_model"] == "ScalarPlusWeightedCoulomb"
+            if args["output_model"] in ("ScalarPlusWeightedCoulomb", "ScalarPlusCoulombZBL")
             else 0
         ),  # https://github.com/torchmd/torchmd-net/issues/343
         q_dim=args.get("q_dim", 0),
@@ -160,6 +175,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         std=std,
         derivative=args["derivative"],
         dtype=dtype,
+        output_charges=True if "Coul" in args["output_model"] else False,
     )
     return model
 
@@ -490,6 +506,7 @@ class TorchMD_Net(nn.Module):
         std=None,
         derivative=False,
         dtype=torch.float32,
+        output_charges=False,
     ):
         super(TorchMD_Net, self).__init__()
         self.representation_model = representation_model.to(dtype=dtype)
@@ -512,6 +529,10 @@ class TorchMD_Net(nn.Module):
         )
 
         self.derivative = derivative
+        # RESP output heads (ScalarPlusCoulombZBL) return per-atom charges alongside the
+        # energy; when enabled, forward() returns a 3-tuple (energy, forces, charges).
+        # Defaults False so non-charge models keep the usual 2-tuple return.
+        self.output_charges = output_charges
 
         mean = torch.scalar_tensor(0) if mean is None else mean
         self.register_buffer("mean", mean.to(dtype=dtype))
@@ -588,7 +609,11 @@ class TorchMD_Net(nn.Module):
             z, pos, batch, box=box, q=q, s=s
         )
         # apply the output network
-        x = self.output_model.pre_reduce(x, v, z, pos, batch, box=box)
+        if self.output_charges:
+            x, charges = self.output_model.pre_reduce(x, v, z, pos, batch, box=box)
+        else:
+            x = self.output_model.pre_reduce(x, v, z, pos, batch, box=box)
+            charges = torch.empty(0)
 
         # scale by data standard deviation
         if self.std is not None:
@@ -625,9 +650,13 @@ class TorchMD_Net(nn.Module):
                 retain_graph=self.training,
             )[0]
             assert dy is not None, "Autograd returned None for the force prediction."
+            if self.output_charges:
+                return y, -dy, charges
             return y, -dy
         # Returning an empty tensor allows to decorate this method as always returning two tensors.
         # This is required to overcome a TorchScript limitation, xref https://github.com/openmm/openmm-torch/issues/135
+        if self.output_charges:
+            return y, torch.empty(0), charges
         return y, torch.empty(0)
 
 
