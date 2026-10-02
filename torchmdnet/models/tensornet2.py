@@ -221,6 +221,9 @@ class TensorNet2(nn.Module):
             output is done by appending to the node features x that will be passed to the output 
             model. If True the output model must be compatible with the output charges.
             (default: :obj:`False`)
+        repulsion (bool, optional): Whether to add the ZBL short-range repulsion term
+            (see :py:class:`torchmdnet.models.utils.RepulsionZBL`) on top of the learned energy.
+            (default: :obj:`False`)
     """
 
     def __init__(
@@ -241,11 +244,23 @@ class TensorNet2(nn.Module):
         dtype=torch.float32,
         box_vecs=None,
         output_charges=False,
+        repulsion=False,
     ):
         super(TensorNet2, self).__init__()
 
         self.q_dim = q_dim
         self.output_charges = output_charges
+
+        if not repulsion:
+            self.repulsion = None
+        else:
+            # aceff-omol/TensorNet2 checkpoints trained with repulsion=True include this
+            # short-range ZBL term as part of the total energy they were fit against -- see
+            # RepulsionZBL's docstring for where its fixed parameters come from.
+            from torchmdnet.models.utils import RepulsionZBL
+
+            self.repulsion = RepulsionZBL(max_z=max_z)
+        self.extra_energy: Optional[Tensor] = None
 
         assert rbf_type in rbf_class_mapping, (
             f'Unknown RBF type "{rbf_type}". '
@@ -399,6 +414,15 @@ class TensorNet2(nn.Module):
         # Normalizing edge vectors by their length can result in NaNs, breaking Autograd.
         # I avoid dividing by zero by setting the weight of self edges and self loops to 1
         edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
+
+        # in-model short-range repulsion on the main neighbour list (reuses edge_index/edge_weight
+        # already computed above); consumed by TorchMD_Net.forward() via
+        # hasattr(representation_model, "extra_energy"). No-op (None) by default.
+        if self.repulsion is not None:
+            e_rep = self.repulsion(zp, edge_index, edge_weight)  # [zp.shape[0]]
+            self.extra_energy = e_rep[: batch.shape[0]].unsqueeze(-1)  # real atoms only, [nr, 1]
+        else:
+            self.extra_energy = None
 
         graph_info = {"edge_index": edge_index}
         graph_info.update(
