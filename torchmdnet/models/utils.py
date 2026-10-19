@@ -9,6 +9,7 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 from torchmdnet.extensions.ops import get_neighbor_pairs_kernel
 import warnings
+from ase.data import covalent_radii
 
 
 def visualize_basis(basis_type, num_rbf=50, cutoff_lower=0, cutoff_upper=5):
@@ -699,6 +700,87 @@ def scatter(
     out = torch.zeros(size, dtype=src.dtype, device=src.device)
     res = out.scatter_reduce(dim, index, src, reduce_op)
     return res
+
+
+class RepulsionZBL(nn.Module):
+    r"""Ziegler-Biersack-Littmark screened nuclear repulsion, computed on the model's own
+    short-range neighbour list.
+
+    .. math::
+        E_\mathrm{rep} = \tfrac12 \sum_{i \ne j} k_e \frac{Z_a Z_b}{r}\, \phi(r/a)\, f_c(r)
+
+        \phi(x) = 0.1818 e^{-3.2x} + 0.5099 e^{-0.9423x} + 0.2802 e^{-0.4029x} + 0.02817 e^{-0.2016x}
+
+        a = \frac{0.4543\, a_0}{Z_a^{0.3} + Z_b^{0.3}}
+
+    MODIFIED FROM https://github.com/orbital-materials/orb-models/blob/main/orb_models/forcefield/models/pair_repulsion.py
+
+    Apache License Version 2.0, January 2004 http://www.apache.org/licenses/
+
+    """
+
+    ANGSTROM_TO_BOHR = 1.8897261258369282
+    COULOMB_EV_ANGSTROM = 14.399645  # e^2 / (4 pi eps0), in eV*Angstrom
+    A_PREFACTOR = 0.4543
+    A_EXP = 0.300
+    ENVELOPE_P = 6
+
+    def __init__(self, max_z: int = 87):
+        super().__init__()
+        num_elem = min(max_z, len(covalent_radii))
+        z = torch.arange(num_elem, dtype=torch.get_default_dtype())
+        z[0] = 1  # avoid 0**A_EXP for the unused index-0 slot; never selected (atomic numbers >= 1)
+        cov_radius = torch.tensor(covalent_radii[:num_elem], dtype=torch.get_default_dtype())
+        # Persistent on purpose, even though every one of these is a fixed table derivable
+        # from the constants above. Checkpoints trained with repulsion=True fold this term into
+        # the total energy they were fit against, but older torchmd-net versions predate the
+        # `repulsion` hyperparameter and silently ignore it -- they would build a plain
+        # TensorNet2, load such a checkpoint without complaint, and return energies missing the
+        # ZBL term entirely (wrong by ~kcal/mol, with nothing in the output to say so). Keeping
+        # these tables in the state_dict makes that failure loud instead: the strict
+        # load_state_dict() in load_model() reports them as unexpected keys. Secondary benefit:
+        # the exact tables the model was trained with travel with the weights.
+        self.register_buffer("z_pow", z**self.A_EXP)
+        self.register_buffer("z_outer", torch.outer(z, z))
+        self.register_buffer(
+            "cutoff_ab", cov_radius.unsqueeze(0) + cov_radius.unsqueeze(1)
+        )
+        self.num_elem = int(num_elem)
+
+    def forward(self, z: Tensor, edge_index: Tensor, edge_weight: Tensor) -> Tensor:
+        # per-atom repulsion energy [num_z], reusing the model's own neighbour list
+        mask = edge_weight > 0  # drop self-loops (d=0) and padded edges
+        r = edge_weight.masked_fill(~mask, 1.0)  # Angstrom
+        za = z[edge_index[0]].clamp(max=self.num_elem - 1)
+        zb = z[edge_index[1]].clamp(max=self.num_elem - 1)
+
+        screening_length = self.A_PREFACTOR * (1.0 / self.ANGSTROM_TO_BOHR) / (
+            self.z_pow[za] + self.z_pow[zb]
+        )
+        x = r / screening_length
+        phi = (
+            0.1818 * torch.exp(-3.2 * x)
+            + 0.5099 * torch.exp(-0.9423 * x)
+            + 0.2802 * torch.exp(-0.4029 * x)
+            + 0.02817 * torch.exp(-0.2016 * x)
+        )
+
+        cutoff = self.cutoff_ab[za, zb].to(r.dtype)
+        p = float(self.ENVELOPE_P)
+        rr = (r / cutoff).clamp(max=1.0)
+        fc = (
+            1.0
+            - ((p + 1.0) * (p + 2.0) / 2.0) * rr.pow(p)
+            + p * (p + 2.0) * rr.pow(p + 1.0)
+            - (p * (p + 1.0) / 2.0) * rr.pow(p + 2.0)
+        ) * (r < cutoff)
+
+        z_ab = self.z_outer[za, zb].to(r.dtype)
+        e_ij = self.COULOMB_EV_ANGSTROM * (z_ab / r) * phi * fc
+        e_ij = e_ij * mask.to(e_ij.dtype)
+        e_atom = torch.zeros(z.shape[0], dtype=e_ij.dtype, device=e_ij.device)
+        e_atom = e_atom.index_add(0, edge_index[0], e_ij)
+        return 0.5 * e_atom  # half: each pair counted twice
 
 
 rbf_class_mapping = {"gauss": GaussianSmearing, "expnorm": ExpNormalSmearing}

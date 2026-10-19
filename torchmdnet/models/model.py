@@ -114,6 +114,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
             static_shapes=args["static_shapes"],
             q_dim=args.get("q_dim", 0),
             output_charges=True if "Coul" in args["output_model"] else False,
+            repulsion=args.get("repulsion", False),
             **shared_args,
         )
     else:
@@ -589,6 +590,13 @@ class TorchMD_Net(nn.Module):
         )
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch, box=box)
+
+        # add extra per-atom energy terms computed inside the representation model on its own
+        # (main short-range) neighbour list, e.g. ZBL repulsion (see TensorNet2's repulsion arg)
+        if hasattr(self.representation_model, "extra_energy"):
+            extra_energy = self.representation_model.extra_energy
+            if extra_energy is not None:
+                x = x + extra_energy
 
         # scale by data standard deviation
         if self.std is not None:
