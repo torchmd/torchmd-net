@@ -133,8 +133,11 @@ class EquivariantScalar(OutputModel):
             reduce_op=reduce_op,
             static_shapes=static_shapes,
         )
-        if kwargs.get("num_layers", 0) > 0:
-            warn("num_layers is not used in EquivariantScalar")
+        if kwargs.get("num_hidden_layers", 0) > 0:
+            warn(
+                "num_hidden_layers (output_mlp_num_layers) is not used in "
+                f"{type(self).__name__}"
+            )
         self.output_network = nn.ModuleList(
             [
                 GatedEquivariantBlock(

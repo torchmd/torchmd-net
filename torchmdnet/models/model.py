@@ -247,6 +247,26 @@ def load_model(filepath, args=None, device="cpu", return_std=False, **kwargs):
     if args["model"] == "tensornetv2_alt" or args["model"] == "tensornet-nqe":
         args["model"] = "tensornet2"
 
+    # Scalar, DipoleMoment and (Equivariant)ElectronicSpatialExtent used to ignore
+    # output_mlp_num_layers (issue #343), so build the output MLP depth stored in the weights.
+    if args["output_model"] in ("Scalar", "DipoleMoment", "ElectronicSpatialExtent"):
+        n_linear = sum(
+            re.fullmatch(
+                r"(model\.)?output_model\.output_network\.(layers\.)?\d+\.weight", k
+            )
+            is not None
+            for k in ckpt["state_dict"]
+        )
+        saved_depth = n_linear - 2
+        if n_linear >= 2 and args.get("output_mlp_num_layers", 0) != saved_depth:
+            warnings.warn(
+                f"output_mlp_num_layers={args.get('output_mlp_num_layers', 0)} does not "
+                f"match the saved output network ({saved_depth} additional hidden "
+                f"layers); using {saved_depth}. Older checkpoints ignored this setting "
+                f"for the {args['output_model']} output model."
+            )
+            args["output_mlp_num_layers"] = saved_depth
+
     model = create_model(args)
     if delta_learning and "remove_ref_energy" in kwargs:
         if not kwargs["remove_ref_energy"]:

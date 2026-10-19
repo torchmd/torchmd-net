@@ -5,6 +5,7 @@
 import pytest
 from pytest import mark
 import pickle
+import warnings
 from os.path import exists, dirname, join
 import torch
 import lightning as pl
@@ -417,3 +418,133 @@ def test_output_mlp_depth(output_class, num_hidden_layers):
 
     assert result.shape == (4, 1)
     assert torch.isfinite(result).all()
+
+
+# Combinations whose output head is an MLP. With the equivariant transformer,
+# Scalar and DipoleMoment become gated equivariant heads instead.
+mlp_output_heads = [
+    (model_name, output_model)
+    for model_name in models.__all_models__
+    for output_model in output_modules.__all__
+    if model_name != "equivariant-transformer"
+    or output_model == "ElectronicSpatialExtent"
+]
+
+
+def _num_linear(module):
+    return sum(isinstance(m, torch.nn.Linear) for m in module.modules())
+
+
+def _mlp_head_args(model_name, output_model):
+    # small representation models keep the saved checkpoints light
+    return load_example_args(
+        model_name,
+        remove_prior=True,
+        output_model=output_model,
+        derivative=output_model == "Scalar",
+        embedding_dimension=64,
+        num_layers=1,
+    )
+
+
+def _save_checkpoint(path, model, hparams):
+    # LNNP checkpoint layout; check_errors would mark an old-format TensorNet checkpoint
+    hparams = {k: v for k, v in hparams.items() if k != "check_errors"}
+    torch.save(
+        {
+            "hyper_parameters": hparams,
+            "state_dict": {f"model.{k}": v for k, v in model.state_dict().items()},
+        },
+        path,
+    )
+
+
+@mark.parametrize("model_name, output_model", mlp_output_heads)
+@mark.parametrize("num_hidden_layers", [0, 2])
+def test_create_and_reload_output_mlp_depth(
+    model_name, output_model, num_hidden_layers, tmp_path
+):
+    args = _mlp_head_args(model_name, output_model)
+    args["output_mlp_num_layers"] = num_hidden_layers
+    model = create_model(args)
+    assert _num_linear(model.output_model.output_network) == num_hidden_layers + 2
+
+    ckpt_path = str(tmp_path / "model.ckpt")
+    _save_checkpoint(ckpt_path, model, args)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error", message="output_mlp_num_layers=")
+        loaded = load_model(ckpt_path)
+    assert _num_linear(loaded.output_model.output_network) == num_hidden_layers + 2
+
+    z, pos, batch = create_example_batch()
+    torch.testing.assert_close(loaded(z, pos, batch), model(z, pos, batch))
+
+
+@mark.parametrize("model_name, output_model", mlp_output_heads)
+@mark.parametrize("requested_by", ["hyper_parameters", "load_model_kwargs"])
+def test_load_legacy_output_mlp_depth(model_name, output_model, requested_by, tmp_path):
+    # These heads used to ignore output_mlp_num_layers, so older checkpoints
+    # store the default MLP even when extra hidden layers were requested.
+    args = _mlp_head_args(model_name, output_model)
+    args["output_mlp_num_layers"] = 0
+    shallow = create_model(args)
+    kwargs = {}
+    if requested_by == "hyper_parameters":
+        args["output_mlp_num_layers"] = 2
+    else:
+        kwargs["output_mlp_num_layers"] = 2
+
+    ckpt_path = str(tmp_path / "legacy.ckpt")
+    _save_checkpoint(ckpt_path, shallow, args)
+    with pytest.warns(UserWarning, match="does not match the saved output network"):
+        loaded = load_model(ckpt_path, **kwargs)
+    assert _num_linear(loaded.output_model.output_network) == 2
+
+    z, pos, batch = create_example_batch()
+    torch.testing.assert_close(loaded(z, pos, batch), shallow(z, pos, batch))
+
+
+@mark.parametrize(
+    "checkpoint, expected_warning",
+    [
+        ("example_tensornet.ckpt", "does not match the saved output network"),
+        # equivariant-transformer + Scalar builds EquivariantScalar, which has no MLP
+        ("example.ckpt", "is not used in EquivariantScalar"),
+    ],
+)
+def test_load_checkpoint_with_ignored_output_mlp_num_layers(
+    checkpoint, expected_warning, tmp_path
+):
+    ckpt_path = join(dirname(__file__), checkpoint)
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    ckpt["hyper_parameters"]["output_mlp_num_layers"] = 2
+    modified_path = str(tmp_path / checkpoint)
+    torch.save(ckpt, modified_path)
+
+    reference = load_model(ckpt_path)
+    with pytest.warns(UserWarning, match=expected_warning):
+        model = load_model(modified_path)
+
+    z, pos, batch = create_example_batch(n_atoms=5)
+    torch.testing.assert_close(model(z, pos, batch), reference(z, pos, batch))
+
+
+@mark.parametrize("output_model", ["Scalar", "DipoleMoment"])
+def test_equivariant_output_ignores_mlp_depth(output_model):
+    args = load_example_args(
+        "equivariant-transformer", remove_prior=True, output_model=output_model
+    )
+    args["output_mlp_num_layers"] = 2
+    with pytest.warns(
+        UserWarning,
+        match=f"num_hidden_layers .*is not used in Equivariant{output_model}",
+    ):
+        model = create_model(args)
+
+    args["output_mlp_num_layers"] = 0
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error", message="num_hidden_layers")
+        default = create_model(args)
+    assert [p.shape for p in model.output_model.parameters()] == [
+        p.shape for p in default.output_model.parameters()
+    ]
