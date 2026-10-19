@@ -385,3 +385,35 @@ def test_ensemble():
     assert neg_dy_std.shape == deriv.shape
     assert (y_std == 0).all()
     assert (neg_dy_std == 0).all()
+
+
+@mark.parametrize(
+    "output_class",
+    [
+        output_modules.Scalar,
+        output_modules.DipoleMoment,
+        output_modules.ElectronicSpatialExtent,
+        output_modules.EquivariantElectronicSpatialExtent,
+    ],
+)
+@mark.parametrize("num_hidden_layers", [0, 1, 3])
+def test_output_mlp_depth(output_class, num_hidden_layers):
+    output = output_class(
+        hidden_channels=16,
+        num_hidden_layers=num_hidden_layers,
+        num_layers=0,
+    )
+
+    linear_layers = [
+        layer
+        for layer in output.output_network.modules()
+        if isinstance(layer, torch.nn.Linear)
+    ]
+
+    assert len(linear_layers) == num_hidden_layers + 2
+
+    x = torch.randn(4, 16)
+    result = output.output_network(x)
+
+    assert result.shape == (4, 1)
+    assert torch.isfinite(result).all()

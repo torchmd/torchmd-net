@@ -97,7 +97,7 @@ class Scalar(OutputModel):
             out_channels=1,
             hidden_channels=hidden_channels // 2,
             activation=activation,
-            num_hidden_layers=kwargs.get("num_layers", 0),
+            num_hidden_layers=kwargs.get("num_hidden_layers", 0),
             dtype=dtype,
         )
         self.reset_parameters()
@@ -260,7 +260,7 @@ class ElectronicSpatialExtent(OutputModel):
             out_channels=1,
             hidden_channels=hidden_channels // 2,
             activation=activation,
-            num_hidden_layers=kwargs.get("num_layers", 0),
+            num_hidden_layers=kwargs.get("num_hidden_layers", 0),
             dtype=dtype,
         )
         atomic_mass = torch.from_numpy(atomic_masses).to(dtype)
