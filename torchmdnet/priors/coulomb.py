@@ -15,9 +15,9 @@ class Coulomb(BasePrior):
     Parameters
     ----------
     lower_switch_distance : float
-        distance below which the interaction strength is zero.
+        Distance in nanometers below which the interaction strength is zero.
     upper_switch_distance : float
-        distance above which the interaction has full strength
+        Distance in nanometers above which the interaction has full strength.
     max_num_neighbors : int
         Maximum number of neighbors per atom allowed.
     distance_scale : float, optional
@@ -31,8 +31,14 @@ class Coulomb(BasePrior):
 
     Notes
     -----
-    The Dataset used with this class must include a `partial_charges` field for each sample, and provide
-    `distance_scale` and `energy_scale` attributes if they are not explicitly passed as arguments.
+    Positions are converted to nanometers internally by multiplying them with
+    `distance_scale * 1e9`, so `lower_switch_distance` and `upper_switch_distance` are in
+    nanometers regardless of the distance unit used by the dataset.  The `partial_charges`
+    field must be given in units of the elementary charge e, and the energy is returned in
+    the dataset's energy units, converted with `energy_scale` (Joules to dataset units).
+    The Dataset used with this class must include a `partial_charges` field for each sample,
+    and provide `distance_scale` and `energy_scale` attributes if they are not explicitly
+    passed as arguments.
     """
 
     def __init__(
@@ -110,7 +116,8 @@ class Coulomb(BasePrior):
         edge_index, distance, _ = self.distance(x, batch, box=box)
 
         # Compute the energy, converting to the dataset's units.  Multiply by 0.5 because every atom pair
-        # appears twice.
+        # appears twice.  Distances are in nm, so the prefactor is the Coulomb constant times e^2
+        # expressed in J*nm (2.30707e-28 J*m times 1e9 nm/m), divided by the dataset's energy unit.
         q = extra_args["partial_charges"][edge_index]
         lower = torch.tensor(self.lower_switch_distance)
         upper = torch.tensor(self.upper_switch_distance)
@@ -118,7 +125,7 @@ class Coulomb(BasePrior):
         energy = (0.5 - 0.5 * torch.cos(torch.pi * phase)) * q[0] * q[1] / distance
         energy = (
             0.5
-            * (2.30707e-28 / self.energy_scale / self.distance_scale)
+            * (1e9 * 2.30707e-28 / self.energy_scale)
             * scatter(energy, batch[edge_index[0]], dim=0, reduce="sum")
         )
         energy = energy.reshape(y.shape)
