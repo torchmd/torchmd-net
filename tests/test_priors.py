@@ -157,6 +157,56 @@ def test_coulomb(dtype):
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("sizes", [(1,), (1, 1), (2, 1), (1, 2)])
+def test_coulomb_zero_pair_batches(dtype, sizes):
+    lower, upper = 0.9, 1.3
+    energy_scale = 1000.0 / 6.02214076e23  # kJ/mol to J
+    coulomb = Coulomb(lower, upper, 8, distance_scale=1e-9, energy_scale=energy_scale)
+    lone = (
+        torch.tensor([[0.3, -0.2, 0.1]], dtype=dtype),
+        torch.tensor([0.7], dtype=dtype),
+    )
+    pair = (
+        torch.tensor([[0.0, 0.0, 0.0], [1.1, 0.0, 0.0]], dtype=dtype),
+        torch.tensor([0.2, -0.4], dtype=dtype),
+    )
+    samples = [lone if n == 1 else pair for n in sizes]
+    pos = torch.cat([p for p, _ in samples]).requires_grad_(True)
+    charge = torch.cat([q for _, q in samples])
+    batch = torch.repeat_interleave(torch.arange(len(sizes)), torch.tensor(sizes))
+    baseline = torch.arange(len(sizes), dtype=dtype).unsqueeze(-1) + 0.25
+    energy = coulomb.post_reduce(
+        baseline,
+        torch.ones(pos.shape[0], dtype=torch.long),
+        pos,
+        batch,
+        extra_args={"partial_charges": charge},
+    )
+    force = -torch.autograd.grad(energy.sum(), pos)[0]
+
+    # Independent switched-pair energy and force in kJ/mol and kJ/mol/nm.
+    # Each physical pair is counted once; the first atom lies to the left.
+    r = torch.tensor(1.1, dtype=torch.float64)
+    phase = torch.pi * (r - lower) / (upper - lower)
+    switch = 0.5 * (1 - torch.cos(phase))
+    dswitch = 0.5 * torch.pi * torch.sin(phase) / (upper - lower)
+    qq = (1e9 * 2.30707e-28 / energy_scale) * 0.2 * -0.4
+    pair_energy = qq * switch / r
+    first_force = qq * (dswitch / r - switch / r**2)
+    pair_force = torch.zeros(2, 3, dtype=dtype)
+    pair_force[0, 0] = first_force
+    pair_force[1, 0] = -first_force
+    expected_energy = baseline + torch.tensor(
+        [pair_energy if n == 2 else 0.0 for n in sizes], dtype=dtype
+    ).unsqueeze(-1)
+    expected_force = torch.cat(
+        [pair_force if n == 2 else torch.zeros(1, 3, dtype=dtype) for n in sizes]
+    )
+    torch.testing.assert_close(energy, expected_energy, rtol=1e-4, atol=1e-4)
+    torch.testing.assert_close(force, expected_force, rtol=1e-4, atol=1e-4)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_multiple_priors(dtype):
     # Create a model from a config file.
 
