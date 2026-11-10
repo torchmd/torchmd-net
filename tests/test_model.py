@@ -2,6 +2,7 @@
 # Distributed under the MIT License.
 # (See accompanying file README.md file or copy at http://opensource.org/licenses/MIT)
 
+import copy
 import pytest
 from pytest import mark
 import pickle
@@ -9,9 +10,10 @@ from os.path import exists, dirname, join
 import torch
 import lightning as pl
 from torchmdnet import models
-from torchmdnet.models.model import create_model, load_model
+from torchmdnet.models.model import create_model, load_model, TorchMD_Net
 from torchmdnet.models import output_modules
-from torchmdnet.models.utils import dtype_mapping
+from torchmdnet.models.tensornet2 import TensorNet2
+from torchmdnet.models.utils import RepulsionZBL, dtype_mapping
 
 from utils import load_example_args, create_example_batch
 
@@ -349,6 +351,71 @@ def test_gradients(model_name):
     pos = pos.to(torch.float64)
     torch.autograd.gradcheck(
         model, (z, pos, batch), eps=1e-4, atol=1e-3, rtol=1e-2, nondet_tol=1e-3
+    )
+
+
+@mark.parametrize("std", [1.0, 2.0])
+@mark.parametrize("static_shapes", [False, True])
+def test_tensornet2_repulsion_not_scaled_by_std(std, static_shapes):
+    """ZBL repulsion contributions are unnormalised quantities and must not be multiplied by std.
+
+    Comparing a model with repulsion enabled against an otherwise identical model
+    with repulsion disabled cancels every learned contribution, leaving exactly the
+    physical reference energy and forces. The result must be independent of std.
+    """
+    z = torch.tensor([1, 1], dtype=torch.long)
+    pos = torch.tensor([[0.0, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=torch.float64)
+    batch = torch.zeros_like(z)
+    dtype = torch.float64
+
+    with torch.random.fork_rng():
+        torch.manual_seed(1234)
+        representation = TensorNet2(
+            hidden_channels=8,
+            q_dim=2,
+            num_layers=1,
+            num_rbf=8,
+            max_z=10,
+            max_num_neighbors=16,
+            static_shapes=static_shapes,
+            repulsion=True,
+        )
+        model = TorchMD_Net(
+            representation,
+            output_modules.Scalar(8),
+            std=torch.tensor(std, dtype=dtype),
+            derivative=True,
+            dtype=dtype,
+        ).eval()
+
+    # Same weights, but without the ZBL term: the difference is the full repulsion.
+    model_without_repulsion = copy.deepcopy(model)
+    model_without_repulsion.representation_model.repulsion = None
+    model_without_repulsion.representation_model.extra_energy = None
+
+    y, neg_dy = model(z, pos.clone(), batch)
+    y_without_repulsion, neg_dy_without_repulsion = model_without_repulsion(
+        z, pos.clone(), batch
+    )
+
+    # Independent reference: directed pair list for the single molecule, with the
+    # distances built from the same differentiable positions.
+    reference_pos = pos.clone().requires_grad_(True)
+    distance = torch.linalg.vector_norm(reference_pos[0] - reference_pos[1])
+    edge_index = torch.tensor([[0, 1], [1, 0]], dtype=torch.long)
+    edge_weight = torch.stack((distance, distance))
+    reference_energy = (
+        RepulsionZBL(max_z=10).to(dtype=dtype)(z, edge_index, edge_weight).sum()
+    )
+    reference_forces = -torch.autograd.grad(reference_energy, reference_pos)[0]
+
+    assert reference_energy > 0.1  # make sure the regression is not testing noise
+
+    torch.testing.assert_close(
+        y - y_without_repulsion, reference_energy.expand_as(y), atol=1e-8, rtol=1e-8
+    )
+    torch.testing.assert_close(
+        neg_dy - neg_dy_without_repulsion, reference_forces, atol=1e-8, rtol=1e-8
     )
 
 

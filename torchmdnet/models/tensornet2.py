@@ -223,6 +223,8 @@ class TensorNet2(nn.Module):
             (default: :obj:`False`)
         repulsion (bool, optional): Whether to add the ZBL short-range repulsion term
             (see :py:class:`torchmdnet.models.utils.RepulsionZBL`) on top of the learned energy.
+            This term is in eV for positions in Angstrom and is added after the learned
+            energy is rescaled by the training-data standard deviation.
             (default: :obj:`False`)
     """
 

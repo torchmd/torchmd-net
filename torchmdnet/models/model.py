@@ -591,16 +591,18 @@ class TorchMD_Net(nn.Module):
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch, box=box)
 
-        # add extra per-atom energy terms computed inside the representation model on its own
-        # (main short-range) neighbour list, e.g. ZBL repulsion (see TensorNet2's repulsion arg)
+        # scale by data standard deviation
+        if self.std is not None:
+            x = x * self.std
+
+        # add per-atom energy terms computed inside the representation model on its own
+        # (main short-range) neighbour list, e.g. TensorNet2's ZBL repulsion. These are
+        # fixed physical energies, so like the atom-wise priors below they must not be
+        # multiplied by std.
         if hasattr(self.representation_model, "extra_energy"):
             extra_energy = self.representation_model.extra_energy
             if extra_energy is not None:
                 x = x + extra_energy
-
-        # scale by data standard deviation
-        if self.std is not None:
-            x = x * self.std
 
         # apply atom-wise prior model
         if self.prior_model is not None:
