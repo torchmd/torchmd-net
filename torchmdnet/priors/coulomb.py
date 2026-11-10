@@ -15,9 +15,9 @@ class Coulomb(BasePrior):
     Parameters
     ----------
     lower_switch_distance : float
-        distance below which the interaction strength is zero.
+        Distance in the same units as the positions below which the interaction strength is zero.
     upper_switch_distance : float
-        distance above which the interaction has full strength
+        Distance in the same units as the positions above which the interaction has full strength.
     max_num_neighbors : int
         Maximum number of neighbors per atom allowed.
     distance_scale : float, optional
@@ -25,14 +25,21 @@ class Coulomb(BasePrior):
     energy_scale : float, optional
         Factor to multiply with energies in the dataset to convert them to Joules (*not* J/mol).
     box_vecs : torch.Tensor, optional
-        Initial box vectors for periodic boundary conditions. If None, no periodic boundary conditions are used.
+        Initial box vectors for periodic boundary conditions, in the same units as the positions. If None, no periodic boundary conditions are used.
     dataset : Dataset
         Dataset object.
 
     Notes
     -----
-    The Dataset used with this class must include a `partial_charges` field for each sample, and provide
-    `distance_scale` and `energy_scale` attributes if they are not explicitly passed as arguments.
+    Positions, switch distances, and box vectors are converted to nanometers internally
+    by multiplying them with `distance_scale * 1e9`. The `lower_switch_distance`,
+    `upper_switch_distance`, and `box_vecs` parameters must therefore be given in the same
+    units as the positions. The `partial_charges` field must be given in units of the
+    elementary charge e, and the energy is returned in the dataset's energy units,
+    converted with `energy_scale` (Joules to dataset units).
+    The Dataset used with this class must include a `partial_charges` field for each sample,
+    and provide `distance_scale` and `energy_scale` attributes if they are not explicitly
+    passed as arguments.
     """
 
     def __init__(
@@ -95,7 +102,7 @@ class Coulomb(BasePrior):
         batch : torch.Tensor
             Tensor of shape (num_atoms,) containing the batch index for each atom in the batch.
         box : torch.Tensor, optional
-            Tensor of shape (3, 3) containing the box vectors for the batch. If None, use the initial box vectors.
+            Tensor of shape (3, 3) containing the box vectors for the batch, in the same units as the positions. If None, use the initial box vectors.
         extra_args : dict, optional
             Dictionary of extra arguments. Must contain a `partial_charges` field.
 
@@ -107,18 +114,21 @@ class Coulomb(BasePrior):
         # Convert to nm and calculate distance.
         x = 1e9 * self.distance_scale * pos
         box = box if box is not None else self.initial_box
+        if box is not None:
+            box = box * 1e9 * self.distance_scale
         edge_index, distance, _ = self.distance(x, batch, box=box)
 
         # Compute the energy, converting to the dataset's units.  Multiply by 0.5 because every atom pair
-        # appears twice.
+        # appears twice.  Distances are in nm, so the prefactor is the Coulomb constant times e^2
+        # expressed in J*nm (2.30707e-28 J*m times 1e9 nm/m), divided by the dataset's energy unit.
         q = extra_args["partial_charges"][edge_index]
-        lower = torch.tensor(self.lower_switch_distance)
-        upper = torch.tensor(self.upper_switch_distance)
+        lower = torch.tensor(self.lower_switch_distance * 1e9 * self.distance_scale)
+        upper = torch.tensor(self.upper_switch_distance * 1e9 * self.distance_scale)
         phase = (torch.max(lower, torch.min(upper, distance)) - lower) / (upper - lower)
         energy = (0.5 - 0.5 * torch.cos(torch.pi * phase)) * q[0] * q[1] / distance
         energy = (
             0.5
-            * (2.30707e-28 / self.energy_scale / self.distance_scale)
+            * (1e9 * 2.30707e-28 / self.energy_scale)
             * scatter(energy, batch[edge_index[0]], dim=0, reduce="sum")
         )
         energy = energy.reshape(y.shape)

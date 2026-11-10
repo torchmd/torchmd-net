@@ -103,57 +103,110 @@ def test_zbl():
     torch.testing.assert_close(expected, energy, rtol=1e-4, atol=1e-4)
 
 
+# Convert kJ/mol and eV to Joules.
+@pytest.mark.parametrize("energy_scale", [1000.0 / 6.02214076e23, 1.602176634e-19])
+@pytest.mark.parametrize(
+    "distance_scale", [1e-10, 1e-9, 5.29177210903e-11]
+)  # Convert Angstrom, nm, and Bohr to meters
+@pytest.mark.parametrize("with_box", [False, True])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-def test_coulomb(dtype):
-    pos = torch.tensor(
+def test_coulomb(distance_scale, energy_scale, dtype, with_box):
+    lower_switch_distance = 0.9  # In nanometers
+    upper_switch_distance = 1.3  # In nanometers
+    # Physical system, with pair distances of 0.640, 0.854, 1.0, 1.063, 1.2, and 1.552 nm,
+    # spanning below, within, and above the switch region, with attractive and repulsive pairs.
+    pos_nm = torch.tensor(
         [[0.5, 0.0, 0.0], [1.5, 0.0, 0.0], [0.8, 0.8, 0.0], [0.0, 0.0, -0.4]],
-        dtype=dtype,
-    )  # Atom positions in nm
-    charge = torch.tensor([0.2, -0.1, 0.8, -0.9], dtype=dtype)  # Partial charges
-    types = torch.tensor([0, 1, 2, 1], dtype=torch.long)  # Atom types
-    distance_scale = 1e-9  # Convert nm to meters
-    energy_scale = 1000.0 / 6.02214076e23  # Convert kJ/mol to Joules
-    lower_switch_distance = 0.9
-    upper_switch_distance = 1.3
+        dtype=torch.float64,
+    )
+    charge = torch.tensor([0.2, -0.1, 0.8, -0.9], dtype=torch.float64)  # In units of e
+    types = torch.tensor([0, 1, 2, 1], dtype=torch.long)
 
-    # Use the Coulomb class to compute the energy.
+    nm_per_distance_unit = distance_scale * 1e9
 
+    # Express the same physical system in the dataset's distance units.
+    pos = (pos_nm / nm_per_distance_unit).to(dtype)
+    pos.requires_grad_(True)
+    charge = charge.to(dtype)
+
+    if with_box:
+        box_nm = torch.diag(torch.tensor([2.5, 2.5, 2.5], dtype=torch.float64))
+        box = (box_nm / nm_per_distance_unit).to(dtype)
+    else:
+        box_nm = None
+        box = None
+
+    # Use the Coulomb class to compute the energy and forces through autograd.
     coulomb = Coulomb(
-        lower_switch_distance,
-        upper_switch_distance,
+        lower_switch_distance / nm_per_distance_unit,
+        upper_switch_distance / nm_per_distance_unit,
         5,
         distance_scale=distance_scale,
         energy_scale=energy_scale,
+        box_vecs=box,
     )
     energy = coulomb.post_reduce(
         torch.zeros((1,)),
         types,
         pos,
         torch.zeros_like(types),
+        box=box,
         extra_args={"partial_charges": charge},
     )[0]
+    force = -torch.autograd.grad(energy, pos)[0]
 
-    # Compare to the expected value.
+    # Compare to analytic values computed in physical units (Joules and nanometers),
+    # independent of the dataset's units.
+    k = 1e9 * 2.30707e-28  # Coulomb constant times e^2, in J*nm
 
-    def compute_interaction(pos1, pos2, z1, z2):
-        delta = pos1 - pos2
-        r = torch.sqrt(torch.dot(delta, delta))
-        if r < lower_switch_distance:
-            return 0
-        energy = 138.935 * z1 * z2 / r
-        if r < upper_switch_distance:
-            energy *= 0.5 - 0.5 * torch.cos(
-                torch.pi
-                * (r - lower_switch_distance)
+    expected_energy = torch.zeros((), dtype=torch.float64)
+    expected_force = torch.zeros_like(
+        pos_nm
+    )  # Force in dataset energy units per distance unit
+    # Sum over ordered pairs: factor 0.5 for the energy because each pair appears twice, no
+    # factor for the force because this sum is already the gradient of the total energy.
+    for i in range(len(pos_nm)):
+        for j in range(len(pos_nm)):
+            if i == j:
+                continue
+            delta = pos_nm[i] - pos_nm[j]
+            if with_box:
+                box_diag = torch.diagonal(box_nm)
+                delta = delta - torch.round(delta / box_diag) * box_diag
+            r = torch.sqrt(torch.dot(delta, delta))
+            phase = (
+                torch.clamp(r, min=lower_switch_distance, max=upper_switch_distance)
+                - lower_switch_distance
+            ) / (upper_switch_distance - lower_switch_distance)
+            switch = 0.5 - 0.5 * torch.cos(torch.pi * phase)
+            dswitch = (
+                0.5
+                * torch.pi
+                * torch.sin(torch.pi * phase)
                 / (upper_switch_distance - lower_switch_distance)
             )
-        return energy
+            expected_energy = (
+                expected_energy
+                + 0.5 * k * charge[i] * charge[j] * switch / r / energy_scale
+            )
+            # Derivative of the physical pair energy with respect to the separation vector,
+            # in J/nm.  Chain rule to dataset units: nm per dataset distance unit, then the
+            # energy scale.
+            denergy_ddelta = (
+                k * charge[i] * charge[j] * (dswitch * r - switch) * delta / r**3
+            )
+            expected_force[i] += -nm_per_distance_unit * denergy_ddelta / energy_scale
 
-    expected = 0
-    for i in range(len(pos)):
-        for j in range(i):
-            expected += compute_interaction(pos[i], pos[j], charge[i], charge[j])
-    torch.testing.assert_close(expected, energy, rtol=1e-4, atol=1e-4)
+    torch.testing.assert_close(
+        expected_energy, energy, rtol=1e-4, atol=1e-4, check_dtype=False
+    )
+    torch.testing.assert_close(
+        expected_force,
+        force,
+        rtol=1e-4,
+        atol=1e-4 * float(expected_force.abs().max()),
+        check_dtype=False,
+    )
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
