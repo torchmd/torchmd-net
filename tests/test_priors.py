@@ -157,6 +157,55 @@ def test_coulomb(dtype):
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("sizes", [(1,), (1, 1), (2, 1), (1, 2)])
+def test_coulomb_zero_pair_batches(dtype, sizes):
+    lower, upper = 0.9, 1.3
+    energy_scale = 1000.0 / 6.02214076e23  # kJ/mol to J
+    coulomb = Coulomb(lower, upper, 8, distance_scale=1e-9, energy_scale=energy_scale)
+    lone = (
+        torch.tensor([[0.3, -0.2, 0.1]], dtype=dtype),
+        torch.tensor([0.7], dtype=dtype),
+    )
+    pair = (
+        torch.tensor([[0.0, 0.0, 0.0], [1.1, 0.0, 0.0]], dtype=dtype),
+        torch.tensor([0.2, -0.4], dtype=dtype),
+    )
+    samples = [lone if n == 1 else pair for n in sizes]
+    pos = torch.cat([p for p, _ in samples]).requires_grad_(True)
+    charge = torch.cat([q for _, q in samples])
+    batch = torch.repeat_interleave(torch.arange(len(sizes)), torch.tensor(sizes))
+    baseline = torch.arange(len(sizes), dtype=dtype).unsqueeze(-1) + 0.25
+    energy = coulomb.post_reduce(
+        baseline,
+        torch.ones(pos.shape[0], dtype=torch.long),
+        pos,
+        batch,
+        extra_args={"partial_charges": charge},
+    )
+    force = -torch.autograd.grad(energy.sum(), pos)[0]
+
+    # Check that each sample gives the same result batched as on its own.
+    expected_energies = []
+    expected_forces = []
+    for i, (sample_pos, sample_charge) in enumerate(samples):
+        sp = sample_pos.clone().requires_grad_(True)
+        se = coulomb.post_reduce(
+            baseline[i : i + 1],
+            torch.ones(sp.shape[0], dtype=torch.long),
+            sp,
+            torch.zeros(sp.shape[0], dtype=torch.long),
+            extra_args={"partial_charges": sample_charge},
+        )
+        expected_energies.append(se)
+        expected_forces.append(-torch.autograd.grad(se.sum(), sp)[0])
+
+    expected_energy = torch.cat(expected_energies, dim=0)
+    expected_force = torch.cat(expected_forces, dim=0)
+    torch.testing.assert_close(energy, expected_energy)
+    torch.testing.assert_close(force, expected_force)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_multiple_priors(dtype):
     # Create a model from a config file.
 

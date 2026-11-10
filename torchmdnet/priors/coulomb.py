@@ -103,6 +103,7 @@ class Coulomb(BasePrior):
         -------
         torch.Tensor
             Tensor of shape (batch_size, 1) containing the energies of each sample in the batch.
+            Samples without any pair (e.g. isolated atoms) return the input energy unchanged.
         """
         # Convert to nm and calculate distance.
         x = 1e9 * self.distance_scale * pos
@@ -119,7 +120,13 @@ class Coulomb(BasePrior):
         energy = (
             0.5
             * (2.30707e-28 / self.energy_scale / self.distance_scale)
-            * scatter(energy, batch[edge_index[0]], dim=0, reduce="sum")
+            * scatter(
+                energy,
+                batch[edge_index[0]],
+                dim=0,
+                dim_size=y.shape[0],
+                reduce="sum",
+            )
         )
         energy = energy.reshape(y.shape)
         return y + energy
