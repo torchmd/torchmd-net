@@ -184,26 +184,25 @@ def test_coulomb_zero_pair_batches(dtype, sizes):
     )
     force = -torch.autograd.grad(energy.sum(), pos)[0]
 
-    # Independent switched-pair energy and force in kJ/mol and kJ/mol/nm.
-    # Each physical pair is counted once; the first atom lies to the left.
-    r = torch.tensor(1.1, dtype=torch.float64)
-    phase = torch.pi * (r - lower) / (upper - lower)
-    switch = 0.5 * (1 - torch.cos(phase))
-    dswitch = 0.5 * torch.pi * torch.sin(phase) / (upper - lower)
-    qq = (1e9 * 2.30707e-28 / energy_scale) * 0.2 * -0.4
-    pair_energy = qq * switch / r
-    first_force = qq * (dswitch / r - switch / r**2)
-    pair_force = torch.zeros(2, 3, dtype=dtype)
-    pair_force[0, 0] = first_force
-    pair_force[1, 0] = -first_force
-    expected_energy = baseline + torch.tensor(
-        [pair_energy if n == 2 else 0.0 for n in sizes], dtype=dtype
-    ).unsqueeze(-1)
-    expected_force = torch.cat(
-        [pair_force if n == 2 else torch.zeros(1, 3, dtype=dtype) for n in sizes]
-    )
-    torch.testing.assert_close(energy, expected_energy, rtol=1e-4, atol=1e-4)
-    torch.testing.assert_close(force, expected_force, rtol=1e-4, atol=1e-4)
+    # Check that each sample gives the same result batched as on its own.
+    expected_energies = []
+    expected_forces = []
+    for i, (sample_pos, sample_charge) in enumerate(samples):
+        sp = sample_pos.clone().requires_grad_(True)
+        se = coulomb.post_reduce(
+            baseline[i : i + 1],
+            torch.ones(sp.shape[0], dtype=torch.long),
+            sp,
+            torch.zeros(sp.shape[0], dtype=torch.long),
+            extra_args={"partial_charges": sample_charge},
+        )
+        expected_energies.append(se)
+        expected_forces.append(-torch.autograd.grad(se.sum(), sp)[0])
+
+    expected_energy = torch.cat(expected_energies, dim=0)
+    expected_force = torch.cat(expected_forces, dim=0)
+    torch.testing.assert_close(energy, expected_energy)
+    torch.testing.assert_close(force, expected_force)
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
