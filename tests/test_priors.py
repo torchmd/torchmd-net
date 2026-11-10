@@ -108,8 +108,9 @@ def test_zbl():
 @pytest.mark.parametrize(
     "distance_scale", [1e-10, 1e-9, 5.29177210903e-11]
 )  # Convert Angstrom, nm, and Bohr to meters
+@pytest.mark.parametrize("with_box", [False, True])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-def test_coulomb(distance_scale, energy_scale, dtype):
+def test_coulomb(distance_scale, energy_scale, dtype, with_box):
     lower_switch_distance = 0.9  # In nanometers
     upper_switch_distance = 1.3  # In nanometers
     # Physical system, with pair distances of 0.640, 0.854, 1.0, 1.063, 1.2, and 1.552 nm,
@@ -121,24 +122,35 @@ def test_coulomb(distance_scale, energy_scale, dtype):
     charge = torch.tensor([0.2, -0.1, 0.8, -0.9], dtype=torch.float64)  # In units of e
     types = torch.tensor([0, 1, 2, 1], dtype=torch.long)
 
+    nm_per_distance_unit = distance_scale * 1e9
+
     # Express the same physical system in the dataset's distance units.
-    pos = (pos_nm / (distance_scale * 1e9)).to(dtype)
+    pos = (pos_nm / nm_per_distance_unit).to(dtype)
     pos.requires_grad_(True)
     charge = charge.to(dtype)
 
+    if with_box:
+        box_nm = torch.diag(torch.tensor([2.5, 2.5, 2.5], dtype=torch.float64))
+        box = (box_nm / nm_per_distance_unit).to(dtype)
+    else:
+        box_nm = None
+        box = None
+
     # Use the Coulomb class to compute the energy and forces through autograd.
     coulomb = Coulomb(
-        lower_switch_distance,
-        upper_switch_distance,
+        lower_switch_distance / nm_per_distance_unit,
+        upper_switch_distance / nm_per_distance_unit,
         5,
         distance_scale=distance_scale,
         energy_scale=energy_scale,
+        box_vecs=box,
     )
     energy = coulomb.post_reduce(
         torch.zeros((1,)),
         types,
         pos,
         torch.zeros_like(types),
+        box=box,
         extra_args={"partial_charges": charge},
     )[0]
     force = -torch.autograd.grad(energy, pos)[0]
@@ -146,7 +158,6 @@ def test_coulomb(distance_scale, energy_scale, dtype):
     # Compare to analytic values computed in physical units (Joules and nanometers),
     # independent of the dataset's units.
     k = 1e9 * 2.30707e-28  # Coulomb constant times e^2, in J*nm
-    nm_per_distance_unit = distance_scale * 1e9
 
     expected_energy = torch.zeros((), dtype=torch.float64)
     expected_force = torch.zeros_like(
@@ -159,6 +170,9 @@ def test_coulomb(distance_scale, energy_scale, dtype):
             if i == j:
                 continue
             delta = pos_nm[i] - pos_nm[j]
+            if with_box:
+                box_diag = torch.diagonal(box_nm)
+                delta = delta - torch.round(delta / box_diag) * box_diag
             r = torch.sqrt(torch.dot(delta, delta))
             phase = (
                 torch.clamp(r, min=lower_switch_distance, max=upper_switch_distance)
