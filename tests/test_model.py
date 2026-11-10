@@ -356,8 +356,8 @@ def test_gradients(model_name):
 
 @mark.parametrize("std", [1.0, 2.0])
 @mark.parametrize("static_shapes", [False, True])
-def test_tensornet2_repulsion_physical_units(std, static_shapes):
-    """ZBL repulsion is a physical energy in eV and must not be rescaled by std.
+def test_tensornet2_repulsion_not_scaled_by_std(std, static_shapes):
+    """ZBL repulsion contributions are unnormalised quantities and must not be multiplied by std.
 
     Comparing a model with repulsion enabled against an otherwise identical model
     with repulsion disabled cancels every learned contribution, leaving exactly the
@@ -404,9 +404,9 @@ def test_tensornet2_repulsion_physical_units(std, static_shapes):
     distance = torch.linalg.vector_norm(reference_pos[0] - reference_pos[1])
     edge_index = torch.tensor([[0, 1], [1, 0]], dtype=torch.long)
     edge_weight = torch.stack((distance, distance))
-    reference_energy = RepulsionZBL(max_z=10).to(dtype=dtype)(
-        z, edge_index, edge_weight
-    ).sum()
+    reference_energy = (
+        RepulsionZBL(max_z=10).to(dtype=dtype)(z, edge_index, edge_weight).sum()
+    )
     reference_forces = -torch.autograd.grad(reference_energy, reference_pos)[0]
 
     assert reference_energy > 0.1  # make sure the regression is not testing noise

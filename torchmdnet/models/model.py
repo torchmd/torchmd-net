@@ -595,10 +595,10 @@ class TorchMD_Net(nn.Module):
         if self.std is not None:
             x = x * self.std
 
-        # add extra per-atom energy terms computed inside the representation model on its own
-        # (main short-range) neighbour list, e.g. ZBL repulsion (see TensorNet2's repulsion arg).
-        # These are physical energies in eV, so they are added after applying std: scaling
-        # them would make the repulsion depend on the (arbitrary) training-set units.
+        # add per-atom energy terms computed inside the representation model on its own
+        # (main short-range) neighbour list, e.g. TensorNet2's ZBL repulsion. These are
+        # fixed physical energies, so like the atom-wise priors below they must not be
+        # multiplied by std.
         if hasattr(self.representation_model, "extra_energy"):
             extra_energy = self.representation_model.extra_energy
             if extra_energy is not None:
