@@ -79,7 +79,18 @@ You can use a yaml configuration file with the `torchmd-train` utility with:
 
    torchmd-train --conf my_conf.yaml 
 
-.. note:: Flags provided after `--conf` will override the ones in the yaml file.
+.. note::
+
+   Explicit command line arguments override the yaml configuration regardless of
+   argument order. When resuming with `--load-model`, the checkpoint directory's
+   `hparams.yaml` supplies settings that are overridden by the configuration file
+   and then by the command line. Value-taking boolean options such as `--redirect`
+   accept `True` and `False` (case-insensitive). The `--remove-ref-energy` flag takes
+   no value.
+
+   A higher-priority `prior_model` definition replaces `prior_args` inherited from
+   a lower-priority source. Explicit `prior_args` supplied alongside `prior_model`
+   in the same file retain their precedence over inline prior parameters.
 
 .. note::
 

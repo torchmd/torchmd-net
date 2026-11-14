@@ -22,8 +22,6 @@ from torchmdnet.models import output_modules
 from torchmdnet.models.model import create_prior_models
 from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping, dtype_mapping
 from torchmdnet.utils import (
-    LoadFromFile,
-    LoadFromCheckpoint,
     save_argparse,
     number,
     check_logs,
@@ -31,11 +29,17 @@ from torchmdnet.utils import (
 from lightning_utilities.core.rank_zero import rank_zero_warn
 
 
+def boolean(value):
+    if value.lower() in ("true", "false"):
+        return value.lower() == "true"
+    raise argparse.ArgumentTypeError("Expected true or false")
+
+
 def get_argparse():
     # fmt: off
     parser = argparse.ArgumentParser(description='Training')
-    parser.add_argument('--load-model', action=LoadFromCheckpoint, help='Restart training using a model checkpoint')  # keep first
-    parser.add_argument('--conf', '-c', type=open, action=LoadFromFile, help='Configuration yaml file')  # keep second
+    parser.add_argument('--load-model', type=str, help='Restart training using a model checkpoint')
+    parser.add_argument('--conf', '-c', type=str, help='Configuration yaml file')
     parser.add_argument('--num-epochs', default=300, type=int, help='number of epochs')
     parser.add_argument('--batch-size', default=32, type=int, help='batch size')
     parser.add_argument('--inference-batch-size', default=None, type=int, help='Batchsize for validation and tests.')
@@ -47,7 +51,7 @@ def get_argparse():
     parser.add_argument('--lr-warmup-steps', type=int, default=0, help='How many steps to warm-up over. Defaults to 0 for no warm-up')
     parser.add_argument('--early-stopping-patience', type=int, default=30, help='Stop training after this many epochs without improvement')
     parser.add_argument('--early-stopping-monitor', type=str, default='val_total_mse_loss', choices=['train_total_mse_loss', 'val_total_mse_loss'], help='Metric to monitor for early stopping')
-    parser.add_argument('--reset-trainer', type=bool, default=False, help='Reset training metrics (e.g. early stopping, lr) when loading a model checkpoint')
+    parser.add_argument('--reset-trainer', type=boolean, default=False, help='Reset training metrics (e.g. early stopping, lr) when loading a model checkpoint')
     parser.add_argument('--weight-decay', type=float, default=0.0, help='Weight decay strength')
     parser.add_argument('--ema-alpha-y', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of y. Must be between 0 and 1.')
     parser.add_argument('--ema-alpha-neg-dy', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of dy. Must be between 0 and 1.')
@@ -63,7 +67,7 @@ def get_argparse():
     parser.add_argument('--save-interval', type=int, default=10, help='Save interval, one save per n epochs (default: 10)')
     parser.add_argument('--seed', type=int, default=1, help='random seed (default: 1)')
     parser.add_argument('--num-workers', type=int, default=4, help='Number of workers for data prefetch')
-    parser.add_argument('--redirect', type=bool, default=False, help='Redirect stdout and stderr to log_dir/log')
+    parser.add_argument('--redirect', type=boolean, default=False, help='Redirect stdout and stderr to log_dir/log')
     parser.add_argument('--gradient-clipping', type=float, default=0.0, help='Gradient clipping norm')
     parser.add_argument('--remove-ref-energy', action='store_true', help='If true, remove the reference energy from the dataset for delta-learning. Total energy can still be predicted by the model during inference by turning this flag off when loading.  The dataset must be compatible with Atomref for this to be used.')
     parser.add_argument('--checkpoint-monitor', type=str, default='val_total_mse_loss', choices=['train_total_mse_loss', 'val_total_mse_loss'], help='Metric to monitor for writing out best models')
@@ -89,15 +93,15 @@ def get_argparse():
     parser.add_argument('--prior-model', type=str, default=None, help='Which prior model to use. It can be a string, a dict if you want to add arguments for it or a dicts to add more than one prior. e.g. {"Atomref": {"max_z":100}, "Coulomb":{"max_num_neighs"=100, "lower_switch_distance"=4, "upper_switch_distance"=8}', action="extend", nargs="*")
 
     # architectural args
-    parser.add_argument('--charge', type=bool, default=False, help='Model needs a total charge. Set this to True if your dataset contains charges and you want them passed down to the model.')
-    parser.add_argument('--spin', type=bool, default=False, help='Model needs a spin state. Set this to True if your dataset contains spin states and you want them passed down to the model.')
+    parser.add_argument('--charge', type=boolean, default=False, help='Model needs a total charge. Set this to True if your dataset contains charges and you want them passed down to the model.')
+    parser.add_argument('--spin', type=boolean, default=False, help='Model needs a spin state. Set this to True if your dataset contains spin states and you want them passed down to the model.')
     parser.add_argument('--embedding-dimension', type=int, default=256, help='Embedding dimension')
     parser.add_argument('--num-layers', type=int, default=6, help='Number of interaction layers in the model')
     parser.add_argument('--num-rbf', type=int, default=64, help='Number of radial basis functions in model')
     parser.add_argument('--activation', type=str, default='silu', choices=list(act_class_mapping.keys()), help='Activation function')
     parser.add_argument('--rbf-type', type=str, default='expnorm', choices=list(rbf_class_mapping.keys()), help='Type of distance expansion')
-    parser.add_argument('--trainable-rbf', type=bool, default=False, help='If distance expansion functions should be trainable')
-    parser.add_argument('--neighbor-embedding', type=bool, default=False, help='If a neighbor embedding should be applied before interactions')
+    parser.add_argument('--trainable-rbf', type=boolean, default=False, help='If distance expansion functions should be trainable')
+    parser.add_argument('--neighbor-embedding', type=boolean, default=False, help='If a neighbor embedding should be applied before interactions')
     parser.add_argument('--aggr', type=str, default='add', help='Aggregation operation for CFConv filter output. Must be one of \'add\', \'mean\', or \'max\'')
 
     # Transformer specific
@@ -106,7 +110,7 @@ def get_argparse():
     parser.add_argument('--num-heads', type=int, default=8, help='Number of attention heads')
 
     # Equivariant Transformer specific
-    parser.add_argument('--vector-cutoff', type=bool, default=False, help='If true, the vector features are weighted by the cutoff function during message passing, forcing the energy to be continuous at the cutoff.')
+    parser.add_argument('--vector-cutoff', type=boolean, default=False, help='If true, the vector features are weighted by the cutoff function during message passing, forcing the energy to be continuous at the cutoff.')
 
     # TensorNet specific
     parser.add_argument('--equivariance-invariance-group', type=str, default='O(3)', help='Equivariance and invariance group of TensorNet')
@@ -115,41 +119,91 @@ def get_argparse():
         `a[1] = a[2] = b[2] = 0`;`a[0] >= 2*cutoff, b[1] >= 2*cutoff, c[2] >= 2*cutoff`;`a[0] >= 2*b[0]`;`a[0] >= 2*c[0]`;`b[1] >= 2*c[1]`;
         These requirements correspond to a particular rotation of the system and reduced form of the vectors, as well as the requirement that the cutoff be no larger than half the box width.
     Example: [[1,0,0],[0,1,0],[0,0,1]]""")
-    parser.add_argument('--static_shapes', type=bool, default=False, help='If true, TensorNet will use statically shaped tensors for the network, making it capturable into a CUDA graphs. In some situations static shapes can lead to a speedup, but it increases memory usage.')
+    parser.add_argument('--static_shapes', type=boolean, default=False, help='If true, TensorNet will use statically shaped tensors for the network, making it capturable into a CUDA graphs. In some situations static shapes can lead to a speedup, but it increases memory usage.')
 
     # other args
-    parser.add_argument('--derivative', default=False, type=bool, help='If true, take the derivative of the prediction w.r.t coordinates')
+    parser.add_argument('--derivative', default=False, type=boolean, help='If true, take the derivative of the prediction w.r.t coordinates')
     parser.add_argument('--cutoff-lower', type=float, default=0.0, help='Lower cutoff in model')
     parser.add_argument('--cutoff-upper', type=float, default=5.0, help='Upper cutoff in model')
     parser.add_argument('--atom-filter', type=int, default=-1, help='Only sum over atoms with Z > atom_filter')
     parser.add_argument('--max-z', type=int, default=100, help='Maximum atomic number that fits in the embedding matrix')
     parser.add_argument('--max-num-neighbors', type=int, default=32, help='Maximum number of neighbors to consider in the network')
-    parser.add_argument('--standardize', type=bool, default=False, help='If true, multiply prediction by dataset std and add mean')
+    parser.add_argument('--standardize', type=boolean, default=False, help='If true, multiply prediction by dataset std and add mean')
     parser.add_argument('--reduce-op', type=str, default='add', choices=['add', 'mean'], help='Reduce operation to apply to atomic predictions')
-    parser.add_argument('--wandb-use', default=False, type=bool, help='Defines if wandb is used or not')
+    parser.add_argument('--wandb-use', default=False, type=boolean, help='Defines if wandb is used or not')
     parser.add_argument('--wandb-name', default='training', type=str, help='Give a name to your wandb run')
     parser.add_argument('--wandb-project', default='training_', type=str, help='Define what wandb Project to log to')
     parser.add_argument('--wandb-resume-from-id', default=None, type=str, help='Resume a wandb run from a given run id. The id can be retrieved from the wandb dashboard')
-    parser.add_argument('--tensorboard-use', default=False, type=bool, help='Defines if tensor board is used or not')
+    parser.add_argument('--tensorboard-use', default=False, type=boolean, help='Defines if tensor board is used or not')
 
     # fmt: on
     return parser
 
 
+def load_hparams(filename, known_args):
+    with open(filename) as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+    if not isinstance(config, dict):
+        raise ValueError(f"Configuration file must contain a mapping: {filename}")
+    for key in config:
+        if key not in known_args:
+            raise ValueError(f"Unknown argument in {filename}: {key}")
+    return config
+
+
 def get_args():
     parser = get_argparse()
-    args = parser.parse_args()
+    defaults = vars(parser.parse_args([]))
+    # Suppress omitted options so explicit None, False, zero and empty lists survive.
+    for action in parser._actions:
+        action.default = argparse.SUPPRESS
+    cli_args = vars(parser.parse_args())
+    known_args = defaults.keys() | {"prior_args"}
+    config = {}
+    if "conf" in cli_args:
+        if not cli_args["conf"].endswith(("yaml", "yml")):
+            raise ValueError("Configuration file must end with yaml or yml")
+        config = load_hparams(cli_args["conf"], known_args)
+
+    checkpoint = cli_args.get("load_model", config.get("load_model"))
+    hparams = {}
+    if checkpoint is not None:
+        hparams_path = os.path.join(os.path.dirname(checkpoint), "hparams.yaml")
+        if os.path.exists(hparams_path):
+            hparams = load_hparams(hparams_path, known_args)
+        else:
+            rank_zero_warn(
+                "Failed to locate the checkpoint's hparams.yaml file. "
+                "Relying on configuration and command line args."
+            )
+    if (
+        "load_model" in cli_args
+        and "load_model" in config
+        and cli_args["load_model"] != config["load_model"]
+    ):
+        rank_zero_warn(
+            f"The load model argument was specified as a command line argument "
+            f"({checkpoint}) and in the config file ({config['load_model']}). "
+            f"Ignoring 'load_model' from the config file and loading {checkpoint}."
+        )
+    resolved = defaults
+    for source in (hparams, config, cli_args):
+        if "prior_model" in source:
+            # Positional arguments belong to the prior definition that supplied them.
+            resolved.pop("prior_args", None)
+        resolved.update(source)
+    args = argparse.Namespace(**resolved)
+    args.load_model = checkpoint
+    if args.inference_batch_size is None:
+        args.inference_batch_size = args.batch_size
+
+    os.makedirs(os.path.abspath(args.log_dir), exist_ok=True)
     if args.redirect:
         sys.stdout = open(os.path.join(args.log_dir, "log"), "w")
         sys.stderr = sys.stdout
         logging.getLogger("pytorch_lightning").addHandler(
             logging.StreamHandler(sys.stdout)
         )
-
-    if args.inference_batch_size is None:
-        args.inference_batch_size = args.batch_size
-
-    os.makedirs(os.path.abspath(args.log_dir), exist_ok=True)
     save_argparse(args, os.path.join(args.log_dir, "input.yaml"), exclude=["conf"])
 
     return args
@@ -191,7 +245,9 @@ def main():
     pl.seed_everything(args.seed, workers=True)
 
     # initialize data module
-    data = DataModule(args)
+    data_args = vars(args).copy()
+    data_args.pop("prior_args", None)
+    data = DataModule(data_args)
     data.prepare_data()
     data.setup("fit")
 
