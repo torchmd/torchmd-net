@@ -61,7 +61,10 @@ class MACEOFF(MemmappedDataset):
         From the repository:
         The core of the training set is the SPICE dataset. 95% of the data were used for training and validation, and 5% for testing. The MACE-OFF23 model is trained to reproduce the energies and forces computed at the ωB97M-D3(BJ)/def2-TZVPPD level of quantum mechanics, as implemented in the PSI4 software. We have used a subset of SPICE that contains the ten chemical elements H, C, N, O, F, P, S, Cl, Br, and I, and has a neutral formal charge. We have also removed the ion pairs subset. Overall, we used about 85% of the full SPICE dataset.
 
-    Contains energy and force data in units of eV and eV/Angstrom
+    Contains total energy and force data in units of eV and eV/Angstrom.
+    The total energies are returned unchanged. Atomic reference energies are
+    available through :meth:`get_atomref` for the Atomref prior and optional
+    delta learning with ``remove_ref_energy``.
 
     """
 
@@ -69,6 +72,20 @@ class MACEOFF(MemmappedDataset):
         "1.0": {
             "url": "https://api.repository.cam.ac.uk/server/api/core/bitstreams/b185b5ab-91cf-489a-9302-63bfac42824a/content",
             "file": "train_large_neut_no_bad_clean.tar.gz",
+            # MACE-OFF23 training reference energies in eV, indexed by atomic number.
+            # https://github.com/ACEsuit/mace-off/blob/986283a9647cf10c4c8e562cd1c11b6ae26ff238/mace_off23/train_scripts/large.sh
+            "atomref": {
+                1: -13.571964772646918,
+                6: -1030.5671648271828,
+                7: -1486.3750255780376,
+                8: -2043.933693071156,
+                9: -2715.318528602957,
+                15: -9287.407133426237,
+                16: -10834.4844708122,
+                17: -12522.649269035726,
+                35: -70045.28385080204,
+                53: -8102.524593409054,
+            },
         },
     }
 
@@ -106,6 +123,22 @@ class MACEOFF(MemmappedDataset):
             pre_filter,
             properties=("y", "neg_dy"),
         )
+
+    def get_atomref(self, max_z=100):
+        """Return atomic reference energies in eV for the Atomref prior.
+
+        Args:
+            max_z (int): Number of atomic-number entries in the returned tensor.
+
+        Returns:
+            torch.Tensor: Float64 energies with shape ``(max_z, 1)``. Entries for
+            elements absent from this dataset are zero.
+        """
+        refs = pt.zeros(max_z, dtype=pt.float64)
+        for z, energy in self.VERSIONS[self.version]["atomref"].items():
+            if z < max_z:
+                refs[z] = energy
+        return refs.view(-1, 1)
 
     def sample_iter(self, mol_ids=False):
         assert len(self.raw_paths) == 1
