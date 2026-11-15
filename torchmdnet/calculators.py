@@ -193,6 +193,9 @@ class TMDNETCalculator(ase_calc.Calculator):
         Cast the input to this dtype if defined. If passed as a string it should be a valid torch dtype. Default: torch.float32
     compile: bool
         Whether to use torch.compile to speed up calcuations, useful for molecular dynamics. Default: False
+    eager_forces : bool, optional
+        Compute and cache forces with the energy. Set to False for energy scans;
+        a later force request will evaluate the model again. Default: True
     kwargs : dict, optional
         Extra arguments to pass to the model when loading it.
     """
@@ -205,11 +208,13 @@ class TMDNETCalculator(ase_calc.Calculator):
         device="cpu",
         dtype=torch.float32,
         compile=False,
+        eager_forces=True,
         **kwargs,
     ):
 
         ase_calc.Calculator.__init__(self)
         self.device = device
+        self.eager_forces = eager_forces
         self.remove_ref_energy = kwargs.pop("remove_ref_energy", True)
         self.max_num_neighbors = kwargs.pop("max_num_neighbors", 64)
         self.static_shapes = True if compile else False
@@ -261,6 +266,7 @@ class TMDNETCalculator(ase_calc.Calculator):
             properties = ["energy"]
 
         ase_calc.Calculator.calculate(self, atoms, properties, system_changes)
+        compute_forces = self.eager_forces or "forces" in properties
 
         numbers = atoms.numbers
 
@@ -276,7 +282,10 @@ class TMDNETCalculator(ase_calc.Calculator):
         batch = torch.tensor(batch, device=self.device, dtype=torch.long)
         numbers = torch.tensor(numbers, device=self.device, dtype=torch.long)
         positions = torch.tensor(
-            positions, device=self.device, dtype=torch.float32, requires_grad=True
+            positions,
+            device=self.device,
+            dtype=torch.float32,
+            requires_grad=compute_forces,
         )
         total_charge = torch.tensor(
             [total_charge], device=self.device, dtype=torch.float32
@@ -303,18 +312,13 @@ class TMDNETCalculator(ase_calc.Calculator):
             )
             self.compiled = True
 
-        if self.compiled:
-            energy, _ = self.compiled_model(
-                numbers, positions, batch=batch, q=total_charge, box=box
-            )
-        else:
-            energy, _ = self.model(
-                numbers, positions, batch=batch, q=total_charge, box=box
-            )
+        model = self.compiled_model if self.compiled else self.model
+        with torch.set_grad_enabled(compute_forces):
+            energy, _ = model(numbers, positions, batch=batch, q=total_charge, box=box)
+            if compute_forces:
+                energy.backward()
 
-        energy.backward()
-        forces = -positions.grad
-
-        self.results["energy"] = energy.detach().cpu().item()
-        self.results["forces"] = forces.detach().cpu().numpy()
+        self.results = {"energy": energy.detach().cpu().item()}
+        if compute_forces:
+            self.results["forces"] = (-positions.grad).detach().cpu().numpy()
         self.evals += 1

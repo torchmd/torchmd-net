@@ -83,6 +83,37 @@ def test_compare_forward_multiple():
 
 
 @pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_ase_forces_on_demand(device):
+    from ase.io import read
+    from torchmdnet.calculators import TMDNETCalculator
+
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    checkpoint = join(dirname(__file__), "example_tensornet.ckpt")
+    atoms = read(join(dirname(__file__), "caffeine.pdb"))
+    atoms.info["charge"] = 0
+    atoms.calc = TMDNETCalculator(checkpoint, device=device)
+    energy = atoms.get_potential_energy()
+    forces = atoms.get_forces()
+    assert atoms.calc.evals == 1
+
+    calc = TMDNETCalculator(checkpoint, device=device, eager_forces=False)
+    atoms.calc = calc
+    grad_modes = []
+    calc.model.register_forward_pre_hook(
+        lambda model, args: grad_modes.append(torch.is_grad_enabled())
+    )
+    assert atoms.get_potential_energy() == pytest.approx(energy)
+    assert "forces" not in calc.results
+    assert_close(torch.from_numpy(atoms.get_forces()), torch.from_numpy(forces))
+    atoms.get_potential_energy()
+    atoms.positions[0, 0] += 0.1
+    atoms.get_potential_energy()
+    assert "forces" not in calc.results
+    assert grad_modes == [False, True, False]
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
 def test_ase_calculator(device):
     import platform
 
