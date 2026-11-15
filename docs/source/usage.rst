@@ -83,6 +83,10 @@ They can also be used with the torchmd-net ASE calculator
     energy = atoms.get_potential_energy()
     forces = atoms.get_forces()
 
+For a conformer energy scan, pass ``eager_forces=False`` to
+``TMDNETCalculator``. Each ``get_potential_energy()`` call on a new geometry
+then skips the force backward pass. Calling ``get_forces()`` on a selected
+geometry still returns its forces, with one additional model evaluation.
 
 
 See the examples `<https://github.com/torchmd/torchmd-net/tree/main/examples/aceff_examples>`_ for more information.
